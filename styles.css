@@ -1,28 +1,30 @@
 :root {
-  --bg: #0f1117;
-  --panel: #171a23;
-  --panel-2: #1f2331;
-  --border: #2a2f40;
-  --text: #e7eaf2;
-  --muted: #8b91a7;
-  --accent: #6aa9ff;
+  --bg: #0b0d14;
+  --panel: #111420;
+  --panel-2: #191d2c;
+  --border: #232740;
+  --text: #e8eaf3;
+  --muted: #7c84a3;
+  --accent: #5b9ef7;
   --income: #34d399;
   --expense: #f87171;
   --warn: #fbbf24;
-  --radius: 12px;
-  --shadow: 0 4px 18px rgba(0,0,0,.25);
+  --radius: 14px;
+  --shadow: 0 4px 24px rgba(0,0,0,.32);
+  --grad: linear-gradient(135deg, #5b9ef7 0%, #818cf8 100%);
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f6f7fb;
+    --bg: #f2f4fc;
     --panel: #ffffff;
-    --panel-2: #f0f2f7;
-    --border: #e3e6ef;
-    --text: #1a1d27;
-    --muted: #6b7180;
-    --accent: #2563eb;
-    --shadow: 0 4px 14px rgba(20,24,40,.08);
+    --panel-2: #edf0f9;
+    --border: #dde1f0;
+    --text: #181b28;
+    --muted: #656e96;
+    --accent: #3b82f6;
+    --shadow: 0 4px 16px rgba(20,24,50,.09);
+    --grad: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   }
 }
 
@@ -61,14 +63,17 @@ button, input, select {
 }
 
 .brand { display: flex; align-items: center; gap: 10px; }
-.brand h1 { font-size: 18px; }
+.brand h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; }
 .logo {
-  width: 28px; height: 28px;
+  width: 34px; height: 34px;
   display: grid; place-items: center;
-  background: var(--accent);
+  background: var(--grad);
   color: white;
-  border-radius: 8px;
-  font-weight: 700;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 17px;
+  box-shadow: 0 2px 12px rgba(91,158,247,.35);
+  flex-shrink: 0;
 }
 
 .month-nav {
@@ -93,14 +98,15 @@ button, input, select {
 .actions { display: flex; gap: 8px; }
 
 button, .file-label {
-  background: var(--accent);
+  background: var(--grad);
   color: white;
   border: 0;
-  border-radius: 8px;
-  padding: 7px 12px;
+  border-radius: 9px;
+  padding: 7px 14px;
   cursor: pointer;
+  font-weight: 500;
 }
-button:hover { filter: brightness(1.08); }
+button:hover { filter: brightness(1.1); }
 button.ghost, .ghost {
   background: var(--panel-2);
   color: var(--text);
@@ -128,7 +134,7 @@ button.small, .small { padding: 4px 10px; font-size: 12px; }
 .card .value { font-size: 18px; font-weight: 600; }
 .card.income .value { color: var(--income); }
 .card.expense .value { color: var(--expense); }
-.card.net .value { color: var(--accent); }
+.card.net .value { background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 .card input {
   background: transparent;
   border: 0;

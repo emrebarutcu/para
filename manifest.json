@@ -1,6 +1,6 @@
 {
-  "name": "Cashflow",
-  "short_name": "Cashflow",
+  "name": "Para",
+  "short_name": "Para",
   "description": "Aylık para akışı takibi",
   "start_url": "/",
   "display": "standalone",
