@@ -323,10 +323,10 @@ els.importInput.addEventListener("change", async e => {
     if (!confirm("Mevcut verilerin üzerine yazılacak. Devam edelim mi?")) return;
     state = { ...defaultState(), ...data };
     saveState();
-    if (typeof window.syncPushNow === 'function') await window.syncPushNow(state);
     render();
-  } catch { alert("Geçersiz dosya."); }
+  } catch { alert("Geçersiz dosya."); return; }
   finally { els.importInput.value = ""; }
+  if (typeof window.syncPushNow === 'function') await window.syncPushNow(state);
 });
 
 // ---------- Chart ----------
@@ -460,10 +460,10 @@ if (typeof window.syncInit === 'function') {
   window.syncInit({
     onRemoteData(remote) {
       if (!remote || typeof remote._v !== 'number') return;
-      const local = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      const local = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
       if (remote._v > (local._v || 0)) {
         state = { ...defaultState(), ...remote };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(getStorageKey(), JSON.stringify(state));
         render();
       }
     },
