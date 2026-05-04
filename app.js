@@ -457,7 +457,7 @@ function renderChart(runningBalances, dailyNets, opening, year, month) {
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.innerHTML = `<defs>
     <linearGradient id="cfGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.22"/>
+      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.14"/>
       <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.01"/>
     </linearGradient>
   </defs>
