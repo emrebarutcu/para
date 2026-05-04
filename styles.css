@@ -373,6 +373,8 @@ button.small, .small { padding: 4px 10px; font-size: 12px; }
 }
 .modal-box input[type="email"]:focus { border-color: var(--accent); }
 .auth-msg { font-size: 13px; margin: 10px 0 0; min-height: 18px; }
+.auth-forgot { margin-top: 8px; font-size: 12px; color: var(--muted); background: transparent; border: none; padding: 0; }
+.auth-forgot:hover { color: var(--accent); filter: none; }
 .auth-user-email { font-weight: 600; margin: 4px 0 14px; }
 
 /* Responsive */

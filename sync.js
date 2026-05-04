@@ -30,6 +30,7 @@
       user = session?.user ?? null;
       renderBtn(user);
       if (event === 'SIGNED_IN') pull();
+      if (event === 'PASSWORD_RECOVERY') showResetForm();
     });
   };
 
@@ -85,21 +86,70 @@
     function open() {
       modal.removeAttribute('hidden');
       if (user) {
-        loginForm.setAttribute('hidden', '');
-        loggedIn.removeAttribute('hidden');
+        showView('authLoggedIn');
         if (userEl) userEl.textContent = user.email;
       } else {
-        loggedIn.setAttribute('hidden', '');
-        loginForm.removeAttribute('hidden');
+        showView('authLoginForm');
         if (msgEl) msgEl.textContent = '';
       }
     }
 
     function close() { modal.setAttribute('hidden', ''); }
 
+    function showView(id) {
+      ['authLoginForm','authForgotForm','authResetForm','authLoggedIn'].forEach(v => {
+        document.getElementById(v)?.[v === id ? 'removeAttribute' : 'setAttribute']('hidden', '');
+      });
+    }
+
+    function showResetForm() {
+      document.getElementById('authModal').removeAttribute('hidden');
+      showView('authResetForm');
+    }
+
     document.getElementById('authBtn')?.addEventListener('click', open);
     overlay?.addEventListener('click', close);
     document.getElementById('authClose')?.addEventListener('click', close);
+
+    document.getElementById('forgotBtn')?.addEventListener('click', () => {
+      document.getElementById('forgotEmail').value = document.getElementById('authEmail')?.value || '';
+      document.getElementById('forgotMsg').textContent = '';
+      showView('authForgotForm');
+    });
+
+    document.getElementById('backToLoginBtn')?.addEventListener('click', () => showView('authLoginForm'));
+
+    document.getElementById('forgotForm')?.addEventListener('submit', async e => {
+      e.preventDefault();
+      const email = document.getElementById('forgotEmail').value.trim();
+      const btn = e.submitter;
+      btn.disabled = true; btn.textContent = '…';
+      const { error } = await db.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      btn.disabled = false; btn.textContent = 'Link gönder';
+      const msgEl = document.getElementById('forgotMsg');
+      msgEl.textContent = error ? '⚠ ' + error.message : '✓ Link gönderildi — e-postanı kontrol et.';
+      msgEl.style.color = error ? 'var(--expense)' : 'var(--income)';
+    });
+
+    document.getElementById('resetForm')?.addEventListener('submit', async e => {
+      e.preventDefault();
+      const password = document.getElementById('newPassword').value;
+      const btn = e.submitter;
+      btn.disabled = true; btn.textContent = '…';
+      const { error } = await db.auth.updateUser({ password });
+      btn.disabled = false; btn.textContent = 'Şifreyi güncelle';
+      const msgEl = document.getElementById('resetMsg');
+      if (error) {
+        msgEl.textContent = '⚠ ' + error.message;
+        msgEl.style.color = 'var(--expense)';
+      } else {
+        msgEl.textContent = '✓ Şifre güncellendi!';
+        msgEl.style.color = 'var(--income)';
+        setTimeout(close, 1200);
+      }
+    });
 
     // Tab switching
     let authMode = 'login';

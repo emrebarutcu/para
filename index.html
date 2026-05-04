@@ -124,6 +124,26 @@
           <button type="submit" id="authSubmitBtn">Giriş Yap</button>
         </form>
         <p id="authMsg" class="auth-msg"></p>
+        <button type="button" id="forgotBtn" class="ghost small auth-forgot">Şifremi unuttum</button>
+      </div>
+
+      <div id="authForgotForm" hidden>
+        <p class="modal-desc">E-postana şifre sıfırlama linki gönderilir.</p>
+        <form id="forgotForm">
+          <input id="forgotEmail" type="email" placeholder="E-posta" autocomplete="email" required />
+          <button type="submit">Link gönder</button>
+        </form>
+        <p id="forgotMsg" class="auth-msg"></p>
+        <button type="button" id="backToLoginBtn" class="ghost small auth-forgot">← Geri</button>
+      </div>
+
+      <div id="authResetForm" hidden>
+        <p class="modal-desc">Yeni şifreni belirle.</p>
+        <form id="resetForm">
+          <input id="newPassword" type="password" placeholder="Yeni şifre" minlength="6" required />
+          <button type="submit">Şifreyi güncelle</button>
+        </form>
+        <p id="resetMsg" class="auth-msg"></p>
       </div>
 
       <div id="authLoggedIn" hidden>
