@@ -306,7 +306,10 @@ els.importInput.addEventListener("change", async e => {
   try {
     const data = JSON.parse(await file.text());
     if (!confirm("Mevcut verilerin üzerine yazılacak. Devam edelim mi?")) return;
-    state = { ...defaultState(), ...data }; saveState(); render();
+    state = { ...defaultState(), ...data };
+    saveState();
+    if (typeof window.syncPushNow === 'function') await window.syncPushNow(state);
+    render();
   } catch { alert("Geçersiz dosya."); }
   finally { els.importInput.value = ""; }
 });

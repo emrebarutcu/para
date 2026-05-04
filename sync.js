@@ -65,13 +65,21 @@
   window.syncSchedulePush = function (stateData) {
     if (!db || !user) return;
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => {
-      db.from('cashflow_data').upsert(
-        { user_id: user.id, data: stateData, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' }
-      );
-    }, 1500);
+    pushTimer = setTimeout(() => push(stateData), 1500);
   };
+
+  window.syncPushNow = async function (stateData) {
+    if (!db || !user) return;
+    clearTimeout(pushTimer);
+    await push(stateData);
+  };
+
+  async function push(stateData) {
+    await db.from('cashflow_data').upsert(
+      { user_id: user.id, data: stateData, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    );
+  }
 
   window.syncGetUser = function () { return user; };
 
