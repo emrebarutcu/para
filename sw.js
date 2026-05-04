@@ -1,4 +1,4 @@
-const CACHE = 'cashflow-v1';
+const CACHE = 'cashflow-v2';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
