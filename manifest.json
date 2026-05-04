@@ -1,0 +1,13 @@
+{
+  "name": "Cashflow",
+  "short_name": "Cashflow",
+  "description": "Aylık para akışı takibi",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f1117",
+  "theme_color": "#6aa9ff",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

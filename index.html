@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#6aa9ff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Cashflow" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <title>Cashflow</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">₺</span>
+      <h1>Cashflow</h1>
+    </div>
+    <div class="month-nav">
+      <button id="prevMonth" class="icon-btn" aria-label="Önceki ay">‹</button>
+      <input type="month" id="monthPicker" />
+      <button id="nextMonth" class="icon-btn" aria-label="Sonraki ay">›</button>
+    </div>
+    <div class="actions">
+      <button id="authBtn" class="ghost small">☁ Giriş</button>
+      <button id="exportBtn" class="ghost">Dışa Aktar</button>
+      <label class="ghost file-label">
+        İçe Aktar
+        <input type="file" id="importInput" accept="application/json" hidden />
+      </label>
+    </div>
+  </header>
+
+  <section class="summary">
+    <div class="card">
+      <span class="label">Açılış Bakiyesi</span>
+      <input type="number" id="openingBalance" step="0.01" placeholder="0,00" />
+    </div>
+    <div class="card income">
+      <span class="label">Toplam Gelir</span>
+      <span class="value" id="totalIncome">₺0,00</span>
+    </div>
+    <div class="card expense">
+      <span class="label">Toplam Gider</span>
+      <span class="value" id="totalExpense">₺0,00</span>
+    </div>
+    <div class="card net">
+      <span class="label">Ay Sonu Bakiye</span>
+      <span class="value" id="endingBalance">₺0,00</span>
+    </div>
+  </section>
+
+  <section class="chart-section">
+    <div class="chart-head">
+      <h2>Net Cashflow</h2>
+      <div class="chart-legend">
+        <span class="leg income">Gelir günü</span>
+        <span class="leg expense">Gider günü</span>
+        <span class="leg balance">Bakiye</span>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <svg id="cashflowChart" class="chart-svg" preserveAspectRatio="none"></svg>
+    </div>
+  </section>
+
+  <section id="dayPanel" class="day-panel">
+    <div class="dp-head">
+      <span class="dp-day-num"></span>
+      <span class="dp-day-name"></span>
+      <span class="dp-balance"></span>
+    </div>
+    <ul class="dp-entries"></ul>
+    <form class="dp-add">
+      <input type="text" name="desc" placeholder="Açıklama" required />
+      <input type="number" name="amount" step="0.01" placeholder="Tutar" required />
+      <select name="type">
+        <option value="expense">Gider</option>
+        <option value="income">Gelir</option>
+      </select>
+      <button type="submit">+</button>
+    </form>
+  </section>
+
+  <section class="recurring">
+    <div class="recurring-head">
+      <h2>Sabit Hareketler</h2>
+      <button id="toggleRecurring" class="ghost small">Göster</button>
+    </div>
+    <div class="recurring-body" id="recurringBody" hidden>
+      <form id="recurringForm" class="row-form">
+        <input type="text" id="rDesc" placeholder="Açıklama (örn. Maaş)" required />
+        <input type="number" id="rAmount" step="0.01" placeholder="Tutar" required />
+        <select id="rType">
+          <option value="income">Gelir</option>
+          <option value="expense">Gider</option>
+        </select>
+        <input type="number" id="rDay" min="1" max="31" placeholder="Gün" required />
+        <button type="submit">Ekle</button>
+      </form>
+      <ul id="recurringList" class="recurring-list"></ul>
+    </div>
+  </section>
+
+  <!-- Auth modal -->
+  <div id="authModal" class="modal-wrap" hidden>
+    <div id="authOverlay" class="modal-overlay"></div>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2>Cloud Sync</h2>
+        <button id="authClose" class="ghost small">✕</button>
+      </div>
+
+      <div id="authLoginForm">
+        <p class="modal-desc">E-posta adresinle giriş yap — şifre yok, sihirli link gönderilir.</p>
+        <form>
+          <input id="authEmail" type="email" placeholder="ornek@mail.com" autocomplete="email" required />
+          <button type="submit">Link gönder</button>
+        </form>
+        <p id="authMsg" class="auth-msg"></p>
+      </div>
+
+      <div id="authLoggedIn" hidden>
+        <p class="modal-desc">Giriş yapıldı:</p>
+        <p id="authUserEmail" class="auth-user-email"></p>
+        <button id="authLogoutBtn" class="ghost">Çıkış Yap</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart tooltip -->
+  <div id="chartTooltip" class="chart-tooltip" hidden>
+    <span class="tt-date"></span>
+    <span class="tt-balance"></span>
+    <span class="tt-net"></span>
+  </div>
+
+  <!-- Scripts: config → supabase SDK → sync → app -->
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="sync.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
