@@ -37,7 +37,7 @@ window.onAuthLogin = function (userId) {
 };
 window.onAuthLogout = function () {
   window.CF_USER_ID = null;
-  state = loadState();   // anonim storage'a geri dön
+  state = defaultState();  // temiz slate — hesap verisi ekranda kalmasın
   render();
 };
 
