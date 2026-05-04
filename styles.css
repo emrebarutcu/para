@@ -28,8 +28,9 @@
   --glow:        0 0 28px rgba(98,114,234,.18);
 }
 
+/* Light tokens — system preference (unless overridden with .dark-theme) */
 @media (prefers-color-scheme: light) {
-  :root {
+  html:not(.dark-theme) {
     --bg:          #f2f5ff;
     --panel:       #ffffff;
     --panel-2:     #edf0fd;
@@ -49,6 +50,28 @@
     --shadow-sm:   0 1px 6px rgba(14,18,40,.07);
     --glow:        none;
   }
+}
+
+/* Manual light override — wins regardless of system pref */
+html.light-theme {
+  --bg:          #f2f5ff;
+  --panel:       #ffffff;
+  --panel-2:     #edf0fd;
+  --panel-3:     #e4e8fc;
+  --border:      #dce0f5;
+  --border-2:    #cdd3f0;
+  --text:        #0e1228;
+  --muted:       #6b748e;
+  --muted-2:     #4a5272;
+  --accent:      #5060d8;
+  --accent-2:    #6878e8;
+  --income:      #00a87e;
+  --income-dim:  rgba(0,168,126,.09);
+  --expense:     #e83252;
+  --expense-dim: rgba(232,50,82,.09);
+  --shadow:      0 6px 32px rgba(14,18,40,.09), 0 1px 4px rgba(14,18,40,.06);
+  --shadow-sm:   0 1px 6px rgba(14,18,40,.07);
+  --glow:        none;
 }
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
@@ -82,8 +105,9 @@ button, input, select { font: inherit; color: inherit; }
   flex-wrap: wrap;
 }
 @media (prefers-color-scheme: light) {
-  .topbar { background: rgba(255,255,255,.88); }
+  html:not(.dark-theme) .topbar { background: rgba(255,255,255,.88); }
 }
+html.light-theme .topbar { background: rgba(255,255,255,.88); }
 
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand h1 {
@@ -138,6 +162,15 @@ button, input, select { font: inherit; color: inherit; }
   transition: background .15s, color .15s;
 }
 .icon-btn:hover { background: var(--panel-3); color: var(--text); }
+
+/* ── Theme button ────────────────────────────────────────────────────────── */
+#themeBtn {
+  width: 32px; height: 32px;
+  padding: 0;
+  font-size: 16px;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
 
 /* ── Action buttons ──────────────────────────────────────────────────────── */
 .actions { display: flex; gap: 8px; align-items: center; }

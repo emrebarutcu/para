@@ -1,3 +1,42 @@
+// ---------- Theme ----------
+(function () {
+  const THEME_KEY = "para.theme";
+  const html = document.documentElement;
+
+  function applyTheme(theme) {
+    html.classList.remove("light-theme", "dark-theme");
+    if (theme === "light") html.classList.add("light-theme");
+    if (theme === "dark")  html.classList.add("dark-theme");
+    const btn = document.getElementById("themeBtn");
+    if (btn) btn.textContent = theme === "light" ? "☽" : "☀";
+  }
+
+  // Apply saved preference immediately (before first paint)
+  const saved = localStorage.getItem(THEME_KEY);
+  applyTheme(saved || "");
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("themeBtn");
+    if (!btn) return;
+
+    // Resolve effective theme (may be from system pref)
+    function effectiveTheme() {
+      if (html.classList.contains("light-theme")) return "light";
+      if (html.classList.contains("dark-theme"))  return "dark";
+      return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+
+    // Set initial icon
+    btn.textContent = effectiveTheme() === "light" ? "☽" : "☀";
+
+    btn.addEventListener("click", () => {
+      const next = effectiveTheme() === "dark" ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    });
+  });
+})();
+
 // ---------- State + storage ----------
 const STORAGE_KEY_BASE = "cashflow.v1";
 function getStorageKey() {
