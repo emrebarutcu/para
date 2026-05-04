@@ -348,7 +348,13 @@ button.small, .small { padding: 4px 10px; font-size: 12px; }
 }
 .modal-head h2 { font-size: 16px; }
 .modal-desc { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
-.modal-box form { display: flex; gap: 8px; }
+.auth-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+.auth-tab {
+  flex: 1; background: var(--panel-2); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px; font-size: 13px;
+}
+.auth-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+.modal-box form { display: flex; flex-direction: column; gap: 8px; }
 .modal-box input[type="email"] {
   flex: 1;
   background: var(--panel-2);

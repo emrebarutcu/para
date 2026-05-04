@@ -114,10 +114,14 @@
       </div>
 
       <div id="authLoginForm">
-        <p class="modal-desc">E-posta adresinle giriş yap — şifre yok, sihirli link gönderilir.</p>
-        <form>
-          <input id="authEmail" type="email" placeholder="ornek@mail.com" autocomplete="email" required />
-          <button type="submit">Link gönder</button>
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login">Giriş Yap</button>
+          <button class="auth-tab" data-tab="register">Kayıt Ol</button>
+        </div>
+        <form id="authForm">
+          <input id="authEmail" type="email" placeholder="E-posta" autocomplete="email" required />
+          <input id="authPassword" type="password" placeholder="Şifre" autocomplete="current-password" minlength="6" required />
+          <button type="submit" id="authSubmitBtn">Giriş Yap</button>
         </form>
         <p id="authMsg" class="auth-msg"></p>
       </div>

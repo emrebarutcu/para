@@ -101,23 +101,46 @@
     overlay?.addEventListener('click', close);
     document.getElementById('authClose')?.addEventListener('click', close);
 
-    loginForm?.addEventListener('submit', async e => {
+    // Tab switching
+    let authMode = 'login';
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        authMode = tab.dataset.tab;
+        document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t === tab));
+        document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
+        document.getElementById('authPassword').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+        if (msgEl) msgEl.textContent = '';
+      });
+    });
+
+    document.getElementById('authForm')?.addEventListener('submit', async e => {
       e.preventDefault();
       if (!db) return;
-      const email = emailEl.value.trim();
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
       const btn = e.submitter;
       btn.disabled = true;
-      btn.textContent = 'Gönderiliyor…';
-      const { error } = await db.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: window.location.origin },
-      });
+      btn.textContent = '…';
+
+      let error;
+      if (authMode === 'login') {
+        ({ error } = await db.auth.signInWithPassword({ email, password }));
+      } else {
+        ({ error } = await db.auth.signUp({ email, password }));
+      }
+
       btn.disabled = false;
-      btn.textContent = 'Link gönder';
-      msgEl.textContent = error
-        ? '⚠ ' + error.message
-        : '✓ Link gönderildi — e-postanı kontrol et.';
-      msgEl.style.color = error ? 'var(--expense)' : 'var(--income)';
+      btn.textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
+
+      if (error) {
+        msgEl.textContent = '⚠ ' + (error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message);
+        msgEl.style.color = 'var(--expense)';
+      } else if (authMode === 'register') {
+        msgEl.textContent = '✓ Kayıt olundu! Giriş yapılıyor…';
+        msgEl.style.color = 'var(--income)';
+      } else {
+        close();
+      }
     });
 
     logoutBtn?.addEventListener('click', async () => {
