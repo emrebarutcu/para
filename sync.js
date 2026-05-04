@@ -56,8 +56,15 @@
 
     db.auth.onAuthStateChange((event, session) => {
       user = session?.user ?? null;
+      window.CF_USER_ID = user?.id || null;
       renderBtn(user);
-      if (event === 'SIGNED_IN')         pull();
+      if (event === 'SIGNED_IN') {
+        if (typeof window.onAuthLogin === 'function') window.onAuthLogin(user.id);
+        pull();
+      }
+      if (event === 'SIGNED_OUT') {
+        if (typeof window.onAuthLogout === 'function') window.onAuthLogout();
+      }
       if (event === 'PASSWORD_RECOVERY') showResetForm();
     });
   };

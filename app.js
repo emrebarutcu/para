@@ -1,5 +1,8 @@
 // ---------- State + storage ----------
-const STORAGE_KEY = "cashflow.v1";
+const STORAGE_KEY_BASE = "cashflow.v1";
+function getStorageKey() {
+  return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
+}
 
 const defaultState = () => ({
   openingBalanceByMonth: {},
@@ -14,7 +17,7 @@ let selectedDay = new Date().getDate();
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey());
     if (!raw) return defaultState();
     return { ...defaultState(), ...JSON.parse(raw) };
   } catch { return defaultState(); }
@@ -22,9 +25,21 @@ function loadState() {
 
 function saveState() {
   state._v = Date.now();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(getStorageKey(), JSON.stringify(state));
   if (typeof window.syncSchedulePush === 'function') window.syncSchedulePush(state);
 }
+
+// Auth callbacks — sync.js tarafından çağrılır
+window.onAuthLogin = function (userId) {
+  window.CF_USER_ID = userId;
+  state = loadState();   // kullanıcıya özel local storage'a geç
+  render();
+};
+window.onAuthLogout = function () {
+  window.CF_USER_ID = null;
+  state = loadState();   // anonim storage'a geri dön
+  render();
+};
 
 // ---------- Helpers ----------
 function todayMonth() {
