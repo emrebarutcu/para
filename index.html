@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#6aa9ff" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Cashflow" />
+  <meta name="apple-mobile-web-app-title" content="Para" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <title>Para</title>
@@ -18,91 +18,111 @@
       <span class="logo">₺</span>
       <h1>para</h1>
     </div>
-    <div class="month-nav">
+    <div class="month-nav" title="Planın başladığı ay">
       <button id="prevMonth" class="icon-btn" aria-label="Önceki ay">‹</button>
-      <input type="month" id="monthPicker" />
+      <input type="month" id="monthPicker" aria-label="Başlangıç ayı" />
       <button id="nextMonth" class="icon-btn" aria-label="Sonraki ay">›</button>
     </div>
     <div class="actions">
       <button id="themeBtn" class="ghost icon-btn" aria-label="Tema değiştir" title="Tema değiştir">☀</button>
       <button id="authBtn" class="ghost small">☁ Giriş</button>
       <button id="exportBtn" class="ghost">Dışa Aktar</button>
-      <label class="ghost file-label">
+      <label class="ghost file-label" title="JSON yedeği ya da Taksitler Excel dosyası">
         İçe Aktar
-        <input type="file" id="importInput" accept="application/json" hidden />
+        <input type="file" id="importInput" accept=".json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
       </label>
     </div>
   </header>
 
   <section class="summary">
-    <div class="card">
-      <span class="label">Açılış Bakiyesi</span>
-      <input type="number" id="openingBalance" step="0.01" placeholder="0,00" />
-    </div>
-    <div class="card income">
-      <span class="label">Gelir</span>
-      <span class="value" id="totalIncome">₺0,00</span>
-    </div>
-    <div class="card expense">
-      <span class="label">Gider</span>
-      <span class="value" id="totalExpense">₺0,00</span>
-    </div>
     <div class="card net">
-      <span class="label">Ay sonu</span>
-      <span class="value" id="endingBalance">₺0,00</span>
+      <span class="label" id="dueLabel">Bu ay</span>
+      <span class="value" id="dueTotal">₺0,00</span>
+    </div>
+    <div class="card">
+      <span class="label" id="nextLabel">Sonraki ay</span>
+      <span class="value" id="nextTotal">₺0,00</span>
+    </div>
+    <div class="card">
+      <span class="label">Kalan borç</span>
+      <span class="value" id="remainingTotal">₺0,00</span>
+    </div>
+    <div class="card">
+      <span class="label">Son taksit</span>
+      <span class="value" id="endLabel">—</span>
     </div>
   </section>
 
   <section class="chart-section">
     <div class="chart-head">
-      <h2>Net Cashflow</h2>
-      <div class="chart-legend">
-        <span class="leg income">Gelir günü</span>
-        <span class="leg expense">Gider günü</span>
-        <span class="leg balance">Bakiye</span>
-      </div>
+      <h2>Aylık ödeme planı</h2>
+      <div class="chart-legend" id="chartLegend"></div>
     </div>
     <div class="chart-wrap">
-      <svg id="cashflowChart" class="chart-svg" preserveAspectRatio="none"></svg>
+      <svg id="planChart" class="chart-svg" role="img" aria-label="Aylık taksit ödemeleri, kişilere göre"></svg>
+      <p id="chartEmpty" class="empty" hidden></p>
     </div>
   </section>
 
-  <section id="dayPanel" class="day-panel">
-    <div class="dp-head">
-      <span class="dp-day-num"></span>
-      <span class="dp-day-name"></span>
-      <span class="dp-balance"></span>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Ödeme tablosu</h2>
+      <label class="due-day">
+        Son ödeme günü
+        <input type="number" id="dueDay" min="1" max="31" step="1" />
+      </label>
     </div>
-    <ul class="dp-entries"></ul>
-    <form class="dp-add">
-      <input type="text" name="desc" placeholder="Açıklama" required />
-      <input type="number" name="amount" step="0.01" placeholder="Tutar" required />
-      <select name="type">
-        <option value="expense">Gider</option>
-        <option value="income">Gelir</option>
-      </select>
-      <button type="submit">+</button>
-    </form>
+    <div class="table-wrap">
+      <table id="planTable" class="plan-table"></table>
+    </div>
   </section>
 
-  <section class="recurring">
-    <div class="recurring-head">
-      <h2>Sabit Hareketler</h2>
-      <button id="toggleRecurring" class="ghost small">Göster</button>
+  <section class="panel installments">
+    <div class="panel-head">
+      <h2>Taksitler</h2>
+      <button id="addPerson" class="ghost small">+ Kişi</button>
     </div>
-    <div class="recurring-body" id="recurringBody" hidden>
-      <form id="recurringForm" class="row-form">
-        <input type="text" id="rDesc" placeholder="Açıklama (örn. Maaş)" required />
-        <input type="number" id="rAmount" step="0.01" placeholder="Tutar" required />
-        <select id="rType">
-          <option value="income">Gelir</option>
-          <option value="expense">Gider</option>
+    <div class="person-tabs" id="personTabs" role="tablist"></div>
+    <div class="person-bar" id="personBar">
+      <span class="person-stats" id="personStats"></span>
+      <button id="renamePerson" class="ghost small">Adını değiştir</button>
+      <button id="deletePerson" class="ghost small">Sil</button>
+    </div>
+    <ul class="inst-list" id="instList"></ul>
+    <form id="instForm" class="inst-form">
+      <label class="fld fld-desc">
+        <span>Ürün</span>
+        <input name="desc" type="text" placeholder="örn. IKEA" required />
+      </label>
+      <label class="fld">
+        <span>Ekstre</span>
+        <input name="statement" type="month" required />
+      </label>
+      <label class="fld">
+        <span>Taksit</span>
+        <input name="count" type="number" min="1" max="60" step="1" placeholder="Kalan" required />
+      </label>
+      <label class="fld">
+        <span>Tutar</span>
+        <input name="amount" type="number" min="0.01" step="0.01" placeholder="0,00" required />
+      </label>
+      <label class="fld">
+        <span>Tutar türü</span>
+        <select name="mode">
+          <option value="total">Toplam</option>
+          <option value="per">Taksit tutarı</option>
         </select>
-        <input type="number" id="rDay" min="1" max="31" placeholder="Gün" required />
-        <button type="submit">Ekle</button>
-      </form>
-      <ul id="recurringList" class="recurring-list"></ul>
-    </div>
+      </label>
+      <label class="fld" title="Alışverişin asıl taksit sayısı (ör. 6 taksitin son 4'ü kaldıysa 6). Orijinal tutarı hesaplamak için.">
+        <span>Plan (ops.)</span>
+        <input name="planCount" type="number" min="1" max="60" step="1" placeholder="—" />
+      </label>
+      <div class="fld-actions">
+        <button type="submit" id="instSubmit">Ekle</button>
+        <button type="button" id="instCancel" class="ghost" hidden>İptal</button>
+      </div>
+    </form>
+    <p class="inst-preview" id="instPreview"></p>
   </section>
 
   <!-- Auth modal -->
@@ -156,16 +176,13 @@
   </div>
 
   <!-- Chart tooltip -->
-  <div id="chartTooltip" class="chart-tooltip" hidden>
-    <span class="tt-date"></span>
-    <span class="tt-balance"></span>
-    <span class="tt-net"></span>
-  </div>
+  <div id="chartTooltip" class="chart-tooltip" hidden></div>
 
-  <!-- Scripts: config → supabase SDK → sync → app -->
+  <!-- Scripts: config → supabase SDK → sync → taksit → app -->
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="sync.js"></script>
+  <script src="taksit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

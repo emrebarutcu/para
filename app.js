@@ -38,27 +38,45 @@
 })();
 
 // ---------- State + storage ----------
+const T = window.Taksit;
 const STORAGE_KEY_BASE = "cashflow.v1";
 function getStorageKey() {
   return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
 }
 
+const SERIES_COUNT = 8;   // styles.css'teki --s1…--s8
+const MAX_MONTHS = 60;    // tablo/grafikte gösterilecek en fazla ay
+
 const defaultState = () => ({
-  openingBalanceByMonth: {},
-  entriesByDate: {},
-  recurring: [],
+  people: [{ id: "ben", name: "Ben", color: 0 }],
+  installments: [],       // { id, personId, desc, statement: "YYYY-MM", count, total, planCount? }
+  dueDay: 22,             // kartın son ödeme günü
   _v: 0, // version timestamp — used for sync conflict resolution
 });
 
+// Eski nakit akışı sürümünden kalan alanlar (entriesByDate, recurring…) olduğu gibi
+// taşınır; senkronizasyon tüm nesneyi yazdığı için böylece silinmezler.
+function hydrate(data) {
+  const s = { ...defaultState(), ...data };
+  if (!Array.isArray(s.people)) s.people = defaultState().people;
+  if (!Array.isArray(s.installments)) s.installments = [];
+  const day = Math.round(Number(s.dueDay));
+  s.dueDay = day >= 1 && day <= 31 ? day : 22;
+  return s;
+}
+
 let state = loadState();
-let currentMonth = todayMonth();
-let selectedDay = new Date().getDate();
+let currentMonth = defaultMonth();  // planın başladığı ay
+let selectedIdx = null;             // tabloda açılan / grafikte vurgulanan ay
+let selectedPersonId = null;
+let editingId = null;
+let lastRows = [];
 
 function loadState() {
   try {
     const raw = localStorage.getItem(getStorageKey());
     if (!raw) return defaultState();
-    return { ...defaultState(), ...JSON.parse(raw) };
+    return hydrate(JSON.parse(raw));
   } catch { return defaultState(); }
 }
 
@@ -68,30 +86,36 @@ function saveState() {
   if (typeof window.syncSchedulePush === 'function') window.syncSchedulePush(state);
 }
 
+function resetView() {
+  selectedIdx = null;
+  selectedPersonId = null;
+  resetForm();
+}
+
 // Auth callbacks — sync.js tarafından çağrılır
 window.onAuthLogin = function (userId) {
   window.CF_USER_ID = userId;
   state = loadState();   // kullanıcıya özel local storage'a geç
+  resetView();
   render();
 };
 window.onAuthLogout = function () {
   window.CF_USER_ID = null;
   state = defaultState();  // temiz slate — hesap verisi ekranda kalmasın
+  resetView();
   render();
 };
 
 // ---------- Helpers ----------
-function todayMonth() {
+function todayIndex() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return d.getFullYear() * 12 + d.getMonth();
 }
 
-function dateKey(year, month, day) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function daysInMonth(year, month) {
-  return new Date(year, month, 0).getDate();
+// Bu ayın son ödeme günü geçtiyse plan bir sonraki aydan başlar
+function defaultMonth() {
+  const late = new Date().getDate() > state.dueDay;
+  return T.monthKey(todayIndex() + (late ? 1 : 0));
 }
 
 function fmt(n) {
@@ -100,394 +124,649 @@ function fmt(n) {
   }).format(n || 0);
 }
 
-const DAY_NAMES = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
-const DAY_NAMES_FULL = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+function fmtNum(n) {
+  return new Intl.NumberFormat("tr-TR", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(n || 0);
+}
+
+function fmtShort(n) {
+  const abs = Math.abs(n), s = n < 0 ? "-" : "";
+  const f = v => new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 }).format(v);
+  if (abs >= 1e6) return s + f(abs / 1e6) + "M";
+  if (abs >= 1e3) return s + f(abs / 1e3) + "K";
+  return s + Math.round(abs).toLocaleString("tr-TR");
+}
+
+// "22 Ekim 2026" / "22 Eki 2026" / "Ekim 2026"
+function dueLong(idx)  { return `${T.dueDate(idx, state.dueDay).getDate()} ${T.monthName(idx)} ${T.yearOf(idx)}`; }
+function dueShort(idx) { return `${T.dueDate(idx, state.dueDay).getDate()} ${T.monthShort(idx)} ${T.yearOf(idx)}`; }
+function monthLong(idx) { return `${T.monthName(idx)} ${T.yearOf(idx)}`; }
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
-function recurringForMonth(year, month) {
-  const last = daysInMonth(year, month);
-  const out = {};
-  for (const r of state.recurring) {
-    const d = Math.min(r.day, last);
-    const key = dateKey(year, month, d);
-    if (!out[key]) out[key] = [];
-    out[key].push({ id: `r-${r.id}`, desc: r.desc, amount: r.amount, type: r.type, fixed: true, recurringId: r.id });
-  }
-  return out;
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
 }
 
-function entriesFor(dateKeyStr, recurringMap) {
-  return [...(recurringMap[dateKeyStr] || []), ...(state.entriesByDate[dateKeyStr] || [])];
+function personById(id) { return state.people.find(p => p.id === id); }
+function seriesVar(person) { return `var(--s${(person.color % SERIES_COUNT) + 1})`; }
+
+function swatch(person) {
+  const i = el("i", "swatch");
+  i.style.background = seriesVar(person);
+  return i;
+}
+
+// Renk kişiye bağlıdır, sırasına değil: yeni kişi boştaki ilk rengi alır
+function nextColor() {
+  const used = new Set(state.people.map(p => p.color));
+  for (let c = 0; c < SERIES_COUNT; c++) if (!used.has(c)) return c;
+  return state.people.length % SERIES_COUNT;
 }
 
 // ---------- Render ----------
 const els = {
-  monthPicker: document.getElementById("monthPicker"),
-  prev:         document.getElementById("prevMonth"),
-  next:         document.getElementById("nextMonth"),
-  opening:      document.getElementById("openingBalance"),
-  totalIncome:  document.getElementById("totalIncome"),
-  totalExpense: document.getElementById("totalExpense"),
-  endingBalance:document.getElementById("endingBalance"),
-  recurringForm:document.getElementById("recurringForm"),
-  recurringList:document.getElementById("recurringList"),
-  recurringBody:document.getElementById("recurringBody"),
-  toggleRecurring: document.getElementById("toggleRecurring"),
-  exportBtn:    document.getElementById("exportBtn"),
-  importInput:  document.getElementById("importInput"),
+  monthPicker:   document.getElementById("monthPicker"),
+  prev:          document.getElementById("prevMonth"),
+  next:          document.getElementById("nextMonth"),
+  dueLabel:      document.getElementById("dueLabel"),
+  dueTotal:      document.getElementById("dueTotal"),
+  nextLabel:     document.getElementById("nextLabel"),
+  nextTotal:     document.getElementById("nextTotal"),
+  remaining:     document.getElementById("remainingTotal"),
+  endLabel:      document.getElementById("endLabel"),
+  legend:        document.getElementById("chartLegend"),
+  chart:         document.getElementById("planChart"),
+  chartEmpty:    document.getElementById("chartEmpty"),
+  tooltip:       document.getElementById("chartTooltip"),
+  dueDay:        document.getElementById("dueDay"),
+  table:         document.getElementById("planTable"),
+  personTabs:    document.getElementById("personTabs"),
+  personBar:     document.getElementById("personBar"),
+  personStats:   document.getElementById("personStats"),
+  addPerson:     document.getElementById("addPerson"),
+  renamePerson:  document.getElementById("renamePerson"),
+  deletePerson:  document.getElementById("deletePerson"),
+  instList:      document.getElementById("instList"),
+  instForm:      document.getElementById("instForm"),
+  instSubmit:    document.getElementById("instSubmit"),
+  instCancel:    document.getElementById("instCancel"),
+  instPreview:   document.getElementById("instPreview"),
+  exportBtn:     document.getElementById("exportBtn"),
+  importInput:   document.getElementById("importInput"),
 };
 
 function render() {
   els.monthPicker.value = currentMonth;
-  const [y, m] = currentMonth.split("-").map(Number);
-  const last = daysInMonth(y, m);
-  const recMap = recurringForMonth(y, m);
+  els.dueDay.value = state.dueDay;
 
-  els.opening.value = state.openingBalanceByMonth[currentMonth] ?? "";
-  const opening = Number(state.openingBalanceByMonth[currentMonth] || 0);
+  const start = T.monthIndex(currentMonth);
+  const known = new Set(state.people.map(p => p.id));
+  const lastDue = state.installments
+    .filter(i => known.has(i.personId))
+    .reduce((m, i) => Math.max(m, T.lastDueIndex(i)), -Infinity);
+  const end = Math.min(lastDue, start + MAX_MONTHS - 1);
+  const rows = end >= start ? T.buildSchedule(state.people, state.installments, start, end) : [];
+  lastRows = rows;
+  if (selectedIdx != null && !rows.some(r => r.idx === selectedIdx)) selectedIdx = null;
 
-  // Clamp selectedDay
-  if (selectedDay > last) selectedDay = last;
-  if (selectedDay < 1)    selectedDay = 1;
-
-  // Data collection loop (no DOM cards)
-  let running = opening;
-  let totalIncome = 0, totalExpense = 0;
-  const runningBalances = [];
-  const dailyNets = [];
-
-  for (let d = 1; d <= last; d++) {
-    const key = dateKey(y, m, d);
-    const entries = entriesFor(key, recMap);
-    let delta = 0;
-    for (const e of entries) {
-      if (e.type === "income") { delta += Number(e.amount); totalIncome += Number(e.amount); }
-      else                     { delta -= Number(e.amount); totalExpense += Number(e.amount); }
-    }
-    running += delta;
-    runningBalances.push(running);
-    dailyNets.push(delta);
-  }
-
-  els.totalIncome.textContent  = fmt(totalIncome);
-  els.totalExpense.textContent = fmt(totalExpense);
-  els.endingBalance.textContent = fmt(opening + totalIncome - totalExpense);
-
-  renderChart(runningBalances, dailyNets, opening, y, m);
-
-  const selKey = dateKey(y, m, selectedDay);
-  renderDayPanel(selectedDay, y, m, entriesFor(selKey, recMap), runningBalances[selectedDay - 1] ?? opening);
-
-  renderRecurring();
+  renderSummary(rows, start, lastDue);
+  renderLegend();
+  renderChart(rows);
+  renderTable(rows);
+  renderInstallments(start);
 }
 
-// ---------- Day panel ----------
-function renderDayPanel(day, year, month, entries, balance) {
-  const panel = document.getElementById("dayPanel");
-  if (!panel) return;
+function renderSummary(rows, start, lastDue) {
+  const totalAt = idx => rows.find(r => r.idx === idx)?.total || 0;
+  const day = idx => `${T.dueDate(idx, state.dueDay).getDate()} ${T.monthName(idx)}`;
+  els.dueLabel.textContent  = day(start) + " ödemesi";
+  els.dueTotal.textContent  = fmt(totalAt(start));
+  els.nextLabel.textContent = day(start + 1);
+  els.nextTotal.textContent = fmt(totalAt(start + 1));
+  els.remaining.textContent = fmt(rows.reduce((s, r) => s + r.total, 0));
+  els.endLabel.textContent  = lastDue >= start ? monthLong(lastDue) : "—";
+}
 
-  const date = new Date(year, month - 1, day);
-  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-  const key = dateKey(year, month, day);
+function renderLegend() {
+  els.legend.replaceChildren();
+  if (state.people.length < 2) return;   // tek seri: başlık yeterli
+  for (const p of state.people) {
+    const item = el("span", "leg");
+    item.append(swatch(p), document.createTextNode(p.name));
+    els.legend.append(item);
+  }
+}
 
-  // Head
-  const numEl = panel.querySelector(".dp-day-num");
-  numEl.textContent = day;
-  numEl.style.color = isWeekend ? "var(--warn)" : "";
+// ---------- Payment table (Excel'deki özet sayfası) ----------
+function renderTable(rows) {
+  const table = els.table;
+  table.replaceChildren();
+  const people = state.people;
+  const cols = people.length + 2;
 
-  panel.querySelector(".dp-day-name").textContent =
-    DAY_NAMES_FULL[date.getDay()] + " · " +
-    date.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+  const head = table.createTHead().insertRow();
+  head.append(el("th", "", "Son ödeme"));
+  for (const p of people) {
+    const th = el("th", "num");
+    th.append(swatch(p), document.createTextNode(p.name));
+    head.append(th);
+  }
+  head.append(el("th", "num", "Toplam"));
 
-  const balEl = panel.querySelector(".dp-balance");
-  balEl.textContent = fmt(balance);
-  balEl.className = "dp-balance" + (balance < 0 ? " negative" : "");
+  const body = table.createTBody();
+  if (!rows.length) {
+    const td = el("td", "empty", state.installments.length
+      ? `${dueLong(T.monthIndex(currentMonth))} ve sonrasında ödeme yok.`
+      : "Henüz taksit yok.");
+    td.colSpan = cols;
+    body.insertRow().append(td);
+    return;
+  }
 
-  // Entries list
-  const ul = panel.querySelector(".dp-entries");
-  ul.innerHTML = "";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const sums = Object.fromEntries(people.map(p => [p.id, 0]));
+  let grand = 0;
 
-  if (entries.length === 0) {
-    const empty = document.createElement("li");
-    empty.className = "dp-empty";
-    empty.textContent = "Bu gün için hareket yok";
-    ul.append(empty);
+  for (const r of rows) {
+    const tr = body.insertRow();
+    const open = r.idx === selectedIdx;
+    tr.className = "month-row" + (open ? " selected" : "") + (r.total ? "" : " zero")
+      + (T.dueDate(r.idx, state.dueDay) < today ? " past" : "");
+    tr.tabIndex = 0;
+    tr.setAttribute("aria-expanded", String(open));
+    const date = el("td");
+    date.append(el("span", "d-long", dueShort(r.idx)),
+      el("span", "d-short", `${T.monthShort(r.idx)} ’${String(T.yearOf(r.idx)).slice(2)}`));
+    tr.append(date);
+    for (const p of people) {
+      const v = r.byPerson[p.id];
+      tr.append(el("td", "num", v ? fmtNum(v) : "—"));
+      sums[p.id] += v;
+    }
+    tr.append(el("td", "num total", r.total ? fmtNum(r.total) : "—"));
+    grand += r.total;
+
+    const toggle = () => { selectedIdx = open ? null : r.idx; render(); };
+    tr.addEventListener("click", toggle);
+    tr.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+    });
+
+    if (open) {
+      const detail = body.insertRow();
+      detail.className = "detail-row";
+      const td = el("td");
+      td.colSpan = cols;
+      td.append(monthDetail(r));
+      detail.append(td);
+    }
+  }
+
+  const foot = table.createTFoot().insertRow();
+  foot.append(el("td", "", "Toplam"));
+  for (const p of people) foot.append(el("td", "num", fmtNum(sums[p.id])));
+  foot.append(el("td", "num total", fmtNum(grand)));
+}
+
+// Seçili ayda ödenen taksitler
+function monthDetail(row) {
+  const ul = el("ul", "month-items");
+  if (!row.items.length) {
+    ul.append(el("li", "dp-empty", "Bu ay ödeme yok"));
+    return ul;
+  }
+  const order = new Map(state.people.map((p, i) => [p.id, i]));
+  const items = [...row.items].sort((a, b) =>
+    order.get(a.inst.personId) - order.get(b.inst.personId) || a.inst.desc.localeCompare(b.inst.desc, "tr"));
+  for (const { inst, no, amount } of items) {
+    const p = personById(inst.personId);
+    const li = el("li");
+    const who = el("span", "who");
+    who.append(swatch(p), document.createTextNode(p.name));
+    li.append(who, el("span", "desc", inst.desc), el("span", "no", `${no}/${T.planLength(inst)}`), el("span", "amount", fmt(amount)));
+    ul.append(li);
+  }
+  return ul;
+}
+
+// ---------- Installments (Excel'deki kişi sayfaları) ----------
+function renderInstallments(start) {
+  if (!personById(selectedPersonId)) selectedPersonId = state.people[0]?.id ?? null;
+  const person = personById(selectedPersonId);
+
+  els.personTabs.replaceChildren(...state.people.map(p => {
+    const b = el("button", "ptab" + (p.id === selectedPersonId ? " active" : ""));
+    b.type = "button";
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", String(p.id === selectedPersonId));
+    b.append(swatch(p), document.createTextNode(p.name));
+    b.addEventListener("click", () => {
+      if (p.id === selectedPersonId) return;
+      selectedPersonId = p.id;
+      resetForm();
+      render();
+    });
+    return b;
+  }));
+
+  els.personBar.hidden = !person;
+  els.instForm.hidden = !person;
+  els.instPreview.hidden = !person;
+  els.instList.replaceChildren();
+  if (!person) {
+    els.instList.append(el("li", "dp-empty", "Taksit eklemek için önce bir kişi ekle."));
+    return;
+  }
+
+  const mine = state.installments.filter(i => i.personId === person.id);
+  let monthly = 0, remaining = 0;
+  for (const inst of mine) {
+    if (T.installmentNo(inst, start)) monthly += T.perInstallment(inst);
+    remaining += T.remainingFrom(inst, start) * T.perInstallment(inst);
+  }
+  els.personStats.textContent =
+    `${T.dueDate(start, state.dueDay).getDate()} ${T.monthName(start)}: ${fmt(monthly)} · kalan ${fmt(remaining)}`;
+
+  if (!mine.length) {
+    els.instList.append(el("li", "dp-empty", `${person.name} için taksit yok`));
+    return;
+  }
+
+  const sorted = mine
+    .map(inst => ({ inst, left: T.remainingFrom(inst, start) }))
+    .sort((a, b) => (b.left > 0) - (a.left > 0)
+      || T.firstDueIndex(a.inst) - T.firstDueIndex(b.inst)
+      || a.inst.desc.localeCompare(b.inst.desc, "tr"));
+
+  for (const { inst, left } of sorted) {
+    const per = T.perInstallment(inst);
+    const plan = T.planLength(inst);
+    const li = el("li", "inst" + (left ? "" : " done") + (inst.id === editingId ? " editing" : ""));
+    li.tabIndex = 0;
+    li.title = "Düzenlemek için tıkla";
+
+    const main = el("div", "inst-main");
+    main.append(el("strong", "", inst.desc));
+    let meta = `${monthLong(T.monthIndex(inst.statement))} ekstresi · ${inst.count} × ${fmt(per)}`;
+    if (plan > inst.count) meta += ` · ${plan} taksitlik plan, orijinal ${fmt(T.originalTotal(inst))}`;
+    main.append(el("span", "meta", meta));
+    main.append(el("span", "meta", `${dueShort(T.firstDueIndex(inst))} → ${dueShort(T.lastDueIndex(inst))}`));
+
+    const side = el("div", "inst-side");
+    side.append(el("span", "amount", fmt(per)));
+    side.append(el("span", "meta", left ? `kalan ${left}/${plan} · ${fmt(left * per)}` : "bitti"));
+
+    const del = el("button", "del", "✕");
+    del.type = "button";
+    del.setAttribute("aria-label", `${inst.desc} sil`);
+    del.addEventListener("click", e => {
+      e.stopPropagation();
+      if (!confirm(`“${inst.desc}” silinsin mi?`)) return;
+      state.installments = state.installments.filter(x => x.id !== inst.id);
+      if (editingId === inst.id) resetForm();
+      saveState(); render();
+    });
+
+    li.append(main, side, del);
+    li.addEventListener("click", () => startEdit(inst));
+    li.addEventListener("keydown", e => { if (e.key === "Enter") startEdit(inst); });
+    els.instList.append(li);
+  }
+}
+
+// ---------- Installment form ----------
+function readForm() {
+  const f = els.instForm.elements;
+  const count = Math.round(Number(f.count.value));
+  const amount = Number(f.amount.value);
+  const planCount = Math.round(Number(f.planCount.value)) || 0;
+  const statement = T.parseStatement(f.statement.value);
+  const desc = f.desc.value.trim();
+  if (!desc || !statement || !(count >= 1) || !(amount > 0)) return null;
+  const total = f.mode.value === "per" ? Math.round(amount * count * 100) / 100 : amount;
+  const inst = { desc, statement, count, total };
+  if (planCount > count) inst.planCount = planCount;
+  return inst;
+}
+
+function updatePreview() {
+  const inst = readForm();
+  if (!inst) { els.instPreview.textContent = ""; return; }
+  let text = `${inst.count} × ${fmt(T.perInstallment(inst))} = ${fmt(inst.total)}`
+    + ` · ilk ödeme ${dueLong(T.firstDueIndex(inst))}`;
+  if (inst.count > 1) text += `, son ${dueLong(T.lastDueIndex(inst))}`;
+  if (inst.planCount) text += ` · orijinal ${fmt(T.originalTotal(inst))}`;
+  els.instPreview.textContent = text;
+}
+
+function resetForm() {
+  editingId = null;
+  els.instForm.reset();
+  els.instForm.elements.statement.value = T.monthKey(todayIndex());
+  els.instSubmit.textContent = "Ekle";
+  els.instCancel.hidden = true;
+  els.instPreview.textContent = "";
+}
+
+function startEdit(inst) {
+  editingId = inst.id;
+  const f = els.instForm.elements;
+  f.desc.value = inst.desc;
+  f.statement.value = inst.statement;
+  f.count.value = inst.count;
+  f.amount.value = Math.round(inst.total * 100) / 100;
+  f.mode.value = "total";
+  f.planCount.value = inst.planCount || "";
+  els.instSubmit.textContent = "Kaydet";
+  els.instCancel.hidden = false;
+  render();
+  updatePreview();
+  els.instForm.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  f.desc.focus({ preventScroll: true });
+}
+
+els.instForm.addEventListener("input", updatePreview);
+
+els.instForm.addEventListener("submit", e => {
+  e.preventDefault();
+  const inst = readForm();
+  if (!inst || !selectedPersonId) return;
+  if (editingId) {
+    state.installments = state.installments.map(x =>
+      x.id === editingId ? { id: x.id, personId: x.personId, ...inst } : x);
   } else {
-    for (const e of entries) {
-      const li = document.createElement("li");
-
-      const desc = document.createElement("span");
-      desc.className = "desc";
-      desc.textContent = e.desc;
-
-      const right = document.createElement("span");
-      right.style.display = "flex";
-      right.style.alignItems = "center";
-      right.style.gap = "8px";
-
-      if (e.fixed) {
-        const tag = document.createElement("span");
-        tag.className = "fixed-tag";
-        tag.textContent = "sabit";
-        right.append(tag);
-      }
-
-      const amt = document.createElement("span");
-      amt.className = `amount ${e.type}`;
-      amt.textContent = (e.type === "income" ? "+" : "−") + fmt(Math.abs(Number(e.amount)));
-
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "del";
-      del.textContent = "✕";
-      del.addEventListener("click", () => {
-        if (e.fixed) {
-          if (confirm("Bu sabit hareketi tüm aylardan kaldırmak istiyor musun?")) {
-            state.recurring = state.recurring.filter(r => r.id !== e.recurringId);
-            saveState(); render();
-          }
-        } else {
-          state.entriesByDate[key] = (state.entriesByDate[key] || []).filter(x => x.id !== e.id);
-          if (!state.entriesByDate[key].length) delete state.entriesByDate[key];
-          saveState(); render();
-        }
-      });
-
-      right.append(amt, del);
-      li.append(desc, right);
-      ul.append(li);
-    }
+    state.installments.push({ id: uid(), personId: selectedPersonId, ...inst });
   }
+  resetForm();
+  saveState(); render();
+});
 
-  // Add-entry form — replace to clear old listeners
-  const oldForm = panel.querySelector(".dp-add");
-  const form = oldForm.cloneNode(true);
-  oldForm.replaceWith(form);
+els.instCancel.addEventListener("click", () => { resetForm(); render(); });
 
-  form.addEventListener("submit", ev => {
-    ev.preventDefault();
-    const fd = new FormData(form);
-    const entry = {
-      id: uid(),
-      desc: String(fd.get("desc") || "").trim(),
-      amount: Number(fd.get("amount")),
-      type: String(fd.get("type")),
-    };
-    if (!entry.desc || !Number.isFinite(entry.amount) || entry.amount <= 0) return;
-    if (!state.entriesByDate[key]) state.entriesByDate[key] = [];
-    state.entriesByDate[key].push(entry);
+// ---------- People ----------
+els.addPerson.addEventListener("click", () => {
+  const name = (prompt("Kişi adı") || "").trim();
+  if (!name) return;
+  const existing = state.people.find(p => T.normalize(p.name) === T.normalize(name));
+  if (existing) {
+    selectedPersonId = existing.id;
+  } else {
+    const person = { id: uid(), name, color: nextColor() };
+    state.people.push(person);
+    selectedPersonId = person.id;
     saveState();
-    form.reset();
-    render();
-  });
-}
-
-// ---------- Recurring ----------
-function renderRecurring() {
-  els.recurringList.innerHTML = "";
-  for (const r of [...state.recurring].sort((a, b) => a.day - b.day)) {
-    const li = document.createElement("li");
-    const left = document.createElement("div");
-    left.innerHTML = `<strong>${escapeHtml(r.desc)}</strong> <span class="meta">· her ayın ${r.day}. günü</span>`;
-    const right = document.createElement("div");
-    right.style.cssText = "display:flex;align-items:center;gap:10px";
-    const amt = document.createElement("span");
-    amt.className = `amount ${r.type}`;
-    amt.textContent = (r.type === "income" ? "+" : "−") + fmt(r.amount);
-    const del = document.createElement("button");
-    del.className = "ghost small";
-    del.textContent = "Sil";
-    del.addEventListener("click", () => { state.recurring = state.recurring.filter(x => x.id !== r.id); saveState(); render(); });
-    right.append(amt, del);
-    li.append(left, right);
-    els.recurringList.append(li);
   }
-}
+  resetForm();
+  render();
+});
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
+els.renamePerson.addEventListener("click", () => {
+  const person = personById(selectedPersonId);
+  if (!person) return;
+  const name = (prompt("Yeni ad", person.name) || "").trim();
+  if (!name || name === person.name) return;
+  person.name = name;
+  saveState(); render();
+});
+
+els.deletePerson.addEventListener("click", () => {
+  const person = personById(selectedPersonId);
+  if (!person) return;
+  const n = state.installments.filter(i => i.personId === person.id).length;
+  if (!confirm(n ? `“${person.name}” ve ${n} taksiti silinsin mi?` : `“${person.name}” silinsin mi?`)) return;
+  state.people = state.people.filter(p => p.id !== person.id);
+  state.installments = state.installments.filter(i => i.personId !== person.id);
+  resetView();
+  saveState(); render();
+});
 
 // ---------- Events ----------
 els.prev.addEventListener("click", () => shiftMonth(-1));
 els.next.addEventListener("click", () => shiftMonth(1));
 els.monthPicker.addEventListener("change", () => {
-  if (els.monthPicker.value) { currentMonth = els.monthPicker.value; render(); }
+  if (els.monthPicker.value) { currentMonth = els.monthPicker.value; selectedIdx = null; render(); }
 });
 
 function shiftMonth(delta) {
-  const [y, m] = currentMonth.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  currentMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  currentMonth = T.monthKey(T.monthIndex(currentMonth) + delta);
+  selectedIdx = null;
   render();
 }
 
-els.opening.addEventListener("input", () => {
-  const v = els.opening.value;
-  if (v === "") delete state.openingBalanceByMonth[currentMonth];
-  else state.openingBalanceByMonth[currentMonth] = Number(v);
-  saveState(); render();
-});
-
-els.toggleRecurring.addEventListener("click", () => {
-  const hidden = els.recurringBody.hasAttribute("hidden");
-  hidden ? els.recurringBody.removeAttribute("hidden") : els.recurringBody.setAttribute("hidden", "");
-  els.toggleRecurring.textContent = hidden ? "Gizle" : "Göster";
-});
-
-els.recurringForm.addEventListener("submit", e => {
-  e.preventDefault();
-  const desc = document.getElementById("rDesc").value.trim();
-  const amount = Number(document.getElementById("rAmount").value);
-  const type = document.getElementById("rType").value;
-  const day = Math.max(1, Math.min(31, Number(document.getElementById("rDay").value)));
-  if (!desc || !Number.isFinite(amount) || amount <= 0 || !day) return;
-  state.recurring.push({ id: uid(), desc, amount, type, day });
-  saveState(); els.recurringForm.reset(); render();
+els.dueDay.addEventListener("change", () => {
+  const v = Math.round(Number(els.dueDay.value));
+  if (v >= 1 && v <= 31 && v !== state.dueDay) { state.dueDay = v; saveState(); }
+  render();
 });
 
 els.exportBtn.addEventListener("click", () => {
   const a = Object.assign(document.createElement("a"), {
     href: URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" })),
-    download: `cashflow-${new Date().toISOString().slice(0, 10)}.json`,
+    download: `para-${new Date().toISOString().slice(0, 10)}.json`,
   });
   a.click(); URL.revokeObjectURL(a.href);
 });
 
 els.importInput.addEventListener("change", async e => {
   const file = e.target.files?.[0]; if (!file) return;
+  const isExcel = /\.xlsx$/i.test(file.name);
   try {
-    const data = JSON.parse(await file.text());
-    if (!confirm("Mevcut verilerin üzerine yazılacak. Devam edelim mi?")) return;
-    state = { ...defaultState(), ...data };
+    if (isExcel) {
+      if (!(await importExcel(file))) return;
+    } else {
+      const data = JSON.parse(await file.text());
+      if (!confirm("Mevcut verilerin üzerine yazılacak. Devam edelim mi?")) return;
+      state = hydrate(data);
+    }
+    resetView();
     saveState();
     render();
-  } catch { alert("Geçersiz dosya."); return; }
-  finally { els.importInput.value = ""; }
+  } catch (err) {
+    alert(err.userMessage || (isExcel ? "Excel dosyası okunamadı." : "Geçersiz dosya."));
+    return;
+  } finally { els.importInput.value = ""; }
   if (typeof window.syncPushNow === 'function') await window.syncPushNow(state);
 });
 
+// ---------- Excel import ----------
+// SheetJS yalnızca Excel içe aktarılırken yüklenir
+const XLSX_SRC = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+const XLSX_SRI = "sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT";
+
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((resolve, reject) => {
+    const s = Object.assign(document.createElement("script"), {
+      src: XLSX_SRC, integrity: XLSX_SRI, crossOrigin: "anonymous",
+    });
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = () => {
+      s.remove();
+      reject(Object.assign(new Error("xlsx load failed"), {
+        userMessage: "Excel okuyucu yüklenemedi. İnternet bağlantını kontrol et.",
+      }));
+    };
+    document.head.append(s);
+  });
+}
+
+// Her sayfa bir kişi; o kişinin taksitleri Excel'dekilerle değiştirilir, diğer kişilere dokunulmaz
+async function importExcel(file) {
+  const XLSX = await loadXlsx();
+  const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
+  const sheets = wb.SheetNames.map(name => ({
+    name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null }),
+  }));
+  const result = T.parseWorkbook(sheets);
+  if (!result.people.length) {
+    throw Object.assign(new Error("no sheets"), { userMessage: "Excel'de “Ürün” sütunu olan bir sayfa bulunamadı." });
+  }
+
+  const total = result.people.reduce((s, p) => s + p.installments.length, 0);
+  const summary = result.people.map(p => `${p.name} (${p.installments.length})`).join(", ");
+  let msg = `${total} taksit içe aktarılacak: ${summary}.\nBu kişilerin mevcut taksitleri Excel'dekilerle değiştirilecek.`;
+  if (result.skipped) msg += `\n${result.skipped} satır eksik bilgi nedeniyle atlanacak.`;
+  if (!confirm(msg + "\nDevam edelim mi?")) return false;
+
+  for (const p of result.people) {
+    let person = state.people.find(x => T.normalize(x.name) === T.normalize(p.name));
+    if (!person) {
+      person = { id: uid(), name: p.name, color: nextColor() };
+      state.people.push(person);
+    }
+    state.installments = state.installments
+      .filter(i => i.personId !== person.id)
+      .concat(p.installments.map(i => ({ id: uid(), personId: person.id, ...i })));
+  }
+  if (result.dueDay) state.dueDay = result.dueDay;
+  return true;
+}
+
 // ---------- Chart ----------
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-
-function fmtShort(n) {
-  const abs = Math.abs(n), s = n < 0 ? "-" : "";
-  if (abs >= 1e6) return s + (abs / 1e6).toFixed(1) + "M";
-  if (abs >= 1e3) return s + (abs / 1e3).toFixed(0) + "K";
-  return s + Math.round(abs).toLocaleString("tr-TR");
+function niceScale(max, count) {
+  const raw = max / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(s => s >= raw);
+  return { step, top: Math.ceil(max / step - 1e-9) * step };
 }
 
-function niceYTicks(lo, hi, count) {
-  const range = hi - lo || 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(range / count)));
-  const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(s => range / s <= count * 1.5) || mag * 10;
-  const ticks = [];
-  for (let t = Math.ceil(lo / step) * step; t <= hi + step * 0.01; t = Math.round((t + step) * 1e9) / 1e9)
-    ticks.push(t);
-  return ticks;
+// Yalnızca üst köşeleri yuvarlatılmış sütun (taban düz)
+function topRoundedBar(x, y, w, h, r) {
+  r = Math.min(r, h, w / 2);
+  return `M${x},${y + h} V${y + r} A${r},${r} 0 0 1 ${x + r},${y} H${x + w - r} A${r},${r} 0 0 1 ${x + w},${y + r} V${y + h} Z`;
 }
 
-function renderChart(runningBalances, dailyNets, opening, year, month) {
-  const svg = document.getElementById("cashflowChart");
-  if (!svg) return;
-  const n = runningBalances.length;
-  svg.innerHTML = "";
-  if (n === 0) return;
+function renderChart(rows) {
+  const svg = els.chart;
+  const hasData = rows.some(r => r.total > 0);
+  svg.style.display = hasData ? "" : "none";
+  els.chartEmpty.hidden = hasData;
+  els.tooltip.setAttribute("hidden", "");
+  if (!hasData) {
+    els.chartEmpty.textContent = state.installments.length
+      ? "Bu aydan sonra ödenecek taksit yok."
+      : "Henüz taksit yok — aşağıdan ekle ya da Taksitler Excel dosyanı içe aktar.";
+    svg.innerHTML = "";
+    return;
+  }
 
-  const W = 880, H = 170, PL = 58, PR = 12, PT = 14, PB = 28;
+  const W = Math.round(svg.getBoundingClientRect().width) || 880, H = 180;
+  const PL = 44, PR = 8, PT = 22, PB = 24, GAP = 2, R = 4;
   const plotW = W - PL - PR, plotH = H - PT - PB;
-
-  const allVals = [opening, ...runningBalances];
-  let lo = Math.min(0, ...allVals), hi = Math.max(0, ...allVals);
-  if (lo === hi) { lo -= 1000; hi += 1000; }
-  const pad = (hi - lo) * 0.12;
-  lo -= pad; hi += pad;
-  const rng = hi - lo;
-
-  const toY = v => PT + plotH * (1 - (v - lo) / rng);
-  const toX = d => PL + (d / n) * plotW;
-
-  const pts = [[toX(0), toY(opening)], ...runningBalances.map((b, i) => [toX(i + 1), toY(b)])];
-  const lineD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
-  const zy = clamp(toY(0), PT, PT + plotH);
-  const areaD = lineD + ` L${pts[n][0].toFixed(1)},${zy} L${PL},${zy} Z`;
-  const colW = (plotW / n).toFixed(1);
+  const n = rows.length;
+  const band = plotW / n;
+  const barW = Math.min(24, band * 0.6);
+  const { step, top } = niceScale(Math.max(...rows.map(r => r.total)), 4);
+  const toY = v => PT + plotH * (1 - v / top);
+  const focusIdx = selectedIdx ?? rows[0].idx;
 
   // Y grid
   let gridSvg = "", yLblSvg = "";
-  for (const v of niceYTicks(lo, hi, 4)) {
+  for (let v = 0; v <= top + step * 0.01; v += step) {
     const y = toY(v).toFixed(1);
-    gridSvg  += `<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>`;
-    yLblSvg  += `<text x="${PL-6}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="var(--muted)">${fmtShort(v)}</text>`;
+    gridSvg += `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="var(--border)" stroke-width="1"/>`;
+    yLblSvg += `<text x="${PL - 8}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="var(--mute)">${fmtShort(v)}</text>`;
   }
 
-  // X labels
-  const shown = new Set([1, n]);
-  for (let d = 5; d < n; d += 5) shown.add(d);
-  const xLblSvg = [...shown].sort((a,b)=>a-b).map(d =>
-    `<text x="${(PL + (d-0.5)/n*plotW).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--muted)">${d}</text>`
-  ).join("");
+  // Columns: kişiler sabit sırada alttan üste, aralarında 2px boşluk
+  const every = Math.ceil(44 / band);
+  let barsSvg = "", xLblSvg = "", capSvg = "", selSvg = "";
+  rows.forEach((row, i) => {
+    const cx = PL + band * (i + 0.5);
+    const x = cx - barW / 2;
+    if (row.idx === selectedIdx) {
+      selSvg = `<rect x="${(PL + band * i).toFixed(1)}" y="${PT}" width="${band.toFixed(1)}" height="${plotH}" fill="var(--accent)" opacity="0.08" rx="4"/>`;
+    }
 
-  // Zero + today lines
-  const zeroSvg = `<line x1="${PL}" y1="${zy}" x2="${W-PR}" y2="${zy}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3,4" opacity="0.4"/>`;
-  let todaySvg = "";
-  const td = new Date();
-  if (td.getFullYear() === year && td.getMonth() + 1 === month) {
-    const tx = toX(td.getDate()).toFixed(1);
-    todaySvg = `<line x1="${tx}" y1="${PT}" x2="${tx}" y2="${PT+plotH}" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.5"/>`;
-  }
+    const segs = state.people
+      .map(p => ({ p, v: row.byPerson[p.id] }))
+      .filter(s => s.v > 0);
+    let cum = 0, parts = "";
+    segs.forEach((s, j) => {
+      const yTop = toY(cum + s.v);
+      const yBot = toY(cum) - (j > 0 ? GAP : 0);
+      cum += s.v;
+      const h = yBot - yTop;
+      if (h <= 0.5) return;
+      parts += j === segs.length - 1
+        ? `<path d="${topRoundedBar(x, yTop, barW, h, R)}" fill="${seriesVar(s.p)}"/>`
+        : `<rect x="${x.toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${seriesVar(s.p)}"/>`;
+    });
+    barsSvg += `<g class="col" data-i="${i}">${parts}</g>`;
 
-  // Selected day highlight
-  const selX = toX(selectedDay - 1).toFixed(1);
-  const selHighlight = `<rect x="${selX}" y="${PT}" width="${colW}" height="${plotH}" fill="var(--accent)" opacity="0.10" rx="2"/>`;
+    // Değer etiketi yalnızca odaktaki ayda
+    if (row.idx === focusIdx && row.total > 0) {
+      const label = band >= 72 ? fmtNum(row.total) : fmtShort(row.total);
+      capSvg = `<text x="${cx.toFixed(1)}" y="${(toY(row.total) - 6).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text)">${label}</text>`;
+    }
 
-  // Dots
-  const dotsSvg = runningBalances.map((_, i) => {
-    const [cx, cy] = pts[i + 1];
-    const col = dailyNets[i] > 0 ? "var(--income)" : dailyNets[i] < 0 ? "var(--expense)" : "var(--muted)";
-    return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="${col}" stroke="var(--panel)" stroke-width="1.5"/>`;
-  }).join("");
+    if (i % every === 0) {
+      const withYear = i === 0 || row.idx % 12 === 0;
+      const label = T.monthShort(row.idx) + (withYear ? ` ’${String(T.yearOf(row.idx)).slice(2)}` : "");
+      xLblSvg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${row.idx === selectedIdx ? "var(--text)" : "var(--mute)"}">${label}</text>`;
+    }
+  });
 
-  // Hit rects (hover + click)
-  const hitsSvg = Array.from({length: n}, (_, i) =>
-    `<rect class="cf-hit" data-d="${i+1}" x="${toX(i).toFixed(1)}" y="${PT}" width="${colW}" height="${plotH}" fill="transparent" style="cursor:pointer"/>`
+  // Hit areas — sütunun tamamı (etiketler dahil)
+  const hitsSvg = rows.map((row, i) =>
+    `<rect class="cf-hit" data-i="${i}" tabindex="0" role="button" aria-label="${dueLong(row.idx)}: ${fmt(row.total)}" x="${(PL + band * i).toFixed(1)}" y="0" width="${band.toFixed(1)}" height="${H}" fill="transparent"/>`
   ).join("");
 
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.innerHTML = `<defs>
-    <linearGradient id="cfGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.14"/>
-      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.01"/>
-    </linearGradient>
-  </defs>
-  ${gridSvg}${zeroSvg}${todaySvg}${selHighlight}
-  <path d="${areaD}" fill="url(#cfGrad)"/>
-  <path d="${lineD}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-  ${dotsSvg}${yLblSvg}${xLblSvg}${hitsSvg}`;
+  svg.innerHTML = `${gridSvg}${selSvg}${barsSvg}${capSvg}${yLblSvg}${xLblSvg}${hitsSvg}`;
 
-  const tt = document.getElementById("chartTooltip");
-  svg.querySelectorAll(".cf-hit").forEach(r => {
-    r.addEventListener("click", () => {
-      selectedDay = Number(r.dataset.d);
-      render();
+  svg.querySelectorAll(".cf-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    const row = rows[i];
+    const col = svg.querySelector(`.col[data-i="${i}"]`);
+    const select = () => { selectedIdx = selectedIdx === row.idx ? null : row.idx; render(); };
+    hit.addEventListener("click", select);
+    hit.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); }
     });
-    r.addEventListener("mousemove", e => {
-      const d = Number(r.dataset.d);
-      const net = dailyNets[d - 1];
-      tt.querySelector(".tt-date").textContent =
-        new Date(year, month-1, d).toLocaleDateString("tr-TR", { weekday:"short", day:"numeric", month:"short" });
-      tt.querySelector(".tt-balance").textContent = "Bakiye: " + fmt(runningBalances[d - 1]);
-      const ttNet = tt.querySelector(".tt-net");
-      ttNet.textContent = "Günlük: " + (net >= 0 ? "+" : "") + fmt(net);
-      ttNet.style.color = net > 0 ? "var(--income)" : net < 0 ? "var(--expense)" : "var(--muted)";
-      tt.removeAttribute("hidden");
-      tt.style.left = (e.clientX + 14) + "px";
-      tt.style.top  = (e.clientY - 60) + "px";
+    hit.addEventListener("pointermove", e => { col.classList.add("hover"); showTooltip(row, e.clientX, e.clientY); });
+    hit.addEventListener("pointerleave", () => { col.classList.remove("hover"); hideTooltip(); });
+    hit.addEventListener("focus", () => {
+      const b = hit.getBoundingClientRect();
+      col.classList.add("hover");
+      showTooltip(row, b.left + b.width / 2, b.top + 40);
     });
-    r.addEventListener("mouseleave", () => tt.setAttribute("hidden", ""));
+    hit.addEventListener("blur", () => { col.classList.remove("hover"); hideTooltip(); });
   });
 }
+
+function showTooltip(row, x, y) {
+  const tt = els.tooltip;
+  tt.replaceChildren(el("span", "tt-date", dueLong(row.idx)));
+  for (const p of state.people) {
+    const v = row.byPerson[p.id];
+    if (!v) continue;
+    const line = el("span", "tt-row");
+    const key = el("i", "tt-key");
+    key.style.background = seriesVar(p);
+    line.append(key, el("strong", "", fmt(v)), el("span", "tt-name", p.name));
+    tt.append(line);
+  }
+  if (state.people.length > 1) tt.append(el("span", "tt-total", "Toplam " + fmt(row.total)));
+  tt.removeAttribute("hidden");
+  const w = tt.offsetWidth, h = tt.offsetHeight;
+  const left = x + 14 + w > window.innerWidth - 8 ? x - 14 - w : x + 14;
+  tt.style.left = Math.max(8, left) + "px";
+  tt.style.top = Math.max(8, y - h - 12) + "px";
+}
+
+function hideTooltip() { els.tooltip.setAttribute("hidden", ""); }
+
+let resizeFrame = 0;
+window.addEventListener("resize", () => {
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(() => renderChart(lastRows));
+});
 
 // ---------- Service Worker ----------
 if ('serviceWorker' in navigator) {
@@ -501,7 +780,7 @@ if (typeof window.syncInit === 'function') {
       if (!remote || typeof remote._v !== 'number') return;
       const local = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
       if (remote._v > (local._v || 0)) {
-        state = { ...defaultState(), ...remote };
+        state = hydrate(remote);
         localStorage.setItem(getStorageKey(), JSON.stringify(state));
         render();
       }
@@ -509,4 +788,5 @@ if (typeof window.syncInit === 'function') {
   });
 }
 
+resetForm();
 render();
