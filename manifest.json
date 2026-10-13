@@ -1,7 +1,7 @@
 {
   "name": "Para",
   "short_name": "Para",
-  "description": "Aylık para akışı takibi",
+  "description": "Kredi kartı taksit takibi",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

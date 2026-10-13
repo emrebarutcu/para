@@ -1,5 +1,5 @@
-const CACHE = 'para-v1';
-const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
+const CACHE = 'para-v2';
+const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
