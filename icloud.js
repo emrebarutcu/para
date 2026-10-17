@@ -24,18 +24,13 @@
     return !!(window.ICLOUD_CONTAINER && window.ICLOUD_API_TOKEN);
   }
 
-  // E-posta (Supabase) hesabı bağlıyken iki bulut aynı veriyi karıştırmasın
-  function blocked() {
-    return !!window.CF_USER_ID;
-  }
-
   function active() {
-    return status === "signedIn" && ready && !blocked();
+    return status === "signedIn" && ready;
   }
 
-  // Oturum açık ama ilk eşitleme yapılmamışsa (ör. e-posta hesabından yeni çıkıldıysa) önce o
+  // Oturum açık ama ilk eşitleme bitmemişse (ör. ağ hatası) yazmadan önce o
   function ensureSynced() {
-    if (status !== "signedIn" || blocked()) return false;
+    if (status !== "signedIn") return false;
     if (!ready) { run(firstSync); return false; }
     return true;
   }
@@ -168,7 +163,7 @@
     lastError = "";
     renderRow();
     container.whenUserSignsOut().then(signedOut);
-    if (!blocked()) run(firstSync);
+    run(firstSync);
   }
 
   function signedOut(err) {
@@ -183,17 +178,15 @@
 
   // ── Arayüz (ayarlardaki iCloud satırı) ───────────────────────────────────
   function renderRow() {
-    const row = document.getElementById("icloudRow");
-    if (!row) return;
-    row.hidden = !configured();
+    const group = document.getElementById("cloudGroup");
+    if (!group) return;
+    group.hidden = !configured();
     const text = document.getElementById("icloudStatus");
     const signInSlot = document.getElementById("ck-sign-in");
     const signOutBtn = document.getElementById("icloudSignOut");
-    const authBtn = document.getElementById("authBtn");
 
     let msg;
-    if (blocked() && status !== "loading") msg = "E-posta hesabından çıkış yapınca kullanılabilir";
-    else if (status === "loading") msg = "Bağlanıyor…";
+    if (status === "loading") msg = "Bağlanıyor…";
     else if (status === "signedIn") {
       const name = user?.nameComponents
         ? [user.nameComponents.givenName, user.nameComponents.familyName].filter(Boolean).join(" ")
@@ -206,13 +199,8 @@
     if (lastError) msg += ` — ${lastError}`;
     if (text) text.textContent = msg;
 
-    if (signInSlot) signInSlot.hidden = status !== "signedOut" || blocked();
+    if (signInSlot) signInSlot.hidden = status !== "signedOut";
     if (signOutBtn) signOutBtn.hidden = status !== "signedIn";
-    // iCloud bağlıyken e-posta girişini kapat
-    if (authBtn) {
-      authBtn.disabled = status === "signedIn";
-      authBtn.title = status === "signedIn" ? "iCloud bağlıyken kullanılamaz" : "";
-    }
   }
 
   // ── Public API (app.js PARA_SYNC üzerinden çağırır) ─────────────────────
@@ -268,5 +256,5 @@
     return run(() => save(state));
   }
 
-  (window.PARA_SYNC = window.PARA_SYNC || []).push({ id: "icloud", init, schedulePush, pushNow, refresh: renderRow });
+  (window.PARA_SYNC = window.PARA_SYNC || []).push({ id: "icloud", init, schedulePush, pushNow });
 })();

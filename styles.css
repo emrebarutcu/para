@@ -26,9 +26,6 @@
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
   --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
   --cash: #9aa0ae;
-  /* sync.js mesaj renkleri */
-  --income: var(--ok);
-  --expense: var(--danger);
 
   --r-xl: 24px;
   --r-lg: 20px;
@@ -741,7 +738,7 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .field-label { font-size: 13px; font-weight: 600; color: var(--text-2); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field input[type="text"], .field input[type="number"], .field input[type="date"],
-.inline-add input, .people-edit input, .modal-box input {
+.inline-add input, .people-edit input {
   width: 100%;
   height: 46px;
   padding: 0 14px;
@@ -752,12 +749,12 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   outline: none;
   transition: border-color .15s, box-shadow .15s, background .15s;
 }
-.field input:focus, .inline-add input:focus, .people-edit input:focus, .modal-box input:focus {
+.field input:focus, .inline-add input:focus, .people-edit input:focus {
   border-color: var(--text-3);
   background: var(--surface);
   box-shadow: 0 0 0 4px var(--focus);
 }
-.field input::placeholder, .inline-add input::placeholder, .modal-box input::placeholder { color: var(--text-3); }
+.field input::placeholder, .inline-add input::placeholder { color: var(--text-3); }
 .field input.invalid { border-color: var(--danger); }
 
 .amount-input {
@@ -844,8 +841,6 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .row-text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .row-text strong { font-size: 15px; font-weight: 600; }
 .row-text small { font-size: 13px; color: var(--text-3); }
-#authBtn.auth-active { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
-#authBtn:disabled { opacity: .45; cursor: not-allowed; }
 .ck-slot { flex-shrink: 0; display: flex; align-items: center; min-height: 34px; }
 .ck-slot > * { cursor: pointer; }
 
@@ -867,47 +862,6 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   white-space: nowrap;
 }
 @keyframes toast { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
-
-/* ── Auth modal (sync.js) ── */
-.modal-wrap {
-  position: fixed; inset: 0;
-  z-index: 80;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.modal-overlay { position: absolute; inset: 0; background: var(--overlay); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-.modal-box {
-  position: relative;
-  width: min(400px, 100%);
-  padding: 20px 22px 22px;
-  border-radius: var(--r-xl);
-  background: var(--surface);
-  box-shadow: var(--shadow-lg);
-  animation: pop .2s ease;
-}
-.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.modal-head h2 { font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
-.modal-desc { color: var(--text-2); font-size: 14px; margin: 0 0 12px; }
-.modal-box form { display: flex; flex-direction: column; gap: 10px; }
-.modal-box form .btn { height: 46px; }
-.auth-tabs { display: flex; padding: 3px; gap: 2px; background: var(--surface-2); border-radius: 11px; margin-bottom: 14px; }
-.auth-tab {
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--text-2);
-  padding: 7px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-}
-.auth-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
-.auth-msg { font-size: 13px; margin: 8px 0 0; min-height: 18px; }
-.auth-forgot { border: none; background: transparent; color: var(--text-3); font-size: 13px; padding: 4px 0; }
-.auth-forgot:hover { color: var(--text); }
-.auth-user-email { font-weight: 600; margin: 0 0 16px; }
 
 /* ── Responsive ── */
 @media (max-width: 639px) {

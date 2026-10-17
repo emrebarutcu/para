@@ -30,7 +30,6 @@
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5V4m0 0L7.5 8.5M12 4l4.5 4.5M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11.5m0 0L7.5 11m4.5 4.5 4.5-4.5M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7.5 18.5a4.5 4.5 0 0 1-.7-8.95A5.75 5.75 0 0 1 17.9 9a4.75 4.75 0 0 1-.4 9.5z"/></symbol>
-    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 20a6.5 6.5 0 0 0-2.6-5.2"/></symbol>
   </svg>
 
@@ -292,19 +291,14 @@
             <button type="button" data-theme="dark">Koyu</button>
           </div>
         </div>
-        <div class="settings-group">
+        <div class="settings-group" id="cloudGroup" hidden>
           <span class="group-label">Bulut</span>
-          <div class="row-btn row-static" id="icloudRow" hidden>
+          <div class="row-btn row-static">
             <svg class="ic"><use href="#i-cloud"/></svg>
             <span class="row-text"><strong>iCloud</strong><small id="icloudStatus">Verilerin iCloud hesabında saklanır</small></span>
             <div id="ck-sign-in" class="ck-slot" hidden></div>
             <div id="ck-sign-out" hidden></div>
             <button type="button" id="icloudSignOut" class="btn btn-ghost sm" hidden>Çıkış</button>
-          </div>
-          <div class="row-btn row-static">
-            <svg class="ic"><use href="#i-mail"/></svg>
-            <span class="row-text"><strong>E-posta ile senkronizasyon</strong><small>Verilerin cihazların arasında eşitlenir</small></span>
-            <button type="button" id="authBtn" class="btn btn-ghost sm">☁ Giriş</button>
           </div>
         </div>
         <div class="settings-group">
@@ -323,63 +317,11 @@
     </div>
   </dialog>
 
-  <!-- Auth modal (sync.js) -->
-  <div id="authModal" class="modal-wrap" hidden>
-    <div id="authOverlay" class="modal-overlay"></div>
-    <div class="modal-box">
-      <div class="modal-head">
-        <h2>Bulut senkronizasyonu</h2>
-        <button id="authClose" class="icon-btn" aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
-      </div>
-
-      <div id="authLoginForm">
-        <div class="auth-tabs">
-          <button class="auth-tab active" data-tab="login">Giriş Yap</button>
-          <button class="auth-tab" data-tab="register">Kayıt Ol</button>
-        </div>
-        <form id="authForm">
-          <input id="authEmail" type="email" placeholder="E-posta" autocomplete="email" required />
-          <input id="authPassword" type="password" placeholder="Şifre" autocomplete="current-password" minlength="6" required />
-          <button type="submit" id="authSubmitBtn" class="btn btn-primary">Giriş Yap</button>
-        </form>
-        <p id="authMsg" class="auth-msg"></p>
-        <button type="button" id="forgotBtn" class="auth-forgot">Şifremi unuttum</button>
-      </div>
-
-      <div id="authForgotForm" hidden>
-        <p class="modal-desc">E-postana şifre sıfırlama linki gönderilir.</p>
-        <form id="forgotForm">
-          <input id="forgotEmail" type="email" placeholder="E-posta" autocomplete="email" required />
-          <button type="submit" class="btn btn-primary">Link gönder</button>
-        </form>
-        <p id="forgotMsg" class="auth-msg"></p>
-        <button type="button" id="backToLoginBtn" class="auth-forgot">← Geri</button>
-      </div>
-
-      <div id="authResetForm" hidden>
-        <p class="modal-desc">Yeni şifreni belirle.</p>
-        <form id="resetForm">
-          <input id="newPassword" type="password" placeholder="Yeni şifre" minlength="6" required />
-          <button type="submit" class="btn btn-primary">Şifreyi güncelle</button>
-        </form>
-        <p id="resetMsg" class="auth-msg"></p>
-      </div>
-
-      <div id="authLoggedIn" hidden>
-        <p class="modal-desc">Giriş yapıldı:</p>
-        <p id="authUserEmail" class="auth-user-email"></p>
-        <button id="authLogoutBtn" class="btn btn-ghost">Çıkış yap</button>
-      </div>
-    </div>
-  </div>
-
   <div id="chartTooltip" class="chart-tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <!-- Scripts: config → supabase SDK → sync (e-posta) → icloud → taksit → app -->
+  <!-- Scripts: config → icloud → taksit → app -->
   <script src="config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script src="sync.js"></script>
   <script src="icloud.js"></script>
   <script src="taksit.js"></script>
   <script src="app.js"></script>

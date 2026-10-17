@@ -1,9 +1,6 @@
 // ---------- State + storage ----------
 const T = window.Taksit;
-const STORAGE_KEY_BASE = "cashflow.v1";
-function getStorageKey() {
-  return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
-}
+const STORAGE_KEY = "cashflow.v1";
 
 const SERIES_COUNT = 8;          // styles.css'teki --s1…--s8
 const MAX_MONTHS = 60;           // akışta gösterilecek en fazla ay
@@ -77,20 +74,29 @@ let lastCardId = null;        // formda son seçilen kart ("" = nakit)
 let lastPersonId = null;
 let chartMonths = [];
 
+// E-posta girişli eski sürüm veriyi kullanıcıya özel anahtarda ("cashflow.v1.<id>") tutuyordu:
+// en yeni kopya ana anahtara alınır
 function loadState() {
   try {
-    const raw = localStorage.getItem(getStorageKey());
-    if (!raw) return defaultState();
-    return hydrate(JSON.parse(raw));
+    let best = null, bestKey = null;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key !== STORAGE_KEY && !key.startsWith(STORAGE_KEY + ".")) continue;
+      const data = JSON.parse(localStorage.getItem(key));
+      if (data && (!best || (data._v || 0) > (best._v || 0))) { best = data; bestKey = key; }
+    }
+    if (!best) return defaultState();
+    if (bestKey !== STORAGE_KEY) localStorage.setItem(STORAGE_KEY, JSON.stringify(best));
+    return hydrate(best);
   } catch { return defaultState(); }
 }
 
-// Bulut eşitleme: sync.js (e-posta / Supabase) ve icloud.js kendilerini window.PARA_SYNC'e kaydeder
+// Bulut eşitleme: icloud.js kendini window.PARA_SYNC'e kaydeder
 function syncProviders() { return window.PARA_SYNC || []; }
 
 function saveState() {
   state._v = Date.now();
-  localStorage.setItem(getStorageKey(), JSON.stringify(state));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   for (const p of syncProviders()) p.schedulePush?.(state);
 }
 
@@ -102,22 +108,6 @@ function resetView() {
   lastPersonId = null;
   for (const d of document.querySelectorAll("dialog[open]")) d.close();
 }
-
-// Auth callbacks — sync.js tarafından çağrılır
-window.onAuthLogin = function (userId) {
-  window.CF_USER_ID = userId;
-  state = loadState();   // kullanıcıya özel local storage'a geç
-  resetView();
-  render();
-  for (const p of syncProviders()) p.refresh?.();
-};
-window.onAuthLogout = function () {
-  window.CF_USER_ID = null;
-  state = defaultState();  // temiz slate — hesap verisi ekranda kalmasın
-  resetView();
-  render();
-  for (const p of syncProviders()) p.refresh?.();
-};
 
 // ---------- Helpers ----------
 function todayIndex() {
@@ -277,7 +267,7 @@ const els = {
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
-  authBtn: $("authBtn"), exportBtn: $("exportBtn"), importInput: $("importInput"),
+  exportBtn: $("exportBtn"), importInput: $("importInput"),
   toast: $("toast"),
 };
 
@@ -1208,8 +1198,6 @@ els.themeSeg.addEventListener("click", e => {
 });
 
 els.settingsBtn.addEventListener("click", () => { renderThemeSeg(); openSheet(els.settingsSheet); });
-// Giriş penceresi (sync.js) ayarların üstünde açılsın diye önce ayarları kapat
-els.authBtn.addEventListener("click", () => els.settingsSheet.close());
 
 els.exportBtn.addEventListener("click", () => {
   const a = Object.assign(document.createElement("a"), {
@@ -1360,10 +1348,9 @@ const syncCallbacks = {
   // Buluttaki veri daha yeniyse (ya da force) yerelin yerine geçer; geri yazılmaz
   onRemoteData(remote, { force = false } = {}) {
     if (!remote || typeof remote._v !== 'number') return;
-    const local = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
-    if (force || remote._v > (local._v || 0)) {
+    if (force || remote._v > (state._v || 0)) {
       state = hydrate(remote);
-      localStorage.setItem(getStorageKey(), JSON.stringify(state));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       render();
     }
   },
