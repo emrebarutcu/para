@@ -79,3 +79,37 @@ yoksa özet sayfasındaki `22 Ekim` gibi başlıklardan son ödeme günü okunar
 Aynı kişinin daha önce Excel'den aktarılan kayıtları yenileriyle değiştirilir; uygulamada tarihle
 girilen harcamalara dokunulmaz. Yılsız ay adları (ör. `Eylül`) içinde bulunulan yıla oturtulur;
 bir sonraki aydan ilerideyse geçen yıla sayılır.
+
+## 6. iCloud (CloudKit) ile senkronizasyon
+
+Veriler kullanıcının kendi iCloud hesabındaki **özel veritabanında** tutulur (iCloud depolama
+kotasından düşer; senin sunucuna ya da Supabase'e gitmez). Web'de bunun tek resmî yolu CloudKit JS'tir.
+
+**Gerekenler:** ücretli **Apple Developer Program** üyeliği (CloudKit konteyneri ve API anahtarı için).
+
+1. [developer.apple.com](https://developer.apple.com/account) → Certificates, Identifiers & Profiles →
+   Identifiers → **+** → **iCloud Containers** → örn. `iCloud.com.ornek.para` oluştur.
+2. [CloudKit Console](https://icloud.developer.apple.com) → bu konteyner → **Tokens & Keys** →
+   **API Tokens** → **+**:
+   - Sign-in Callback: **Post Message**
+   - Allowed Origins: sitenin adresi (örn. `https://para.pages.dev`, kendi alan adın) ve
+     denemek için `http://localhost:3100`
+3. `config.js`:
+
+```js
+window.ICLOUD_CONTAINER = 'iCloud.com.ornek.para';
+window.ICLOUD_API_TOKEN = '...';
+window.ICLOUD_ENV       = 'development';   // ilk denemede
+```
+
+4. Uygulamada Ayarlar → Bulut → **iCloud** satırındaki Apple düğmesiyle giriş yap. Development
+   ortamında ilk kayıtta `ParaState` kayıt türü (alanlar: `data` String, `version` Int(64))
+   otomatik oluşur.
+5. CloudKit Console → **Schema** → **Deploy Schema Changes…** ile şemayı Production'a yayınla,
+   sonra `ICLOUD_ENV = 'production'` yap ve siteyi yeniden yayınla.
+
+**Çalışma mantığı:** Her kayıtta iCloud'a 1,5 sn gecikmeli yazılır; uygulama öne geldiğinde
+iCloud'daki daha yeni veri çekilir (son yazan kazanır). Bir cihaz bu iCloud hesabına ilk kez
+bağlanırken iki tarafta da farklı veri varsa hangisinin kullanılacağı sorulur.
+iCloud ile e-posta senkronizasyonu aynı anda açık olamaz. E-postadaki veriyi iCloud'a taşımak için:
+e-postayla girişliyken **Dışa aktar** → e-posta hesabından çık → iCloud'a bağlan → **İçe aktar**.

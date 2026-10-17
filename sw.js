@@ -1,5 +1,5 @@
-const CACHE = 'para-v4';
-const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
+const CACHE = 'para-v5';
+const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/sync.js', '/icloud.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -16,8 +16,8 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Network-first for Supabase API, cache-first for local assets
-  if (e.request.url.includes('supabase.co')) {
+  // Bulut API'leri (Supabase, iCloud) her zaman ağdan — oturum yanıtları önbelleğe girmesin
+  if (/supabase\.co|apple-cloudkit\.com|icloud\.com/.test(new URL(e.request.url).hostname)) {
     e.respondWith(fetch(e.request).catch(() => new Response('', { status: 503 })));
     return;
   }

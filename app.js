@@ -85,10 +85,13 @@ function loadState() {
   } catch { return defaultState(); }
 }
 
+// Bulut eşitleme: sync.js (e-posta / Supabase) ve icloud.js kendilerini window.PARA_SYNC'e kaydeder
+function syncProviders() { return window.PARA_SYNC || []; }
+
 function saveState() {
   state._v = Date.now();
   localStorage.setItem(getStorageKey(), JSON.stringify(state));
-  if (typeof window.syncSchedulePush === 'function') window.syncSchedulePush(state);
+  for (const p of syncProviders()) p.schedulePush?.(state);
 }
 
 function resetView() {
@@ -106,12 +109,14 @@ window.onAuthLogin = function (userId) {
   state = loadState();   // kullanıcıya özel local storage'a geç
   resetView();
   render();
+  for (const p of syncProviders()) p.refresh?.();
 };
 window.onAuthLogout = function () {
   window.CF_USER_ID = null;
   state = defaultState();  // temiz slate — hesap verisi ekranda kalmasın
   resetView();
   render();
+  for (const p of syncProviders()) p.refresh?.();
 };
 
 // ---------- Helpers ----------
@@ -1233,7 +1238,7 @@ els.importInput.addEventListener("change", async e => {
     alert(err.userMessage || (isExcel ? "Excel dosyası okunamadı." : "Geçersiz dosya."));
     return;
   } finally { els.importInput.value = ""; }
-  if (typeof window.syncPushNow === 'function') await window.syncPushNow(state);
+  for (const p of syncProviders()) await p.pushNow?.(state);
 });
 
 // ---------- Excel import ----------
@@ -1351,18 +1356,20 @@ if ('serviceWorker' in navigator) {
 }
 
 // ---------- Boot ----------
-if (typeof window.syncInit === 'function') {
-  window.syncInit({
-    onRemoteData(remote) {
-      if (!remote || typeof remote._v !== 'number') return;
-      const local = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
-      if (remote._v > (local._v || 0)) {
-        state = hydrate(remote);
-        localStorage.setItem(getStorageKey(), JSON.stringify(state));
-        render();
-      }
-    },
-  });
-}
+const syncCallbacks = {
+  // Buluttaki veri daha yeniyse (ya da force) yerelin yerine geçer; geri yazılmaz
+  onRemoteData(remote, { force = false } = {}) {
+    if (!remote || typeof remote._v !== 'number') return;
+    const local = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
+    if (force || remote._v > (local._v || 0)) {
+      state = hydrate(remote);
+      localStorage.setItem(getStorageKey(), JSON.stringify(state));
+      render();
+    }
+  },
+  getState: () => state,
+  isEmpty: s => !s.installments?.length && !s.cards?.length,
+};
+for (const p of syncProviders()) p.init?.(syncCallbacks);
 
 render();

@@ -90,6 +90,13 @@
 
   window.syncGetUser = function () { return user; };
 
+  (window.PARA_SYNC = window.PARA_SYNC || []).push({
+    id: 'supabase',
+    init: window.syncInit,
+    schedulePush: window.syncSchedulePush,
+    pushNow: window.syncPushNow,
+  });
+
   // ── Internal ────────────────────────────────────────────────────────────────
   async function pull() {
     if (!db || !user) return;

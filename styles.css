@@ -845,6 +845,9 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .row-text strong { font-size: 15px; font-weight: 600; }
 .row-text small { font-size: 13px; color: var(--text-3); }
 #authBtn.auth-active { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+#authBtn:disabled { opacity: .45; cursor: not-allowed; }
+.ck-slot { flex-shrink: 0; display: flex; align-items: center; min-height: 34px; }
+.ck-slot > * { cursor: pointer; }
 
 /* ── Toast ── */
 .toast {
