@@ -1,5 +1,6 @@
 // ---------- State + storage ----------
 const T = window.Taksit;
+const E = window.Eposta;
 const STORAGE_KEY_BASE = "cashflow.v1";
 function getStorageKey() {
   return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
@@ -16,7 +17,7 @@ const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flo
 
 const defaultState = () => ({
   people: [{ id: "ben", name: "Ben", color: 0 }],
-  cards: [],              // { id, name, limit, cutoffDay, dueDay, color }
+  cards: [],              // { id, name, limit, cutoffDay, dueDay, color, last4? }
   installments: [],       // harcamalar — biçimi taksit.js'de
   _v: 0, // version timestamp — used for sync conflict resolution
 });
@@ -76,6 +77,9 @@ let editingCardId = null;     // düzenlenen kart
 let lastCardId = null;        // formda son seçilen kart ("" = nakit)
 let lastPersonId = null;
 let chartMonths = [];
+let inbox = [];               // e-postadan gelen, kendiliğinden eklenemeyen kayıtlar
+let inboxBusy = false;
+let inboxDraftId = null;      // formda açılan e-posta kaydı
 
 function loadState() {
   try {
@@ -97,6 +101,8 @@ function resetView() {
   focusIdx = null;
   lastCardId = null;
   lastPersonId = null;
+  inbox = [];
+  inboxDraftId = null;
   for (const d of document.querySelectorAll("dialog[open]")) d.close();
 }
 
@@ -272,6 +278,9 @@ const els = {
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
+  inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
+  inboxUrl: $("inboxUrl"), inboxApikey: $("inboxApikey"), inboxToken: $("inboxToken"),
+  inboxCheck: $("inboxCheck"), inboxRenew: $("inboxRenew"), inboxTry: $("inboxTry"), inboxTryResult: $("inboxTryResult"),
   authBtn: $("authBtn"), exportBtn: $("exportBtn"), importInput: $("importInput"),
   toast: $("toast"),
 };
@@ -721,6 +730,7 @@ function renderPurchases() {
   const done = mine.filter(x => !x.left).sort((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key));
 
   els.purchaseWrap.replaceChildren();
+  if (inbox.length) els.purchaseWrap.append(inboxPanel());
   if (!mine.length) {
     const btn = el("button", "btn btn-primary");
     btn.type = "button";
@@ -847,6 +857,7 @@ function cardTile(c, stats, tag = "button") {
 
   const chipRow = el("div", "cc-chiprow");
   chipRow.append(el("div", "cc-chip"));
+  if (c.last4) chipRow.append(el("span", "cc-num", `•••• ${c.last4}`));
   if (over) chipRow.append(el("span", "cc-alert", "Limit aşıldı"));
   tile.append(top, chipRow, mid, bottom);
   return tile;
@@ -902,21 +913,25 @@ function radioChip(name, value, label, checked, color) {
 }
 
 // ---------- Harcama formu ----------
-function openPurchaseSheet(p) {
+// draft: kayıtlı olmayan, önceden doldurulmuş harcama (e-postadan gelen)
+function openPurchaseSheet(p, draft) {
   if (!state.people.length) { openPeopleSheet(); toast("Önce bir kişi ekle"); return; }
   editingId = p?.id ?? null;
+  inboxDraftId = draft?.inboxId ?? null;
+  const src = p || draft;
   const f = els.purchaseForm;
   f.reset();
   for (const n of f.querySelectorAll(".invalid")) n.classList.remove("invalid");
-  els.purchaseTitle.textContent = p ? "Harcamayı düzenle" : "Yeni harcama";
+  els.purchaseTitle.textContent = p ? "Harcamayı düzenle" : draft ? "E-postadan harcama" : "Yeni harcama";
   els.purchaseDelete.hidden = !p;
 
-  const count = p ? p.count : 1;
+  const count = src?.count ?? 1;
   els.countChips.replaceChildren(...COUNT_PRESETS.map(n =>
     radioChip("countPreset", String(n), n === 1 ? "Peşin" : `${n} taksit`, n === count)));
   f.elements.count.value = count;
 
   const cardId = p ? (p.cardId && cardById(p.cardId) ? p.cardId : "")
+    : draft?.cardId && cardById(draft.cardId) ? draft.cardId
     : (lastCardId != null && (lastCardId === "" || cardById(lastCardId)) ? lastCardId : state.cards[0]?.id ?? "");
   els.cardChips.replaceChildren(
     ...state.cards.map(c => radioChip("card", c.id, c.name, c.id === cardId, seriesVar(c))),
@@ -928,9 +943,9 @@ function openPurchaseSheet(p) {
   els.personChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
 
-  f.elements.desc.value = p?.desc ?? "";
-  f.elements.amount.value = p ? Math.round(p.total * 100) / 100 : "";
-  f.elements.date.value = p ? p.date || "" : T.todayKey();
+  f.elements.desc.value = src?.desc ?? "";
+  f.elements.amount.value = src?.total ? Math.round(src.total * 100) / 100 : "";
+  f.elements.date.value = p ? p.date || "" : draft?.date || T.todayKey();
   syncChecked(f);
   updatePurchasePreview();
   openSheet(els.purchaseSheet);
@@ -1015,6 +1030,12 @@ els.purchaseForm.addEventListener("submit", e => {
   } else {
     state.installments.push({ id: uid(), personId, ...p });
   }
+  if (inboxDraftId != null) {
+    const id = inboxDraftId;
+    inbox = inbox.filter(x => x.row.id !== id);
+    window.syncInboxClaim?.([id]);
+  }
+  inboxDraftId = null;
   lastCardId = p.cardId || "";
   lastPersonId = personId;
   saveState();
@@ -1047,6 +1068,7 @@ function readCardForm() {
     limit: Number(f.limit.value) || 0,
     cutoffDay: validDay(f.cutoffDay.value),
     dueDay: validDay(f.dueDay.value),
+    last4: f.last4.value.replace(/\D/g, ""),
   };
 }
 
@@ -1062,6 +1084,7 @@ function openCardSheet(c) {
     f.elements.limit.value = c.limit || "";
     f.elements.cutoffDay.value = c.cutoffDay;
     f.elements.dueDay.value = c.dueDay;
+    f.elements.last4.value = c.last4 || "";
   }
   updateCardPreview();
   openSheet(els.cardSheet);
@@ -1096,13 +1119,27 @@ els.cardForm.addEventListener("submit", e => {
   e.preventDefault();
   const v = readCardForm();
   const f = els.cardForm.elements;
-  const bad = { name: !v.name, cutoffDay: !v.cutoffDay, dueDay: !v.dueDay, limit: v.limit < 0 };
+  const last4Taken = v.last4 && state.cards.some(c => c.id !== editingCardId && c.last4 === v.last4);
+  const bad = {
+    name: !v.name, limit: v.limit < 0,
+    last4: (v.last4 !== "" && v.last4.length !== 4) || last4Taken,
+    cutoffDay: !v.cutoffDay, dueDay: !v.dueDay,
+  };
   for (const [k, isBad] of Object.entries(bad)) f[k].classList.toggle("invalid", isBad);
   const firstBad = Object.keys(bad).find(k => bad[k]);
-  if (firstBad) { f[firstBad].focus(); return; }
+  if (firstBad) {
+    f[firstBad].focus();
+    if (firstBad === "last4") toast(last4Taken ? "Bu son 4 hane başka bir kartta kayıtlı" : "Son 4 hane 4 rakam olmalı");
+    return;
+  }
+  if (!v.last4) delete v.last4;
 
   if (editingCardId) {
-    state.cards = state.cards.map(c => (c.id === editingCardId ? { ...c, ...v } : c));
+    state.cards = state.cards.map(c => {
+      if (c.id !== editingCardId) return c;
+      const { last4, ...rest } = { ...c, ...v };
+      return v.last4 ? { ...rest, last4 } : rest;
+    });
   } else {
     state.cards.push({ id: uid(), ...v, color: nextColor(state.cards) });
   }
@@ -1181,6 +1218,158 @@ els.personAddForm.addEventListener("submit", e => {
 });
 
 els.managePeople.addEventListener("click", openPeopleSheet);
+
+// ---------- E-postadan harcama ----------
+// Kestirme bankanın e-postasını Supabase'e yazar (supabase/eposta.sql); burada okunup kartına eklenir.
+// Okunamayan ya da kartı bulunamayan e-postalar Harcamalar sekmesinde onaya bekler.
+function emailCard(parsed) {
+  if (parsed.last4) return state.cards.find(c => c.last4 === parsed.last4) ?? null;
+  return state.cards.length === 1 ? state.cards[0] : null;
+}
+
+function emailPurchase(parsed, card) {
+  return { desc: parsed.merchant || "Kart harcaması", cardId: card?.id ?? null, count: parsed.count, total: parsed.amount, date: parsed.date };
+}
+
+function emailItem(row) {
+  const parsed = E.parse({ body: row.body, subject: row.subject, receivedAt: row.received_at });
+  const card = emailCard(parsed);
+  const reason = parsed.reason
+    || (card ? null : parsed.last4 ? `•••• ${parsed.last4} ile biten kart tanımlı değil` : "Kart okunamadı");
+  return { row, parsed, card, reason };
+}
+
+async function checkInbox({ quiet = true } = {}) {
+  if (inboxBusy || typeof window.syncInboxFetch !== "function") return;
+  // Kullanıcıya özel veri yüklenmeden harcama eklenmesin (giriş olayından önce çağrılırsa)
+  if (!window.CF_USER_ID || window.CF_USER_ID !== window.syncGetUser?.()?.id) return;
+  inboxBusy = true;
+  try {
+    const rows = await window.syncInboxFetch();
+    if (!rows) { if (!quiet) toast("E-postalar okunamadı"); return; }
+    const items = rows.map(emailItem);
+    const ready = items.filter(x => !x.reason);
+    const seen = new Set(inbox.map(x => x.row.id));
+    inbox = items.filter(x => x.reason);
+    const fresh = inbox.filter(x => !seen.has(x.row.id)).length;
+
+    // Önce işaretlenir: başka bir cihaz aynı anda okuduysa harcama iki kez eklenmez
+    const claimed = new Set(await window.syncInboxClaim(ready.map(x => x.row.id)));
+    const added = ready.filter(x => claimed.has(x.row.id));
+    if (added.length) {
+      const personId = state.people[0].id;
+      for (const x of added) state.installments.push({ id: uid(), personId, ...emailPurchase(x.parsed, x.card) });
+      saveState();
+      if (typeof window.syncPushNow === "function") await window.syncPushNow(state);
+    }
+    if (added.length === 1) {
+      const p = emailPurchase(added[0].parsed, added[0].card);
+      toast(`E-postadan eklendi: ${p.desc} · ${fmt(p.total)}`);
+    } else if (added.length) {
+      toast(`E-postadan ${added.length} harcama eklendi`);
+    } else if (fresh || (!quiet && inbox.length)) {
+      toast(`${inbox.length} e-posta onay bekliyor · Harcamalar`);
+    } else if (!quiet) {
+      toast("Yeni e-posta yok");
+    }
+    render();
+  } finally { inboxBusy = false; }
+}
+
+function inboxPanel() {
+  const panel = el("section", "panel inbox-panel");
+  const head = el("header", "panel-head");
+  head.append(el("h2", "", "E-postadan gelenler"), el("span", "panel-note", `${inbox.length} onay bekliyor`));
+  const list = el("ul", "inbox-list");
+  for (const x of inbox) {
+    const { parsed, row } = x;
+    const li = el("li", "inbox-item");
+    const main = el("div", "p-main");
+    main.append(el("div", "p-title", parsed.merchant || row.subject || "Banka e-postası"));
+    const meta = el("div", "p-meta");
+    if (parsed.amount != null) {
+      meta.append(el("span", "", parsed.currency === "TRY" ? fmt(parsed.amount) : `${fmtNum(parsed.amount)} ${parsed.currency}`));
+    }
+    if (parsed.date) meta.append(el("span", "", fmtDayShort(parsed.date)));
+    if (parsed.count > 1) meta.append(el("span", "", `${parsed.count} taksit`));
+    if (meta.childElementCount) main.append(meta);
+    main.append(el("div", "inbox-reason", x.reason));
+
+    const actions = el("div", "inbox-actions");
+    const add = el("button", "btn btn-primary sm", "Ekle");
+    add.type = "button";
+    add.addEventListener("click", () => openPurchaseSheet(null, { inboxId: row.id, ...emailPurchase(parsed, x.card) }));
+    const skip = el("button", "btn btn-ghost sm", "Yok say");
+    skip.type = "button";
+    skip.addEventListener("click", async () => {
+      skip.disabled = true;
+      await window.syncInboxClaim?.([row.id]);
+      inbox = inbox.filter(y => y.row.id !== row.id);
+      render();
+    });
+    actions.append(add, skip);
+    li.append(main, actions);
+    list.append(li);
+  }
+  panel.append(head, list);
+  return panel;
+}
+
+async function openInboxSheet() {
+  const loggedIn = !!window.syncGetUser?.();
+  els.inboxLoginNote.hidden = loggedIn;
+  els.inboxSetup.hidden = !loggedIn;
+  openSheet(els.inboxSheet);
+  if (!loggedIn) return;
+  const ep = window.syncInboxEndpoint();
+  els.inboxUrl.textContent = ep.url;
+  els.inboxApikey.textContent = ep.apikey;
+  await showInboxToken(false);
+}
+
+async function showInboxToken(renew) {
+  els.inboxToken.textContent = "…";
+  try {
+    els.inboxToken.textContent = await window.syncInboxToken(renew);
+    if (renew) toast("Yeni anahtar oluşturuldu");
+  } catch {
+    els.inboxToken.textContent = "—";
+    toast("Anahtar alınamadı — supabase/eposta.sql çalıştırıldı mı?");
+  }
+}
+
+function renderInboxTry() {
+  const text = els.inboxTry.value.trim();
+  const box = els.inboxTryResult;
+  box.replaceChildren();
+  if (!text) return;
+  const parsed = E.parse({ body: text, receivedAt: new Date() });
+  const card = emailCard(parsed);
+  const line = (label, value) => el("div", "", `${label}: ${value ?? "okunamadı"}`);
+  box.append(
+    el("div", "big", parsed.amount != null ? (parsed.currency === "TRY" ? fmt(parsed.amount) : `${fmtNum(parsed.amount)} ${parsed.currency}`) : "Tutar okunamadı"),
+    line("İşyeri", parsed.merchant),
+    line("Tarih", parsed.date && fmtDay(parsed.date)),
+    line("Taksit", parsed.count > 1 ? `${parsed.count} taksit` : "Peşin"),
+    line("Kart", parsed.last4 && `•••• ${parsed.last4}${card ? ` → ${card.name}` : " (tanımlı kart yok)"}`));
+  const reason = parsed.reason || (card ? null : "Kart eşleşmedi; harcama onaya düşer");
+  box.append(reason ? el("div", "warn", reason) : el("div", "", `${card.name} kartına kendiliğinden eklenir`));
+}
+
+els.inboxBtn.addEventListener("click", () => { els.settingsSheet.close(); openInboxSheet(); });
+els.inboxCheck.addEventListener("click", () => checkInbox({ quiet: false }));
+els.inboxRenew.addEventListener("click", () => {
+  if (confirm("Eski anahtar çalışmaz hale gelir; kestirmedeki token değerini de değiştirmen gerekir. Devam edelim mi?")) showInboxToken(true);
+});
+els.inboxTry.addEventListener("input", renderInboxTry);
+els.inboxSheet.addEventListener("click", async e => {
+  const b = e.target.closest("[data-copy]");
+  if (!b) return;
+  try {
+    await navigator.clipboard.writeText($(b.dataset.copy).textContent);
+    toast("Kopyalandı");
+  } catch { toast("Kopyalanamadı"); }
+});
 
 // ---------- Ayarlar ----------
 function currentTheme() { return document.documentElement.dataset.theme || ""; }
@@ -1362,7 +1551,12 @@ if (typeof window.syncInit === 'function') {
         render();
       }
     },
+    onSynced() { checkInbox(); },
   });
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") window.syncRefresh?.();
+});
 
 render();

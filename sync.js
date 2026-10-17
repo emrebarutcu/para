@@ -4,6 +4,7 @@
   let user = null;
   let pushTimer = null;
   let onRemoteDataCb = null;
+  let onSyncedCb = null;
 
   function enabled() {
     return !!(window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase);
@@ -44,6 +45,7 @@
   // ── Public API ──────────────────────────────────────────────────────────────
   window.syncInit = function (callbacks) {
     onRemoteDataCb = callbacks.onRemoteData;
+    onSyncedCb = callbacks.onSynced;
     if (!enabled()) { renderBtn(null); return; }
 
     db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -51,7 +53,7 @@
     db.auth.getSession().then(({ data }) => {
       user = data.session?.user ?? null;
       renderBtn(user);
-      if (user) pull();
+      if (user) refresh();
     });
 
     db.auth.onAuthStateChange((event, session) => {
@@ -60,7 +62,7 @@
       renderBtn(user);
       if (event === 'SIGNED_IN') {
         if (typeof window.onAuthLogin === 'function') window.onAuthLogin(user.id);
-        pull();
+        refresh();
       }
       if (event === 'SIGNED_OUT') {
         if (typeof window.onAuthLogout === 'function') window.onAuthLogout();
@@ -90,7 +92,62 @@
 
   window.syncGetUser = function () { return user; };
 
+  // Uygulama öne gelince: başka cihazdaki değişiklikler ve yeni e-postalar
+  window.syncRefresh = function () {
+    if (db && user) return refresh();
+  };
+
+  // ── E-postadan harcama (supabase/eposta.sql) ────────────────────────────────
+  window.syncInboxEndpoint = function () {
+    return { url: `${window.SUPABASE_URL}/rest/v1/rpc/ingest_email`, apikey: window.SUPABASE_ANON_KEY };
+  };
+
+  // İşlenmemiş e-postalar; tablo yoksa ya da hata olursa null
+  window.syncInboxFetch = async function () {
+    if (!db || !user) return null;
+    const { data, error } = await db.from('inbox_messages')
+      .select('id, sender, subject, body, received_at')
+      .is('processed_at', null)
+      .order('received_at')
+      .limit(50);
+    return error ? null : data;
+  };
+
+  // E-postaları işlendi olarak işaretler ve işaretlenenlerin id'lerini döndürür.
+  // Başka bir cihaz aynı e-postayı önce işlediyse o id dönmez — harcama iki kez eklenmez.
+  window.syncInboxClaim = async function (ids) {
+    if (!db || !user || !ids.length) return [];
+    const { data, error } = await db.from('inbox_messages')
+      .update({ processed_at: new Date().toISOString() })
+      .in('id', ids)
+      .is('processed_at', null)
+      .select('id');
+    return error ? [] : data.map(r => r.id);
+  };
+
+  // Kestirmenin kullandığı kişisel anahtar; yoksa (ya da renew ile) yenisi oluşturulur
+  window.syncInboxToken = async function (renew) {
+    if (!db || !user) return null;
+    if (renew) {
+      const { error } = await db.from('inbox_tokens').delete().eq('user_id', user.id);
+      if (error) throw error;
+    } else {
+      const { data, error } = await db.from('inbox_tokens').select('token').eq('user_id', user.id).maybeSingle();
+      if (error) throw error;
+      if (data) return data.token;
+    }
+    const { data, error } = await db.from('inbox_tokens').insert({ user_id: user.id }).select('token').single();
+    if (error) throw error;
+    return data.token;
+  };
+
   // ── Internal ────────────────────────────────────────────────────────────────
+  // Önce uzak veri çekilir, sonra e-postalar işlenir: harcama güncel verinin üstüne eklensin
+  async function refresh() {
+    await pull();
+    if (typeof onSyncedCb === 'function') onSyncedCb();
+  }
+
   async function pull() {
     if (!db || !user) return;
     const { data } = await db.from('cashflow_data').select('data').eq('user_id', user.id).single();

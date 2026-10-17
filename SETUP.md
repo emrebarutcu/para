@@ -79,3 +79,28 @@ yoksa özet sayfasındaki `22 Ekim` gibi başlıklardan son ödeme günü okunar
 Aynı kişinin daha önce Excel'den aktarılan kayıtları yenileriyle değiştirilir; uygulamada tarihle
 girilen harcamalara dokunulmaz. Yılsız ay adları (ör. `Eylül`) içinde bulunulan yıla oturtulur;
 bir sonraki aydan ilerideyse geçen yıla sayılır.
+
+## 6. Banka e-postalarından otomatik harcama
+
+Bankanın kredi kartı harcama e-postası iPhone'a düşünce bir kestirme e-postayı Supabase'e gönderir.
+Para açıldığında (ya da arka plandan öne geldiğinde) okunmamış e-postaları okur; tutar, tarih, taksit sayısı,
+işyeri ve kartın son 4 hanesi çıkarılır ve harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
+
+1. Supabase **SQL Editor**'de `supabase/eposta.sql` dosyasını bir kez çalıştır
+   (`inbox_tokens`, `inbox_messages` tabloları ve `ingest_email` fonksiyonu).
+2. **Kartlar** sekmesinde her kartın son 4 hanesini gir. Tek kartın varsa son 4 hane okunamayan e-postalar da ona eklenir.
+3. Ayarlar → **Banka e-postaları**: adres, `apikey` ve kişisel `token` burada; kopyala.
+4. iPhone → Kestirmeler → **Otomasyon** → Yeni → **E-posta**: gönderen = bankanın bildirim adresi, **Hemen Çalıştır**.
+   Eylem **URL'nin İçeriğini Al**:
+   - URL: `https://<proje>.supabase.co/rest/v1/rpc/ingest_email`, Yöntem: `POST`
+   - Başlık: `apikey` = anon/public key
+   - İstek gövdesi (JSON): `token` = kişisel anahtar, `body` = Kestirme Girdisi, `subject` = konu
+     (isteğe bağlı `sender`, `message_id`)
+
+Aynı e-posta iki kez gönderilirse ikincisi yok sayılır (`message_id`, yoksa konu + metin özeti).
+Tutarı, tarihi ya da kartı okunamayan, yabancı para birimli ve iade/iptal e-postaları kendiliğinden eklenmez;
+**Harcamalar** sekmesinde "E-postadan gelenler" altında *Ekle* (form doldurulmuş açılır) ya da *Yok say* ile beklerler.
+Ayarlar'daki "Bir e-postayı dene" alanına bir bildirim yapıştırıp neyin okunduğunu görebilirsin.
+
+Kestirme dışında başka bir tetikleyici (ör. iCloud Mail'i IMAP ile dinleyen bir servis) de aynı
+`ingest_email` adresini çağırabilir.

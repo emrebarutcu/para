@@ -30,6 +30,7 @@
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5V4m0 0L7.5 8.5M12 4l4.5 4.5M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11.5m0 0L7.5 11m4.5 4.5 4.5-4.5M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7.5 18.5a4.5 4.5 0 0 1-.7-8.95A5.75 5.75 0 0 1 17.9 9a4.75 4.75 0 0 1-.4 9.5z"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6 8.5-6"/></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 20a6.5 6.5 0 0 0-2.6-5.2"/></symbol>
   </svg>
 
@@ -236,6 +237,10 @@
             <input name="limit" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0,00" aria-label="Limit" />
           </div>
         </div>
+        <label class="field">
+          <span class="field-label">Kartın son 4 hanesi <small>(isteğe bağlı)</small></span>
+          <input name="last4" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" placeholder="1234" autocomplete="off" />
+        </label>
         <div class="field-row">
           <label class="field">
             <span class="field-label">Hesap kesim günü</span>
@@ -300,6 +305,13 @@
           </div>
         </div>
         <div class="settings-group">
+          <span class="group-label">Otomatik ekleme</span>
+          <button type="button" class="row-btn" id="inboxBtn">
+            <svg class="ic"><use href="#i-mail"/></svg>
+            <span class="row-text"><strong>Banka e-postaları</strong><small>Harcama bildirimleri kartına kendiliğinden eklenir</small></span>
+          </button>
+        </div>
+        <div class="settings-group">
           <span class="group-label">Veri</span>
           <label class="row-btn">
             <svg class="ic"><use href="#i-upload"/></svg>
@@ -311,6 +323,43 @@
             <span class="row-text"><strong>Dışa aktar</strong><small>Tüm verilerin JSON yedeği</small></span>
           </button>
         </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ── Banka e-postaları ──────────────────────────────── -->
+  <dialog class="sheet" id="inboxSheet" aria-labelledby="inboxTitle">
+    <div class="sheet-form">
+      <header class="sheet-head">
+        <h2 id="inboxTitle">Banka e-postaları</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <p class="hint">Bankanın harcama e-postası iPhone'a düşünce bir kestirme e-postayı Para'ya gönderir. Para açıldığında tutar, tarih ve taksit okunur, harcama kartın son 4 hanesine göre ilgili karta eklenir.</p>
+        <p class="hint warn-text" id="inboxLoginNote" hidden>Bu özellik bulut senkronizasyonuyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.</p>
+        <div id="inboxSetup" hidden>
+          <ol class="steps">
+            <li><strong>Kartlar</strong> sekmesinde her kartın son 4 hanesini gir.</li>
+            <li>Kestirmeler → <strong>Otomasyon</strong> → Yeni Otomasyon → <strong>E-posta</strong>. Gönderen olarak bankanın bildirim adresini seç, <strong>Hemen Çalıştır</strong>'ı işaretle.</li>
+            <li>Eylem olarak <strong>URL'nin İçeriğini Al</strong> ekle: URL aşağıdaki adres, Yöntem <strong>POST</strong>, Başlıklar'a <code>apikey</code> → aşağıdaki genel anahtar.</li>
+            <li>İstek Gövdesi <strong>JSON</strong>: <code>token</code> → kişisel anahtarın, <code>body</code> → Kestirme Girdisi (e-postanın içeriği), <code>subject</code> → e-postanın konusu.</li>
+          </ol>
+          <div class="copy-list">
+            <div class="copy-row"><span class="copy-label">Adres</span><code id="inboxUrl"></code><button type="button" class="btn btn-ghost sm" data-copy="inboxUrl">Kopyala</button></div>
+            <div class="copy-row"><span class="copy-label">apikey</span><code id="inboxApikey"></code><button type="button" class="btn btn-ghost sm" data-copy="inboxApikey">Kopyala</button></div>
+            <div class="copy-row"><span class="copy-label">token</span><code id="inboxToken">…</code><button type="button" class="btn btn-ghost sm" data-copy="inboxToken">Kopyala</button></div>
+          </div>
+          <p class="hint">Kişisel anahtar, senin hesabına e-posta göndermeye yeter; kimseyle paylaşma. Ele geçtiğini düşünürsen yenile ve kestirmedeki değeri değiştir.</p>
+          <div class="btn-row">
+            <button type="button" class="btn btn-ghost sm" id="inboxCheck">Şimdi kontrol et</button>
+            <button type="button" class="btn btn-ghost sm" id="inboxRenew">Anahtarı yenile</button>
+          </div>
+        </div>
+        <label class="field">
+          <span class="field-label">Bir e-postayı dene</span>
+          <textarea id="inboxTry" rows="4" placeholder="Bankadan gelen harcama e-postasının metnini yapıştır"></textarea>
+        </label>
+        <div class="preview" id="inboxTryResult" aria-live="polite"></div>
       </div>
     </div>
   </dialog>
@@ -368,11 +417,12 @@
   <div id="chartTooltip" class="chart-tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <!-- Scripts: config → supabase SDK → sync → taksit → app -->
+  <!-- Scripts: config → supabase SDK → sync → taksit → eposta → app -->
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="sync.js"></script>
   <script src="taksit.js"></script>
+  <script src="eposta.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
