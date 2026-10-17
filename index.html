@@ -308,7 +308,7 @@
           <span class="group-label">Otomatik ekleme</span>
           <button type="button" class="row-btn" id="inboxBtn">
             <svg class="ic"><use href="#i-mail"/></svg>
-            <span class="row-text"><strong>Banka e-postaları</strong><small>Harcama bildirimleri kartına kendiliğinden eklenir</small></span>
+            <span class="row-text"><strong>Banka e-postaları</strong><small>Sana özel adrese gelen harcamalar kartına eklenir</small></span>
           </button>
         </div>
         <div class="settings-group">
@@ -335,24 +335,22 @@
         <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
       <div class="sheet-body">
-        <p class="hint">Bankanın harcama e-postası iPhone'a düşünce bir kestirme e-postayı Para'ya gönderir. Para açıldığında tutar, tarih ve taksit okunur, harcama kartın son 4 hanesine göre ilgili karta eklenir.</p>
+        <p class="hint">Sana özel e-posta adresini bankana harcama bildirim adresi olarak ver. E-postalar telefonun kapalıyken de alınır; Para'yı açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur.</p>
         <p class="hint warn-text" id="inboxLoginNote" hidden>Bu özellik bulut senkronizasyonuyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.</p>
         <div id="inboxSetup" hidden>
+          <div class="copy-row copy-row-lg">
+            <code id="inboxAddress">…</code>
+            <button type="button" class="btn btn-primary sm" data-copy="inboxAddress">Kopyala</button>
+          </div>
           <ol class="steps">
             <li><strong>Kartlar</strong> sekmesinde her kartın son 4 hanesini gir.</li>
-            <li>Kestirmeler → <strong>Otomasyon</strong> → Yeni Otomasyon → <strong>E-posta</strong>. Gönderen olarak bankanın bildirim adresini seç, <strong>Hemen Çalıştır</strong>'ı işaretle.</li>
-            <li>Eylem olarak <strong>URL'nin İçeriğini Al</strong> ekle: URL aşağıdaki adres, Yöntem <strong>POST</strong>, Başlıklar'a <code>apikey</code> → aşağıdaki genel anahtar.</li>
-            <li>İstek Gövdesi <strong>JSON</strong>: <code>token</code> → kişisel anahtarın, <code>body</code> → Kestirme Girdisi (e-postanın içeriği), <code>subject</code> → e-postanın konusu.</li>
+            <li>Bankanın internet ya da mobil şubesinde harcama bildirimlerinin gideceği e-posta adresini <strong>bu adres</strong> yap.</li>
+            <li>Banka adresi doğrulamak için e-posta gönderirse <strong>Harcamalar</strong> sekmesinde "E-postadan gelenler" altında görünür; <strong>Göster</strong> ile açıp bağlantıya dokun.</li>
           </ol>
-          <div class="copy-list">
-            <div class="copy-row"><span class="copy-label">Adres</span><code id="inboxUrl"></code><button type="button" class="btn btn-ghost sm" data-copy="inboxUrl">Kopyala</button></div>
-            <div class="copy-row"><span class="copy-label">apikey</span><code id="inboxApikey"></code><button type="button" class="btn btn-ghost sm" data-copy="inboxApikey">Kopyala</button></div>
-            <div class="copy-row"><span class="copy-label">token</span><code id="inboxToken">…</code><button type="button" class="btn btn-ghost sm" data-copy="inboxToken">Kopyala</button></div>
-          </div>
-          <p class="hint">Kişisel anahtar, senin hesabına e-posta göndermeye yeter; kimseyle paylaşma. Ele geçtiğini düşünürsen yenile ve kestirmedeki değeri değiştir.</p>
+          <p class="hint">Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir.</p>
           <div class="btn-row">
             <button type="button" class="btn btn-ghost sm" id="inboxCheck">Şimdi kontrol et</button>
-            <button type="button" class="btn btn-ghost sm" id="inboxRenew">Anahtarı yenile</button>
+            <button type="button" class="btn btn-ghost sm" id="inboxRenew">Adresi yenile</button>
           </div>
         </div>
         <label class="field">

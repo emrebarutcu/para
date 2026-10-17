@@ -1,22 +1,23 @@
 -- E-postadan harcama
--- Kestirme (ya da başka bir e-posta dinleyicisi) bankanın bildirim e-postasını ingest_email'e gönderir;
--- uygulama açılınca okunmamış e-postaları ayrıştırır, kartına ekler ve işlendi olarak işaretler.
+-- Her kullanıcıya özel bir e-posta adresi (<address>@INBOX_DOMAIN) verilir; kullanıcı bunu bankaya bildirim adresi
+-- olarak girer. Alan adına gelen e-postaları Cloudflare Email Worker (workers/eposta) karşılar ve ingest_email ile
+-- buraya yazar. Uygulama okunmamış e-postaları ayrıştırır, kartına ekler ve işlendi olarak işaretler.
 -- Supabase → SQL Editor'de bir kez çalıştırılır.
 
--- Kullanıcı başına gizli anahtar: kestirme bununla kimin adına yazdığını bildirir
-create table if not exists inbox_tokens (
+-- Kullanıcının e-posta adresi (yerel kısım). 12 onaltılık hane: tahmin edilemez, bankaların alan sınırına sığar.
+create table if not exists inbox_addresses (
   user_id    uuid primary key references auth.users on delete cascade,
-  token      text unique not null default replace(gen_random_uuid()::text, '-', ''),
+  address    text unique not null default substr(md5(gen_random_uuid()::text), 1, 12),
   created_at timestamptz not null default now()
 );
 
-alter table inbox_tokens enable row level security;
+alter table inbox_addresses enable row level security;
 
-create policy "own token read" on inbox_tokens
+create policy "own address read" on inbox_addresses
   for select using (auth.uid() = user_id);
-create policy "own token create" on inbox_tokens
+create policy "own address create" on inbox_addresses
   for insert with check (auth.uid() = user_id);
-create policy "own token delete" on inbox_tokens
+create policy "own address delete" on inbox_addresses
   for delete using (auth.uid() = user_id);
 
 -- Gelen e-postalar; processed_at dolunca uygulama tarafından işlenmiş (eklenmiş ya da yok sayılmış) demektir
@@ -41,9 +42,12 @@ create policy "own messages read" on inbox_messages
 create policy "own messages update" on inbox_messages
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- Anahtarla çağrılır (anon key yeterli). Aynı e-posta iki kez gelirse ikincisi yok sayılır.
+-- Uygulama açıkken yeni e-posta anında işlensin (Realtime)
+alter publication supabase_realtime add table inbox_messages;
+
+-- Yalnızca e-posta worker'ı çağırır (service role). Aynı e-posta iki kez gelirse ikincisi yok sayılır.
 create or replace function ingest_email(
-  token      text,
+  address    text,
   body       text,
   subject    text default null,
   sender     text default null,
@@ -58,12 +62,12 @@ declare
   owner    uuid;
   inserted bigint;
 begin
-  select t.user_id into owner from inbox_tokens t where t.token = token;
+  select a.user_id into owner from inbox_addresses a where a.address = lower(btrim(address));
   if owner is null then
-    raise exception 'invalid token' using errcode = '28000';
+    return json_build_object('ok', false, 'error', 'unknown address');
   end if;
   if coalesce(btrim(body), '') = '' then
-    raise exception 'empty body' using errcode = '22023';
+    return json_build_object('ok', false, 'error', 'empty body');
   end if;
 
   insert into inbox_messages (user_id, message_key, sender, subject, body)
@@ -72,7 +76,7 @@ begin
     coalesce(nullif(btrim(message_id), ''), md5(coalesce(subject, '') || body)),
     left(sender, 300),
     left(subject, 500),
-    left(body, 20000)
+    left(body, 50000)
   )
   on conflict (user_id, message_key) do nothing
   returning id into inserted;
@@ -81,5 +85,5 @@ begin
 end;
 $$;
 
-revoke all on function ingest_email(text, text, text, text, text) from public;
-grant execute on function ingest_email(text, text, text, text, text) to anon, authenticated;
+revoke all on function ingest_email(text, text, text, text, text) from public, anon, authenticated;
+grant execute on function ingest_email(text, text, text, text, text) to service_role;

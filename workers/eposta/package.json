@@ -1,0 +1,15 @@
+{
+  "name": "para-eposta",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "postal-mime": "2.7.6"
+  },
+  "devDependencies": {
+    "wrangler": "4.146.0"
+  }
+}

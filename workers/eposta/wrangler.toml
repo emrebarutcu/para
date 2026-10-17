@@ -1,0 +1,10 @@
+# Cloudflare Email Worker: alan adına gelen e-postaları Supabase'e yazar.
+# Kurulum: SETUP.md → "Banka e-postalarından otomatik harcama"
+name = "para-eposta"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+SUPABASE_URL = "https://bffqfhgctlgexjdyvaup.supabase.co"
+
+# Gizli: wrangler secret put SUPABASE_SERVICE_KEY  (Supabase → Settings → API Keys → secret / service_role)

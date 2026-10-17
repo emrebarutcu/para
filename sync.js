@@ -5,6 +5,7 @@
   let pushTimer = null;
   let onRemoteDataCb = null;
   let onSyncedCb = null;
+  let inboxChannel = null;
 
   function enabled() {
     return !!(window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase);
@@ -53,7 +54,7 @@
     db.auth.getSession().then(({ data }) => {
       user = data.session?.user ?? null;
       renderBtn(user);
-      if (user) refresh();
+      if (user) { refresh(); watchInbox(); }
     });
 
     db.auth.onAuthStateChange((event, session) => {
@@ -63,8 +64,10 @@
       if (event === 'SIGNED_IN') {
         if (typeof window.onAuthLogin === 'function') window.onAuthLogin(user.id);
         refresh();
+        watchInbox();
       }
       if (event === 'SIGNED_OUT') {
+        unwatchInbox();
         if (typeof window.onAuthLogout === 'function') window.onAuthLogout();
       }
       if (event === 'PASSWORD_RECOVERY') showResetForm();
@@ -98,10 +101,6 @@
   };
 
   // ── E-postadan harcama (supabase/eposta.sql) ────────────────────────────────
-  window.syncInboxEndpoint = function () {
-    return { url: `${window.SUPABASE_URL}/rest/v1/rpc/ingest_email`, apikey: window.SUPABASE_ANON_KEY };
-  };
-
   // İşlenmemiş e-postalar; tablo yoksa ya da hata olursa null
   window.syncInboxFetch = async function () {
     if (!db || !user) return null;
@@ -125,21 +124,37 @@
     return error ? [] : data.map(r => r.id);
   };
 
-  // Kestirmenin kullandığı kişisel anahtar; yoksa (ya da renew ile) yenisi oluşturulur
-  window.syncInboxToken = async function (renew) {
+  // Kullanıcının e-posta adresi ("<address>@INBOX_DOMAIN"); yoksa (ya da renew ile) yenisi oluşturulur
+  window.syncInboxAddress = async function (renew) {
     if (!db || !user) return null;
     if (renew) {
-      const { error } = await db.from('inbox_tokens').delete().eq('user_id', user.id);
+      const { error } = await db.from('inbox_addresses').delete().eq('user_id', user.id);
       if (error) throw error;
     } else {
-      const { data, error } = await db.from('inbox_tokens').select('token').eq('user_id', user.id).maybeSingle();
+      const { data, error } = await db.from('inbox_addresses').select('address').eq('user_id', user.id).maybeSingle();
       if (error) throw error;
-      if (data) return data.token;
+      if (data) return data.address;
     }
-    const { data, error } = await db.from('inbox_tokens').insert({ user_id: user.id }).select('token').single();
+    const { data, error } = await db.from('inbox_addresses').insert({ user_id: user.id }).select('address').single();
     if (error) throw error;
-    return data.token;
+    return data.address;
   };
+
+  // Uygulama açıkken gelen e-posta beklemeden işlensin
+  function watchInbox() {
+    unwatchInbox();
+    if (!db || !user || typeof db.channel !== 'function') return;
+    inboxChannel = db.channel('inbox-' + user.id)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'inbox_messages', filter: `user_id=eq.${user.id}` },
+        () => { if (typeof onSyncedCb === 'function') onSyncedCb(); })
+      .subscribe();
+  }
+
+  function unwatchInbox() {
+    if (inboxChannel) db.removeChannel(inboxChannel);
+    inboxChannel = null;
+  }
 
   // ── Internal ────────────────────────────────────────────────────────────────
   // Önce uzak veri çekilir, sonra e-postalar işlenir: harcama güncel verinin üstüne eklensin

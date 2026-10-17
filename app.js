@@ -80,6 +80,7 @@ let chartMonths = [];
 let inbox = [];               // e-postadan gelen, kendiliğinden eklenemeyen kayıtlar
 let inboxBusy = false;
 let inboxDraftId = null;      // formda açılan e-posta kaydı
+let inboxOpenId = null;       // içeriği gösterilen e-posta
 
 function loadState() {
   try {
@@ -103,6 +104,7 @@ function resetView() {
   lastPersonId = null;
   inbox = [];
   inboxDraftId = null;
+  inboxOpenId = null;
   for (const d of document.querySelectorAll("dialog[open]")) d.close();
 }
 
@@ -279,7 +281,7 @@ const els = {
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
-  inboxUrl: $("inboxUrl"), inboxApikey: $("inboxApikey"), inboxToken: $("inboxToken"),
+  inboxAddress: $("inboxAddress"),
   inboxCheck: $("inboxCheck"), inboxRenew: $("inboxRenew"), inboxTry: $("inboxTry"), inboxTryResult: $("inboxTryResult"),
   authBtn: $("authBtn"), exportBtn: $("exportBtn"), importInput: $("importInput"),
   toast: $("toast"),
@@ -1220,7 +1222,8 @@ els.personAddForm.addEventListener("submit", e => {
 els.managePeople.addEventListener("click", openPeopleSheet);
 
 // ---------- E-postadan harcama ----------
-// Kestirme bankanın e-postasını Supabase'e yazar (supabase/eposta.sql); burada okunup kartına eklenir.
+// Kullanıcıya özel adrese gelen e-postaları workers/eposta Supabase'e yazar (supabase/eposta.sql);
+// burada okunup kartına eklenir.
 // Okunamayan ya da kartı bulunamayan e-postalar Harcamalar sekmesinde onaya bekler.
 function emailCard(parsed) {
   if (parsed.last4) return state.cards.find(c => c.last4 === parsed.last4) ?? null;
@@ -1294,6 +1297,7 @@ function inboxPanel() {
     if (parsed.count > 1) meta.append(el("span", "", `${parsed.count} taksit`));
     if (meta.childElementCount) main.append(meta);
     main.append(el("div", "inbox-reason", x.reason));
+    if (row.sender) main.append(el("div", "inbox-from", row.sender));
 
     const actions = el("div", "inbox-actions");
     const add = el("button", "btn btn-primary sm", "Ekle");
@@ -1307,12 +1311,36 @@ function inboxPanel() {
       inbox = inbox.filter(y => y.row.id !== row.id);
       render();
     });
-    actions.append(add, skip);
+    const open = inboxOpenId === row.id;
+    const show = el("button", "btn btn-ghost sm", open ? "Gizle" : "Göster");
+    show.type = "button";
+    show.setAttribute("aria-expanded", String(open));
+    show.addEventListener("click", () => { inboxOpenId = open ? null : row.id; render(); });
+    actions.append(add, show, skip);
     li.append(main, actions);
+    if (open) li.append(emailBody(row.body));
     list.append(li);
   }
   panel.append(head, list);
   return panel;
+}
+
+// E-posta metni; bağlantılar tıklanabilir (banka doğrulama e-postaları için)
+function emailBody(body) {
+  const pre = el("div", "inbox-body");
+  const text = E.plainText(body);
+  let last = 0;
+  for (const m of text.matchAll(/https?:\/\/[^\s<>"')\]]+/g)) {
+    pre.append(document.createTextNode(text.slice(last, m.index)));
+    const a = el("a", "", m[0]);
+    a.href = m[0];
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    pre.append(a);
+    last = m.index + m[0].length;
+  }
+  pre.append(document.createTextNode(text.slice(last)));
+  return pre;
 }
 
 async function openInboxSheet() {
@@ -1321,20 +1349,23 @@ async function openInboxSheet() {
   els.inboxSetup.hidden = !loggedIn;
   openSheet(els.inboxSheet);
   if (!loggedIn) return;
-  const ep = window.syncInboxEndpoint();
-  els.inboxUrl.textContent = ep.url;
-  els.inboxApikey.textContent = ep.apikey;
-  await showInboxToken(false);
+  await showInboxAddress(false);
 }
 
-async function showInboxToken(renew) {
-  els.inboxToken.textContent = "…";
+async function showInboxAddress(renew) {
+  els.inboxAddress.textContent = "…";
   try {
-    els.inboxToken.textContent = await window.syncInboxToken(renew);
-    if (renew) toast("Yeni anahtar oluşturuldu");
+    const address = await window.syncInboxAddress(renew);
+    if (!window.INBOX_DOMAIN) {
+      els.inboxAddress.textContent = "—";
+      toast("Alan adı ayarlanmamış (config.js → INBOX_DOMAIN)");
+      return;
+    }
+    els.inboxAddress.textContent = `${address}@${window.INBOX_DOMAIN}`;
+    if (renew) toast("Yeni adres oluşturuldu");
   } catch {
-    els.inboxToken.textContent = "—";
-    toast("Anahtar alınamadı — supabase/eposta.sql çalıştırıldı mı?");
+    els.inboxAddress.textContent = "—";
+    toast("Adres alınamadı — supabase/eposta.sql çalıştırıldı mı?");
   }
 }
 
@@ -1359,7 +1390,7 @@ function renderInboxTry() {
 els.inboxBtn.addEventListener("click", () => { els.settingsSheet.close(); openInboxSheet(); });
 els.inboxCheck.addEventListener("click", () => checkInbox({ quiet: false }));
 els.inboxRenew.addEventListener("click", () => {
-  if (confirm("Eski anahtar çalışmaz hale gelir; kestirmedeki token değerini de değiştirmen gerekir. Devam edelim mi?")) showInboxToken(true);
+  if (confirm("Eski adrese gelen e-postalar artık alınmaz; bankadaki adresi de yenisiyle değiştirmen gerekir. Devam edelim mi?")) showInboxAddress(true);
 });
 els.inboxTry.addEventListener("input", renderInboxTry);
 els.inboxSheet.addEventListener("click", async e => {

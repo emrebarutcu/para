@@ -82,25 +82,40 @@ bir sonraki aydan ilerideyse geçen yıla sayılır.
 
 ## 6. Banka e-postalarından otomatik harcama
 
-Bankanın kredi kartı harcama e-postası iPhone'a düşünce bir kestirme e-postayı Supabase'e gönderir.
-Para açıldığında (ya da arka plandan öne geldiğinde) okunmamış e-postaları okur; tutar, tarih, taksit sayısı,
-işyeri ve kartın son 4 hanesi çıkarılır ve harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
+Her kullanıcıya özel bir adres verilir (`<12 hane>@INBOX_DOMAIN`, Ayarlar → **Banka e-postaları**). Kullanıcı bunu
+bankasına harcama bildirim adresi olarak girer. Alan adına gelen e-postaları Cloudflare Email Worker (`workers/eposta`)
+karşılar, düz metne çevirir ve Supabase'deki kutusuna yazar; telefonun açık olması gerekmez. Para açıldığında
+(açıksa anında, Realtime ile) okunmamış e-postalardan tutar, tarih, taksit, işyeri ve kartın son 4 hanesi çıkarılır,
+harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
 
-1. Supabase **SQL Editor**'de `supabase/eposta.sql` dosyasını bir kez çalıştır
-   (`inbox_tokens`, `inbox_messages` tabloları ve `ingest_email` fonksiyonu).
-2. **Kartlar** sekmesinde her kartın son 4 hanesini gir. Tek kartın varsa son 4 hane okunamayan e-postalar da ona eklenir.
-3. Ayarlar → **Banka e-postaları**: adres, `apikey` ve kişisel `token` burada; kopyala.
-4. iPhone → Kestirmeler → **Otomasyon** → Yeni → **E-posta**: gönderen = bankanın bildirim adresi, **Hemen Çalıştır**.
-   Eylem **URL'nin İçeriğini Al**:
-   - URL: `https://<proje>.supabase.co/rest/v1/rpc/ingest_email`, Yöntem: `POST`
-   - Başlık: `apikey` = anon/public key
-   - İstek gövdesi (JSON): `token` = kişisel anahtar, `body` = Kestirme Girdisi, `subject` = konu
-     (isteğe bağlı `sender`, `message_id`)
+### Bir kez yapılacak kurulum
 
-Aynı e-posta iki kez gönderilirse ikincisi yok sayılır (`message_id`, yoksa konu + metin özeti).
+1. **Supabase → SQL Editor**: `supabase/eposta.sql` dosyasını çalıştır
+   (`inbox_addresses`, `inbox_messages`, Realtime yayını ve yalnızca service role'ün çağırabildiği `ingest_email`).
+2. **Alan adı**: Cloudflare'de yönetilen bir alan adı ya da alt alan adı seç (ör. `para.ornek.com`) ve
+   `config.js` → `window.INBOX_DOMAIN` değerine yaz.
+3. **Worker**:
+   ```sh
+   cd workers/eposta
+   npm install
+   npx wrangler login
+   npx wrangler secret put SUPABASE_SERVICE_KEY   # Supabase → Settings → API Keys → secret (service_role)
+   npm run deploy
+   ```
+   `wrangler.toml` içindeki `SUPABASE_URL` projeninkiyle aynı olmalı. Testler: `npm test`.
+4. **Cloudflare → Email → Email Routing**: alan adında Email Routing'i aç (MX/SPF kayıtlarını Cloudflare ekler),
+   **Routing rules → Catch-all address → Send to a Worker → `para-eposta`**.
+
+### Kullanıcı tarafı
+
+1. **Kartlar** sekmesinde her kartın son 4 hanesini gir. Tek kartın varsa son 4 hane okunamayan e-postalar da ona eklenir.
+2. Ayarlar → **Banka e-postaları**'ndaki adresi kopyala, bankanın internet/mobil şubesinde bildirim e-posta adresi yap.
+3. Banka adresi doğrulamak için e-posta gönderirse Harcamalar → "E-postadan gelenler" altında görünür;
+   **Göster** ile açılıp bağlantıya dokunulur.
+
+Worker yalnızca 12 onaltılık haneli adresleri kabul eder; kayıtlı olmayan adrese ve 2 MB'tan büyük e-postalara
+ret döner. Aynı e-posta iki kez gelirse ikincisi yok sayılır (`Message-ID`).
 Tutarı, tarihi ya da kartı okunamayan, yabancı para birimli ve iade/iptal e-postaları kendiliğinden eklenmez;
-**Harcamalar** sekmesinde "E-postadan gelenler" altında *Ekle* (form doldurulmuş açılır) ya da *Yok say* ile beklerler.
+**Harcamalar** sekmesinde *Ekle* (form doldurulmuş açılır), *Göster* ya da *Yok say* ile beklerler.
 Ayarlar'daki "Bir e-postayı dene" alanına bir bildirim yapıştırıp neyin okunduğunu görebilirsin.
-
-Kestirme dışında başka bir tetikleyici (ör. iCloud Mail'i IMAP ile dinleyen bir servis) de aynı
-`ingest_email` adresini çağırabilir.
+Adres yenilenirse eskisine gelen e-postalar reddedilir.
