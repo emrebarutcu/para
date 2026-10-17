@@ -36,11 +36,11 @@
 
   <section class="summary">
     <div class="card net">
-      <span class="label" id="dueLabel">Bu ay</span>
+      <span class="label" id="dueLabel">Bu ay ödemeleri</span>
       <span class="value" id="dueTotal">₺0,00</span>
     </div>
     <div class="card">
-      <span class="label" id="nextLabel">Sonraki ay</span>
+      <span class="label" id="nextLabel">Sonraki ay ödemeleri</span>
       <span class="value" id="nextTotal">₺0,00</span>
     </div>
     <div class="card">
@@ -55,31 +55,63 @@
 
   <section class="chart-section">
     <div class="chart-head">
-      <h2>Aylık ödeme planı</h2>
+      <div class="chart-title">
+        <h2>Aylık ödemeler</h2>
+        <div class="seg" id="chartBy" role="group" aria-label="Grafiği grupla">
+          <button type="button" data-by="person">Kişi</button>
+          <button type="button" data-by="card">Kart</button>
+        </div>
+      </div>
       <div class="chart-legend" id="chartLegend"></div>
     </div>
     <div class="chart-wrap">
-      <svg id="planChart" class="chart-svg" role="img" aria-label="Aylık taksit ödemeleri, kişilere göre"></svg>
+      <svg id="planChart" class="chart-svg" role="img" aria-label="Aylık ödemeler"></svg>
       <p id="chartEmpty" class="empty" hidden></p>
     </div>
   </section>
 
   <section class="panel">
     <div class="panel-head">
-      <h2>Ödeme tablosu</h2>
-      <label class="due-day">
-        Son ödeme günü
-        <input type="number" id="dueDay" min="1" max="31" step="1" />
-      </label>
+      <h2>Nakit akışı</h2>
+      <span class="panel-note">ödeme tarihi ve karta göre</span>
     </div>
     <div class="table-wrap">
       <table id="planTable" class="plan-table"></table>
     </div>
   </section>
 
+  <section class="panel cards-panel">
+    <div class="panel-head">
+      <h2>Kartlar</h2>
+    </div>
+    <ul class="card-list" id="cardList"></ul>
+    <form id="cardForm" class="card-form">
+      <label class="fld fld-desc">
+        <span>Kart adı</span>
+        <input name="name" type="text" placeholder="örn. Bonus" required />
+      </label>
+      <label class="fld">
+        <span>Limit</span>
+        <input name="limit" type="number" min="0" step="0.01" placeholder="0,00" />
+      </label>
+      <label class="fld" title="Hesap kesim günü: bu güne kadarki harcamalar o ayın ekstresine girer">
+        <span>Kesim günü</span>
+        <input name="cutoffDay" type="number" min="1" max="31" step="1" placeholder="12" required />
+      </label>
+      <label class="fld">
+        <span>Son ödeme günü</span>
+        <input name="dueDay" type="number" min="1" max="31" step="1" placeholder="22" required />
+      </label>
+      <div class="fld-actions">
+        <button type="submit" id="cardSubmit">Kart ekle</button>
+        <button type="button" id="cardCancel" class="ghost" hidden>İptal</button>
+      </div>
+    </form>
+  </section>
+
   <section class="panel installments">
     <div class="panel-head">
-      <h2>Taksitler</h2>
+      <h2>Harcamalar</h2>
       <button id="addPerson" class="ghost small">+ Kişi</button>
     </div>
     <div class="person-tabs" id="personTabs" role="tablist"></div>
@@ -95,12 +127,16 @@
         <input name="desc" type="text" placeholder="örn. IKEA" required />
       </label>
       <label class="fld">
-        <span>Ekstre</span>
-        <input name="statement" type="month" required />
+        <span>Tarih</span>
+        <input name="date" type="date" />
+      </label>
+      <label class="fld">
+        <span>Kart</span>
+        <select name="card"></select>
       </label>
       <label class="fld">
         <span>Taksit</span>
-        <input name="count" type="number" min="1" max="60" step="1" placeholder="Kalan" required />
+        <input name="count" type="number" min="1" max="60" step="1" placeholder="1" />
       </label>
       <label class="fld">
         <span>Tutar</span>
@@ -112,10 +148,6 @@
           <option value="total">Toplam</option>
           <option value="per">Taksit tutarı</option>
         </select>
-      </label>
-      <label class="fld" title="Alışverişin asıl taksit sayısı (ör. 6 taksitin son 4'ü kaldıysa 6). Orijinal tutarı hesaplamak için.">
-        <span>Plan (ops.)</span>
-        <input name="planCount" type="number" min="1" max="60" step="1" placeholder="—" />
       </label>
       <div class="fld-actions">
         <button type="submit" id="instSubmit">Ekle</button>

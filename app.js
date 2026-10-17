@@ -44,33 +44,61 @@ function getStorageKey() {
   return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
 }
 
-const SERIES_COUNT = 8;   // styles.css'teki --s1…--s8
-const MAX_MONTHS = 60;    // tablo/grafikte gösterilecek en fazla ay
+const SERIES_COUNT = 8;          // styles.css'teki --s1…--s8
+const MAX_MONTHS = 60;           // tablo/grafikte gösterilecek en fazla ay
+const CASH_COLOR = "var(--mute)";
+const CHART_BY_KEY = "para.chartBy";
 
 const defaultState = () => ({
   people: [{ id: "ben", name: "Ben", color: 0 }],
-  installments: [],       // { id, personId, desc, statement: "YYYY-MM", count, total, planCount? }
-  dueDay: 22,             // kartın son ödeme günü
+  cards: [],              // { id, name, limit, cutoffDay, dueDay, color }
+  installments: [],       // harcamalar — biçimi taksit.js'de
   _v: 0, // version timestamp — used for sync conflict resolution
 });
 
-// Eski nakit akışı sürümünden kalan alanlar (entriesByDate, recurring…) olduğu gibi
-// taşınır; senkronizasyon tüm nesneyi yazdığı için böylece silinmezler.
+function validDay(v) {
+  const d = Math.round(Number(v));
+  return d >= 1 && d <= 31 ? d : null;
+}
+
+// Son ödeme günü bilinen ama kesimi bilinmeyen kart: kesim, yasal 10 günlük aralıkla tahmin edilir
+function defaultCard(dueDay, id, color) {
+  const due = validDay(dueDay) || 22;
+  return { id, name: "Kredi kartı", limit: 0, cutoffDay: ((due - 11 + 31) % 31) + 1, dueDay: due, color };
+}
+
+// Eski sürümlerden gelen veriyi bugünkü biçime taşır. Nakit akışı sürümünden kalan alanlar
+// (entriesByDate, recurring…) olduğu gibi kalır; senkronizasyon tüm nesneyi yazdığı için silinmezler.
 function hydrate(data) {
   const s = { ...defaultState(), ...data };
   if (!Array.isArray(s.people)) s.people = defaultState().people;
+  if (!Array.isArray(s.cards)) s.cards = [];
   if (!Array.isArray(s.installments)) s.installments = [];
-  const day = Math.round(Number(s.dueDay));
-  s.dueDay = day >= 1 && day <= 31 ? day : 22;
+
+  // İlk taksit sürümü: tek kart (dueDay) ve "Ekstre" ayı → varsayılan kart + ilk ödeme ayı
+  if (s.installments.some(i => i.statement)) {
+    let card = s.cards[0];
+    if (!card) { card = defaultCard(s.dueDay, "kart", 0); s.cards = [card]; }
+    s.installments = s.installments.map(i => {
+      if (!i.statement) return i;
+      const { statement, planCount, ...rest } = i;
+      return { ...rest, cardId: i.cardId || card.id, ...T.fromStatement({ statement, count: i.count, total: i.total, planCount }) };
+    });
+  }
+  delete s.dueDay;
   return s;
 }
 
 let state = loadState();
-let currentMonth = defaultMonth();  // planın başladığı ay
-let selectedIdx = null;             // tabloda açılan / grafikte vurgulanan ay
+let currentMonth = T.monthKey(todayIndex());  // planın başladığı ay
+let selectedIdx = null;      // grafikte vurgulanan ay
+let openEventKey = null;     // tabloda açılan ödeme
 let selectedPersonId = null;
-let editingId = null;
-let lastRows = [];
+let editingId = null;        // düzenlenen harcama
+let editingCardId = null;    // düzenlenen kart
+let formCardId = null;       // harcama formunda seçili kart ("" = nakit)
+let chartBy = readPref(CHART_BY_KEY) === "card" ? "card" : "person";
+let lastMonths = [];
 
 function loadState() {
   try {
@@ -86,10 +114,17 @@ function saveState() {
   if (typeof window.syncSchedulePush === 'function') window.syncSchedulePush(state);
 }
 
+function readPref(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
 function resetView() {
   selectedIdx = null;
+  openEventKey = null;
   selectedPersonId = null;
+  formCardId = null;
   resetForm();
+  resetCardForm();
 }
 
 // Auth callbacks — sync.js tarafından çağrılır
@@ -112,12 +147,6 @@ function todayIndex() {
   return d.getFullYear() * 12 + d.getMonth();
 }
 
-// Bu ayın son ödeme günü geçtiyse plan bir sonraki aydan başlar
-function defaultMonth() {
-  const late = new Date().getDate() > state.dueDay;
-  return T.monthKey(todayIndex() + (late ? 1 : 0));
-}
-
 function fmt(n) {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency", currency: "TRY", maximumFractionDigits: 2,
@@ -138,9 +167,15 @@ function fmtShort(n) {
   return s + Math.round(abs).toLocaleString("tr-TR");
 }
 
-// "22 Ekim 2026" / "22 Eki 2026" / "Ekim 2026"
-function dueLong(idx)  { return `${T.dueDate(idx, state.dueDay).getDate()} ${T.monthName(idx)} ${T.yearOf(idx)}`; }
-function dueShort(idx) { return `${T.dueDate(idx, state.dueDay).getDate()} ${T.monthShort(idx)} ${T.yearOf(idx)}`; }
+// "2026-10-22" → "22 Eki 2026" / "22 Eki"; ay indeksi → "Ekim 2026"
+function fmtDay(key) {
+  const d = T.parseDate(key);
+  return `${d.day} ${T.monthShort(d.idx)} ${T.yearOf(d.idx)}`;
+}
+function fmtDayShort(key) {
+  const d = T.parseDate(key);
+  return `${d.day} ${T.monthShort(d.idx)}`;
+}
 function monthLong(idx) { return `${T.monthName(idx)} ${T.yearOf(idx)}`; }
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
@@ -153,19 +188,23 @@ function el(tag, className, text) {
 }
 
 function personById(id) { return state.people.find(p => p.id === id); }
-function seriesVar(person) { return `var(--s${(person.color % SERIES_COUNT) + 1})`; }
+function cardById(id) { return state.cards.find(c => c.id === id); }
+function cardName(id) { return cardById(id)?.name ?? "Nakit"; }
+function seriesVar(entity) { return `var(--s${(entity.color % SERIES_COUNT) + 1})`; }
+function cardColor(id) { const c = cardById(id); return c ? seriesVar(c) : CASH_COLOR; }
+function paymentsOf(p) { return T.payments(p, cardById(p.cardId)); }
 
-function swatch(person) {
+function swatch(color) {
   const i = el("i", "swatch");
-  i.style.background = seriesVar(person);
+  i.style.background = color;
   return i;
 }
 
-// Renk kişiye bağlıdır, sırasına değil: yeni kişi boştaki ilk rengi alır
-function nextColor() {
-  const used = new Set(state.people.map(p => p.color));
+// Renk kişiye / karta bağlıdır, sırasına değil: yeni kayıt boştaki ilk rengi alır
+function nextColor(list) {
+  const used = new Set(list.map(x => x.color));
   for (let c = 0; c < SERIES_COUNT; c++) if (!used.has(c)) return c;
-  return state.people.length % SERIES_COUNT;
+  return list.length % SERIES_COUNT;
 }
 
 // ---------- Render ----------
@@ -179,12 +218,16 @@ const els = {
   nextTotal:     document.getElementById("nextTotal"),
   remaining:     document.getElementById("remainingTotal"),
   endLabel:      document.getElementById("endLabel"),
+  chartBy:       document.getElementById("chartBy"),
   legend:        document.getElementById("chartLegend"),
   chart:         document.getElementById("planChart"),
   chartEmpty:    document.getElementById("chartEmpty"),
   tooltip:       document.getElementById("chartTooltip"),
-  dueDay:        document.getElementById("dueDay"),
   table:         document.getElementById("planTable"),
+  cardList:      document.getElementById("cardList"),
+  cardForm:      document.getElementById("cardForm"),
+  cardSubmit:    document.getElementById("cardSubmit"),
+  cardCancel:    document.getElementById("cardCancel"),
   personTabs:    document.getElementById("personTabs"),
   personBar:     document.getElementById("personBar"),
   personStats:   document.getElementById("personStats"),
@@ -202,149 +245,305 @@ const els = {
 
 function render() {
   els.monthPicker.value = currentMonth;
-  els.dueDay.value = state.dueDay;
 
   const start = T.monthIndex(currentMonth);
+  const end = Math.min(lastPaymentIndex(), start + MAX_MONTHS - 1);
+  const months = end >= start ? T.buildCashflow(state.people, state.cards, state.installments, start, end) : [];
+  lastMonths = months;
+  if (selectedIdx != null && !months.some(m => m.idx === selectedIdx)) selectedIdx = null;
+
+  renderSummary(months, start);
+  renderLegend(months);
+  renderChart(months);
+  renderTable(months);
+  renderCards();
+  renderPurchases(start);
+}
+
+function lastPaymentIndex() {
   const known = new Set(state.people.map(p => p.id));
-  const lastDue = state.installments
-    .filter(i => known.has(i.personId))
-    .reduce((m, i) => Math.max(m, T.lastDueIndex(i)), -Infinity);
-  const end = Math.min(lastDue, start + MAX_MONTHS - 1);
-  const rows = end >= start ? T.buildSchedule(state.people, state.installments, start, end) : [];
-  lastRows = rows;
-  if (selectedIdx != null && !rows.some(r => r.idx === selectedIdx)) selectedIdx = null;
-
-  renderSummary(rows, start, lastDue);
-  renderLegend();
-  renderChart(rows);
-  renderTable(rows);
-  renderInstallments(start);
+  let last = -Infinity;
+  for (const p of state.installments) {
+    if (!known.has(p.personId)) continue;
+    const list = paymentsOf(p);
+    if (list.length) last = Math.max(last, list[list.length - 1].idx);
+  }
+  return last;
 }
 
-function renderSummary(rows, start, lastDue) {
-  const totalAt = idx => rows.find(r => r.idx === idx)?.total || 0;
-  const day = idx => `${T.dueDate(idx, state.dueDay).getDate()} ${T.monthName(idx)}`;
-  els.dueLabel.textContent  = day(start) + " ödemesi";
+function renderSummary(months, start) {
+  const totalAt = idx => months.find(m => m.idx === idx)?.total || 0;
+  els.dueLabel.textContent  = `${T.monthName(start)} ödemeleri`;
   els.dueTotal.textContent  = fmt(totalAt(start));
-  els.nextLabel.textContent = day(start + 1);
+  els.nextLabel.textContent = `${T.monthName(start + 1)} ödemeleri`;
   els.nextTotal.textContent = fmt(totalAt(start + 1));
-  els.remaining.textContent = fmt(rows.reduce((s, r) => s + r.total, 0));
-  els.endLabel.textContent  = lastDue >= start ? monthLong(lastDue) : "—";
+  els.remaining.textContent = fmt(months.reduce((s, m) => s + m.total, 0));
+  els.endLabel.textContent  = months.length ? monthLong(months[months.length - 1].idx) : "—";
 }
 
-function renderLegend() {
+// Grafiğin serileri: kişiler ya da kartlar (+ nakit)
+function chartSeries(months) {
+  if (chartBy === "card") {
+    const list = state.cards.map(c => ({ name: c.name, color: seriesVar(c), value: m => m.byCard[c.id] || 0 }));
+    if (months.some(m => m.byCard[T.CASH])) {
+      list.push({ name: "Nakit", color: CASH_COLOR, value: m => m.byCard[T.CASH] || 0 });
+    }
+    return list;
+  }
+  return state.people.map(p => ({ name: p.name, color: seriesVar(p), value: m => m.byPerson[p.id] || 0 }));
+}
+
+function renderLegend(months) {
+  for (const b of els.chartBy.querySelectorAll("button")) {
+    b.classList.toggle("active", b.dataset.by === chartBy);
+    b.setAttribute("aria-pressed", String(b.dataset.by === chartBy));
+  }
   els.legend.replaceChildren();
-  if (state.people.length < 2) return;   // tek seri: başlık yeterli
-  for (const p of state.people) {
+  const series = chartSeries(months);
+  if (series.length < 2) return;   // tek seri: başlık yeterli
+  for (const s of series) {
     const item = el("span", "leg");
-    item.append(swatch(p), document.createTextNode(p.name));
+    item.append(swatch(s.color), document.createTextNode(s.name));
     els.legend.append(item);
   }
 }
 
-// ---------- Payment table (Excel'deki özet sayfası) ----------
-function renderTable(rows) {
+// ---------- Cash-flow table (tarih + kart bazında; Excel'deki özet sayfası) ----------
+function renderTable(months) {
   const table = els.table;
   table.replaceChildren();
   const people = state.people;
   const cols = people.length + 2;
 
   const head = table.createTHead().insertRow();
-  head.append(el("th", "", "Son ödeme"));
+  head.append(el("th", "", "Ödeme"));
   for (const p of people) {
     const th = el("th", "num");
-    th.append(swatch(p), document.createTextNode(p.name));
+    th.append(swatch(seriesVar(p)), document.createTextNode(p.name));
     head.append(th);
   }
   head.append(el("th", "num", "Toplam"));
 
   const body = table.createTBody();
-  if (!rows.length) {
+  if (!months.length) {
     const td = el("td", "empty", state.installments.length
-      ? `${dueLong(T.monthIndex(currentMonth))} ve sonrasında ödeme yok.`
-      : "Henüz taksit yok.");
+      ? `${monthLong(T.monthIndex(currentMonth))} ve sonrasında ödeme yok.`
+      : "Henüz harcama yok.");
     td.colSpan = cols;
     body.insertRow().append(td);
     return;
   }
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const sums = Object.fromEntries(people.map(p => [p.id, 0]));
-  let grand = 0;
+  const today = T.todayKey();
+  const amountCells = (tr, byPerson, total) => {
+    for (const p of people) tr.append(el("td", "num", byPerson[p.id] ? fmtNum(byPerson[p.id]) : "—"));
+    tr.append(el("td", "num total", total ? fmtNum(total) : "—"));
+  };
 
-  for (const r of rows) {
-    const tr = body.insertRow();
-    const open = r.idx === selectedIdx;
-    tr.className = "month-row" + (open ? " selected" : "") + (r.total ? "" : " zero")
-      + (T.dueDate(r.idx, state.dueDay) < today ? " past" : "");
-    tr.tabIndex = 0;
-    tr.setAttribute("aria-expanded", String(open));
-    const date = el("td");
-    date.append(el("span", "d-long", dueShort(r.idx)),
-      el("span", "d-short", `${T.monthShort(r.idx)} ’${String(T.yearOf(r.idx)).slice(2)}`));
-    tr.append(date);
-    for (const p of people) {
-      const v = r.byPerson[p.id];
-      tr.append(el("td", "num", v ? fmtNum(v) : "—"));
-      sums[p.id] += v;
+  for (const m of months) {
+    const focus = m.idx === selectedIdx ? " focus" : "";
+    if (!m.events.length) {
+      const tr = body.insertRow();
+      tr.className = "zero" + focus;
+      tr.append(el("td", "", monthLong(m.idx)));
+      amountCells(tr, {}, 0);
+      continue;
     }
-    tr.append(el("td", "num total", r.total ? fmtNum(r.total) : "—"));
-    grand += r.total;
 
-    const toggle = () => { selectedIdx = open ? null : r.idx; render(); };
-    tr.addEventListener("click", toggle);
-    tr.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
-    });
+    for (const ev of m.events) {
+      const open = ev.key === openEventKey;
+      const tr = body.insertRow();
+      tr.className = "event-row" + focus + (open ? " open" : "") + (ev.date < today ? " past" : "");
+      tr.tabIndex = 0;
+      tr.setAttribute("aria-expanded", String(open));
 
-    if (open) {
-      const detail = body.insertRow();
-      detail.className = "detail-row";
-      const td = el("td");
-      td.colSpan = cols;
-      td.append(monthDetail(r));
-      detail.append(td);
+      const when = el("div", "when");
+      const date = el("span", "when-date");
+      date.append(el("span", "d-long", fmtDay(ev.date)), el("span", "d-short", fmtDayShort(ev.date)));
+      const card = el("span", "when-card");
+      card.append(swatch(cardColor(ev.cardId)), document.createTextNode(cardName(ev.cardId)));
+      when.append(date, card);
+      tr.insertCell().append(when);
+      amountCells(tr, ev.byPerson, ev.total);
+
+      const toggle = () => { openEventKey = open ? null : ev.key; render(); };
+      tr.addEventListener("click", toggle);
+      tr.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
+
+      if (open) {
+        const detail = body.insertRow();
+        detail.className = "detail-row";
+        const td = el("td");
+        td.colSpan = cols;
+        td.append(eventDetail(ev));
+        detail.append(td);
+      }
+    }
+
+    // Ayda birden fazla ödeme varsa ay toplamı (Excel'deki satır)
+    if (m.events.length > 1) {
+      const tr = body.insertRow();
+      tr.className = "subtotal" + focus;
+      tr.append(el("td", "", `${monthLong(m.idx)} toplamı`));
+      amountCells(tr, m.byPerson, m.total);
     }
   }
 
+  const sums = Object.fromEntries(people.map(p => [p.id, 0]));
+  for (const m of months) for (const p of people) sums[p.id] += m.byPerson[p.id] || 0;
   const foot = table.createTFoot().insertRow();
   foot.append(el("td", "", "Toplam"));
-  for (const p of people) foot.append(el("td", "num", fmtNum(sums[p.id])));
-  foot.append(el("td", "num total", fmtNum(grand)));
+  amountCells(foot, sums, months.reduce((s, m) => s + m.total, 0));
 }
 
-// Seçili ayda ödenen taksitler
-function monthDetail(row) {
+// Bir ödemede (tarih + kart) ödenen taksitler
+function eventDetail(ev) {
   const ul = el("ul", "month-items");
-  if (!row.items.length) {
-    ul.append(el("li", "dp-empty", "Bu ay ödeme yok"));
-    return ul;
-  }
   const order = new Map(state.people.map((p, i) => [p.id, i]));
-  const items = [...row.items].sort((a, b) =>
-    order.get(a.inst.personId) - order.get(b.inst.personId) || a.inst.desc.localeCompare(b.inst.desc, "tr"));
-  for (const { inst, no, amount } of items) {
-    const p = personById(inst.personId);
+  const items = [...ev.items].sort((a, b) =>
+    order.get(a.purchase.personId) - order.get(b.purchase.personId)
+    || a.purchase.desc.localeCompare(b.purchase.desc, "tr"));
+  for (const { purchase, no, amount } of items) {
+    const p = personById(purchase.personId);
     const li = el("li");
     const who = el("span", "who");
-    who.append(swatch(p), document.createTextNode(p.name));
-    li.append(who, el("span", "desc", inst.desc), el("span", "no", `${no}/${T.planLength(inst)}`), el("span", "amount", fmt(amount)));
+    who.append(swatch(seriesVar(p)), document.createTextNode(p.name));
+    const plan = T.planLength(purchase);
+    li.append(who, el("span", "desc", purchase.desc),
+      el("span", "no", plan > 1 ? `${no}/${plan}` : "peşin"), el("span", "amount", fmt(amount)));
     ul.append(li);
   }
   return ul;
 }
 
-// ---------- Installments (Excel'deki kişi sayfaları) ----------
-function renderInstallments(start) {
+// ---------- Cards ----------
+function renderCards() {
+  els.cardList.replaceChildren();
+  if (!state.cards.length) {
+    els.cardList.append(el("li", "dp-empty",
+      "Henüz kart yok. Kart eklersen kartlı harcamaların ödeme tarihi kesim ve son ödeme gününe göre hesaplanır."));
+    return;
+  }
+
+  const today = T.todayKey();
+  const known = new Set(state.people.map(p => p.id));
+  for (const c of state.cards) {
+    const pays = state.installments
+      .filter(p => p.cardId === c.id && known.has(p.personId))
+      .flatMap(p => T.payments(p, c));
+    const used = T.outstanding(pays, today);
+    const upcoming = pays.filter(x => x.key >= today);
+    const nextKey = upcoming.reduce((min, x) => (!min || x.key < min ? x.key : min), null);
+    const nextTotal = upcoming.filter(x => x.key === nextKey).reduce((s, x) => s + x.amount, 0);
+
+    const li = el("li", "card-item" + (c.id === editingCardId ? " editing" : ""));
+    li.tabIndex = 0;
+    li.title = "Düzenlemek için tıkla";
+
+    const main = el("div", "ci-main");
+    const name = el("strong");
+    name.append(swatch(seriesVar(c)), document.createTextNode(c.name));
+    main.append(name, el("span", "meta", `Kesim ${c.cutoffDay} · son ödeme ${c.dueDay}`));
+    main.append(el("span", "meta", nextKey
+      ? `Sonraki ödeme ${fmtDay(nextKey)}: ${fmt(nextTotal)}`
+      : "Bekleyen ödeme yok"));
+
+    const side = el("div", "ci-limit");
+    if (c.limit > 0) {
+      const ratio = used / c.limit;
+      const meter = el("div", "meter" + (ratio > 1 ? " over" : ratio >= 0.9 ? " warn" : ""));
+      meter.setAttribute("role", "meter");
+      meter.setAttribute("aria-label", `${c.name} limit kullanımı`);
+      meter.setAttribute("aria-valuemin", "0");
+      meter.setAttribute("aria-valuemax", String(c.limit));
+      meter.setAttribute("aria-valuenow", String(Math.round(used)));
+      const fill = el("span", "meter-fill");
+      fill.style.width = `${Math.min(100, ratio * 100)}%`;
+      meter.append(fill);
+      side.append(meter,
+        el("span", "meta", `${fmt(used)} / ${fmt(c.limit)}`),
+        el("span", "meta", ratio > 1 ? `limit ${fmt(used - c.limit)} aşıldı` : `kullanılabilir ${fmt(c.limit - used)}`));
+    } else {
+      side.append(el("span", "meta", `Bekleyen borç ${fmt(used)}`));
+    }
+
+    const del = el("button", "del", "✕");
+    del.type = "button";
+    del.setAttribute("aria-label", `${c.name} kartını sil`);
+    del.addEventListener("click", e => {
+      e.stopPropagation();
+      const n = state.installments.filter(p => p.cardId === c.id).length;
+      if (!confirm(n ? `“${c.name}” kartı ve bu karttaki ${n} harcama silinsin mi?` : `“${c.name}” kartı silinsin mi?`)) return;
+      state.cards = state.cards.filter(x => x.id !== c.id);
+      state.installments = state.installments.filter(p => p.cardId !== c.id);
+      if (editingCardId === c.id) resetCardForm();
+      if (formCardId === c.id) formCardId = null;
+      saveState(); render();
+    });
+
+    li.append(main, side, del);
+    li.addEventListener("click", () => startCardEdit(c));
+    li.addEventListener("keydown", e => { if (e.key === "Enter") startCardEdit(c); });
+    els.cardList.append(li);
+  }
+}
+
+function resetCardForm() {
+  editingCardId = null;
+  els.cardForm.reset();
+  els.cardSubmit.textContent = "Kart ekle";
+  els.cardCancel.hidden = true;
+}
+
+function startCardEdit(c) {
+  editingCardId = c.id;
+  const f = els.cardForm.elements;
+  f.name.value = c.name;
+  f.limit.value = c.limit || "";
+  f.cutoffDay.value = c.cutoffDay;
+  f.dueDay.value = c.dueDay;
+  els.cardSubmit.textContent = "Kaydet";
+  els.cardCancel.hidden = false;
+  render();
+  els.cardForm.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  f.name.focus({ preventScroll: true });
+}
+
+els.cardForm.addEventListener("submit", e => {
+  e.preventDefault();
+  const f = els.cardForm.elements;
+  const name = f.name.value.trim();
+  const limit = Number(f.limit.value) || 0;
+  const cutoffDay = validDay(f.cutoffDay.value);
+  const dueDay = validDay(f.dueDay.value);
+  if (!name || !cutoffDay || !dueDay || limit < 0) return;
+  if (editingCardId) {
+    state.cards = state.cards.map(c => (c.id === editingCardId ? { ...c, name, limit, cutoffDay, dueDay } : c));
+  } else {
+    const card = { id: uid(), name, limit, cutoffDay, dueDay, color: nextColor(state.cards) };
+    state.cards.push(card);
+    if (state.cards.length === 1) formCardId = card.id;   // ilk kart: formda nakit yerine seçili gelsin
+  }
+  resetCardForm();
+  saveState(); render();
+});
+
+els.cardCancel.addEventListener("click", () => { resetCardForm(); render(); });
+
+// ---------- Purchases (Excel'deki kişi sayfaları) ----------
+function renderPurchases(start) {
   if (!personById(selectedPersonId)) selectedPersonId = state.people[0]?.id ?? null;
   const person = personById(selectedPersonId);
+  renderCardOptions();
 
   els.personTabs.replaceChildren(...state.people.map(p => {
     const b = el("button", "ptab" + (p.id === selectedPersonId ? " active" : ""));
     b.type = "button";
     b.setAttribute("role", "tab");
     b.setAttribute("aria-selected", String(p.id === selectedPersonId));
-    b.append(swatch(p), document.createTextNode(p.name));
+    b.append(swatch(seriesVar(p)), document.createTextNode(p.name));
     b.addEventListener("click", () => {
       if (p.id === selectedPersonId) return;
       selectedPersonId = p.id;
@@ -359,43 +558,49 @@ function renderInstallments(start) {
   els.instPreview.hidden = !person;
   els.instList.replaceChildren();
   if (!person) {
-    els.instList.append(el("li", "dp-empty", "Taksit eklemek için önce bir kişi ekle."));
+    els.instList.append(el("li", "dp-empty", "Harcama eklemek için önce bir kişi ekle."));
     return;
   }
 
-  const mine = state.installments.filter(i => i.personId === person.id);
+  const mine = state.installments
+    .filter(p => p.personId === person.id)
+    .map(p => ({ p, pays: paymentsOf(p) }));
   let monthly = 0, remaining = 0;
-  for (const inst of mine) {
-    if (T.installmentNo(inst, start)) monthly += T.perInstallment(inst);
-    remaining += T.remainingFrom(inst, start) * T.perInstallment(inst);
+  for (const { p, pays } of mine) {
+    monthly += pays.filter(x => x.idx === start).reduce((s, x) => s + x.amount, 0);
+    remaining += T.remainingFrom(pays, start) * T.perInstallment(p);
   }
-  els.personStats.textContent =
-    `${T.dueDate(start, state.dueDay).getDate()} ${T.monthName(start)}: ${fmt(monthly)} · kalan ${fmt(remaining)}`;
+  els.personStats.textContent = `${T.monthName(start)}: ${fmt(monthly)} · kalan ${fmt(remaining)}`;
 
   if (!mine.length) {
-    els.instList.append(el("li", "dp-empty", `${person.name} için taksit yok`));
+    els.instList.append(el("li", "dp-empty", `${person.name} için harcama yok`));
     return;
   }
 
   const sorted = mine
-    .map(inst => ({ inst, left: T.remainingFrom(inst, start) }))
+    .map(x => ({ ...x, left: T.remainingFrom(x.pays, start) }))
     .sort((a, b) => (b.left > 0) - (a.left > 0)
-      || T.firstDueIndex(a.inst) - T.firstDueIndex(b.inst)
-      || a.inst.desc.localeCompare(b.inst.desc, "tr"));
+      || a.pays[0].key.localeCompare(b.pays[0].key)
+      || a.p.desc.localeCompare(b.p.desc, "tr"));
 
-  for (const { inst, left } of sorted) {
-    const per = T.perInstallment(inst);
-    const plan = T.planLength(inst);
-    const li = el("li", "inst" + (left ? "" : " done") + (inst.id === editingId ? " editing" : ""));
+  for (const { p, pays, left } of sorted) {
+    const per = T.perInstallment(p);
+    const plan = T.planLength(p);
+    const li = el("li", "inst" + (left ? "" : " done") + (p.id === editingId ? " editing" : ""));
     li.tabIndex = 0;
     li.title = "Düzenlemek için tıkla";
 
     const main = el("div", "inst-main");
-    main.append(el("strong", "", inst.desc));
-    let meta = `${monthLong(T.monthIndex(inst.statement))} ekstresi · ${inst.count} × ${fmt(per)}`;
-    if (plan > inst.count) meta += ` · ${plan} taksitlik plan, orijinal ${fmt(T.originalTotal(inst))}`;
-    main.append(el("span", "meta", meta));
-    main.append(el("span", "meta", `${dueShort(T.firstDueIndex(inst))} → ${dueShort(T.lastDueIndex(inst))}`));
+    main.append(el("strong", "", p.desc));
+    const card = el("span", "meta inst-card");
+    card.append(swatch(cardColor(p.cardId)), document.createTextNode(cardName(p.cardId)));
+    let meta = p.date ? ` · ${fmtDay(p.date)}` : "";
+    meta += p.count > 1 ? ` · ${p.count} × ${fmt(per)}` : " · peşin";
+    if (plan > p.count) meta += ` · ${plan} taksitlik plan, orijinal ${fmt(T.originalTotal(p))}`;
+    card.append(document.createTextNode(meta));
+    main.append(card);
+    const first = pays[0].key, last = pays[pays.length - 1].key;
+    main.append(el("span", "meta", first === last ? `ödeme ${fmtDay(first)}` : `${fmtDay(first)} → ${fmtDay(last)}`));
 
     const side = el("div", "inst-side");
     side.append(el("span", "amount", fmt(per)));
@@ -403,65 +608,91 @@ function renderInstallments(start) {
 
     const del = el("button", "del", "✕");
     del.type = "button";
-    del.setAttribute("aria-label", `${inst.desc} sil`);
+    del.setAttribute("aria-label", `${p.desc} sil`);
     del.addEventListener("click", e => {
       e.stopPropagation();
-      if (!confirm(`“${inst.desc}” silinsin mi?`)) return;
-      state.installments = state.installments.filter(x => x.id !== inst.id);
-      if (editingId === inst.id) resetForm();
+      if (!confirm(`“${p.desc}” silinsin mi?`)) return;
+      state.installments = state.installments.filter(x => x.id !== p.id);
+      if (editingId === p.id) resetForm();
       saveState(); render();
     });
 
     li.append(main, side, del);
-    li.addEventListener("click", () => startEdit(inst));
-    li.addEventListener("keydown", e => { if (e.key === "Enter") startEdit(inst); });
+    li.addEventListener("click", () => startEdit(p));
+    li.addEventListener("keydown", e => { if (e.key === "Enter") startEdit(p); });
     els.instList.append(li);
   }
 }
 
-// ---------- Installment form ----------
+// Kart seçenekleri; formCardId geçersizse ilk kart (yoksa nakit)
+function renderCardOptions() {
+  const sel = els.instForm.elements.card;
+  sel.replaceChildren(
+    ...state.cards.map(c => new Option(c.name, c.id)),
+    new Option("Nakit / banka kartı", ""),
+  );
+  if (formCardId == null || (formCardId && !cardById(formCardId))) formCardId = state.cards[0]?.id ?? "";
+  sel.value = formCardId;
+}
+
+// ---------- Purchase form ----------
 function readForm() {
   const f = els.instForm.elements;
-  const count = Math.round(Number(f.count.value));
-  const amount = Number(f.amount.value);
-  const planCount = Math.round(Number(f.planCount.value)) || 0;
-  const statement = T.parseStatement(f.statement.value);
   const desc = f.desc.value.trim();
-  if (!desc || !statement || !(count >= 1) || !(amount > 0)) return null;
+  const count = Math.round(Number(f.count.value || 1));
+  const amount = Number(f.amount.value);
+  const date = T.parseDate(f.date.value) ? f.date.value : "";
+  const editing = editingId ? state.installments.find(x => x.id === editingId) : null;
+  if (!desc || !(count >= 1) || !(amount > 0)) return null;
+  if (!date && !editing?.firstDue) return null;
+
   const total = f.mode.value === "per" ? Math.round(amount * count * 100) / 100 : amount;
-  const inst = { desc, statement, count, total };
-  if (planCount > count) inst.planCount = planCount;
-  return inst;
+  const p = { desc, cardId: f.card.value || null, count, total };
+  if (date) {
+    p.date = date;
+  } else {
+    // Excel'den gelen tarihsiz kayıt: ödeme ayı ve plan korunur
+    p.firstDue = editing.firstDue;
+    if (editing.planCount) p.planCount = editing.planCount;
+  }
+  return p;
 }
 
 function updatePreview() {
-  const inst = readForm();
-  if (!inst) { els.instPreview.textContent = ""; return; }
-  let text = `${inst.count} × ${fmt(T.perInstallment(inst))} = ${fmt(inst.total)}`
-    + ` · ilk ödeme ${dueLong(T.firstDueIndex(inst))}`;
-  if (inst.count > 1) text += `, son ${dueLong(T.lastDueIndex(inst))}`;
-  if (inst.planCount) text += ` · orijinal ${fmt(T.originalTotal(inst))}`;
+  const p = readForm();
+  if (!p) { els.instPreview.textContent = ""; return; }
+  const card = cardById(p.cardId);
+  const pays = T.payments(p, card);
+  let text = `${card ? card.name : "Nakit"} · `;
+  text += p.count > 1 ? `${p.count} × ${fmt(T.perInstallment(p))} = ${fmt(p.total)}` : fmt(p.total);
+  if (card && p.date) {
+    text += ` · ${fmtDay(T.dateKey(T.statementIndex(card, p.date), card.cutoffDay))} kesimli ekstreye girer`;
+  }
+  text += p.count > 1
+    ? ` · ilk ödeme ${fmtDay(pays[0].key)}, son ${fmtDay(pays[pays.length - 1].key)}`
+    : ` · ödeme ${fmtDay(pays[0].key)}`;
   els.instPreview.textContent = text;
 }
 
 function resetForm() {
   editingId = null;
   els.instForm.reset();
-  els.instForm.elements.statement.value = T.monthKey(todayIndex());
+  els.instForm.elements.date.value = T.todayKey();
   els.instSubmit.textContent = "Ekle";
   els.instCancel.hidden = true;
   els.instPreview.textContent = "";
+  renderCardOptions();
 }
 
-function startEdit(inst) {
-  editingId = inst.id;
+function startEdit(p) {
+  editingId = p.id;
+  formCardId = p.cardId || "";
   const f = els.instForm.elements;
-  f.desc.value = inst.desc;
-  f.statement.value = inst.statement;
-  f.count.value = inst.count;
-  f.amount.value = Math.round(inst.total * 100) / 100;
+  f.desc.value = p.desc;
+  f.date.value = p.date || "";
+  f.count.value = p.count;
+  f.amount.value = Math.round(p.total * 100) / 100;
   f.mode.value = "total";
-  f.planCount.value = inst.planCount || "";
   els.instSubmit.textContent = "Kaydet";
   els.instCancel.hidden = false;
   render();
@@ -471,16 +702,18 @@ function startEdit(inst) {
 }
 
 els.instForm.addEventListener("input", updatePreview);
+els.instForm.elements.card.addEventListener("change", e => { formCardId = e.target.value; updatePreview(); });
 
 els.instForm.addEventListener("submit", e => {
   e.preventDefault();
-  const inst = readForm();
-  if (!inst || !selectedPersonId) return;
+  const p = readForm();
+  if (!selectedPersonId) return;
+  if (!p) { els.instPreview.textContent = "Harcama tarihini gir."; return; }
   if (editingId) {
     state.installments = state.installments.map(x =>
-      x.id === editingId ? { id: x.id, personId: x.personId, ...inst } : x);
+      x.id === editingId ? { id: x.id, personId: x.personId, ...p } : x);
   } else {
-    state.installments.push({ id: uid(), personId: selectedPersonId, ...inst });
+    state.installments.push({ id: uid(), personId: selectedPersonId, ...p });
   }
   resetForm();
   saveState(); render();
@@ -496,7 +729,7 @@ els.addPerson.addEventListener("click", () => {
   if (existing) {
     selectedPersonId = existing.id;
   } else {
-    const person = { id: uid(), name, color: nextColor() };
+    const person = { id: uid(), name, color: nextColor(state.people) };
     state.people.push(person);
     selectedPersonId = person.id;
     saveState();
@@ -518,7 +751,7 @@ els.deletePerson.addEventListener("click", () => {
   const person = personById(selectedPersonId);
   if (!person) return;
   const n = state.installments.filter(i => i.personId === person.id).length;
-  if (!confirm(n ? `“${person.name}” ve ${n} taksiti silinsin mi?` : `“${person.name}” silinsin mi?`)) return;
+  if (!confirm(n ? `“${person.name}” ve ${n} harcaması silinsin mi?` : `“${person.name}” silinsin mi?`)) return;
   state.people = state.people.filter(p => p.id !== person.id);
   state.installments = state.installments.filter(i => i.personId !== person.id);
   resetView();
@@ -538,9 +771,11 @@ function shiftMonth(delta) {
   render();
 }
 
-els.dueDay.addEventListener("change", () => {
-  const v = Math.round(Number(els.dueDay.value));
-  if (v >= 1 && v <= 31 && v !== state.dueDay) { state.dueDay = v; saveState(); }
+els.chartBy.addEventListener("click", e => {
+  const by = e.target.closest("button")?.dataset.by;
+  if (!by || by === chartBy) return;
+  chartBy = by;
+  try { localStorage.setItem(CHART_BY_KEY, by); } catch {}
   render();
 });
 
@@ -595,7 +830,8 @@ function loadXlsx() {
   });
 }
 
-// Her sayfa bir kişi; o kişinin taksitleri Excel'dekilerle değiştirilir, diğer kişilere dokunulmaz
+// Her sayfa bir kişi. Excel'de tarih olmadığı için kayıtlar ilk karta (yoksa yeni karta) ödeme ayıyla
+// eklenir; aynı kişinin daha önce Excel'den gelen (tarihsiz) kayıtları değiştirilir, diğerlerine dokunulmaz.
 async function importExcel(file) {
   const XLSX = await loadXlsx();
   const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
@@ -607,23 +843,29 @@ async function importExcel(file) {
     throw Object.assign(new Error("no sheets"), { userMessage: "Excel'de “Ürün” sütunu olan bir sayfa bulunamadı." });
   }
 
+  let card = state.cards[0];
+  const newCard = card ? null : defaultCard(result.dueDay, "kart", nextColor(state.cards));
   const total = result.people.reduce((s, p) => s + p.installments.length, 0);
   const summary = result.people.map(p => `${p.name} (${p.installments.length})`).join(", ");
-  let msg = `${total} taksit içe aktarılacak: ${summary}.\nBu kişilerin mevcut taksitleri Excel'dekilerle değiştirilecek.`;
+  let msg = `${total} taksit içe aktarılacak: ${summary}.`;
+  msg += card
+    ? `\nKart: ${card.name}.`
+    : `\nYeni kart: “${newCard.name}” (son ödeme ${newCard.dueDay}, kesim ${newCard.cutoffDay} — sonra düzenleyebilirsin).`;
+  msg += "\nBu kişilerin daha önce Excel'den aktarılan taksitleri yenileriyle değiştirilecek.";
   if (result.skipped) msg += `\n${result.skipped} satır eksik bilgi nedeniyle atlanacak.`;
   if (!confirm(msg + "\nDevam edelim mi?")) return false;
 
+  if (!card) { card = newCard; state.cards.push(card); }
   for (const p of result.people) {
     let person = state.people.find(x => T.normalize(x.name) === T.normalize(p.name));
     if (!person) {
-      person = { id: uid(), name: p.name, color: nextColor() };
+      person = { id: uid(), name: p.name, color: nextColor(state.people) };
       state.people.push(person);
     }
     state.installments = state.installments
-      .filter(i => i.personId !== person.id)
-      .concat(p.installments.map(i => ({ id: uid(), personId: person.id, ...i })));
+      .filter(i => i.personId !== person.id || i.date)
+      .concat(p.installments.map(i => ({ id: uid(), personId: person.id, cardId: card.id, ...i })));
   }
-  if (result.dueDay) state.dueDay = result.dueDay;
   return true;
 }
 
@@ -641,29 +883,30 @@ function topRoundedBar(x, y, w, h, r) {
   return `M${x},${y + h} V${y + r} A${r},${r} 0 0 1 ${x + r},${y} H${x + w - r} A${r},${r} 0 0 1 ${x + w},${y + r} V${y + h} Z`;
 }
 
-function renderChart(rows) {
+function renderChart(months) {
   const svg = els.chart;
-  const hasData = rows.some(r => r.total > 0);
+  const hasData = months.some(m => m.total > 0);
   svg.style.display = hasData ? "" : "none";
   els.chartEmpty.hidden = hasData;
-  els.tooltip.setAttribute("hidden", "");
+  hideTooltip();
   if (!hasData) {
     els.chartEmpty.textContent = state.installments.length
       ? "Bu aydan sonra ödenecek taksit yok."
-      : "Henüz taksit yok — aşağıdan ekle ya da Taksitler Excel dosyanı içe aktar.";
+      : "Henüz harcama yok — aşağıdan ekle ya da Taksitler Excel dosyanı içe aktar.";
     svg.innerHTML = "";
     return;
   }
 
+  const series = chartSeries(months);
   const W = Math.round(svg.getBoundingClientRect().width) || 880, H = 180;
   const PL = 44, PR = 8, PT = 22, PB = 24, GAP = 2, R = 4;
   const plotW = W - PL - PR, plotH = H - PT - PB;
-  const n = rows.length;
+  const n = months.length;
   const band = plotW / n;
   const barW = Math.min(24, band * 0.6);
-  const { step, top } = niceScale(Math.max(...rows.map(r => r.total)), 4);
+  const { step, top } = niceScale(Math.max(...months.map(m => m.total)), 4);
   const toY = v => PT + plotH * (1 - v / top);
-  const focusIdx = selectedIdx ?? rows[0].idx;
+  const focusIdx = selectedIdx ?? months[0].idx;
 
   // Y grid
   let gridSvg = "", yLblSvg = "";
@@ -673,48 +916,46 @@ function renderChart(rows) {
     yLblSvg += `<text x="${PL - 8}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="var(--mute)">${fmtShort(v)}</text>`;
   }
 
-  // Columns: kişiler sabit sırada alttan üste, aralarında 2px boşluk
+  // Columns: seriler sabit sırada alttan üste, aralarında 2px boşluk
   const every = Math.ceil(44 / band);
   let barsSvg = "", xLblSvg = "", capSvg = "", selSvg = "";
-  rows.forEach((row, i) => {
+  months.forEach((m, i) => {
     const cx = PL + band * (i + 0.5);
     const x = cx - barW / 2;
-    if (row.idx === selectedIdx) {
+    if (m.idx === selectedIdx) {
       selSvg = `<rect x="${(PL + band * i).toFixed(1)}" y="${PT}" width="${band.toFixed(1)}" height="${plotH}" fill="var(--accent)" opacity="0.08" rx="4"/>`;
     }
 
-    const segs = state.people
-      .map(p => ({ p, v: row.byPerson[p.id] }))
-      .filter(s => s.v > 0);
+    const segs = series.map(s => ({ s, v: s.value(m) })).filter(x => x.v > 0);
     let cum = 0, parts = "";
-    segs.forEach((s, j) => {
-      const yTop = toY(cum + s.v);
+    segs.forEach((seg, j) => {
+      const yTop = toY(cum + seg.v);
       const yBot = toY(cum) - (j > 0 ? GAP : 0);
-      cum += s.v;
+      cum += seg.v;
       const h = yBot - yTop;
       if (h <= 0.5) return;
       parts += j === segs.length - 1
-        ? `<path d="${topRoundedBar(x, yTop, barW, h, R)}" fill="${seriesVar(s.p)}"/>`
-        : `<rect x="${x.toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${seriesVar(s.p)}"/>`;
+        ? `<path d="${topRoundedBar(x, yTop, barW, h, R)}" fill="${seg.s.color}"/>`
+        : `<rect x="${x.toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${seg.s.color}"/>`;
     });
     barsSvg += `<g class="col" data-i="${i}">${parts}</g>`;
 
     // Değer etiketi yalnızca odaktaki ayda
-    if (row.idx === focusIdx && row.total > 0) {
-      const label = band >= 72 ? fmtNum(row.total) : fmtShort(row.total);
-      capSvg = `<text x="${cx.toFixed(1)}" y="${(toY(row.total) - 6).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text)">${label}</text>`;
+    if (m.idx === focusIdx && m.total > 0) {
+      const label = band >= 72 ? fmtNum(m.total) : fmtShort(m.total);
+      capSvg = `<text x="${cx.toFixed(1)}" y="${(toY(m.total) - 6).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text)">${label}</text>`;
     }
 
     if (i % every === 0) {
-      const withYear = i === 0 || row.idx % 12 === 0;
-      const label = T.monthShort(row.idx) + (withYear ? ` ’${String(T.yearOf(row.idx)).slice(2)}` : "");
-      xLblSvg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${row.idx === selectedIdx ? "var(--text)" : "var(--mute)"}">${label}</text>`;
+      const withYear = i === 0 || m.idx % 12 === 0;
+      const label = T.monthShort(m.idx) + (withYear ? ` ’${String(T.yearOf(m.idx)).slice(2)}` : "");
+      xLblSvg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${m.idx === selectedIdx ? "var(--text)" : "var(--mute)"}">${label}</text>`;
     }
   });
 
   // Hit areas — sütunun tamamı (etiketler dahil)
-  const hitsSvg = rows.map((row, i) =>
-    `<rect class="cf-hit" data-i="${i}" tabindex="0" role="button" aria-label="${dueLong(row.idx)}: ${fmt(row.total)}" x="${(PL + band * i).toFixed(1)}" y="0" width="${band.toFixed(1)}" height="${H}" fill="transparent"/>`
+  const hitsSvg = months.map((m, i) =>
+    `<rect class="cf-hit" data-i="${i}" tabindex="0" role="button" aria-label="${monthLong(m.idx)}: ${fmt(m.total)}" x="${(PL + band * i).toFixed(1)}" y="0" width="${band.toFixed(1)}" height="${H}" fill="transparent"/>`
   ).join("");
 
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -722,37 +963,37 @@ function renderChart(rows) {
 
   svg.querySelectorAll(".cf-hit").forEach(hit => {
     const i = Number(hit.dataset.i);
-    const row = rows[i];
+    const m = months[i];
     const col = svg.querySelector(`.col[data-i="${i}"]`);
-    const select = () => { selectedIdx = selectedIdx === row.idx ? null : row.idx; render(); };
+    const select = () => { selectedIdx = selectedIdx === m.idx ? null : m.idx; render(); };
     hit.addEventListener("click", select);
     hit.addEventListener("keydown", e => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); }
     });
-    hit.addEventListener("pointermove", e => { col.classList.add("hover"); showTooltip(row, e.clientX, e.clientY); });
+    hit.addEventListener("pointermove", e => { col.classList.add("hover"); showTooltip(m, series, e.clientX, e.clientY); });
     hit.addEventListener("pointerleave", () => { col.classList.remove("hover"); hideTooltip(); });
     hit.addEventListener("focus", () => {
       const b = hit.getBoundingClientRect();
       col.classList.add("hover");
-      showTooltip(row, b.left + b.width / 2, b.top + 40);
+      showTooltip(m, series, b.left + b.width / 2, b.top + 40);
     });
     hit.addEventListener("blur", () => { col.classList.remove("hover"); hideTooltip(); });
   });
 }
 
-function showTooltip(row, x, y) {
+function showTooltip(m, series, x, y) {
   const tt = els.tooltip;
-  tt.replaceChildren(el("span", "tt-date", dueLong(row.idx)));
-  for (const p of state.people) {
-    const v = row.byPerson[p.id];
+  tt.replaceChildren(el("span", "tt-date", monthLong(m.idx)));
+  for (const s of series) {
+    const v = s.value(m);
     if (!v) continue;
     const line = el("span", "tt-row");
     const key = el("i", "tt-key");
-    key.style.background = seriesVar(p);
-    line.append(key, el("strong", "", fmt(v)), el("span", "tt-name", p.name));
+    key.style.background = s.color;
+    line.append(key, el("strong", "", fmt(v)), el("span", "tt-name", s.name));
     tt.append(line);
   }
-  if (state.people.length > 1) tt.append(el("span", "tt-total", "Toplam " + fmt(row.total)));
+  if (series.length > 1) tt.append(el("span", "tt-total", "Toplam " + fmt(m.total)));
   tt.removeAttribute("hidden");
   const w = tt.offsetWidth, h = tt.offsetHeight;
   const left = x + 14 + w > window.innerWidth - 8 ? x - 14 - w : x + 14;
@@ -765,7 +1006,7 @@ function hideTooltip() { els.tooltip.setAttribute("hidden", ""); }
 let resizeFrame = 0;
 window.addEventListener("resize", () => {
   cancelAnimationFrame(resizeFrame);
-  resizeFrame = requestAnimationFrame(() => renderChart(lastRows));
+  resizeFrame = requestAnimationFrame(() => renderChart(lastMonths));
 });
 
 // ---------- Service Worker ----------
@@ -789,4 +1030,5 @@ if (typeof window.syncInit === 'function') {
 }
 
 resetForm();
+resetCardForm();
 render();

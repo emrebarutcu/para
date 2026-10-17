@@ -1,9 +1,11 @@
-// ---------- Taksit hesapları (DOM'dan bağımsız) ----------
-// Excel'deki mantık: bir alışveriş "Ekstre" ayından itibaren "Taksit" kadar ay
-// ödenir; her ekstre bir sonraki ayın son ödeme gününde (varsayılan 22) ödenir.
+// ---------- Taksit / nakit akışı hesapları (DOM'dan bağımsız) ----------
+// Kartlı harcama: harcama tarihi kartın kesim gününe göre bir ekstreye girer, ekstre
+// kartın son ödeme gününde ödenir; taksitler sonraki ekstrelere birer ay kayarak düşer.
+// Nakit harcama: harcama gününde ödenir (taksitliyse sonraki aylarda aynı gün).
 (function (root) {
   const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
   const MONTHS_SHORT = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+  const CASH = "nakit";   // kartsız harcamaların seri / grup anahtarı
 
   // Ay aritmetiği tek bir tamsayı üzerinden: "2026-09" ↔ 2026 * 12 + 8
   function monthIndex(ym) {
@@ -16,54 +18,120 @@
   function monthName(idx) { return MONTHS[idx % 12]; }
   function monthShort(idx) { return MONTHS_SHORT[idx % 12]; }
   function yearOf(idx) { return Math.floor(idx / 12); }
+  function daysInMonth(idx) { return new Date(yearOf(idx), idx % 12 + 1, 0).getDate(); }
 
-  function dueDate(idx, dueDay) {
-    const y = yearOf(idx), m = idx % 12;
-    return new Date(y, m, Math.min(dueDay, new Date(y, m + 1, 0).getDate()));
+  // Ayın verilen günü; ay kısaysa son güne çekilir (31 → 28 Şubat)
+  function dayOf(idx, day) { return Math.min(day, daysInMonth(idx)); }
+
+  function dateKey(idx, day) {
+    return `${monthKey(idx)}-${String(dayOf(idx, day)).padStart(2, "0")}`;
   }
 
-  // ---------- Bir taksitli alışveriş ----------
-  // { id, personId, desc, statement: "YYYY-MM", count, total, planCount? }
-  // count: ekstre ayından itibaren kalan taksit sayısı (Excel'deki "Taksit")
-  // planCount: alışverişin asıl taksit sayısı (Excel'deki "Orijinal Tutar" bundan çıkar)
-  function perInstallment(inst) { return inst.total / inst.count; }
-  function firstDueIndex(inst) { return monthIndex(inst.statement) + 1; }
-  function lastDueIndex(inst)  { return firstDueIndex(inst) + inst.count - 1; }
-  function planLength(inst)    { return Math.max(inst.planCount || 0, inst.count); }
-  function originalTotal(inst) { return perInstallment(inst) * planLength(inst); }
+  // "YYYY-MM-DD" → { idx, day }
+  function parseDate(s) {
+    const m = String(s ?? "").match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!m) return null;
+    return { idx: Number(m[1]) * 12 + Number(m[2]) - 1, day: Number(m[3]) };
+  }
 
-  // O ay ödenen taksitin plan içindeki sırası (1 tabanlı); ödeme yoksa 0
-  function installmentNo(inst, idx) {
-    const k = idx - firstDueIndex(inst);
-    if (k < 0 || k >= inst.count) return 0;
-    return planLength(inst) - inst.count + k + 1;
+  function toDate(key) {
+    const d = parseDate(key);
+    return new Date(yearOf(d.idx), d.idx % 12, d.day);
+  }
+
+  function todayKey(now = new Date()) {
+    return dateKey(now.getFullYear() * 12 + now.getMonth(), now.getDate());
+  }
+
+  // ---------- Kart ----------
+  // { id, name, limit, cutoffDay, dueDay, color }
+
+  // Harcamanın girdiği ekstrenin kesim ayı (kesim günü dahil)
+  function statementIndex(card, date) {
+    const d = parseDate(date);
+    return d.day <= dayOf(d.idx, card.cutoffDay) ? d.idx : d.idx + 1;
+  }
+
+  // Kesim ayındaki ekstrenin ödendiği ay: son ödeme günü kesimden sonraysa aynı ay
+  function dueIndex(card, statementIdx) {
+    return statementIdx + (card.dueDay > card.cutoffDay ? 0 : 1);
+  }
+
+  // ---------- Harcama ----------
+  // { id, personId, cardId, desc, total, count, date?: "YYYY-MM-DD", firstDue?: "YYYY-MM", planCount? }
+  // date: harcama tarihi. Tarihi bilinmeyen (Excel'den gelen) kayıtlarda firstDue kalan ilk taksitin
+  // ödendiği ay, count/total kalan taksitler, planCount alışverişin asıl taksit sayısıdır.
+  function perInstallment(p) { return p.total / p.count; }
+  function planLength(p)     { return Math.max(p.planCount || 0, p.count); }
+  function originalTotal(p)  { return perInstallment(p) * planLength(p); }
+
+  // Ödemeler: [{ idx (ödeme ayı), key ("YYYY-MM-DD"), no (1 tabanlı), amount }]
+  function payments(p, card) {
+    const amount = perInstallment(p);
+    const d = parseDate(p.date);
+    let first, day;
+    if (card) {
+      first = d ? dueIndex(card, statementIndex(card, p.date)) : monthIndex(p.firstDue);
+      day = card.dueDay;
+    } else {
+      first = d ? d.idx : monthIndex(p.firstDue);
+      day = d ? d.day : 1;
+    }
+    const paid = planLength(p) - p.count;
+    const out = [];
+    for (let k = 0; k < p.count; k++) {
+      out.push({ idx: first + k, key: dateKey(first + k, day), no: paid + k + 1, amount });
+    }
+    return out;
   }
 
   // fromIdx ayı ve sonrasında ödenecek taksit sayısı
-  function remainingFrom(inst, fromIdx) {
-    const first = Math.max(firstDueIndex(inst), fromIdx);
-    return Math.max(0, lastDueIndex(inst) - first + 1);
+  function remainingFrom(list, fromIdx) {
+    return list.filter(x => x.idx >= fromIdx).length;
   }
 
-  // Excel'deki özet sayfası: her ay × her kişi için ödenecek tutar
-  function buildSchedule(people, installments, fromIdx, toIdx) {
+  // Bugün ve sonrasında ödenecek tutar — kart limitinden düşen kısım
+  function outstanding(list, today) {
+    return list.filter(x => x.key >= today).reduce((s, x) => s + x.amount, 0);
+  }
+
+  // Ay ay nakit akışı: her ay kişi / kart toplamları ve tarih + kart bazında ödemeler
+  function buildCashflow(people, cards, purchases, fromIdx, toIdx) {
     const known = new Set(people.map(p => p.id));
-    const rows = [];
+    const cardById = new Map(cards.map(c => [c.id, c]));
+    const cardOrder = new Map(cards.map((c, i) => [c.id, i]));
+    const months = new Map();
     for (let idx = fromIdx; idx <= toIdx; idx++) {
-      const byPerson = Object.fromEntries(people.map(p => [p.id, 0]));
-      const items = [];
-      let total = 0;
-      for (const inst of installments) {
-        const no = installmentNo(inst, idx);
-        if (!no || !known.has(inst.personId)) continue;
-        const amount = perInstallment(inst);
-        byPerson[inst.personId] += amount;
-        total += amount;
-        items.push({ inst, no, amount });
-      }
-      rows.push({ idx, byPerson, total, items });
+      months.set(idx, { idx, total: 0, byPerson: {}, byCard: {}, events: new Map() });
     }
-    return rows;
+
+    for (const p of purchases) {
+      if (!known.has(p.personId)) continue;
+      const card = cardById.get(p.cardId);
+      const cardKey = card ? card.id : CASH;
+      for (const pay of payments(p, card)) {
+        const m = months.get(pay.idx);
+        if (!m) continue;
+        const key = `${pay.key}|${cardKey}`;
+        let ev = m.events.get(key);
+        if (!ev) {
+          ev = { key, date: pay.key, cardId: card ? card.id : null, total: 0, byPerson: {}, items: [] };
+          m.events.set(key, ev);
+        }
+        ev.total += pay.amount;
+        ev.byPerson[p.personId] = (ev.byPerson[p.personId] || 0) + pay.amount;
+        ev.items.push({ purchase: p, no: pay.no, amount: pay.amount });
+        m.total += pay.amount;
+        m.byPerson[p.personId] = (m.byPerson[p.personId] || 0) + pay.amount;
+        m.byCard[cardKey] = (m.byCard[cardKey] || 0) + pay.amount;
+      }
+    }
+
+    const rank = id => (id == null ? Infinity : cardOrder.get(id));
+    return [...months.values()].map(m => ({
+      ...m,
+      events: [...m.events.values()].sort((a, b) => a.date.localeCompare(b.date) || rank(a.cardId) - rank(b.cardId)),
+    }));
   }
 
   // ---------- Excel içe aktarma ----------
@@ -103,7 +171,15 @@
     return monthKey(year * 12 + mi);
   }
 
-  // Bir sayfanın satırları → taksitler. Başlığında "Ürün" olmayan sayfa (ör. özet) null döner.
+  // Excel'deki satır: "Ekstre" ayından itibaren kalan "Taksit" sayısı; ekstre bir sonraki ay ödenir.
+  // Önceden ödenmiş taksitlerin tarihi bilinmediği için yalnızca planCount olarak saklanır.
+  function fromStatement({ statement, count, total, planCount }) {
+    const item = { firstDue: monthKey(monthIndex(statement) + 1), count, total };
+    if (planCount > count) item.planCount = planCount;
+    return item;
+  }
+
+  // Bir sayfanın satırları → harcamalar. Başlığında "Ürün" olmayan sayfa (ör. özet) null döner.
   function parseSheetRows(rows, today) {
     const hi = rows.findIndex(r => Array.isArray(r) && r.some(c => normalize(c) === "ürün"));
     if (hi < 0) return null;
@@ -123,11 +199,9 @@
       let total = toNumber(cell(r, "toplam"));
       if (!(total > 0) && per > 0) total = per * count;
       if (!statement || !(count > 0) || !(total > 0)) { skipped++; continue; }
-      const item = { desc, statement, count, total };
       const original = toNumber(cell(r, "orijinal tutar"));
       const planCount = original > 0 ? Math.round(original / (total / count)) : 0;
-      if (planCount > count) item.planCount = planCount;
-      items.push(item);
+      items.push({ desc, ...fromStatement({ statement, count, total, planCount }) });
     }
     return { items, skipped };
   }
@@ -154,11 +228,11 @@
   }
 
   const api = {
-    MONTHS, MONTHS_SHORT,
-    monthIndex, monthKey, monthName, monthShort, yearOf, dueDate,
-    perInstallment, firstDueIndex, lastDueIndex, planLength, originalTotal,
-    installmentNo, remainingFrom, buildSchedule,
-    normalize, titleCase, parseStatement, parseSheetRows, parseWorkbook,
+    MONTHS, MONTHS_SHORT, CASH,
+    monthIndex, monthKey, monthName, monthShort, yearOf, daysInMonth, dayOf, dateKey, parseDate, toDate, todayKey,
+    statementIndex, dueIndex,
+    perInstallment, planLength, originalTotal, payments, remainingFrom, outstanding, buildCashflow,
+    normalize, titleCase, parseStatement, fromStatement, parseSheetRows, parseWorkbook,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Taksit = api;

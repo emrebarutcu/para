@@ -52,13 +52,27 @@ Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
 Sync çalışma mantığı: Her kayıtta Supabase'e 1.5s gecikmeli yazar.  
 Giriş yapınca uzak veri daha yeniyse otomatik çeker. Çevrimdışıyken localStorage'dan çalışır.
 
-## 4. Taksitler Excel'ini içe aktarma
+## 4. Kartlar ve nakit akışı
+
+**Kartlar** bölümünde her kart için ad, limit, hesap kesim günü ve son ödeme günü girilir.
+Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
+
+- Kesim günü dahil o güne kadarki harcama o ayın ekstresine, sonrası bir sonraki ayın ekstresine girer.
+- Ekstre, son ödeme günü kesimden sonraysa aynı ay, değilse bir sonraki ay ödenir
+  (ör. kesim 12 / son ödeme 22 → 12 Eki ekstresi 22 Eki'de; kesim 25 / son ödeme 5 → 25 Eki ekstresi 5 Kas'ta).
+- Taksitler sonraki ekstrelere birer ay kayarak düşer. Ay kısaysa gün ayın son gününe çekilir.
+- Nakit harcama kendi gününde ödenir.
+
+**Nakit akışı** tablosu ödemeleri tarih + kart bazında, kişi sütunlarıyla listeler; bir ayda birden
+fazla ödeme varsa ay toplamı satırı eklenir. Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
+
+## 5. Taksitler Excel'ini içe aktarma
 
 **İçe Aktar** → `.xlsx` dosyasını seç. Başlık satırında **Ürün** olan her sayfa bir kişi olarak alınır
 (sayfa adı = kişi adı); sütunlar: `Ürün`, `Ekstre`, `Taksit`, `Toplam` ve/veya `Taksit Tutarı`,
-isteğe bağlı `Orijinal Tutar`. Aynı adlı kişinin mevcut taksitleri Excel'dekilerle değiştirilir,
-diğer kişilere dokunulmaz. Özet sayfasındaki `22 Ekim` gibi başlıklardan son ödeme günü okunur.
-
-Hesap mantığı Excel'deki gibidir: `Ekstre` ayındaki taksit bir sonraki ayın son ödeme gününde
-ödenir ve `Taksit` sayısı kadar ay sürer. Yılsız ay adları (ör. `Eylül`) içinde bulunulan yıla
-oturtulur; bir sonraki aydan ilerideyse geçen yıla sayılır.
+isteğe bağlı `Orijinal Tutar`. Excel'de harcama tarihi olmadığı için satırlar ilk karta, ödeme
+ayıyla eklenir (`Ekstre` ayındaki taksit bir sonraki ay ödenir, `Taksit` kadar sürer). Hiç kart
+yoksa özet sayfasındaki `22 Ekim` gibi başlıklardan son ödeme günü okunarak yeni bir kart açılır.
+Aynı kişinin daha önce Excel'den aktarılan kayıtları yenileriyle değiştirilir; uygulamada tarihle
+girilen harcamalara dokunulmaz. Yılsız ay adları (ör. `Eylül`) içinde bulunulan yıla oturtulur;
+bir sonraki aydan ilerideyse geçen yıla sayılır.
