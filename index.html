@@ -2,168 +2,326 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#6aa9ff" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0b0c10" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Para" />
   <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <title>Para</title>
+  <script>try { var t = localStorage.getItem("para.theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 10.2 12 3.5l8.5 6.7V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-6h-5v6H5A1.5 1.5 0 0 1 3.5 19z"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4M8 13.5h3M8 16.5h6"/></symbol>
+    <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5.5 3h13v18l-3.25-2-3.25 2-3.25-2-3.25 2z"/><path d="M9 8h6M9 12h6"/></symbol>
+    <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9.5 6 6 6-6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5V4m0 0L7.5 8.5M12 4l4.5 4.5M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11.5m0 0L7.5 11m4.5 4.5 4.5-4.5M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7.5 18.5a4.5 4.5 0 0 1-.7-8.95A5.75 5.75 0 0 1 17.9 9a4.75 4.75 0 0 1-.4 9.5z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 20a6.5 6.5 0 0 0-2.6-5.2"/></symbol>
+  </svg>
+
+  <header class="app-header">
+    <a class="brand" href="#ozet" aria-label="Para — Özet">
       <span class="logo">₺</span>
-      <h1>para</h1>
-    </div>
-    <div class="month-nav" title="Planın başladığı ay">
-      <button id="prevMonth" class="icon-btn" aria-label="Önceki ay">‹</button>
-      <input type="month" id="monthPicker" aria-label="Başlangıç ayı" />
-      <button id="nextMonth" class="icon-btn" aria-label="Sonraki ay">›</button>
-    </div>
-    <div class="actions">
-      <button id="themeBtn" class="ghost icon-btn" aria-label="Tema değiştir" title="Tema değiştir">☀</button>
-      <button id="authBtn" class="ghost small">☁ Giriş</button>
-      <button id="exportBtn" class="ghost">Dışa Aktar</button>
-      <label class="ghost file-label" title="JSON yedeği ya da Taksitler Excel dosyası">
-        İçe Aktar
-        <input type="file" id="importInput" accept=".json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
-      </label>
+      <span class="brand-name">para</span>
+    </a>
+    <nav class="tabs" id="tabs" aria-label="Bölümler">
+      <a href="#ozet" data-view="ozet"><svg class="ic"><use href="#i-home"/></svg><span>Özet</span></a>
+      <a href="#akis" data-view="akis"><svg class="ic"><use href="#i-flow"/></svg><span>Akış</span></a>
+      <a href="#harcamalar" data-view="harcamalar"><svg class="ic"><use href="#i-receipt"/></svg><span>Harcamalar</span></a>
+      <a href="#kartlar" data-view="kartlar"><svg class="ic"><use href="#i-card"/></svg><span>Kartlar</span></a>
+    </nav>
+    <div class="header-actions">
+      <button type="button" class="btn btn-primary btn-add" data-add-purchase>
+        <svg class="ic"><use href="#i-plus"/></svg><span>Harcama</span>
+      </button>
+      <button type="button" class="icon-btn" id="settingsBtn" aria-label="Ayarlar" title="Ayarlar">
+        <svg class="ic"><use href="#i-settings"/></svg>
+      </button>
     </div>
   </header>
 
-  <section class="summary">
-    <div class="card net">
-      <span class="label" id="dueLabel">Bu ay ödemeleri</span>
-      <span class="value" id="dueTotal">₺0,00</span>
-    </div>
-    <div class="card">
-      <span class="label" id="nextLabel">Sonraki ay ödemeleri</span>
-      <span class="value" id="nextTotal">₺0,00</span>
-    </div>
-    <div class="card">
-      <span class="label">Kalan borç</span>
-      <span class="value" id="remainingTotal">₺0,00</span>
-    </div>
-    <div class="card">
-      <span class="label">Son taksit</span>
-      <span class="value" id="endLabel">—</span>
-    </div>
-  </section>
+  <main class="app-main">
+    <!-- ── Özet ─────────────────────────────────────────── -->
+    <section class="view" data-view="ozet" id="view-ozet">
+      <div class="hero">
+        <div class="hero-top">
+          <span class="hero-label" id="heroLabel">Bu ay ödenecek</span>
+          <div class="month-switch">
+            <button type="button" class="icon-btn sm" data-month-shift="-1" aria-label="Önceki ay"><svg class="ic"><use href="#i-left"/></svg></button>
+            <button type="button" class="month-name js-month-label" data-month-reset title="Bu aya dön"></button>
+            <button type="button" class="icon-btn sm" data-month-shift="1" aria-label="Sonraki ay"><svg class="ic"><use href="#i-right"/></svg></button>
+          </div>
+        </div>
+        <div class="hero-amount" id="heroAmount"></div>
+        <dl class="hero-stats">
+          <div><dt id="nextLabel">Sonraki ay</dt><dd id="nextTotal"></dd></div>
+          <div><dt>Kalan borç</dt><dd id="remainingTotal"></dd></div>
+          <div><dt>Son taksit</dt><dd id="endLabel"></dd></div>
+        </dl>
+      </div>
 
-  <section class="chart-section">
-    <div class="chart-head">
-      <div class="chart-title">
-        <h2>Aylık ödemeler</h2>
-        <div class="seg" id="chartBy" role="group" aria-label="Grafiği grupla">
-          <button type="button" data-by="person">Kişi</button>
-          <button type="button" data-by="card">Kart</button>
+      <div class="grid-2">
+        <section class="panel">
+          <header class="panel-head">
+            <h2>Sıradaki ödemeler</h2>
+            <a href="#akis" class="link">Tümü</a>
+          </header>
+          <ul class="pay-list" id="upcomingList"></ul>
+        </section>
+        <section class="panel">
+          <header class="panel-head">
+            <h2>Kişiler</h2>
+            <span class="panel-note js-month-label"></span>
+          </header>
+          <ul class="people-sum" id="peopleSummary"></ul>
+        </section>
+      </div>
+
+      <section class="panel chart-panel">
+        <header class="panel-head">
+          <h2>Aylık ödemeler</h2>
+          <div class="seg" id="chartBy" role="group" aria-label="Grafiği grupla">
+            <button type="button" data-by="person">Kişi</button>
+            <button type="button" data-by="card">Kart</button>
+          </div>
+        </header>
+        <div class="legend" id="chartLegend"></div>
+        <svg id="planChart" class="chart" role="img" aria-label="Aylık ödemeler"></svg>
+        <p id="chartEmpty" class="empty" hidden></p>
+      </section>
+    </section>
+
+    <!-- ── Akış ─────────────────────────────────────────── -->
+    <section class="view" data-view="akis" id="view-akis" hidden>
+      <div class="view-head">
+        <h1>Nakit akışı</h1>
+        <div class="view-tools">
+          <div class="month-switch">
+            <button type="button" class="icon-btn sm" data-month-shift="-1" aria-label="Önceki ay"><svg class="ic"><use href="#i-left"/></svg></button>
+            <button type="button" class="month-name js-month-label" data-month-reset title="Bu aya dön"></button>
+            <button type="button" class="icon-btn sm" data-month-shift="1" aria-label="Sonraki ay"><svg class="ic"><use href="#i-right"/></svg></button>
+          </div>
+          <div class="seg" id="flowMode" role="group" aria-label="Görünüm">
+            <button type="button" data-mode="list">Liste</button>
+            <button type="button" data-mode="table">Tablo</button>
+          </div>
         </div>
       </div>
-      <div class="chart-legend" id="chartLegend"></div>
-    </div>
-    <div class="chart-wrap">
-      <svg id="planChart" class="chart-svg" role="img" aria-label="Aylık ödemeler"></svg>
-      <p id="chartEmpty" class="empty" hidden></p>
-    </div>
-  </section>
+      <div id="flowList" class="flow"></div>
+      <section id="flowTable" class="panel table-panel" hidden>
+        <div class="table-wrap"><table id="planTable" class="plan-table"></table></div>
+      </section>
+    </section>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Nakit akışı</h2>
-      <span class="panel-note">ödeme tarihi ve karta göre</span>
-    </div>
-    <div class="table-wrap">
-      <table id="planTable" class="plan-table"></table>
-    </div>
-  </section>
-
-  <section class="panel cards-panel">
-    <div class="panel-head">
-      <h2>Kartlar</h2>
-    </div>
-    <ul class="card-list" id="cardList"></ul>
-    <form id="cardForm" class="card-form">
-      <label class="fld fld-desc">
-        <span>Kart adı</span>
-        <input name="name" type="text" placeholder="örn. Bonus" required />
-      </label>
-      <label class="fld">
-        <span>Limit</span>
-        <input name="limit" type="number" min="0" step="0.01" placeholder="0,00" />
-      </label>
-      <label class="fld" title="Hesap kesim günü: bu güne kadarki harcamalar o ayın ekstresine girer">
-        <span>Kesim günü</span>
-        <input name="cutoffDay" type="number" min="1" max="31" step="1" placeholder="12" required />
-      </label>
-      <label class="fld">
-        <span>Son ödeme günü</span>
-        <input name="dueDay" type="number" min="1" max="31" step="1" placeholder="22" required />
-      </label>
-      <div class="fld-actions">
-        <button type="submit" id="cardSubmit">Kart ekle</button>
-        <button type="button" id="cardCancel" class="ghost" hidden>İptal</button>
+    <!-- ── Harcamalar ───────────────────────────────────── -->
+    <section class="view" data-view="harcamalar" id="view-harcamalar" hidden>
+      <div class="view-head">
+        <h1>Harcamalar</h1>
+        <button type="button" class="btn btn-ghost sm" id="managePeople">
+          <svg class="ic"><use href="#i-users"/></svg><span>Kişiler</span>
+        </button>
       </div>
-    </form>
-  </section>
+      <div class="chips scroll-x" id="personFilter" role="group" aria-label="Kişiye göre süz"></div>
+      <div id="purchaseWrap"></div>
+    </section>
 
-  <section class="panel installments">
-    <div class="panel-head">
-      <h2>Harcamalar</h2>
-      <button id="addPerson" class="ghost small">+ Kişi</button>
-    </div>
-    <div class="person-tabs" id="personTabs" role="tablist"></div>
-    <div class="person-bar" id="personBar">
-      <span class="person-stats" id="personStats"></span>
-      <button id="renamePerson" class="ghost small">Adını değiştir</button>
-      <button id="deletePerson" class="ghost small">Sil</button>
-    </div>
-    <ul class="inst-list" id="instList"></ul>
-    <form id="instForm" class="inst-form">
-      <label class="fld fld-desc">
-        <span>Ürün</span>
-        <input name="desc" type="text" placeholder="örn. IKEA" required />
-      </label>
-      <label class="fld">
-        <span>Tarih</span>
-        <input name="date" type="date" />
-      </label>
-      <label class="fld">
-        <span>Kart</span>
-        <select name="card"></select>
-      </label>
-      <label class="fld">
-        <span>Taksit</span>
-        <input name="count" type="number" min="1" max="60" step="1" placeholder="1" />
-      </label>
-      <label class="fld">
-        <span>Tutar</span>
-        <input name="amount" type="number" min="0.01" step="0.01" placeholder="0,00" required />
-      </label>
-      <label class="fld">
-        <span>Tutar türü</span>
-        <select name="mode">
-          <option value="total">Toplam</option>
-          <option value="per">Taksit tutarı</option>
-        </select>
-      </label>
-      <div class="fld-actions">
-        <button type="submit" id="instSubmit">Ekle</button>
-        <button type="button" id="instCancel" class="ghost" hidden>İptal</button>
+    <!-- ── Kartlar ──────────────────────────────────────── -->
+    <section class="view" data-view="kartlar" id="view-kartlar" hidden>
+      <div class="view-head">
+        <h1>Kartlar</h1>
+        <button type="button" class="btn btn-ghost sm" id="addCard">
+          <svg class="ic"><use href="#i-plus"/></svg><span>Kart ekle</span>
+        </button>
       </div>
-    </form>
-    <p class="inst-preview" id="instPreview"></p>
-  </section>
+      <div class="card-grid" id="cardGrid"></div>
+      <p class="footnote">Kesim günü dahil o güne kadarki harcamalar o ayın ekstresine girer. Ekstre, son ödeme günü kesimden sonraysa aynı ay, değilse ertesi ay ödenir; taksitler sonraki ekstrelere birer ay kayarak düşer.</p>
+    </section>
+  </main>
 
-  <!-- Auth modal -->
+  <button type="button" class="fab" data-add-purchase aria-label="Harcama ekle">
+    <svg class="ic"><use href="#i-plus"/></svg>
+  </button>
+
+  <!-- ── Harcama formu ──────────────────────────────────── -->
+  <dialog class="sheet" id="purchaseSheet" aria-labelledby="purchaseTitle">
+    <form id="purchaseForm" class="sheet-form" novalidate>
+      <header class="sheet-head">
+        <h2 id="purchaseTitle">Yeni harcama</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <label class="field">
+          <span class="field-label">Ne aldın?</span>
+          <input name="desc" type="text" placeholder="örn. IKEA" autocomplete="off" required />
+        </label>
+
+        <div class="field">
+          <span class="field-label">Tutar</span>
+          <div class="amount-input">
+            <span class="cur">₺</span>
+            <input name="amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0,00" required aria-label="Tutar" />
+          </div>
+          <div class="seg seg-full" role="radiogroup" aria-label="Tutar türü">
+            <label><input type="radio" name="mode" value="total" checked /><span>Toplam tutar</span></label>
+            <label><input type="radio" name="mode" value="per" /><span>Taksit başına</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Taksit</span>
+          <div class="chips" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
+          <label class="inline-input">
+            <span>Diğer</span>
+            <input name="count" type="number" min="1" max="60" step="1" inputmode="numeric" />
+          </label>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Ödeme şekli</span>
+          <div class="chips" id="cardChips" role="radiogroup" aria-label="Kart"></div>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Harcama tarihi</span>
+          <input name="date" type="date" />
+        </label>
+
+        <div class="field">
+          <span class="field-label">Kimin için</span>
+          <div class="chips" id="personChips" role="radiogroup" aria-label="Kişi"></div>
+        </div>
+
+        <div class="preview" id="purchasePreview" aria-live="polite"></div>
+      </div>
+      <footer class="sheet-foot">
+        <button type="button" class="btn btn-danger" id="purchaseDelete" hidden>Sil</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Vazgeç</button>
+        <button type="submit" class="btn btn-primary">Kaydet</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ── Kart formu ─────────────────────────────────────── -->
+  <dialog class="sheet" id="cardSheet" aria-labelledby="cardTitle">
+    <form id="cardForm" class="sheet-form" novalidate>
+      <header class="sheet-head">
+        <h2 id="cardTitle">Yeni kart</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <div class="cc cc-preview" id="cardPreview" aria-hidden="true"></div>
+        <label class="field">
+          <span class="field-label">Kart adı</span>
+          <input name="name" type="text" placeholder="örn. Bonus" autocomplete="off" required />
+        </label>
+        <div class="field">
+          <span class="field-label">Limit</span>
+          <div class="amount-input sm">
+            <span class="cur">₺</span>
+            <input name="limit" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0,00" aria-label="Limit" />
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Hesap kesim günü</span>
+            <input name="cutoffDay" type="number" inputmode="numeric" min="1" max="31" step="1" placeholder="12" required />
+          </label>
+          <label class="field">
+            <span class="field-label">Son ödeme günü</span>
+            <input name="dueDay" type="number" inputmode="numeric" min="1" max="31" step="1" placeholder="22" required />
+          </label>
+        </div>
+        <p class="hint" id="cardHint"></p>
+      </div>
+      <footer class="sheet-foot">
+        <button type="button" class="btn btn-danger" id="cardDelete" hidden>Sil</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" data-close>Vazgeç</button>
+        <button type="submit" class="btn btn-primary">Kaydet</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ── Kişiler ────────────────────────────────────────── -->
+  <dialog class="sheet" id="peopleSheet" aria-labelledby="peopleTitle">
+    <div class="sheet-form">
+      <header class="sheet-head">
+        <h2 id="peopleTitle">Kişiler</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <p class="hint">Harcamaları kimin için yaptığını ayırmak için. Adı değiştirmek için üzerine yaz.</p>
+        <ul class="people-edit" id="peopleEdit"></ul>
+        <form id="personAddForm" class="inline-add">
+          <input name="name" type="text" placeholder="Yeni kişi adı" autocomplete="off" required />
+          <button type="submit" class="btn btn-primary">Ekle</button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ── Ayarlar ────────────────────────────────────────── -->
+  <dialog class="sheet" id="settingsSheet" aria-labelledby="settingsTitle">
+    <div class="sheet-form">
+      <header class="sheet-head">
+        <h2 id="settingsTitle">Ayarlar</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <div class="settings-group">
+          <span class="group-label">Görünüm</span>
+          <div class="seg seg-full" id="themeSeg" role="group" aria-label="Tema">
+            <button type="button" data-theme="">Sistem</button>
+            <button type="button" data-theme="light">Açık</button>
+            <button type="button" data-theme="dark">Koyu</button>
+          </div>
+        </div>
+        <div class="settings-group">
+          <span class="group-label">Hesap</span>
+          <div class="row-btn row-static">
+            <svg class="ic"><use href="#i-cloud"/></svg>
+            <span class="row-text"><strong>Bulut senkronizasyonu</strong><small>Verilerin cihazların arasında eşitlenir</small></span>
+            <button type="button" id="authBtn" class="btn btn-ghost sm">☁ Giriş</button>
+          </div>
+        </div>
+        <div class="settings-group">
+          <span class="group-label">Veri</span>
+          <label class="row-btn">
+            <svg class="ic"><use href="#i-upload"/></svg>
+            <span class="row-text"><strong>İçe aktar</strong><small>JSON yedeği ya da Taksitler Excel dosyası</small></span>
+            <input type="file" id="importInput" accept=".json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
+          </label>
+          <button type="button" class="row-btn" id="exportBtn">
+            <svg class="ic"><use href="#i-download"/></svg>
+            <span class="row-text"><strong>Dışa aktar</strong><small>Tüm verilerin JSON yedeği</small></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Auth modal (sync.js) -->
   <div id="authModal" class="modal-wrap" hidden>
     <div id="authOverlay" class="modal-overlay"></div>
     <div class="modal-box">
       <div class="modal-head">
-        <h2>Cloud Sync</h2>
-        <button id="authClose" class="ghost small">✕</button>
+        <h2>Bulut senkronizasyonu</h2>
+        <button id="authClose" class="icon-btn" aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
 
       <div id="authLoginForm">
@@ -174,27 +332,27 @@
         <form id="authForm">
           <input id="authEmail" type="email" placeholder="E-posta" autocomplete="email" required />
           <input id="authPassword" type="password" placeholder="Şifre" autocomplete="current-password" minlength="6" required />
-          <button type="submit" id="authSubmitBtn">Giriş Yap</button>
+          <button type="submit" id="authSubmitBtn" class="btn btn-primary">Giriş Yap</button>
         </form>
         <p id="authMsg" class="auth-msg"></p>
-        <button type="button" id="forgotBtn" class="ghost small auth-forgot">Şifremi unuttum</button>
+        <button type="button" id="forgotBtn" class="auth-forgot">Şifremi unuttum</button>
       </div>
 
       <div id="authForgotForm" hidden>
         <p class="modal-desc">E-postana şifre sıfırlama linki gönderilir.</p>
         <form id="forgotForm">
           <input id="forgotEmail" type="email" placeholder="E-posta" autocomplete="email" required />
-          <button type="submit">Link gönder</button>
+          <button type="submit" class="btn btn-primary">Link gönder</button>
         </form>
         <p id="forgotMsg" class="auth-msg"></p>
-        <button type="button" id="backToLoginBtn" class="ghost small auth-forgot">← Geri</button>
+        <button type="button" id="backToLoginBtn" class="auth-forgot">← Geri</button>
       </div>
 
       <div id="authResetForm" hidden>
         <p class="modal-desc">Yeni şifreni belirle.</p>
         <form id="resetForm">
           <input id="newPassword" type="password" placeholder="Yeni şifre" minlength="6" required />
-          <button type="submit">Şifreyi güncelle</button>
+          <button type="submit" class="btn btn-primary">Şifreyi güncelle</button>
         </form>
         <p id="resetMsg" class="auth-msg"></p>
       </div>
@@ -202,13 +360,13 @@
       <div id="authLoggedIn" hidden>
         <p class="modal-desc">Giriş yapıldı:</p>
         <p id="authUserEmail" class="auth-user-email"></p>
-        <button id="authLogoutBtn" class="ghost">Çıkış Yap</button>
+        <button id="authLogoutBtn" class="btn btn-ghost">Çıkış yap</button>
       </div>
     </div>
   </div>
 
-  <!-- Chart tooltip -->
   <div id="chartTooltip" class="chart-tooltip" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <!-- Scripts: config → supabase SDK → sync → taksit → app -->
   <script src="config.js"></script>

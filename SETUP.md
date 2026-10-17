@@ -54,7 +54,11 @@ Giriş yapınca uzak veri daha yeniyse otomatik çeker. Çevrimdışıyken local
 
 ## 4. Kartlar ve nakit akışı
 
-**Kartlar** bölümünde her kart için ad, limit, hesap kesim günü ve son ödeme günü girilir.
+Uygulama dört sekmeden oluşur: **Özet** (bu ayın ödemesi, sıradaki ödemeler, kişiler, aylık grafik),
+**Akış** (ödemeler ay ay, tarih + kart bazında; "Tablo" görünümü Excel'deki ay × kişi özeti),
+**Harcamalar** ve **Kartlar**. Yeni harcama `+` düğmesiyle eklenir; içe/dışa aktarma ve tema ayarlardadır.
+
+**Kartlar** sekmesinde her kart için ad, limit, hesap kesim günü ve son ödeme günü girilir.
 Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
 
 - Kesim günü dahil o güne kadarki harcama o ayın ekstresine, sonrası bir sonraki ayın ekstresine girer.
@@ -63,12 +67,11 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
 - Taksitler sonraki ekstrelere birer ay kayarak düşer. Ay kısaysa gün ayın son gününe çekilir.
 - Nakit harcama kendi gününde ödenir.
 
-**Nakit akışı** tablosu ödemeleri tarih + kart bazında, kişi sütunlarıyla listeler; bir ayda birden
-fazla ödeme varsa ay toplamı satırı eklenir. Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
+Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
 
 ## 5. Taksitler Excel'ini içe aktarma
 
-**İçe Aktar** → `.xlsx` dosyasını seç. Başlık satırında **Ürün** olan her sayfa bir kişi olarak alınır
+Ayarlar → **İçe aktar** → `.xlsx` dosyasını seç. Başlık satırında **Ürün** olan her sayfa bir kişi olarak alınır
 (sayfa adı = kişi adı); sütunlar: `Ürün`, `Ekstre`, `Taksit`, `Toplam` ve/veya `Taksit Tutarı`,
 isteğe bağlı `Orijinal Tutar`. Excel'de harcama tarihi olmadığı için satırlar ilk karta, ödeme
 ayıyla eklenir (`Ekstre` ayındaki taksit bir sonraki ay ödenir, `Taksit` kadar sürer). Hiç kart

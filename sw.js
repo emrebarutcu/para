@@ -1,4 +1,4 @@
-const CACHE = 'para-v3';
+const CACHE = 'para-v4';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
