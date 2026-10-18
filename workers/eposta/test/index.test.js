@@ -88,3 +88,69 @@ test("Supabase hatası fırlatılır", async () => {
   const m = message("abc123def456@para.example", mime());
   await assert.rejects(handleEmail(m, ENV, fakeFetch({ message: "boom" }, 500)), /ingest_email 500/);
 });
+
+function raw(lines) { return lines.join("\r\n"); }
+
+test("multipart, quoted-printable ve ISO-8859-9 çözülür; ek atlanır", async () => {
+  const latin5 = s => Buffer.from([...s].map(ch => ({ "ı": 0xfd, "ş": 0xfe, "ğ": 0xf0, "İ": 0xdd, "Ş": 0xde, "Ğ": 0xd0 })[ch] ?? ch.charCodeAt(0)));
+  const qp = buf => [...buf].map(b => (b >= 33 && b <= 126 && b !== 61 ? String.fromCharCode(b) : b === 32 ? " " : "=" + b.toString(16).toUpperCase().padStart(2, "0"))).join("");
+  const text = "1234 ile biten kartınızdan 17.10.2026 tarihinde ŞOK MARKET işyerinde 45,90 TL tutarında harcama yapılmıştır.";
+  const m = message("abc123def456@para.example", raw([
+    "From: =?ISO-8859-9?Q?Banka_Bildirim?= <bildirim@banka.com.tr>",
+    "To: abc123def456@para.example",
+    "Subject: =?ISO-8859-9?Q?Kart=FDn=FDzla_harcama?=",
+    "Message-ID: <m2@banka.com.tr>",
+    "MIME-Version: 1.0",
+    'Content-Type: multipart/mixed; boundary="dis"',
+    "",
+    "--dis",
+    'Content-Type: multipart/alternative; boundary="ic"',
+    "",
+    "--ic",
+    "Content-Type: text/plain; charset=ISO-8859-9",
+    "Content-Transfer-Encoding: quoted-printable",
+    "",
+    qp(latin5(text)),
+    "--ic",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    "<p>HTML sürüm</p>",
+    "--ic--",
+    "--dis",
+    "Content-Type: application/pdf; name=ekstre.pdf",
+    "Content-Disposition: attachment; filename=ekstre.pdf",
+    "Content-Transfer-Encoding: base64",
+    "",
+    "JVBERi0xLjQK",
+    "--dis--",
+  ]));
+  const f = fakeFetch();
+  await handleEmail(m, ENV, f);
+  const body = f.calls[0].body;
+  assert.equal(body.subject, "Kartınızla harcama");
+  assert.equal(body.sender, "bildirim@banka.com.tr");
+  assert.equal(body.body, text);
+});
+
+test("düz metin çok kısaysa HTML kullanılır", async () => {
+  const m = message("abc123def456@para.example", raw([
+    "From: bildirim@banka.com.tr",
+    "Subject: Harcama",
+    'Content-Type: multipart/alternative; boundary="b"',
+    "",
+    "--b",
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    "HTML görüntüleyin.",
+    "--b",
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    Buffer.from("<table><tr><td>Tutar:</td><td>1.250,00 TL</td></tr><tr><td>Kart:</td><td>**** 1234</td></tr></table>").toString("base64"),
+    "--b--",
+  ]));
+  const f = fakeFetch();
+  await handleEmail(m, ENV, f);
+  assert.match(f.calls[0].body.body, /Tutar: 1\.250,00 TL\nKart: \*\*\*\* 1234/);
+  assert.equal(f.calls[0].body.sender, "bildirim@banka.com.tr");
+});

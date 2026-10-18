@@ -97,14 +97,13 @@ harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
 3. **Worker**:
    ```sh
    cd workers/eposta
-   npm install
+   npm install          # yalnızca wrangler
    npx wrangler login
    npx wrangler secret put SUPABASE_SERVICE_KEY   # Supabase → Settings → API Keys → secret (service_role)
    npm run deploy
    ```
    `wrangler.toml` içindeki `SUPABASE_URL` projeninkiyle aynı olmalı. Testler: `npm test`.
-   Komut satırı yerine panelden de kurulabilir: `workers/eposta/para-eposta-worker.js`'i
-   (kaynak değişince `npm run build` ile oluşan `dist/index.js`'ten yenilenir)
+   Komut satırı yerine panelden de kurulabilir (Worker'ın bağımlılığı yok): `workers/eposta/src/index.js`'in içeriğini
    Cloudflare → Workers & Pages → Create → Hello World worker → **Edit code**'a yapıştır, Deploy et;
    Settings → Variables and Secrets'a `SUPABASE_URL` (Text) ve `SUPABASE_SERVICE_KEY` (Secret) ekle.
 4. **Cloudflare → Email → Email Routing**: alan adında Email Routing'i aç (MX/SPF kayıtlarını Cloudflare ekler),
