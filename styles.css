@@ -759,6 +759,21 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 }
 .field input::placeholder, .inline-add input::placeholder, .modal-box input::placeholder { color: var(--text-3); }
 .field input.invalid { border-color: var(--danger); }
+.field-label small { font-weight: 500; color: var(--text-3); }
+.field textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  resize: vertical;
+  outline: none;
+}
+.field textarea:focus { border-color: var(--text-3); background: var(--surface); box-shadow: 0 0 0 4px var(--focus); }
 
 .amount-input {
   display: flex;
@@ -815,6 +830,53 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .preview .warn { color: var(--danger); font-weight: 500; }
 .hint { font-size: 13px; color: var(--text-2); line-height: 1.5; }
 .hint:empty { display: none; }
+.warn-text { color: var(--danger); }
+
+/* ── Banka e-postaları ── */
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.steps strong { color: var(--text); font-weight: 600; }
+.steps code, .copy-row code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+#inboxSetup { display: flex; flex-direction: column; gap: 14px; }
+#inboxSetup[hidden] { display: none; }
+.copy-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.copy-row-lg { grid-template-columns: minmax(0, 1fr) auto; padding: 10px 10px 10px 14px; }
+.copy-row-lg code { font-size: 15px; font-weight: 600; }
+.copy-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.inbox-panel { padding: 16px 0 4px; }
+.inbox-panel .panel-head { padding: 0 18px; margin-bottom: 4px; }
+.inbox-item { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px 18px; }
+.inbox-item + .inbox-item { border-top: 1px solid var(--line); }
+.inbox-reason { font-size: 12px; color: var(--danger); }
+.inbox-actions { display: flex; gap: 6px; }
+.inbox-body {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+}
+.inbox-body a { color: var(--text); text-decoration: underline; }
+.inbox-from { font-size: 12px; color: var(--text-3); }
+.inbox-list { list-style: none; margin: 0; padding: 0; }
+.cc-num { font-size: 13px; font-weight: 600; letter-spacing: .12em; opacity: .9; font-variant-numeric: tabular-nums; }
 
 .people-edit { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .people-edit li { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 10px; }
