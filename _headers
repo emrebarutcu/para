@@ -1,0 +1,7 @@
+# Cloudflare Pages ve Netlify bu dosyayı okur (netlify.toml'daki başlıklarla aynı)
+/sw.js
+  Cache-Control: no-cache
+
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff

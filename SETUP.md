@@ -30,14 +30,15 @@ window.SUPABASE_URL      = 'https://xyzxyz.supabase.co';
 window.SUPABASE_ANON_KEY = 'eyJhbGci...';
 ```
 
-## 2. Netlify (hosting)
+## 2. Yayın (Cloudflare Pages → cashfollow.app)
 
-1. [netlify.com](https://netlify.com) → ücretsiz hesap aç
-2. Dashboard → **"Add new site" → "Deploy manually"**
-3. `cashflow` klasörünü drag & drop et
-4. Bitti — sana bir `*.netlify.app` URL verir
+1. Cloudflare → **Workers & Pages** → Create → **Pages** → **Import an existing Git repository** → `emrebarutcu/para`
+2. Production branch: `main`, Framework: **None**, Build command: boş, Build output directory: `/`
+3. Proje → **Custom domains** → `cashfollow.app` (ve istersen `www.cashfollow.app`) — DNS kaydını Cloudflare kendisi ekler
+4. Supabase → Authentication → **URL Configuration**: Site URL `https://cashfollow.app`, Redirect URLs'e `https://cashfollow.app/**`
 
-> **Özel domain** bağlamak istersen Netlify → Domain settings'ten ücretsiz ekleyebilirsin.
+`main`'e her birleştirmede site kendiliğinden yayınlanır. Güvenlik ve önbellek başlıkları `_headers` dosyasında.
+Netlify'da da çalışır (`netlify.toml`); yeni adres yerleştikten sonra eski site kapatılabilir.
 
 ## 3. Mobil (iPhone / Android)
 
