@@ -103,7 +103,8 @@ harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
    npm run deploy
    ```
    `wrangler.toml` içindeki `SUPABASE_URL` projeninkiyle aynı olmalı. Testler: `npm test`.
-   Komut satırı yerine panelden de kurulabilir: `npm run build` ile oluşan `dist/index.js`'i
+   Komut satırı yerine panelden de kurulabilir: `workers/eposta/para-eposta-worker.js`'i
+   (kaynak değişince `npm run build` ile oluşan `dist/index.js`'ten yenilenir)
    Cloudflare → Workers & Pages → Create → Hello World worker → **Edit code**'a yapıştır, Deploy et;
    Settings → Variables and Secrets'a `SUPABASE_URL` (Text) ve `SUPABASE_SERVICE_KEY` (Secret) ekle.
 4. **Cloudflare → Email → Email Routing**: alan adında Email Routing'i aç (MX/SPF kayıtlarını Cloudflare ekler),
