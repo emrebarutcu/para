@@ -10,6 +10,10 @@ export default {
   async email(message, env) {
     await handleEmail(message, env);
   },
+  // Panel önizlemesi / tarayıcı: Worker'ın ayakta olduğunu göstermek için (e-posta işini etkilemez)
+  async fetch() {
+    return new Response("Para e-posta servisi çalışıyor.\n", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  },
 };
 
 export async function handleEmail(message, env, fetchFn = fetch) {

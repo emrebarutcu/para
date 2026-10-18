@@ -154,3 +154,10 @@ test("düz metin çok kısaysa HTML kullanılır", async () => {
   assert.match(f.calls[0].body.body, /Tutar: 1\.250,00 TL\nKart: \*\*\*\* 1234/);
   assert.equal(f.calls[0].body.sender, "bildirim@banka.com.tr");
 });
+
+test("web isteğine kısa bir cevap döner", async () => {
+  const { default: worker } = await import("../src/index.js");
+  const res = await worker.fetch(new Request("https://para-eposta.example.workers.dev/"));
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /çalışıyor/);
+});
