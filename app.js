@@ -1429,7 +1429,7 @@ els.authBtn.addEventListener("click", () => els.settingsSheet.close());
 els.exportBtn.addEventListener("click", () => {
   const a = Object.assign(document.createElement("a"), {
     href: URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" })),
-    download: `para-${new Date().toISOString().slice(0, 10)}.json`,
+    download: `cashfollow-${new Date().toISOString().slice(0, 10)}.json`,
   });
   a.click(); URL.revokeObjectURL(a.href);
 });

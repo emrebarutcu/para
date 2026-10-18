@@ -1,4 +1,4 @@
-# Para — Kurulum
+# CashFollow — Kurulum
 
 ## 1. Supabase (cloud sync)
 
@@ -84,7 +84,7 @@ bir sonraki aydan ilerideyse geçen yıla sayılır.
 
 Her kullanıcıya özel bir adres verilir (`<12 hane>@INBOX_DOMAIN`, Ayarlar → **Banka e-postaları**). Kullanıcı bunu
 bankasına harcama bildirim adresi olarak girer. Alan adına gelen e-postaları Cloudflare Email Worker (`workers/eposta`)
-karşılar, düz metne çevirir ve Supabase'deki kutusuna yazar; telefonun açık olması gerekmez. Para açıldığında
+karşılar, düz metne çevirir ve Supabase'deki kutusuna yazar; telefonun açık olması gerekmez. CashFollow açıldığında
 (açıksa anında, Realtime ile) okunmamış e-postalardan tutar, tarih, taksit, işyeri ve kartın son 4 hanesi çıkarılır,
 harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
 

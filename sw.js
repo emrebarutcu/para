@@ -1,4 +1,4 @@
-const CACHE = 'para-v5';
+const CACHE = 'cashfollow-v6';
 const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/eposta.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {

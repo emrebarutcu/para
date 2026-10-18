@@ -1,6 +1,6 @@
 {
-  "name": "Para",
-  "short_name": "Para",
+  "name": "CashFollow",
+  "short_name": "CashFollow",
   "description": "Kredi kartı taksit takibi",
   "start_url": "/",
   "display": "standalone",

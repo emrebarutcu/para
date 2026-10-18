@@ -1,4 +1,4 @@
-// ---------- Para e-posta karşılayıcı (Cloudflare Email Worker) ----------
+// ---------- CashFollow e-posta karşılayıcı (Cloudflare Email Worker) ----------
 // <adres>@alanadi'na gelen e-posta → ingest_email(adres, metin) → inbox_messages.
 // Ayrıştırma uygulamada yapılır; burada e-postanın metni çıkarılıp kullanıcının kutusuna yazılır.
 // Bağımlılığı yoktur: Cloudflare panelindeki kod düzenleyicisine olduğu gibi yapıştırılabilir.
@@ -12,7 +12,7 @@ export default {
   },
   // Panel önizlemesi / tarayıcı: Worker'ın ayakta olduğunu göstermek için (e-posta işini etkilemez)
   async fetch() {
-    return new Response("Para e-posta servisi çalışıyor.\n", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    return new Response("CashFollow e-posta servisi çalışıyor.\n", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
   },
 };
 
