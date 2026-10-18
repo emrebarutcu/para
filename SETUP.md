@@ -92,8 +92,8 @@ harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
 
 1. **Supabase → SQL Editor**: `supabase/eposta.sql` dosyasını çalıştır
    (`inbox_addresses`, `inbox_messages`, Realtime yayını ve yalnızca service role'ün çağırabildiği `ingest_email`).
-2. **Alan adı**: Cloudflare'de yönetilen bir alan adı ya da alt alan adı seç (ör. `para.ornek.com`) ve
-   `config.js` → `window.INBOX_DOMAIN` değerine yaz.
+2. **Alan adı**: Cloudflare DNS'inde yönetilen bir alan adı (şu an `cashfollow.app`); `config.js` → `window.INBOX_DOMAIN`.
+   Alan adı başka bir firmadan alındıysa Cloudflare'e site olarak eklenip ad sunucuları Cloudflare'inkilerle değiştirilir.
 3. **Worker**:
    ```sh
    cd workers/eposta
@@ -103,6 +103,9 @@ harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
    npm run deploy
    ```
    `wrangler.toml` içindeki `SUPABASE_URL` projeninkiyle aynı olmalı. Testler: `npm test`.
+   Komut satırı yerine panelden de kurulabilir: `npm run build` ile oluşan `dist/index.js`'i
+   Cloudflare → Workers & Pages → Create → Hello World worker → **Edit code**'a yapıştır, Deploy et;
+   Settings → Variables and Secrets'a `SUPABASE_URL` (Text) ve `SUPABASE_SERVICE_KEY` (Secret) ekle.
 4. **Cloudflare → Email → Email Routing**: alan adında Email Routing'i aç (MX/SPF kayıtlarını Cloudflare ekler),
    **Routing rules → Catch-all address → Send to a Worker → `para-eposta`**.
 

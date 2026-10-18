@@ -9,4 +9,4 @@ window.SUPABASE_ANON_KEY = 'sb_publishable_KoF5Tfi74v8RSWvszPeuxQ_LWwKZGDo';
 // ─── E-postadan harcama ───────────────────────────────────────────────────────
 // Kullanıcılara verilen adreslerin alan adı (Cloudflare Email Routing → workers/eposta).
 // Boşsa Ayarlar → Banka e-postaları'nda adres yerine kurulum uyarısı gösterilir.
-window.INBOX_DOMAIN = '';
+window.INBOX_DOMAIN = 'cashfollow.app';
