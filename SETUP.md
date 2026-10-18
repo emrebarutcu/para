@@ -123,3 +123,48 @@ Tutarı, tarihi ya da kartı okunamayan, yabancı para birimli ve iade/iptal e-p
 **Harcamalar** sekmesinde *Ekle* (form doldurulmuş açılır), *Göster* ya da *Yok say* ile beklerler.
 Ayarlar'daki "Bir e-postayı dene" alanına bir bildirim yapıştırıp neyin okunduğunu görebilirsin.
 Adres yenilenirse eskisine gelen e-postalar reddedilir.
+
+## 7. Yapay zekâ asistanları (MCP)
+
+CashFollow, `https://cashfollow.app/mcp` adresinde bir [MCP](https://modelcontextprotocol.io) sunucusu sunar.
+Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış kullanıcının adına ön yüzdeki
+çekirdek işlemlerin hepsini yapabilir:
+
+| Alan | Araçlar |
+| --- | --- |
+| Özet / akış | `get_overview` (bu ay, gelecek ay, kalan, yaklaşan ödemeler), `get_cashflow` (ay ay ödemeler, kişi / kart toplamları) |
+| Harcamalar | `list_purchases`, `get_purchase` (taksit takvimi), `add_purchase` (`dry_run` ile önizleme), `update_purchase`, `delete_purchase` |
+| Kartlar | `list_cards` (kullanılan / kalan limit), `add_card`, `update_card`, `delete_card` |
+| Kişiler | `list_people`, `add_person`, `rename_person`, `delete_person` |
+| Banka e-postaları | `get_inbox_address`, `renew_inbox_address`, `list_inbox`, `check_inbox`, `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
+| Yedek | `export_data`, `import_data` |
+
+Ödeme tarihleri uygulamayla aynı kodla (`taksit.js`, `eposta.js`) hesaplanır; doğrulama kuralları formlardakiyle aynıdır.
+Sunucu `functions/mcp.js` (Cloudflare Pages Function) → `mcp/server.js`; `main`'e birleştirince sitenin yanında
+kendiliğinden yayınlanır (build komutu gerekmez). Testler: `cd mcp && npm test`.
+
+**Güvenlik:** Asistanlar Supabase OAuth 2.1 ile yetki alır. Kullanıcı `cashfollow.app/oauth/consent` sayfasında giriş yapıp
+izin verir; asistan, kullanıcının kendi erişim token'ıyla çalışır ve RLS onu yalnızca kendi verisiyle sınırlar.
+MCP sunucusunda gizli anahtar yoktur. İzinler uygulamada Ayarlar → **Yapay zekâ asistanları**'ndan görülüp kaldırılabilir.
+
+### Bir kez yapılacak kurulum
+
+1. **Supabase → Authentication → OAuth Server**:
+   - OAuth 2.1 server'ı **aç**
+   - **Authorization Path**: `/oauth/consent` (Site URL `https://cashfollow.app` olmalı — bkz. 2. bölüm)
+   - **Allow dynamic client registration**: **aç** (Claude / ChatGPT kendini kaydeder; kapalıysa her asistan için
+     Authentication → OAuth Apps'ten elle istemci açılır, Claude'un dönüş adresi `https://claude.ai/api/mcp/auth_callback`)
+2. (Önerilir) **Supabase → Settings → JWT Keys**: asimetrik imzalama anahtarına (ES256/RS256) geç.
+3. **Supabase → SQL Editor**: `supabase/mcp.sql` dosyasını çalıştır (asistanın yaptığı değişiklik açık uygulamada anında görünsün).
+
+Kontrol: `https://bffqfhgctlgexjdyvaup.supabase.co/.well-known/oauth-authorization-server/auth/v1` JSON döndürmeli
+(şu an `OAuth server is disabled` döner — 1. adım yapılınca düzelir).
+
+### Kullanıcı tarafı
+
+- **Claude (claude.ai / masaüstü / mobil)**: Ayarlar → Bağlayıcılar → **Özel bağlayıcı ekle** → `https://cashfollow.app/mcp`
+- **ChatGPT**: Ayarlar → Uygulamalar → geliştirici modunda yeni uygulama → `https://cashfollow.app/mcp`, kimlik doğrulama OAuth
+- **Claude Code**: `claude mcp add --transport http cashfollow https://cashfollow.app/mcp`, sonra `/mcp` ile giriş
+
+Bağlanırken CashFollow izin sayfası açılır; giriş yapıp **İzin ver**'e dokunulur. Sonra "Telefonu 6 taksitle Bonus karta ekle",
+"Kasımda kime ne kadar ödeyeceğim?", "Bekleyen banka e-postalarını işle" gibi istekler doğrudan yapılabilir.

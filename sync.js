@@ -6,6 +6,7 @@
   let onRemoteDataCb = null;
   let onSyncedCb = null;
   let inboxChannel = null;
+  let dataChannel = null;
 
   function enabled() {
     return !!(window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase);
@@ -54,7 +55,7 @@
     db.auth.getSession().then(({ data }) => {
       user = data.session?.user ?? null;
       renderBtn(user);
-      if (user) { refresh(); watchInbox(); }
+      if (user) { refresh(); watchInbox(); watchData(); }
     });
 
     db.auth.onAuthStateChange((event, session) => {
@@ -65,9 +66,11 @@
         if (typeof window.onAuthLogin === 'function') window.onAuthLogin(user.id);
         refresh();
         watchInbox();
+        watchData();
       }
       if (event === 'SIGNED_OUT') {
         unwatchInbox();
+        unwatchData();
         if (typeof window.onAuthLogout === 'function') window.onAuthLogout();
       }
       if (event === 'PASSWORD_RECOVERY') showResetForm();
@@ -154,6 +157,37 @@
   function unwatchInbox() {
     if (inboxChannel) db.removeChannel(inboxChannel);
     inboxChannel = null;
+  }
+
+  // ── Yapay zekâ asistanları (Supabase OAuth 2.1 → /mcp) ─────────────────────
+  // Kullanıcının izin verdiği uygulamalar; OAuth sunucusu kapalıysa ya da hata olursa null
+  window.syncOAuthGrants = async function () {
+    if (!db || !user || !db.auth.oauth?.listGrants) return null;
+    const { data, error } = await db.auth.oauth.listGrants();
+    return error ? null : data;
+  };
+
+  // İzni kaldırır: uygulamanın oturumları ve yenileme token'ları geçersiz olur
+  window.syncOAuthRevoke = async function (clientId) {
+    const { error } = await db.auth.oauth.revokeGrant({ clientId });
+    if (error) throw error;
+  };
+
+  // Asistan (MCP) ya da başka cihaz veriyi değiştirince açık uygulama beklemeden güncellensin
+  // (supabase/mcp.sql: cashflow_data Realtime yayınında). Kendi yazdığımız veri _v'den dolayı yok sayılır.
+  function watchData() {
+    unwatchData();
+    if (!db || !user || typeof db.channel !== 'function') return;
+    dataChannel = db.channel('data-' + user.id)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'cashflow_data', filter: `user_id=eq.${user.id}` },
+        () => pull())
+      .subscribe();
+  }
+
+  function unwatchData() {
+    if (dataChannel) db.removeChannel(dataChannel);
+    dataChannel = null;
   }
 
   // ── Internal ────────────────────────────────────────────────────────────────

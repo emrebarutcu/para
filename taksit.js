@@ -134,6 +134,59 @@
     }));
   }
 
+  // ---------- Kayıtlı veri ----------
+  // { people: [{ id, name, color }], cards: [kart], installments: [harcama], _v }
+  const SERIES_COUNT = 8;   // styles.css'teki --s1…--s8
+
+  function defaultState() {
+    return {
+      people: [{ id: "ben", name: "Ben", color: 0 }],
+      cards: [],              // { id, name, limit, cutoffDay, dueDay, color, last4? }
+      installments: [],       // harcamalar
+      _v: 0, // version timestamp — used for sync conflict resolution
+    };
+  }
+
+  function validDay(v) {
+    const d = Math.round(Number(v));
+    return d >= 1 && d <= 31 ? d : null;
+  }
+
+  // Son ödeme günü bilinen ama kesimi bilinmeyen kart: kesim, yasal 10 günlük aralıkla tahmin edilir
+  function defaultCard(dueDay, id, color) {
+    const due = validDay(dueDay) || 22;
+    return { id, name: "Kredi kartı", limit: 0, cutoffDay: ((due - 11 + 31) % 31) + 1, dueDay: due, color };
+  }
+
+  // Renk kişiye / karta bağlıdır, sırasına değil: yeni kayıt boştaki ilk rengi alır
+  function nextColor(list) {
+    const used = new Set(list.map(x => x.color));
+    for (let c = 0; c < SERIES_COUNT; c++) if (!used.has(c)) return c;
+    return list.length % SERIES_COUNT;
+  }
+
+  // Eski sürümlerden gelen veriyi bugünkü biçime taşır. Nakit akışı sürümünden kalan alanlar
+  // (entriesByDate, recurring…) olduğu gibi kalır; senkronizasyon tüm nesneyi yazdığı için silinmezler.
+  function hydrate(data) {
+    const s = { ...defaultState(), ...data };
+    if (!Array.isArray(s.people)) s.people = defaultState().people;
+    if (!Array.isArray(s.cards)) s.cards = [];
+    if (!Array.isArray(s.installments)) s.installments = [];
+
+    // İlk taksit sürümü: tek kart (dueDay) ve "Ekstre" ayı → varsayılan kart + ilk ödeme ayı
+    if (s.installments.some(i => i.statement)) {
+      let card = s.cards[0];
+      if (!card) { card = defaultCard(s.dueDay, "kart", 0); s.cards = [card]; }
+      s.installments = s.installments.map(i => {
+        if (!i.statement) return i;
+        const { statement, planCount, ...rest } = i;
+        return { ...rest, cardId: i.cardId || card.id, ...fromStatement({ statement, count: i.count, total: i.total, planCount }) };
+      });
+    }
+    delete s.dueDay;
+    return s;
+  }
+
   // ---------- Excel içe aktarma ----------
   function normalize(s) {
     return String(s ?? "").trim().toLocaleLowerCase("tr-TR").replace(/\s+/g, " ");
@@ -228,10 +281,11 @@
   }
 
   const api = {
-    MONTHS, MONTHS_SHORT, CASH,
+    MONTHS, MONTHS_SHORT, CASH, SERIES_COUNT,
     monthIndex, monthKey, monthName, monthShort, yearOf, daysInMonth, dayOf, dateKey, parseDate, toDate, todayKey,
     statementIndex, dueIndex,
     perInstallment, planLength, originalTotal, payments, remainingFrom, outstanding, buildCashflow,
+    defaultState, validDay, defaultCard, nextColor, hydrate,
     normalize, titleCase, parseStatement, fromStatement, parseSheetRows, parseWorkbook,
   };
   if (typeof module === "object" && module.exports) module.exports = api;

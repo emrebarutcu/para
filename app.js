@@ -6,7 +6,6 @@ function getStorageKey() {
   return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
 }
 
-const SERIES_COUNT = 8;          // styles.css'teki --s1…--s8
 const MAX_MONTHS = 60;           // akışta gösterilecek en fazla ay
 const CHART_MONTHS = 12;         // özetteki grafikte gösterilecek ay
 const CASH_COLOR = "var(--cash)";
@@ -15,45 +14,7 @@ const COUNT_PRESETS = [1, 2, 3, 4, 6, 9, 12];
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode" };
 
-const defaultState = () => ({
-  people: [{ id: "ben", name: "Ben", color: 0 }],
-  cards: [],              // { id, name, limit, cutoffDay, dueDay, color, last4? }
-  installments: [],       // harcamalar — biçimi taksit.js'de
-  _v: 0, // version timestamp — used for sync conflict resolution
-});
-
-function validDay(v) {
-  const d = Math.round(Number(v));
-  return d >= 1 && d <= 31 ? d : null;
-}
-
-// Son ödeme günü bilinen ama kesimi bilinmeyen kart: kesim, yasal 10 günlük aralıkla tahmin edilir
-function defaultCard(dueDay, id, color) {
-  const due = validDay(dueDay) || 22;
-  return { id, name: "Kredi kartı", limit: 0, cutoffDay: ((due - 11 + 31) % 31) + 1, dueDay: due, color };
-}
-
-// Eski sürümlerden gelen veriyi bugünkü biçime taşır. Nakit akışı sürümünden kalan alanlar
-// (entriesByDate, recurring…) olduğu gibi kalır; senkronizasyon tüm nesneyi yazdığı için silinmezler.
-function hydrate(data) {
-  const s = { ...defaultState(), ...data };
-  if (!Array.isArray(s.people)) s.people = defaultState().people;
-  if (!Array.isArray(s.cards)) s.cards = [];
-  if (!Array.isArray(s.installments)) s.installments = [];
-
-  // İlk taksit sürümü: tek kart (dueDay) ve "Ekstre" ayı → varsayılan kart + ilk ödeme ayı
-  if (s.installments.some(i => i.statement)) {
-    let card = s.cards[0];
-    if (!card) { card = defaultCard(s.dueDay, "kart", 0); s.cards = [card]; }
-    s.installments = s.installments.map(i => {
-      if (!i.statement) return i;
-      const { statement, planCount, ...rest } = i;
-      return { ...rest, cardId: i.cardId || card.id, ...T.fromStatement({ statement, count: i.count, total: i.total, planCount }) };
-    });
-  }
-  delete s.dueDay;
-  return s;
-}
+const { SERIES_COUNT, defaultState, validDay, defaultCard, nextColor, hydrate } = T;
 
 function readPref(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -227,13 +188,6 @@ function setMoney(node, n) {
   }
 }
 
-// Renk kişiye / karta bağlıdır, sırasına değil: yeni kayıt boştaki ilk rengi alır
-function nextColor(list) {
-  const used = new Set(list.map(x => x.color));
-  for (let c = 0; c < SERIES_COUNT; c++) if (!used.has(c)) return c;
-  return list.length % SERIES_COUNT;
-}
-
 function knownPurchases() {
   const known = new Set(state.people.map(p => p.id));
   return state.installments.filter(p => known.has(p.personId));
@@ -282,6 +236,8 @@ const els = {
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
   inboxAddress: $("inboxAddress"),
+  aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"),
+  aiAppsGroup: $("aiAppsGroup"), aiApps: $("aiApps"),
   inboxCheck: $("inboxCheck"), inboxRenew: $("inboxRenew"), inboxTry: $("inboxTry"), inboxTryResult: $("inboxTryResult"),
   authBtn: $("authBtn"), exportBtn: $("exportBtn"), importInput: $("importInput"),
   toast: $("toast"),
@@ -1393,14 +1349,55 @@ els.inboxRenew.addEventListener("click", () => {
   if (confirm("Eski adrese gelen e-postalar artık alınmaz; bankadaki adresi de yenisiyle değiştirmen gerekir. Devam edelim mi?")) showInboxAddress(true);
 });
 els.inboxTry.addEventListener("input", renderInboxTry);
-els.inboxSheet.addEventListener("click", async e => {
+async function copyFrom(e) {
   const b = e.target.closest("[data-copy]");
   if (!b) return;
   try {
     await navigator.clipboard.writeText($(b.dataset.copy).textContent);
     toast("Kopyalandı");
   } catch { toast("Kopyalanamadı"); }
-});
+}
+els.inboxSheet.addEventListener("click", copyFrom);
+
+// ---------- Yapay zekâ asistanları (MCP) ----------
+// Asistanlar /mcp'ye (functions/mcp.js) bağlanır; kullanıcı oauth/consent.html'de izin verir.
+async function openAiSheet() {
+  els.mcpUrl.textContent = `${location.origin}/mcp`;
+  const loggedIn = !!window.syncGetUser?.();
+  els.aiLoginNote.hidden = loggedIn;
+  els.aiAppsGroup.hidden = true;
+  openSheet(els.aiSheet);
+  if (loggedIn) await renderAiApps();
+}
+
+async function renderAiApps() {
+  const grants = await window.syncOAuthGrants?.();
+  els.aiApps.replaceChildren();
+  els.aiAppsGroup.hidden = !grants;
+  if (!grants) return;
+  if (!grants.length) { els.aiApps.append(el("li", "hint", "Henüz bağlı uygulama yok")); return; }
+  for (const g of grants) {
+    const li = el("li");
+    const info = el("span", "row-text");
+    info.append(el("strong", "", g.client?.name || "Uygulama"), el("small", "", `${fmtDay(g.granted_at.slice(0, 10))} tarihinden beri`));
+    const del = el("button", "btn btn-ghost sm", "Kaldır");
+    del.type = "button";
+    del.addEventListener("click", async () => {
+      if (!confirm(`“${g.client?.name || "Uygulama"}” artık CashFollow verilerine erişemesin mi?`)) return;
+      del.disabled = true;
+      try {
+        await window.syncOAuthRevoke(g.client.id);
+        toast("Erişim kaldırıldı");
+      } catch { toast("Kaldırılamadı"); }
+      renderAiApps();
+    });
+    li.append(icon("spark"), info, del);
+    els.aiApps.append(li);
+  }
+}
+
+els.aiBtn.addEventListener("click", () => { els.settingsSheet.close(); openAiSheet(); });
+els.aiSheet.addEventListener("click", copyFrom);
 
 // ---------- Ayarlar ----------
 function currentTheme() { return document.documentElement.dataset.theme || ""; }
