@@ -27,19 +27,21 @@ window.SUPABASE_ANON_KEY = 'eyJhbGci...';
 
 Kayıt doğrulama ve şifre sıfırlama e-postalarını Supabase gönderir. Hazır e-posta servisi yalnızca Supabase
 organizasyonundaki ekip üyelerine ve saatte birkaç e-posta gönderdiği için kendi SMTP'miz tanımlıdır: **Brevo**
-(ücretsiz planda günde 300 e-posta). Gönderen `noreply@mail.cashfollow.app`; alt alan adı, kök alan adındaki Cloudflare
-Email Routing'in (banka e-postaları, bölüm 6) SPF / DMARC kayıtlarına dokunmamak için.
+(ücretsiz planda günde 300 e-posta). Gönderen `noreply@cashfollow.app`; Brevo kök alan adında doğrulanır (DKIM `brevo1/brevo2._domainkey`,
+DMARC `_dmarc`). Geri dönen e-postalar `mail.cashfollow.app`'e (Brevo'ya CNAME) gider; kök alan adındaki Cloudflare Email
+Routing MX'i (banka e-postaları, bölüm 6) ve SPF'i olduğu gibi kalır.
 
-1. **Brevo → Senders, Domains & Dedicated IPs → Domains → Add a domain** → `mail.cashfollow.app`. Brevo'nun verdiği
+1. **Brevo → Senders, Domains & Dedicated IPs → Domains → Add a domain** → `cashfollow.app`. Brevo'nun verdiği
    doğrulama, DKIM ve DMARC kayıtları Cloudflare DNS'e eklenir (CNAME'ler proxy'siz, gri bulut) → **Authenticate**.
-2. **Senders → Add a sender**: `CashFollow`, `noreply@mail.cashfollow.app`.
+2. **Senders → Add a sender**: `CashFollow`, `noreply@cashfollow.app`.
 3. **Ayarlar → SMTP & API → SMTP**: **Generate SMTP key** (API key değil). Aynı sayfadaki **Login** kullanıcı adıdır.
 4. **Supabase → Authentication → Emails → SMTP Settings** → Enable custom SMTP:
-   sender `noreply@mail.cashfollow.app` / `CashFollow`, host `smtp-relay.brevo.com`, port `587`,
+   sender `noreply@cashfollow.app` / `CashFollow`, host `smtp-relay.brevo.com`, port `587`,
    username Brevo'daki Login, password SMTP key.
 5. **Authentication → Rate Limits**: özel SMTP'de e-posta sınırı saatte 30'dur, gerekirse artırılır.
-6. **Authentication → Emails → Templates**: şablonlar `supabase/eposta-sablonlari/`'ndadır; dosyanın tamamı **Message body**'ye
-   (Source), konu **Subject**'e yapıştırılır:
+6. **E-posta şablonları** `supabase/eposta-sablonlari/`'ndadır. `sh supabase/sablonlar.sh` (SUPABASE_ACCESS_TOKEN ile) hepsini
+   konularıyla Supabase'e yükler; elle de Authentication → Emails → Templates'te **Message body**'ye (Source) ve **Subject**'e
+   yapıştırılabilir:
 
    | Supabase şablonu | Dosya | Konu |
    | --- | --- | --- |
