@@ -9,6 +9,9 @@
   let onSyncedCb = null;
   let inboxChannel = null;
   let dataChannel = null;
+  let welcome = false;   // ilk açılıştaki giriş penceresi: kapatılamaz, "Çevrimdışı devam et" ile geçilir
+
+  const OFFLINE_PREF = 'para.offline';   // girişsiz devam etmeyi seçti; ilk açılış penceresi bir daha çıkmaz
 
   function enabled() {
     return !!(window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase);
@@ -25,6 +28,7 @@
   function openModal() {
     const modal = document.getElementById('authModal');
     if (!modal) return;
+    setWelcome(false);
     modal.removeAttribute('hidden');
     if (user) {
       showView('authLoggedIn');
@@ -39,6 +43,32 @@
 
   function closeModal() {
     document.getElementById('authModal')?.setAttribute('hidden', '');
+    setWelcome(false);
+  }
+
+  function setWelcome(on) {
+    welcome = on;
+    const title = document.getElementById('authTitle');
+    if (title) title.textContent = on ? 'CashFollow\'a hoş geldin' : 'Bulut senkronizasyonu';
+    document.getElementById('authClose')?.toggleAttribute('hidden', on);
+    document.getElementById('authWelcomeDesc')?.toggleAttribute('hidden', !on);
+    document.getElementById('authOffline')?.toggleAttribute('hidden', !on);
+  }
+
+  // Giriş yapılmamış ve çevrimdışı devam seçilmemişse giriş / kayıt penceresi açılır
+  function maybeWelcome() {
+    if (user || hasStoredSession()) return;
+    try { if (localStorage.getItem(OFFLINE_PREF)) return; } catch { return; }
+    const modal = document.getElementById('authModal');
+    if (!modal || !modal.hidden) return;
+    showView('authLoginForm');
+    setWelcome(true);
+    modal.removeAttribute('hidden');
+  }
+
+  // Ağ yokken süresi dolmuş oturum yenilenemez ve getSession boş döner; kayıtlı oturum varsa kullanıcı girişsiz sayılmaz
+  function hasStoredSession() {
+    try { return !!localStorage.getItem(db.auth.storageKey); } catch { return false; }
   }
 
   function showResetForm() {
@@ -61,6 +91,7 @@
       user = data.session?.user ?? null;
       renderBtn(user);
       if (user) { refresh(); watchInbox(); watchData(); }
+      else maybeWelcome();
     });
     window.addEventListener('online', () => window.syncRefresh());
 
@@ -69,6 +100,7 @@
       window.CF_USER_ID = user?.id || null;
       renderBtn(user);
       if (event === 'SIGNED_IN') {
+        if (!document.getElementById('authLoginForm')?.hidden) closeModal();
         if (typeof window.onAuthLogin === 'function') window.onAuthLogin(user.id);
         refresh();
         watchInbox();
@@ -96,6 +128,9 @@
   };
 
   window.syncGetUser = function () { return user; };
+
+  // Bu cihazda hesabın verisi en az bir kez çekildi mi
+  window.syncPulled = function () { return !!(user && loadMeta(user.id)); };
 
   // Uygulama öne gelince: başka cihazdaki değişiklikler ve yeni e-postalar
   window.syncRefresh = function () {
@@ -338,6 +373,7 @@
     btn.textContent = u ? ('☁ ' + u.email.split('@')[0]) : '☁ Giriş';
     btn.title = u ? u.email : 'Cloud sync için giriş yap';
     btn.classList.toggle('auth-active', !!u);
+    document.getElementById('offlineNote')?.toggleAttribute('hidden', !!u || hasStoredSession());
   }
 
   // ── Event wiring ────────────────────────────────────────────────────────────
@@ -345,8 +381,13 @@
     let authMode = 'login';
 
     document.getElementById('authBtn')?.addEventListener('click', openModal);
-    document.getElementById('authOverlay')?.addEventListener('click', closeModal);
+    document.getElementById('authOverlay')?.addEventListener('click', () => { if (!welcome) closeModal(); });
     document.getElementById('authClose')?.addEventListener('click', closeModal);
+    document.getElementById('offlineLoginBtn')?.addEventListener('click', openModal);
+    document.getElementById('authOfflineBtn')?.addEventListener('click', () => {
+      try { localStorage.setItem(OFFLINE_PREF, '1'); } catch {}
+      closeModal();
+    });
 
     // Giriş / Kayıt tabs
     document.querySelectorAll('.auth-tab').forEach(tab => {
@@ -368,7 +409,7 @@
       const btn = e.submitter;
       btn.disabled = true; btn.textContent = '…';
 
-      const { error } = authMode === 'login'
+      const { data, error } = authMode === 'login'
         ? await db.auth.signInWithPassword({ email, password })
         : await db.auth.signUp({ email, password });
 
@@ -380,7 +421,7 @@
         msgEl.textContent = '⚠ ' + (error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message);
         msgEl.style.color = 'var(--expense)';
       } else if (authMode === 'register') {
-        msgEl.textContent = '✓ Kayıt olundu!';
+        msgEl.textContent = data.session ? '✓ Kayıt olundu!' : '✓ Kayıt olundu! E-postana gelen bağlantıyla hesabını doğrula.';
         msgEl.style.color = 'var(--income)';
       } else {
         closeModal();

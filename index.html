@@ -61,6 +61,11 @@
   <main class="app-main">
     <!-- ── Özet ─────────────────────────────────────────── -->
     <section class="view" data-view="ozet" id="view-ozet">
+      <div class="offline-note" id="offlineNote" hidden>
+        <svg class="ic"><use href="#i-cloud"/></svg>
+        <p class="row-text"><strong>Çevrimdışı kullanıyorsun</strong><small>Verilerin yalnızca bu tarayıcıda saklanır. Eşitleme ve yedek için giriş yap.</small></p>
+        <button type="button" id="offlineLoginBtn" class="btn btn-ghost sm">Giriş yap</button>
+      </div>
       <div class="hero">
         <div class="hero-top">
           <span class="hero-label" id="heroLabel">Bu ay ödenecek</span>
@@ -399,6 +404,7 @@
             <span class="row-text"><strong>Dışa aktar</strong><small>Tüm verilerin JSON yedeği</small></span>
           </button>
         </div>
+        <p class="app-version" id="appVersion"></p>
       </div>
     </div>
   </dialog>
@@ -470,11 +476,12 @@
     <div id="authOverlay" class="modal-overlay"></div>
     <div class="modal-box">
       <div class="modal-head">
-        <h2>Bulut senkronizasyonu</h2>
+        <h2 id="authTitle">Bulut senkronizasyonu</h2>
         <button id="authClose" class="icon-btn" aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
 
       <div id="authLoginForm">
+        <p class="modal-desc" id="authWelcomeDesc" hidden>Giriş yap ya da hesap oluştur; verilerin cihazların arasında eşitlensin ve yedekte dursun.</p>
         <div class="auth-tabs">
           <button class="auth-tab active" data-tab="login">Giriş Yap</button>
           <button class="auth-tab" data-tab="register">Kayıt Ol</button>
@@ -486,6 +493,10 @@
         </form>
         <p id="authMsg" class="auth-msg"></p>
         <button type="button" id="forgotBtn" class="auth-forgot">Şifremi unuttum</button>
+        <div class="auth-offline" id="authOffline" hidden>
+          <button type="button" id="authOfflineBtn" class="auth-forgot">Çevrimdışı devam et</button>
+          <small>Verilerin yalnızca bu cihazda saklanır.</small>
+        </div>
       </div>
 
       <div id="authForgotForm" hidden>
@@ -515,10 +526,31 @@
     </div>
   </div>
 
+  <!-- Girişten önce bu cihaza girilen veri (app.js) -->
+  <div id="moveModal" class="modal-wrap" hidden>
+    <div class="modal-overlay"></div>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="moveTitle">
+      <div class="modal-head"><h2 id="moveTitle">Bu cihazdaki veriler</h2></div>
+      <p class="modal-desc">Giriş yapmadan önce bu cihaza girdiğin veriler var (<span id="moveSummary"></span>). Bunlarla ne yapalım?</p>
+      <div class="move-actions">
+        <button type="button" class="row-btn" id="moveKeepBtn">
+          <svg class="ic"><use href="#i-cloud"/></svg>
+          <span class="row-text"><strong>Hesabıma taşı</strong><small>Hesabındaki verilere eklenir; aynı kişi ve kartlar birleşir</small></span>
+        </button>
+        <button type="button" class="row-btn" id="moveDropBtn">
+          <svg class="ic"><use href="#i-x"/></svg>
+          <span class="row-text"><strong>Sil, hesabımdakilerle devam et</strong><small>Bu cihaza girdiklerin silinir</small></span>
+        </button>
+      </div>
+      <p id="moveMsg" class="auth-msg"></p>
+    </div>
+  </div>
+
   <div id="chartTooltip" class="chart-tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <!-- Scripts: config → supabase SDK → sync → taksit → eposta → app -->
+  <!-- Scripts: version → config → supabase SDK → sync → taksit → eposta → app -->
+  <script src="version.js"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="tablo.js"></script>
