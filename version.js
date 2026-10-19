@@ -1,3 +1,4 @@
-// Uygulama sürümü: main'e her birleştirmede artırılır (scripts/surum.sh, .github/workflows/surum.yml denetler).
+// Uygulama sürümü, YIL.AYGÜN.SIRA (ör. 2026.1019.2: 19 Ekim'in ikinci yayını). main'e her birleştirmede
+// scripts/surum.sh ile artırılır, .github/workflows/surum.yml denetler.
 // Service worker önbelleğinin adı da buradan gelir; sürüm değişince eski önbellek silinir.
-self.APP_VERSION = '1.0.0';
+self.APP_VERSION = '2026.1019.1';

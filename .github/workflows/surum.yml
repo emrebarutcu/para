@@ -16,7 +16,7 @@ jobs:
         env:
           BASE: ${{ github.base_ref }}
         run: |
-          ver() { grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1; }
+          ver() { sed -n "s/^self.APP_VERSION = '\([0-9]*\.[0-9]*\.[0-9]*\)';.*/\1/p"; }
           head=$(ver < version.js)
           base=$(git show "origin/$BASE:version.js" 2>/dev/null | ver || true)
           echo "main: ${base:-yok}, bu PR: $head"

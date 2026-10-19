@@ -38,18 +38,24 @@ Netlify'da da çalışır (`netlify.toml`); yeni adres yerleştikten sonra eski 
 
 ### Sürüm
 
-Uygulamanın sürümü `version.js`'tedir (`1.4.2` gibi) ve Ayarlar'ın altında görünür. `main`'e açılan her PR sürümü
-artırmalıdır; `.github/workflows/surum.yml` ("Sürüm" denetimi) artmamışsa PR'ı kırmızıya çeker:
+Uygulamanın sürümü `version.js`'tedir ve Ayarlar'ın altında görünür. Biçim **`YIL.AYGÜN.SIRA`**: `2026.1019.1` 19 Ekim
+2026'nın ilk yayını, `2026.1019.2` aynı günün ikincisi. Ay ve gün tek parçadadır (ay × 100 + gün, başta sıfır olmadan:
+5 Ocak → `105`), çünkü App Store en fazla üç tam sayı kabul eder; sayısal sıralama tarih sırasıyla aynıdır.
+Google Play'in `versionCode`'u gerekince sürümden üretilir: `YILAYGÜNSIRA`, ör. `2026.1019.2` → `2026101902`.
+
+`main`'e açılan her PR sürümü artırır:
 
 ```sh
-scripts/surum.sh          # düzeltme: 1.4.2 → 1.4.3
-scripts/surum.sh minor    # yeni özellik: 1.4.2 → 1.5.0
-scripts/surum.sh major    # büyük değişiklik: 1.4.2 → 2.0.0
+scripts/surum.sh    # bugünün ilk yayını 2026.1019.1, aynı gün tekrar çalıştırılınca 2026.1019.2
 ```
 
+`.github/workflows/surum.yml` ("Sürüm" denetimi) sürüm main'dekinden büyük değilse PR'ı kırmızıya çeker.
+GitHub → Settings → Branches → `main` kuralında şu ikisi açılmalı: **Require status checks to pass** (altında **Sürüm**)
+ve **Require branches to be up to date before merging**. İkincisi olmazsa paralel iki PR aynı sürümü yazıp ikisi de
+birleşebilir (aynı satırdaki aynı değişiklik git'te çakışma sayılmaz); PR main'i alınca denetim yeniden çalışır,
+aynı sürüm yakalanır, `scripts/surum.sh` yeniden çalıştırılır.
+
 Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca cihazlardaki eski dosyalar kendiliğinden yenilenir.
-Denetimin birleştirmeyi gerçekten engellemesi için GitHub → Settings → Branches → `main` kuralında
-"Require status checks to pass" altında **Sürüm** seçilir.
 
 ## 3. Mobil (iPhone / Android)
 
