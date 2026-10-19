@@ -2,12 +2,11 @@
 // POST /mcp → JSON-RPC (initialize, tools/list, tools/call, ping); cevaplar düz JSON, oturum tutulmaz.
 // Kimlik doğrulama: Supabase OAuth 2.1. Token'sız istek 401 + WWW-Authenticate alır; istemci
 // /.well-known/oauth-protected-resource'tan Supabase'in yetkilendirme sunucusunu bulur, kullanıcı
-// cashfollow.app/oauth/consent'te izin verir. Bağımlılığı yoktur; Cloudflare Pages Function'dan çağrılır
-// (functions/mcp.js).
+// cashfollow.app/oauth/consent'te izin verir. Bağımlılığı yoktur; sitenin Worker'ından çağrılır (worker.js).
 import { TOOLS, INSTRUCTIONS, ToolError, todayKey } from "./tools.js";
 import { createStore, getUser } from "./supabase.js";
 
-// config.js ile aynı (herkese açık değerler); Pages → Settings → Variables ile değiştirilebilir
+// config.js ile aynı (herkese açık değerler); Worker → Settings → Variables ile değiştirilebilir
 const DEFAULTS = {
   SUPABASE_URL: "https://bffqfhgctlgexjdyvaup.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_KoF5Tfi74v8RSWvszPeuxQ_LWwKZGDo",

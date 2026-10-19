@@ -30,12 +30,15 @@ window.SUPABASE_URL      = 'https://xyzxyz.supabase.co';
 window.SUPABASE_ANON_KEY = 'eyJhbGci...';
 ```
 
-## 2. Yayın (Cloudflare Pages → cashfollow.app)
+## 2. Yayın (Cloudflare Workers → cashfollow.app)
 
-1. Cloudflare → **Workers & Pages** → Create → **Pages** → **Import an existing Git repository** → `emrebarutcu/para`
-2. Production branch: `main`, Framework: **None**, Build command: boş, Build output directory: `/`
-3. Proje → **Custom domains** → `cashfollow.app` (ve istersen `www.cashfollow.app`) — DNS kaydını Cloudflare kendisi ekler
-4. Supabase → Authentication → **URL Configuration**: Site URL `https://cashfollow.app`, Redirect URLs'e `https://cashfollow.app/**`
+Site, `para` adlı bir Cloudflare Worker'dır (Workers Builds, ayarları `wrangler.jsonc`): statik dosyalar kök dizinden sunulur
+(`.assetsignore`'dakiler hariç), yalnızca MCP adresleri Worker kodundan geçer (`mcp/worker.js`).
+
+1. Cloudflare → **Workers & Pages** → Create → **Import a repository** → `emrebarutcu/para`, Worker adı `para`
+   (adı `wrangler.jsonc`'teki `name` ile aynı olmalı), build komutu boş, deploy komutu `npx wrangler deploy`
+2. Worker → Settings → **Domains & Routes** → `cashfollow.app` (ve istersen `www.cashfollow.app`)
+3. Supabase → Authentication → **URL Configuration**: Site URL `https://cashfollow.app`, Redirect URLs'e `https://cashfollow.app/**`
 
 `main`'e her birleştirmede site kendiliğinden yayınlanır. Güvenlik ve önbellek başlıkları `_headers` dosyasında.
 Netlify'da da çalışır (`netlify.toml`); yeni adres yerleştikten sonra eski site kapatılabilir.
@@ -140,8 +143,8 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 | Yedek | `export_data`, `import_data` |
 
 Ödeme tarihleri uygulamayla aynı kodla (`taksit.js`, `eposta.js`) hesaplanır; doğrulama kuralları formlardakiyle aynıdır.
-Sunucu `functions/mcp.js` (Cloudflare Pages Function) → `mcp/server.js`; `main`'e birleştirince sitenin yanında
-kendiliğinden yayınlanır (build komutu gerekmez). Testler: `cd mcp && npm test`.
+Sunucu `mcp/server.js`, sitenin Worker'ında çalışır (`mcp/worker.js`, `wrangler.jsonc`); `main`'e birleştirince sitenin
+yanında kendiliğinden yayınlanır. Testler: `cd mcp && npm test`.
 
 **Güvenlik:** Asistanlar Supabase OAuth 2.1 ile yetki alır. Kullanıcı `cashfollow.app/oauth/consent` sayfasında giriş yapıp
 izin verir; asistan, kullanıcının kendi erişim token'ıyla çalışır ve RLS onu yalnızca kendi verisiyle sınırlar.

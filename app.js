@@ -1360,7 +1360,7 @@ async function copyFrom(e) {
 els.inboxSheet.addEventListener("click", copyFrom);
 
 // ---------- Yapay zekâ asistanları (MCP) ----------
-// Asistanlar /mcp'ye (functions/mcp.js) bağlanır; kullanıcı oauth/consent.html'de izin verir.
+// Asistanlar /mcp'ye (mcp/worker.js) bağlanır; kullanıcı oauth/consent.html'de izin verir.
 async function openAiSheet() {
   els.mcpUrl.textContent = `${location.origin}/mcp`;
   const loggedIn = !!window.syncGetUser?.();
