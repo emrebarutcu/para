@@ -135,7 +135,7 @@
   }
 
   // ---------- Kayıtlı veri ----------
-  // { people: [{ id, name, color }], cards: [kart], installments: [harcama] }
+  // { people: [{ id, name, color }], cards: [kart], installments: [harcama], entries: [varlık hareketi (varlik.js)] }
   const SERIES_COUNT = 8;   // styles.css'teki --s1…--s8
 
   function defaultState() {
@@ -143,6 +143,7 @@
       people: [{ id: "ben", name: "Ben", color: 0 }],
       cards: [],              // { id, name, limit, cutoffDay, dueDay, color, last4? }
       installments: [],       // harcamalar
+      entries: [],            // TL / döviz / altın giriş ve çıkışları
     };
   }
 
@@ -171,6 +172,7 @@
     if (!Array.isArray(s.people)) s.people = defaultState().people;
     if (!Array.isArray(s.cards)) s.cards = [];
     if (!Array.isArray(s.installments)) s.installments = [];
+    if (!Array.isArray(s.entries)) s.entries = [];
 
     // İlk taksit sürümü: tek kart (dueDay) ve "Ekstre" ayı → varsayılan kart + ilk ödeme ayı
     if (s.installments.some(i => i.statement)) {

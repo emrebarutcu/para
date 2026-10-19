@@ -1,12 +1,13 @@
 // ---------- Supabase tabloları ↔ uygulama verisi (DOM'dan bağımsız) ----------
-// Uygulama veriyi tek nesne olarak tutar ({ people, cards, installments }); Supabase'te her kişi, kart ve harcama
-// ayrı bir satırdır (supabase/tablolar.sql). Senkronizasyon (sync.js, mcp/supabase.js) son eşitlenen satırları
+// Uygulama veriyi tek nesne olarak tutar ({ people, cards, installments, entries }); Supabase'te her kişi, kart,
+// harcama ve varlık hareketi ayrı bir satırdır (supabase/tablolar.sql). Senkronizasyon (sync.js, mcp/supabase.js) son eşitlenen satırları
 // (taban: tablo → id → satırın JSON'u) bugünkü veriyle karşılaştırır: yalnızca değişen satırlar yazılır, veriden
 // çıkanlar silindi olarak işaretlenir. Uzaktan gelen satır, yerelde henüz yazılmamış değişikliği ezmez.
 (function (root) {
-  // Yazma sırası da budur: harcama kişisine ve kartına bağlıdır
-  const TABLES = ["people", "cards", "purchases"];
-  const FIELD = { people: "people", cards: "cards", purchases: "installments" };
+  // Yazma sırası da budur: harcama kişisine ve kartına, hareket kişisine bağlıdır
+  const TABLES = ["people", "cards", "purchases", "entries"];
+  const FIELD = { people: "people", cards: "cards", purchases: "installments", entries: "entries" };
+  const ASSETS = ["TRY", "USD", "EUR", "GAU"];   // varlik.js
 
   const num = v => (typeof v === "number" ? v : Number(v));
   function int(v, lo, hi) {
@@ -47,6 +48,11 @@
         plan_count: int(p.planCount, 1, 100000),
       };
     },
+    entries: e => {
+      const amount = num(e.amount), date = dateKey(e.date);
+      if (!validId(e.personId) || !ASSETS.includes(e.asset) || !Number.isFinite(amount) || amount === 0 || !date) return null;
+      return { id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date };
+    },
   };
 
   // Satır → kayıt (uygulamadaki biçim: boş alanlar yazılmaz)
@@ -64,6 +70,7 @@
       if (r.plan_count) p.planCount = r.plan_count;
       return p;
     },
+    entries: r => ({ id: r.id, personId: r.person_id, asset: r.asset, amount: Number(r.amount), desc: r.description, date: r.date }),
   };
 
   function keyOf(table, item) {
@@ -98,7 +105,7 @@
   }
 
   // Yazılacaklar: tablo → { upsert: [{ id, key, row }], delete: [id] }. Taban, yazma başarılınca key'lerle güncellenir.
-  // Harcamanın kişisi tabloda yoksa harcama yazılmaz; kartı yoksa nakit yazılır (uygulamada da nakit sayılır).
+  // Harcamanın / hareketin kişisi tabloda yoksa yazılmaz; harcamanın kartı yoksa nakit yazılır (uygulamada da nakit sayılır).
   function changes(state, base) {
     const out = {}, exists = {};
     for (const t of TABLES) {
@@ -115,6 +122,7 @@
       }
       out[t] = { upsert, delete: Object.keys(known).filter(id => !seen.has(id)) };
     }
+    out.entries.upsert = out.entries.upsert.filter(x => exists.people.has(x.row.person_id));
     out.purchases.upsert = out.purchases.upsert
       .filter(x => exists.people.has(x.row.person_id))
       .map(x => (x.row.card_id && !exists.cards.has(x.row.card_id) ? { ...x, row: { ...x.row, card_id: null } } : x));

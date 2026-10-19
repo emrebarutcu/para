@@ -1,4 +1,4 @@
--- Kişiler, kartlar ve harcamalar ayrı tablolarda
+-- Kişiler, kartlar, harcamalar ve varlık hareketleri ayrı tablolarda
 -- Eskiden kullanıcının bütün verisi cashflow_data'da tek bir JSON'du; her yazma bütün belgeyi değiştirdiği için
 -- iki cihaz (ya da uygulama ve asistan) aynı anda yazınca biri diğerinin değişikliğini siliyordu. Artık her kişi,
 -- kart ve harcama ayrı bir satırdır: uygulama (sync.js) ve asistan (mcp/supabase.js) yalnızca değişen satırları
@@ -56,9 +56,27 @@ create table if not exists purchases (
   check (date is not null or first_due is not null)
 );
 
+-- Varlık hareketleri: TL, dolar, euro ve gram altın giriş / çıkışları. amount varlığın kendi biriminde (GAU: gram),
+-- girişte artı, çıkışta eksidir; bakiye toplamdır. TL karşılığı uygulamada güncel kurla hesaplanır (/api/kur).
+create table if not exists entries (
+  user_id     uuid not null default auth.uid() references auth.users on delete cascade,
+  id          text not null check (length(id) between 1 and 100),
+  person_id   text not null,
+  asset       text not null check (asset in ('TRY', 'USD', 'EUR', 'GAU')),
+  amount      numeric not null check (amount <> 0),
+  description text not null,
+  date        date not null,
+  created_at  timestamptz not null default clock_timestamp(),
+  updated_at  timestamptz not null default clock_timestamp(),
+  deleted_at  timestamptz,
+  primary key (user_id, id),
+  foreign key (user_id, person_id) references people (user_id, id)
+);
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);
+create index if not exists entries_sync   on entries   (user_id, updated_at);
 
 -- updated_at her yazmada sunucu saatiyle yenilenir; created_at değiştirilemez
 create or replace function touch_row() returns trigger
@@ -74,7 +92,7 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['people', 'cards', 'purchases'] loop
+  foreach t in array array['people', 'cards', 'purchases', 'entries'] loop
     execute format('drop trigger if exists touch on %I', t);
     execute format('create trigger touch before insert or update on %I for each row execute function touch_row()', t);
 

@@ -144,3 +144,23 @@ test("tarih ay sonuna çekilir, sayılar metin gelse de aynı anahtar", () => {
   const base = baseOf(rows);
   assert.deepEqual(changes(toState(rows), base).purchases.upsert, []);
 });
+
+test("varlık hareketleri: satıra çevrilir, geçersizler ve kişisi olmayanlar yazılmaz", () => {
+  const rows = server();
+  rows.entries = [{ user_id: "u1", id: "e1", person_id: "ben", asset: "GAU", amount: "2.5", description: "Altın", date: "2026-10-19",
+    created_at: at(), updated_at: at(), deleted_at: null }];
+  const base = baseOf(rows);
+  const state = toState(rows);
+  assert.deepEqual(state.entries, [{ id: "e1", personId: "ben", asset: "GAU", amount: 2.5, desc: "Altın", date: "2026-10-19" }]);
+  assert.deepEqual(changes(state, base).entries, { upsert: [], delete: [] });
+
+  state.entries.push(
+    { id: "e2", personId: "ali", asset: "USD", amount: -30, desc: "Tatil", date: "2026-10-19" },
+    { id: "btc", personId: "ben", asset: "BTC", amount: 1, desc: "Desteklenmiyor", date: "2026-10-19" },
+    { id: "sifir", personId: "ben", asset: "TRY", amount: 0, desc: "Sıfır", date: "2026-10-19" },
+    { id: "yetim", personId: "yok", asset: "TRY", amount: 5, desc: "Kişisi yok", date: "2026-10-19" },
+  );
+  const plan = changes(state, base);
+  assert.deepEqual(plan.entries.upsert.map(x => x.row), [{ id: "e2", person_id: "ali", asset: "USD", amount: -30, description: "Tatil", date: "2026-10-19" }]);
+  assert.deepEqual(toState({}).entries, []);
+});
