@@ -53,7 +53,6 @@ let entryFilter = "all";      // varlıklarda seçili kişi
 let timelineKind = "all";     // özetteki zaman çizelgesi: all | in | out
 let timelineMode = readPref(PREF.timelineMode) === "calendar" ? "calendar" : "list";
 let timelineDay = null;       // takvimde seçili gün
-let timelineOpen = null;      // özetteki zaman çizelgesinde açılan ödeme (ayrıntısı gösterilir)
 let editingEntryId = null;    // düzenlenen varlık hareketi
 let lastAsset = "TRY";
 let rates = readRates();      // son alınan kurlar: { rates: { TRY, USD, EUR, GAU }, updatedAt, fetchedAt }
@@ -270,6 +269,8 @@ const els = {
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
   termField: $("termField"), termNote: $("termNote"), termChoices: $("termChoices"),
+  eventSheet: $("eventSheet"), eventTitle: $("eventTitle"), eventDate: $("eventDate"), eventSplit: $("eventSplit"),
+  eventItems: $("eventItems"), eventToFlow: $("eventToFlow"),
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
@@ -517,7 +518,7 @@ function timelineItem(it, today, r) {
   const title = el("div", "tl-title");
   const sub = el("div", "tl-sub");
   const side = el("div", "tl-amt");
-  let open, detail = null;
+  let open;
 
   if (it.entry) {
     const e = it.entry;
@@ -541,22 +542,12 @@ function timelineItem(it, today, r) {
     what.append(dot(cardColor(ev.cardId)), document.createTextNode(names.slice(0, 2).join(", ") + (names.length > 2 ? ` +${names.length - 2}` : "")));
     sub.append(what);
     side.append(el("span", "amount", "−" + fmt(ev.total)));
-    // Dokununca yerinde açılır: kimin ne kadar ödeyeceği ve ödenen taksitler
-    const isOpen = timelineOpen === ev.key;
-    li.dataset.ev = ev.key;
-    li.classList.toggle("open", isOpen);
-    li.setAttribute("aria-expanded", String(isOpen));
-    if (isOpen) detail = eventDetail(ev);
-    open = () => {
-      timelineOpen = isOpen ? null : ev.key;
-      render();
-      els.timeline.querySelector(`.tl-item[data-ev="${CSS.escape(ev.key)}"]`)?.focus();
-    };
+    li.setAttribute("aria-haspopup", "dialog");
+    open = () => openEventSheet(ev);
   }
 
   main.append(title, sub);
   li.append(el("span", "tl-mark"), main, side);
-  if (detail) li.append(detail);
   li.addEventListener("click", open);
   li.addEventListener("keydown", e => {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
@@ -564,20 +555,114 @@ function timelineItem(it, today, r) {
   return li;
 }
 
-// Ödemenin ayrıntısı: kişilere düşen pay (birden çok kişi varsa) ve ödenen taksitler
-function eventDetail(ev) {
-  const box = el("div", "tl-detail");
-  const split = el("div", "month-split");
-  for (const p of state.people) {
-    const v = ev.byPerson[p.id];
-    if (!v) continue;
-    const s = el("span");
-    s.append(dot(seriesVar(p)), document.createTextNode(`${p.name} ${fmt(v)}`));
-    split.append(s);
+// ---------- Ödeme ayrıntısı (zaman çizelgesinden) ----------
+// Kişilere dağılım halka grafikte (renk kişinin rengi, sabit sıra) ve yanında tutar / yüzde listesi;
+// altında ödenen taksitler kişi kişi. Dilime ya da listedeki kişiye gelince / dokununca ortada o kişinin payı yazar.
+let sheetEvent = null;
+
+function openEventSheet(ev) {
+  sheetEvent = ev;
+  const today = T.todayKey();
+  els.eventTitle.replaceChildren(dot(cardColor(ev.cardId)), document.createTextNode(ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit ödemeler"));
+  els.eventDate.textContent = `${WEEKDAYS[T.toDate(ev.date).getDay()]}, ${fmtDay(ev.date)} · ${relDays(ev.date, today)}`;
+
+  const parts = state.people.filter(p => ev.byPerson[p.id] > 0).map(p => ({ person: p, value: ev.byPerson[p.id] }));
+  els.eventSplit.removeAttribute("data-active");
+  els.eventSplit.replaceChildren(...eventSplit(parts, ev.total));
+  els.eventItems.replaceChildren(...eventItemRows(ev));
+  openSheet(els.eventSheet);
+}
+
+els.eventToFlow.addEventListener("click", () => {
+  els.eventSheet.close();
+  if (sheetEvent) openEvent(sheetEvent);
+});
+
+function eventSplit(parts, total) {
+  const R = 66, W = 18, C = 2 * Math.PI * R;
+  const gap = parts.length > 1 ? 3 : 0;   // dilimler arasında yüzey boşluğu
+  const ns = "http://www.w3.org/2000/svg";
+  const box = el("div", "donut");
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 168 168");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", parts.map(x => `${x.person.name} ${fmt(x.value)}`).join(", "));
+  const circle = cls => {
+    const c = document.createElementNS(ns, "circle");
+    c.setAttribute("cx", "84"); c.setAttribute("cy", "84"); c.setAttribute("r", String(R));
+    c.setAttribute("class", cls);
+    return c;
+  };
+  svg.append(circle("track"));
+
+  const center = el("div", "donut-center");
+  const big = el("strong"), small = el("span");
+  center.append(big, small);
+  const pct = v => `%${Math.round((v / total) * 100)}`;
+
+  const legend = el("ul", "ev-legend");
+  const segs = new Map(), rows = new Map();
+  let pinned = null;
+  const show = id => {
+    const x = parts.find(p => p.person.id === id);
+    box.parentElement?.toggleAttribute("data-active", !!x);
+    for (const [k, n] of segs) n.classList.toggle("on", k === id);
+    for (const [k, n] of rows) n.classList.toggle("on", k === id);
+    big.textContent = fmt(x ? x.value : total);
+    small.textContent = x ? `${x.person.name} · ${pct(x.value)}` : parts.length > 1 ? `${parts.length} kişi` : "toplam";
+  };
+  const hook = (node, id) => {
+    node.addEventListener("pointerenter", () => show(id));
+    node.addEventListener("pointerleave", () => show(pinned));
+    node.addEventListener("click", () => { pinned = pinned === id ? null : id; show(pinned); });
+  };
+
+  let start = 0;
+  for (const { person, value } of parts) {
+    const len = (value / total) * C;
+    const seg = circle("seg");
+    seg.style.stroke = seriesVar(person);
+    seg.setAttribute("stroke-dasharray", `${Math.max(len - gap, 0.5)} ${C}`);
+    seg.setAttribute("stroke-dashoffset", String(-start));
+    start += len;
+    hook(seg, person.id);
+    segs.set(person.id, seg);
+    svg.append(seg);
+
+    const b = el("button", "ev-leg");
+    b.type = "button";
+    const name = el("span", "name");
+    name.append(dot(seriesVar(person)), el("span", "", person.name));
+    b.append(name, el("span", "pct", pct(value)), el("span", "amount", fmt(value)));
+    b.addEventListener("focus", () => show(person.id));
+    b.addEventListener("blur", () => show(pinned));
+    hook(b, person.id);
+    rows.set(person.id, b);
+    const li = el("li");
+    li.append(b);
+    legend.append(li);
   }
-  if (split.childElementCount > 1) box.append(split);
-  box.append(eventItems(ev));
-  return box;
+  box.append(svg, center);
+  show(null);
+  return [box, legend];
+}
+
+// Ödenen taksitler: kişi sırasıyla, kişinin içinde büyükten küçüğe
+function eventItemRows(ev) {
+  const order = new Map(state.people.map((p, i) => [p.id, i]));
+  const items = [...ev.items].sort((a, b) =>
+    order.get(a.purchase.personId) - order.get(b.purchase.personId) || b.amount - a.amount);
+  return items.map(({ purchase, no, amount }) => {
+    const p = personById(purchase.personId);
+    const plan = T.planLength(purchase);
+    const li = el("li");
+    li.style.setProperty("--c", seriesVar(p));
+    const main = el("div", "ev-item-main");
+    main.append(el("span", "desc", purchase.desc),
+      el("span", "meta", `${p.name} · ${plan > 1 ? `${no}/${plan}. taksit` : "peşin"}`));
+    li.append(main, el("span", "amount", fmt(amount)));
+    return li;
+  });
 }
 
 function renderPeopleSummary(months, start) {

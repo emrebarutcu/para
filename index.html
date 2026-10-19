@@ -394,6 +394,31 @@
     </div>
   </dialog>
 
+  <!-- ── Ödeme ayrıntısı ────────────────────────────────── -->
+  <dialog class="sheet" id="eventSheet" aria-labelledby="eventTitle">
+    <div class="sheet-form">
+      <header class="sheet-head">
+        <div class="ev-head">
+          <h2 id="eventTitle"></h2>
+          <p class="ev-date" id="eventDate"></p>
+        </div>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <div class="ev-split" id="eventSplit"></div>
+        <section>
+          <h3 class="ev-sub">Harcamalar</h3>
+          <ul class="ev-items" id="eventItems"></ul>
+        </section>
+      </div>
+      <footer class="sheet-foot">
+        <button type="button" class="btn btn-ghost" id="eventToFlow">Akışta göster</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" data-close>Tamam</button>
+      </footer>
+    </div>
+  </dialog>
+
   <!-- ── Ayarlar ────────────────────────────────────────── -->
   <dialog class="sheet" id="settingsSheet" aria-labelledby="settingsTitle">
     <div class="sheet-form">
