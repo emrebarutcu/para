@@ -968,6 +968,21 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .auth-forgot:hover { color: var(--text); }
 .auth-user-email { font-weight: 600; margin: 0 0 16px; }
 
+/* ── Yapay zekâ erişim izni (oauth/consent.html) ── */
+.consent-page { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.consent-box { display: flex; flex-direction: column; gap: 12px; }
+.consent-box > div[id] { display: flex; flex-direction: column; gap: 12px; }
+.consent-box > div[id][hidden] { display: none; }
+.consent-box .modal-desc, .consent-box .auth-msg { margin: 0; }
+.consent-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.consent-title { font-size: 18px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; }
+.consent-redirect code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--text); }
+.consent-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.consent-actions .btn { height: 46px; }
+.consent-box > div > .auth-forgot { align-self: center; }
+.ai-apps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ai-apps li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+
 /* ── Responsive ── */
 @media (max-width: 639px) {
   dialog.sheet {

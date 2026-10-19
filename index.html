@@ -31,6 +31,7 @@
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11.5m0 0L7.5 11m4.5 4.5 4.5-4.5M4.5 15v3.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V15"/></symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7.5 18.5a4.5 4.5 0 0 1-.7-8.95A5.75 5.75 0 0 1 17.9 9a4.75 4.75 0 0 1-.4 9.5z"/></symbol>
     <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6 8.5-6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5c.6 4.4 2.6 6.4 7 7-4.4.6-6.4 2.6-7 7-.6-4.4-2.6-6.4-7-7 4.4-.6 6.4-2.6 7-7zM18.5 15.5c.25 1.8 1 2.55 2.75 2.75-1.75.25-2.5 1-2.75 2.75-.25-1.75-1-2.5-2.75-2.75 1.75-.2 2.5-.95 2.75-2.75z"/></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 20a6.5 6.5 0 0 0-2.6-5.2"/></symbol>
   </svg>
 
@@ -310,6 +311,10 @@
             <svg class="ic"><use href="#i-mail"/></svg>
             <span class="row-text"><strong>Banka e-postaları</strong><small>Sana özel adrese gelen harcamalar kartına eklenir</small></span>
           </button>
+          <button type="button" class="row-btn" id="aiBtn">
+            <svg class="ic"><use href="#i-spark"/></svg>
+            <span class="row-text"><strong>Yapay zekâ asistanları</strong><small>Claude, ChatGPT gibi asistanlar harcamalarını yönetsin (MCP)</small></span>
+          </button>
         </div>
         <div class="settings-group">
           <span class="group-label">Veri</span>
@@ -358,6 +363,33 @@
           <textarea id="inboxTry" rows="4" placeholder="Bankadan gelen harcama e-postasının metnini yapıştır"></textarea>
         </label>
         <div class="preview" id="inboxTryResult" aria-live="polite"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ── Yapay zekâ asistanları (MCP) ───────────────────── -->
+  <dialog class="sheet" id="aiSheet" aria-labelledby="aiTitle">
+    <div class="sheet-form">
+      <header class="sheet-head">
+        <h2 id="aiTitle">Yapay zekâ asistanları</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <p class="hint">CashFollow'u MCP destekleyen bir asistana bağla; "Telefonu 6 taksitle Bonus'a ekle", "Bu ay ne kadar ödeyeceğim?" gibi isteklerle harcama, kart ve kişileri yönetsin.</p>
+        <div class="copy-row copy-row-lg">
+          <code id="mcpUrl">…</code>
+          <button type="button" class="btn btn-primary sm" data-copy="mcpUrl">Kopyala</button>
+        </div>
+        <ol class="steps">
+          <li><strong>Claude</strong>: Ayarlar → Bağlayıcılar → Özel bağlayıcı ekle, adresi yapıştır. <strong>ChatGPT</strong>: Ayarlar → Uygulamalar'da geliştirici modunu açıp yeni uygulama olarak ekle. Claude Code: <code>claude mcp add --transport http cashfollow &lt;adres&gt;</code></li>
+          <li>Açılan CashFollow sayfasında giriş yap ve <strong>İzin ver</strong>'e dokun.</li>
+        </ol>
+        <p class="hint">Asistan, izin verdiğin hesabın verisini okuyup değiştirebilir; yaptığı değişiklikler burada anında görünür.</p>
+        <p class="hint warn-text" id="aiLoginNote" hidden>Bu özellik bulut hesabıyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.</p>
+        <div class="settings-group" id="aiAppsGroup" hidden>
+          <span class="group-label">Bağlı uygulamalar</span>
+          <ul class="ai-apps" id="aiApps"></ul>
+        </div>
       </div>
     </div>
   </dialog>
