@@ -349,8 +349,12 @@ function renderUpcoming(last) {
     const li = payRow(ev, today, { relative: true });
     li.classList.add("clickable");
     li.tabIndex = 0;
-    li.addEventListener("click", () => openEvent(ev));
-    li.addEventListener("keydown", e => { if (e.key === "Enter") openEvent(ev); });
+    li.setAttribute("role", "button");
+    li.setAttribute("aria-haspopup", "dialog");
+    li.addEventListener("click", () => openEventSheet(ev));
+    li.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEventSheet(ev); }
+    });
     els.upcoming.append(li);
   }
 }
