@@ -87,9 +87,11 @@ window.onAuthLogin = function (userId) {
   state = loadState();   // kullanıcıya özel local storage'a geç
   resetView();
   render();
+  askOfflineData();
 };
 window.onAuthLogout = function () {
   window.CF_USER_ID = null;
+  els.moveModal.hidden = true;
   stateOwner = null;
   state = defaultState();  // temiz slate — hesap verisi ekranda kalmasın
   resetView();
@@ -264,6 +266,7 @@ const els = {
   aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"),
   aiAppsGroup: $("aiAppsGroup"), aiApps: $("aiApps"),
   inboxCheck: $("inboxCheck"), inboxRenew: $("inboxRenew"), inboxTry: $("inboxTry"), inboxTryResult: $("inboxTryResult"),
+  moveModal: $("moveModal"), moveSummary: $("moveSummary"), moveKeepBtn: $("moveKeepBtn"), moveDropBtn: $("moveDropBtn"), moveMsg: $("moveMsg"),
   authBtn: $("authBtn"), exportBtn: $("exportBtn"), importInput: $("importInput"),
   toast: $("toast"),
 };
@@ -1726,6 +1729,67 @@ els.importInput.addEventListener("change", async e => {
     return;
   } finally { els.importInput.value = ""; }
   if (typeof window.syncPushNow === 'function') await window.syncPushNow();
+});
+
+// ---------- Girişten önce bu cihaza girilen veri ----------
+// Girişsiz kullanımda veri STORAGE_KEY_BASE'de durur. Giriş yapınca kullanıcı onu hesaba taşımayı ya da silmeyi seçer;
+// seçene kadar olduğu gibi kalır (pencere her girişte yeniden sorar).
+function offlineData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_BASE);
+    if (!raw) return null;
+    const s = hydrate(JSON.parse(raw));
+    const people = s.people.filter(p => !(p.id === "ben" && p.name === "Ben"));
+    if (!people.length && !s.cards.length && !s.installments.length && !s.entries.length) {
+      localStorage.removeItem(STORAGE_KEY_BASE);   // yalnızca varsayılan kişi: sorulacak bir şey yok
+      return null;
+    }
+    return s;
+  } catch { return null; }
+}
+
+function askOfflineData() {
+  const local = offlineData();
+  if (!local) return;
+  const people = local.people.filter(p => !(p.id === "ben" && p.name === "Ben")).length;
+  els.moveSummary.textContent = [[local.installments.length, "harcama"], [local.cards.length, "kart"],
+    [local.entries.length, "varlık hareketi"], [people, "kişi"]].filter(([n]) => n).map(([n, w]) => `${n} ${w}`).join(", ");
+  els.moveMsg.textContent = "";
+  els.moveModal.hidden = false;
+}
+
+function setMoveBusy(busy) {
+  els.moveKeepBtn.disabled = els.moveDropBtn.disabled = busy;
+}
+
+els.moveKeepBtn.addEventListener("click", async () => {
+  const userId = window.CF_USER_ID;
+  setMoveBusy(true);
+  els.moveMsg.textContent = "";
+  // Önce hesaptaki veri gelsin: hiç eşitlenmemiş cihazda buluttaki veri ekrandakinin yerine geçer, eklenen kaybolurdu
+  await window.syncRefresh?.();
+  setMoveBusy(false);
+  if (!userId || stateOwner !== userId || window.CF_USER_ID !== userId) return;   // bu arada çıkış yapıldı
+  if (!window.syncPulled?.()) {
+    els.moveMsg.textContent = "⚠ Hesabındaki veriler alınamadı. İnternet bağlantını kontrol edip yeniden dene.";
+    els.moveMsg.style.color = "var(--expense)";
+    return;
+  }
+  const local = offlineData();
+  if (local) state = hydrate(window.Tablo.combine(state, local));
+  localStorage.removeItem(STORAGE_KEY_BASE);
+  els.moveModal.hidden = true;
+  saveState();
+  render();
+  toast("Veriler hesabına taşındı");
+  await window.syncPushNow?.();
+});
+
+els.moveDropBtn.addEventListener("click", () => {
+  if (!confirm("Bu cihaza girdiğin veriler silinecek. Devam edelim mi?")) return;
+  localStorage.removeItem(STORAGE_KEY_BASE);
+  els.moveModal.hidden = true;
+  toast("Cihazdaki veriler silindi");
 });
 
 // ---------- Excel import ----------

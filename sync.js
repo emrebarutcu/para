@@ -129,6 +129,9 @@
 
   window.syncGetUser = function () { return user; };
 
+  // Bu cihazda hesabın verisi en az bir kez çekildi mi
+  window.syncPulled = function () { return !!(user && loadMeta(user.id)); };
+
   // Uygulama öne gelince: başka cihazdaki değişiklikler ve yeni e-postalar
   window.syncRefresh = function () {
     if (db && user) return refresh();

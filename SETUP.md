@@ -64,6 +64,10 @@ Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
 Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.
 Giriş yapmamış kullanıcıya ilk açılışta giriş / kayıt penceresi çıkar; altındaki "Çevrimdışı devam et" seçilirse
 pencere bir daha çıkmaz (`para.offline`), Özet'in üstünde verilerin yalnızca bu cihazda durduğunu söyleyen bir not görünür.
+Girişsiz kullanımın verisi `cashflow.v1`'de, hesabınki `cashflow.v1.<kullanıcı id>`'de durur. Girişsizken veri girilmiş
+cihazda giriş yapılınca kullanıcı seçer: **Hesabıma taşı** (önce hesaptaki veri çekilir, cihazdakiler eklenir; aynı id'li
+kayıt bir kez, aynı adlı kişi ve aynı son 4 haneli / aynı adlı kart birleşir — `Tablo.combine`) ya da **Sil, hesabımdakilerle
+devam et**. Seçilene kadar cihazdaki veri silinmez, pencere her girişte yeniden çıkar.
 Her kayıttan 1.5s sonra yalnızca değişen kişi / kart / harcama / varlık hareketi satırları yazılır; silinenler satırdan kalkmaz,
 `deleted_at` ile işaretlenir. Uygulama açılınca, öne gelince ve başka cihaz (ya da asistan) yazınca (Realtime)
 son okumadan beri değişen satırlar çekilir. Aynı anda farklı kayıtlar değişirse hepsi korunur; aynı kayıt iki

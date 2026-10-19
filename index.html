@@ -526,6 +526,26 @@
     </div>
   </div>
 
+  <!-- Girişten önce bu cihaza girilen veri (app.js) -->
+  <div id="moveModal" class="modal-wrap" hidden>
+    <div class="modal-overlay"></div>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="moveTitle">
+      <div class="modal-head"><h2 id="moveTitle">Bu cihazdaki veriler</h2></div>
+      <p class="modal-desc">Giriş yapmadan önce bu cihaza girdiğin veriler var (<span id="moveSummary"></span>). Bunlarla ne yapalım?</p>
+      <div class="move-actions">
+        <button type="button" class="row-btn" id="moveKeepBtn">
+          <svg class="ic"><use href="#i-cloud"/></svg>
+          <span class="row-text"><strong>Hesabıma taşı</strong><small>Hesabındaki verilere eklenir; aynı kişi ve kartlar birleşir</small></span>
+        </button>
+        <button type="button" class="row-btn" id="moveDropBtn">
+          <svg class="ic"><use href="#i-x"/></svg>
+          <span class="row-text"><strong>Sil, hesabımdakilerle devam et</strong><small>Bu cihaza girdiklerin silinir</small></span>
+        </button>
+      </div>
+      <p id="moveMsg" class="auth-msg"></p>
+    </div>
+  </div>
+
   <div id="chartTooltip" class="chart-tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import Tablo from "../../tablo.js";
 
-const { toState, baseOf, changes, merge } = Tablo;
+const { toState, baseOf, changes, merge, combine } = Tablo;
 
 let clock = 0;
 const at = () => new Date(Date.UTC(2026, 9, 19, 9, 0, 0, ++clock)).toISOString().replace("Z", "+00:00");
@@ -163,4 +163,36 @@ test("varlık hareketleri: satıra çevrilir, geçersizler ve kişisi olmayanlar
   const plan = changes(state, base);
   assert.deepEqual(plan.entries.upsert.map(x => x.row), [{ id: "e2", person_id: "ali", asset: "USD", amount: -30, description: "Tatil", date: "2026-10-19" }]);
   assert.deepEqual(toState({}).entries, []);
+});
+
+test("cihazdaki veri hesaba eklenir: aynı kayıt iki kez eklenmez, aynı kişi / kart birleşir", () => {
+  const account = {
+    people: [{ id: "ben", name: "Emre", color: 0 }, { id: "a1", name: "Ali", color: 1 }],
+    cards: [{ id: "k1", name: "Bonus", limit: 0, cutoffDay: 12, dueDay: 22, color: 0, last4: "1234" }, { id: "kart", name: "Kredi kartı", limit: 0, cutoffDay: 1, dueDay: 10, color: 1 }],
+    installments: [{ id: "p1", personId: "ben", cardId: "k1", desc: "Eski", total: 100, count: 1, date: "2026-10-01" }],
+    entries: [],
+  };
+  const local = {
+    people: [{ id: "ben", name: "Ben", color: 0 }, { id: "x1", name: "ali ", color: 2 }, { id: "y1", name: "Ayşe", color: 3 }],
+    cards: [
+      { id: "c9", name: "Benim kartım", limit: 0, cutoffDay: 12, dueDay: 22, color: 0, last4: "1234" },
+      { id: "c8", name: "World", limit: 0, cutoffDay: 5, dueDay: 15, color: 2, last4: "9999" },
+      { id: "kart", name: "Kredi kartı", limit: 0, cutoffDay: 1, dueDay: 10, color: 0 },
+    ],
+    installments: [
+      { id: "p1", personId: "ben", cardId: "k1", desc: "Eski", total: 100, count: 1, date: "2026-10-01" },
+      { id: "p2", personId: "x1", cardId: "c9", desc: "Ali'nin", total: 300, count: 3, date: "2026-10-05" },
+      { id: "p3", personId: "y1", cardId: "c8", desc: "Ayşe'nin", total: 50, count: 1, date: "2026-10-06" },
+      { id: "p4", personId: "ben", cardId: null, desc: "Nakit", total: 20, count: 1, date: "2026-10-07" },
+    ],
+    entries: [{ id: "e1", personId: "x1", asset: "TRY", amount: 10, desc: "Maaş", date: "2026-10-01" }],
+  };
+  const out = combine(account, local);
+  assert.deepEqual(out.people.map(p => [p.id, p.name]), [["ben", "Emre"], ["a1", "Ali"], ["y1", "Ayşe"]]);
+  assert.deepEqual(out.cards.map(c => c.id), ["k1", "kart", "c8"]);
+  assert.deepEqual(out.installments.map(p => [p.id, p.personId, p.cardId]),
+    [["p1", "ben", "k1"], ["p2", "a1", "k1"], ["p3", "y1", "c8"], ["p4", "ben", null]]);
+  assert.deepEqual(out.entries.map(e => [e.id, e.personId]), [["e1", "a1"]]);
+  assert.equal(account.people.length, 2);   // hesabın verisi değişmez
+  assert.equal(changes(out, {}).purchases.upsert.length, 4);
 });

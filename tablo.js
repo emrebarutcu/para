@@ -166,7 +166,40 @@
     };
   }
 
-  const api = { TABLES, FIELD, keyOf, toState, baseOf, changes, merge };
+  // Girişsiz kullanılan cihazın verisini (local) hesabın verisine (account) ekler. Aynı id'li kayıt aynı kayıttır
+  // (daha önce eşitlenmiş olabilir; varsayılan kişi her yerde "ben"), iki kez eklenmez. Kişi aynı adlı kişiyle, kart
+  // aynı son 4 haneli ya da aynı adlı kartla birleşir; harcama ve hareketler birleşilen kişiye / karta bağlanır.
+  function combine(account, local) {
+    const out = { ...account };
+    const name = s => String(s ?? "").trim().toLocaleLowerCase("tr-TR");
+    const absorb = (field, same) => {
+      const list = [...(account[field] || [])], map = {};
+      for (const item of local[field] || []) {
+        if (!item || !validId(item.id)) continue;
+        const match = list.find(x => x.id === item.id) || list.find(x => same(x, item));
+        map[item.id] = match ? match.id : item.id;
+        if (!match) list.push(item);
+      }
+      out[field] = list;
+      return map;
+    };
+    const people = absorb("people", (a, b) => name(a.name) === name(b.name));
+    const cards = absorb("cards", (a, b) => (a.last4 && b.last4 ? a.last4 === b.last4 : name(a.name) === name(b.name)));
+    for (const field of ["installments", "entries"]) {
+      const list = [...(account[field] || [])], ids = new Set(list.map(x => x.id));
+      for (const item of local[field] || []) {
+        if (!item || ids.has(item.id)) continue;
+        ids.add(item.id);
+        const moved = { ...item, personId: people[item.personId] ?? item.personId };
+        if (item.cardId) moved.cardId = cards[item.cardId] ?? item.cardId;
+        list.push(moved);
+      }
+      out[field] = list;
+    }
+    return out;
+  }
+
+  const api = { TABLES, FIELD, keyOf, toState, baseOf, changes, merge, combine };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Tablo = api;
 })(this);
