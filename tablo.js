@@ -65,7 +65,11 @@
     entries: e => {
       const amount = num(e.amount), date = dateKey(e.date);
       if (!validId(e.personId) || !ASSETS.includes(e.asset) || !Number.isFinite(amount) || amount === 0 || !date) return null;
-      return { id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date };
+      const repeat = int(e.repeat, 0, 600);
+      return {
+        id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date,
+        repeat_count: repeat === 0 || repeat >= 2 ? repeat : null,
+      };
     },
   };
 
@@ -86,7 +90,11 @@
       if (r.plan_count) p.planCount = r.plan_count;
       return p;
     },
-    entries: r => ({ id: r.id, personId: r.person_id, asset: r.asset, amount: Number(r.amount), desc: r.description, date: r.date }),
+    entries: r => {
+      const e = { id: r.id, personId: r.person_id, asset: r.asset, amount: Number(r.amount), desc: r.description, date: r.date };
+      if (r.repeat_count != null) e.repeat = r.repeat_count;
+      return e;
+    },
   };
 
   function keyOf(table, item) {

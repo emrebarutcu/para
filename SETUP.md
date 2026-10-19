@@ -109,11 +109,15 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
 
 ### Yükseltme notları
 
-- **2.0.0** — Kartın eski kesim / son ödeme günleri (`cards.history`). Yayından **önce** `supabase/tablolar.sql` yeniden
-  çalıştırılır (`sh supabase/sql.sh supabase/tablolar.sql`); sütun yoksa yeni sürüm kartları buluta yazamaz. Önbellekteki
-  eski sürüm sütunu yazmaz, olduğu gibi bırakır (eski günleri bilmediği için kartın bütün ödemelerini bugünkü günlerle
-  gösterir). MCP'de `update_card` günler değişince, karttaki harcamaları etkiliyorsa `transition` ister: araç seçenekleri
-  hata olarak döndürür, asistan kullanıcıya sorup yeniden çağırır.
+- **2.0.0** — Kartın eski kesim / son ödeme günleri (`cards.history`) ve tekrarlayan varlık hareketleri
+  (`entries.repeat_count`). Yayından **önce** `supabase/tablolar.sql` yeniden çalıştırılır
+  (`sh supabase/sql.sh supabase/tablolar.sql`; zararsızdır, yalnızca eksik sütunları ekler); sütunlar yoksa yeni sürüm
+  eşitleyemez. Önbellekteki 1.x sürümleri yeni sütunları yazmaz, olduğu gibi bırakır: kartın bütün ödemelerini bugünkü
+  günlerle, tekrarlayan hareketi tek seferlik gösterir. 2.0'a geçen cihaz ilk eşitlemede bütün satırları yeniden çeker
+  (eşitleme tabanı yeni satır biçimine çevrilir), 1.x'in görmediği eski günler ve tekrarlar böylece cihaza gelir.
+  MCP: `update_card` günler değişince, karttaki harcamaları etkiliyorsa `transition` ister (araç seçenekleri hata olarak
+  döndürür, asistan kullanıcıya sorup yeniden çağırır); varlık araçlarına isteğe bağlı `repeat` parametresi, cevaplara
+  `repeat` alanı eklendi; `get_assets` tekrarlayan hareketin yalnızca tarihi gelmiş tekrarlarını sayar.
 
 ## 3. Mobil (iPhone / Android)
 
@@ -164,6 +168,10 @@ Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
 **Varlıklar** sekmesinde tarihli giriş / çıkış hareketleri tutulur (maaş, döviz ya da altın alımı, harcama, satış).
 Miktar varlığın kendi birimindedir (altında gram); bakiye hareketlerin toplamıdır. Her varlığın ve toplamın TL
 karşılığı güncel satış kuruyla gösterilir.
+
+Hareket her ay tekrarlanabilir (maaş, kira, aidat): formdaki **Tekrar** ile belirli sayıda ay ya da süresiz. Tekrarlar
+ilk tarihin gününde düşer (ay kısaysa ayın son günü); bakiyeye yalnızca tarihi gelmiş tekrarlar girer. Süresiz
+tekrarı durdurmak için ay sayısı işlenen tekrar sayısına çekilir.
 
 Kurlar sitenin Worker'ından gelir: `GET /api/kur` → `{ rates: { TRY, USD, EUR, GAU }, updatedAt, source }`
 (`mcp/kur.js`). Kaynak [Truncgil](https://finans.truncgil.com) (Türkiye piyasası, gram altın dahil); erişilemezse

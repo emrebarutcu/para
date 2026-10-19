@@ -467,6 +467,38 @@ test("varlıklar: TL, döviz ve gram altın hareketleri, güncel kurla TL karş�
   assert.deepEqual(stored(sb).entries.map(e => e.desc), ["Dolar alımı", "Tatil"]);
 });
 
+test("tekrarlayan varlık hareketleri: bakiyeye yalnızca tarihi gelen tekrarlar girer", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  // Bugün 2026-10-18
+  const maas = await c.call("add_entry", { asset: "TRY", direction: "in", amount: 50000, description: "Maaş", date: "2026-08-15", repeat: 0 });
+  assert.deepEqual(maas.entry.repeat, { every: "month", times: null, lastDate: null, processed: 3, nextDate: "2026-11-15" });
+  assert.equal(maas.balance, 150000);
+  const kira = await c.call("add_entry", { asset: "TRY", direction: "out", amount: 20000, description: "Kira", date: "2026-10-20", repeat: 3 });
+  assert.deepEqual(kira.entry.repeat, { every: "month", times: 3, lastDate: "2026-12-20", processed: 0, nextDate: "2026-10-20" });
+  assert.equal(kira.balance, 150000);
+  const tek = await c.call("add_entry", { asset: "USD", direction: "in", amount: 10, description: "Tek", repeat: 1 });
+  assert.equal(tek.entry.repeat, undefined);
+  assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", repeat: 601 })).error, /repeat/);
+
+  assert.equal(sb.db.entries.find(r => r.id === maas.entry.id).repeat_count, 0);
+  assert.equal(sb.db.entries.find(r => r.id === kira.entry.id).repeat_count, 3);
+  assert.equal(sb.db.entries.find(r => r.id === tek.entry.id).repeat_count, null);
+
+  // Aralık süzgeci: tekrarlayan hareket aralıkta yinelenmeye devam ediyorsa listelenir
+  const range = await c.call("list_entries", { asset: "TRY", from: "2027-01-01" });
+  assert.deepEqual(range.entries.map(e => e.description), ["Maaş"]);
+  assert.deepEqual((await c.call("list_entries", { asset: "TRY", to: "2026-10-01" })).entries.map(e => e.description), ["Maaş"]);
+
+  // Süresiz tekrarı durdurmak: repeat işlenen sayıya çekilir; diğer alanlar korunur
+  const stop = await c.call("update_entry", { id: maas.entry.id, repeat: 3 });
+  assert.equal(stop.entry.repeat.nextDate, null);
+  assert.equal(stop.entry.amount, 50000);
+  const once = await c.call("update_entry", { id: kira.entry.id, amount: 25000 });
+  assert.equal(once.entry.repeat.times, 3);
+  assert.equal((await c.call("get_assets")).assets[0].balance, 150000);
+});
+
 test("kur alınamazsa yalnızca TL sayılır", async () => {
   const { clearRates } = await import("../kur.js");
   clearRates();
