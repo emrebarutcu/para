@@ -23,6 +23,28 @@ window.SUPABASE_URL      = 'https://xyzxyz.supabase.co';
 window.SUPABASE_ANON_KEY = 'eyJhbGci...';
 ```
 
+### Giriş e-postaları (Brevo SMTP)
+
+Kayıt doğrulama ve şifre sıfırlama e-postalarını Supabase gönderir. Hazır e-posta servisi yalnızca Supabase
+organizasyonundaki ekip üyelerine ve saatte birkaç e-posta gönderdiği için kendi SMTP'miz tanımlıdır: **Brevo**
+(ücretsiz planda günde 300 e-posta). Gönderen `noreply@mail.cashfollow.app`; alt alan adı, kök alan adındaki Cloudflare
+Email Routing'in (banka e-postaları, bölüm 6) SPF / DMARC kayıtlarına dokunmamak için.
+
+1. **Brevo → Senders, Domains & Dedicated IPs → Domains → Add a domain** → `mail.cashfollow.app`. Brevo'nun verdiği
+   doğrulama, DKIM ve DMARC kayıtları Cloudflare DNS'e eklenir (CNAME'ler proxy'siz, gri bulut) → **Authenticate**.
+2. **Senders → Add a sender**: `CashFollow`, `noreply@mail.cashfollow.app`.
+3. **Ayarlar → SMTP & API → SMTP**: **Generate SMTP key** (API key değil). Aynı sayfadaki **Login** kullanıcı adıdır.
+4. **Supabase → Authentication → Emails → SMTP Settings** → Enable custom SMTP:
+   sender `noreply@mail.cashfollow.app` / `CashFollow`, host `smtp-relay.brevo.com`, port `587`,
+   username Brevo'daki Login, password SMTP key.
+5. **Authentication → Rate Limits**: özel SMTP'de e-posta sınırı saatte 30'dur, gerekirse artırılır.
+6. **Authentication → Emails → Templates**: "Confirm signup" ve "Reset password" metinleri Türkçe; `{{ .ConfirmationURL }}`
+   olduğu gibi kalır.
+
+E-posta gelmezse önce **Brevo → Transactional → Email logs**'a bakılır. Uygulama kayıttan sonra ve doğrulanmamış hesapla
+girişte "Doğrulama e-postasını yeniden gönder" gösterir; adres zaten kayıtlıysa (Supabase bu durumda başarılı döner ama
+e-posta göndermez) kayıt yerine girişe yönlendirir.
+
 ## 2. Yayın (Cloudflare Workers → cashfollow.app)
 
 Site, `para` adlı bir Cloudflare Worker'dır (Workers Builds, ayarları `wrangler.jsonc`): statik dosyalar kök dizinden sunulur
