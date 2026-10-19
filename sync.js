@@ -9,7 +9,8 @@
   let onSyncedCb = null;
   let inboxChannel = null;
   let dataChannel = null;
-  let welcome = false;   // ilk açılıştaki giriş penceresi: kapatılamaz, "Çevrimdışı devam et" ile geçilir
+  let welcome = false;
+  let loginFor = null;   // onAuthLogin'in çağrıldığı kullanıcı   // ilk açılıştaki giriş penceresi: kapatılamaz, "Çevrimdışı devam et" ile geçilir
 
   const OFFLINE_PREF = 'para.offline';   // girişsiz devam etmeyi seçti; ilk açılış penceresi bir daha çıkmaz
 
@@ -76,6 +77,36 @@
     showView('authResetForm');
   }
 
+  // E-postadaki bağlantı (supabase/eposta-sablonlari): cashfollow.app/?token_hash=…&type=…
+  // Bağlantı Supabase'in adresine değil uygulamaya gelir (gönderenle aynı alan adı; spam filtreleri ve önceden tıklayan
+  // e-posta tarayıcıları için). Doğrulanınca oturum açılır; şifre sıfırlamada yeni şifre formu çıkar.
+  async function handleEmailLink() {
+    const params = new URLSearchParams(location.search);
+    const tokenHash = params.get('token_hash'), type = params.get('type');
+    if (!tokenHash || !type) return;
+    params.delete('token_hash');
+    params.delete('type');
+    const rest = params.toString();
+    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+
+    const { error } = await db.auth.verifyOtp({ token_hash: tokenHash, type });
+    if (error) {
+      showView('authLoginForm');
+      document.getElementById('authModal')?.removeAttribute('hidden');
+      const msg = document.getElementById('authMsg');
+      if (msg) {
+        msg.textContent = '⚠ ' + (type === 'recovery'
+          ? 'Bağlantının süresi dolmuş ya da daha önce kullanılmış. "Şifremi unuttum" ile yenisini iste.'
+          : 'Bağlantının süresi dolmuş ya da daha önce kullanılmış. Hesabın zaten doğrulanmış olabilir; giriş yapmayı dene.');
+        msg.style.color = 'var(--expense)';
+      }
+    } else if (type === 'recovery') {
+      showResetForm();
+    } else if (typeof window.toast === 'function') {
+      window.toast(type === 'email_change' ? 'E-posta adresin güncellendi' : 'E-posta adresin doğrulandı');
+    }
+  }
+
   // ── Public API ──────────────────────────────────────────────────────────────
   // callbacks.getState(userId): ekrandaki veri o kullanıcınınsa veri, değilse null
   // callbacks.onRemoteData(veri): başka cihazdan / asistandan gelenler işlenmiş yeni veri
@@ -87,7 +118,7 @@
 
     db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
-    db.auth.getSession().then(({ data }) => {
+    handleEmailLink().then(() => db.auth.getSession()).then(({ data }) => {
       user = data.session?.user ?? null;
       renderBtn(user);
       if (user) { refresh(); watchInbox(); watchData(); }
@@ -99,14 +130,19 @@
       user = session?.user ?? null;
       window.CF_USER_ID = user?.id || null;
       renderBtn(user);
-      if (event === 'SIGNED_IN') {
-        if (!document.getElementById('authLoginForm')?.hidden) closeModal();
-        if (typeof window.onAuthLogin === 'function') window.onAuthLogin(user.id);
-        refresh();
-        watchInbox();
-        watchData();
+      if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
+        if (event === 'SIGNED_IN' && !document.getElementById('authLoginForm')?.hidden) closeModal();
+        // Aynı oturum için bir kez: SIGNED_IN sekme öne gelince de gelir, şifre sıfırlama bağlantısı yalnızca PASSWORD_RECOVERY verir
+        if (loginFor !== user.id) {
+          loginFor = user.id;
+          if (typeof window.onAuthLogin === 'function') window.onAuthLogin(user.id);
+          refresh();
+          watchInbox();
+          watchData();
+        }
       }
       if (event === 'SIGNED_OUT') {
+        loginFor = null;
         unwatchInbox();
         unwatchData();
         if (typeof window.onAuthLogout === 'function') window.onAuthLogout();
