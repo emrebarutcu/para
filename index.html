@@ -100,6 +100,29 @@
         </section>
       </div>
 
+      <section class="panel timeline-panel">
+        <header class="panel-head">
+          <div class="panel-title">
+            <h2>Girdi ve çıktılar</h2>
+            <span class="panel-note js-month-label"></span>
+          </div>
+          <div class="panel-tools">
+            <div class="seg" id="timelineKind" role="group" aria-label="Hareketleri süz">
+              <button type="button" data-kind="all">Tümü</button>
+              <button type="button" data-kind="in">Girdi</button>
+              <button type="button" data-kind="out">Çıktı</button>
+            </div>
+            <div class="seg" id="timelineMode" role="group" aria-label="Görünüm">
+              <button type="button" data-mode="list">Liste</button>
+              <button type="button" data-mode="calendar">Takvim</button>
+            </div>
+          </div>
+        </header>
+        <dl class="tl-sum" id="timelineSum"></dl>
+        <div class="cal" id="timelineCal" hidden></div>
+        <ol class="timeline" id="timeline"></ol>
+      </section>
+
       <section class="panel chart-panel">
         <header class="panel-head">
           <h2>Aylık ödemeler</h2>
