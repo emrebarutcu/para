@@ -3,8 +3,9 @@
 ## 1. Supabase (cloud sync)
 
 1. [supabase.com](https://supabase.com) → New project oluştur
-2. **SQL Editor** → `supabase/tablolar.sql` dosyasını çalıştır. Kişiler (`people`), kartlar (`cards`) ve
-   harcamalar (`purchases`) ayrı tablolardır; her kullanıcı yalnızca kendi satırlarını görür (RLS).
+2. **SQL Editor** → `supabase/tablolar.sql` dosyasını çalıştır. Kişiler (`people`), kartlar (`cards`),
+   harcamalar (`purchases`) ve varlık hareketleri (`entries`) ayrı tablolardır; her kullanıcı yalnızca kendi
+   satırlarını görür (RLS). Dosya daha önce çalıştırıldıysa yeniden çalıştırmak eksik tabloyu ekler.
 
    **Eski kurulumdan geçiş** (veri `cashflow_data`'da tek JSON olarak duruyorsa): aynı dosya, yeni sürüm yayınlanmadan
    **önce** bir kez çalıştırılır. Herkesin JSON'unu tablolara taşır (`cashflow_data` silinmez) ve geçiş döneminde
@@ -46,16 +47,17 @@ Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
 ---
 
 Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.
-Her kayıttan 1.5s sonra yalnızca değişen kişi / kart / harcama satırları yazılır; silinenler satırdan kalkmaz,
+Her kayıttan 1.5s sonra yalnızca değişen kişi / kart / harcama / varlık hareketi satırları yazılır; silinenler satırdan kalkmaz,
 `deleted_at` ile işaretlenir. Uygulama açılınca, öne gelince ve başka cihaz (ya da asistan) yazınca (Realtime)
 son okumadan beri değişen satırlar çekilir. Aynı anda farklı kayıtlar değişirse hepsi korunur; aynı kayıt iki
 cihazda değişirse sonra yazan kazanır. Hiç eşitlenmemiş cihazda buluttaki veri esastır.
 
 ## 4. Kartlar ve nakit akışı
 
-Uygulama dört sekmeden oluşur: **Özet** (bu ayın ödemesi, sıradaki ödemeler, kişiler, aylık grafik),
+Uygulama beş sekmeden oluşur: **Özet** (bu ayın ödemesi, sıradaki ödemeler, kişiler, aylık grafik),
 **Akış** (ödemeler ay ay, tarih + kart bazında; "Tablo" görünümü Excel'deki ay × kişi özeti),
-**Harcamalar** ve **Kartlar**. Yeni harcama `+` düğmesiyle eklenir; içe/dışa aktarma ve tema ayarlardadır.
+**Harcamalar**, **Kartlar** ve **Varlıklar**. Yeni harcama (Varlıklar'da yeni hareket) `+` düğmesiyle eklenir;
+içe/dışa aktarma ve tema ayarlardadır.
 
 **Kartlar** sekmesinde her kart için ad, limit, hesap kesim günü ve son ödeme günü girilir.
 Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
@@ -67,6 +69,18 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
 - Nakit harcama kendi gününde ödenir.
 
 Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
+
+### Varlıklar: TL, dolar, euro, gram altın
+
+**Varlıklar** sekmesinde tarihli giriş / çıkış hareketleri tutulur (maaş, döviz ya da altın alımı, harcama, satış).
+Miktar varlığın kendi birimindedir (altında gram); bakiye hareketlerin toplamıdır. Her varlığın ve toplamın TL
+karşılığı güncel satış kuruyla gösterilir.
+
+Kurlar sitenin Worker'ından gelir: `GET /api/kur` → `{ rates: { TRY, USD, EUR, GAU }, updatedAt, source }`
+(`mcp/kur.js`). Kaynak [Truncgil](https://finans.truncgil.com) (Türkiye piyasası, gram altın dahil); erişilemezse
+dolar / euro open.er-api.com'dan, gram altın gold-api.com'un ons fiyatından hesaplanır (Kapalıçarşı farkı olmaz).
+Sonuç 10 dakika önbellekte tutulur; uygulama son alınan kuru cihazda saklar, çevrimdışıyken onu kullanır.
+Ek ayar ya da anahtar gerekmez.
 
 ## 5. Taksitler Excel'ini içe aktarma
 
@@ -134,6 +148,7 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 | Harcamalar | `list_purchases`, `get_purchase` (taksit takvimi), `add_purchase` (`dry_run` ile önizleme), `update_purchase`, `delete_purchase` |
 | Kartlar | `list_cards` (kullanılan / kalan limit), `add_card`, `update_card`, `delete_card` |
 | Kişiler | `list_people`, `add_person`, `rename_person`, `delete_person` |
+| Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı), `list_entries`, `add_entry`, `update_entry`, `delete_entry` |
 | Banka e-postaları | `get_inbox_address`, `renew_inbox_address`, `list_inbox`, `check_inbox`, `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
 | Yedek | `export_data`, `import_data` |
 
