@@ -4,7 +4,7 @@
 // app.js'teki formlarla aynıdır. Araçlar kullanıcının verisine yalnızca ctx üzerinden erişir (bkz. server.js):
 //   ctx.today            "YYYY-MM-DD" (Türkiye saati)
 //   ctx.load()           → hydrate edilmiş veri
-//   ctx.mutate(fn)       → fn(veri) çalışır, veri kaydedilir; başka cihaz araya girdiyse fn güncel veriyle yeniden çalışır
+//   ctx.mutate(fn)       → fn(veri) çalışır, değişen kişi / kart / harcamalar kaydedilir
 //   ctx.inbox            → pending(), claim(ids), release(ids), address(renew)
 import T from "../taksit.js";
 import E from "../eposta.js";

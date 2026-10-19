@@ -1,25 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { handle } from "../server.js";
+import Tablo from "../../tablo.js";
 
 const NOW = () => new Date("2026-10-18T09:00:00Z");
 const ORIGIN = "https://cashfollow.app";
 
 // Bellekte Supabase: auth/v1/user ve kullanılan PostgREST uçları (RLS: yalnızca token sahibinin satırları)
+const DATA = ["people", "cards", "purchases"];
 function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { id: "u2", email: "x@y.z" } } } = {}) {
-  const db = { cashflow_data: [], inbox_messages: [], inbox_addresses: [] };
+  const db = { people: [], cards: [], purchases: [], inbox_messages: [], inbox_addresses: [] };
   let clock = 0;
   const stamp = () => new Date(Date.UTC(2026, 9, 18, 9, 0, 0, ++clock)).toISOString().replace("Z", "+00:00");
   const calls = [];
-  const hooks = { beforePatch: null };
+  const hooks = { beforeWrite: null };
+
+  // in.(1,2) ya da in.("a","b")
+  const inList = v => v.slice(4, -1).split(",").map(x => x.replace(/^"(.*)"$/, "$1"));
 
   const fn = async (input, init = {}) => {
     const url = new URL(input);
     const method = init.method || "GET";
     const token = (init.headers?.Authorization || "").replace("Bearer ", "");
-    calls.push({ method, path: url.pathname, search: url.search });
+    const body = init.body ? JSON.parse(init.body) : null;
+    calls.push({ method, path: url.pathname, search: url.search, body });
     const user = users[token];
-    const reply = (body, status = 200) => new Response(body === null ? null : JSON.stringify(body), { status });
+    const reply = (out, status = 200) => new Response(out === null ? null : JSON.stringify(out), { status });
 
     if (url.pathname === "/auth/v1/user") return user ? reply(user) : reply({ msg: "bad jwt" }, 403);
     if (!user) return reply({ message: "JWT expired" }, 401);
@@ -27,36 +33,51 @@ function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { i
     const table = url.pathname.replace("/rest/v1/", "");
     const rows = db[table];
     if (!rows) return reply({ code: "PGRST205" }, 404);
-    const filters = [...url.searchParams].filter(([k]) => !["select", "order", "limit"].includes(k));
+    const p = url.searchParams;
+    const filters = [...p].filter(([k]) => !["select", "order", "limit", "offset", "on_conflict"].includes(k));
     const match = r => r.user_id === user.id && filters.every(([k, v]) => {
       if (v === "is.null") return r[k] == null;
       if (v.startsWith("eq.")) return String(r[k]) === v.slice(3);
-      if (v.startsWith("in.(")) return v.slice(4, -1).split(",").map(Number).includes(r[k]);
+      if (v.startsWith("in.(")) return inList(v).includes(String(r[k]));
       throw new Error("filter " + v);
     });
-    const body = init.body ? JSON.parse(init.body) : null;
+    if (method !== "GET" && hooks.beforeWrite) { const h = hooks.beforeWrite; hooks.beforeWrite = null; h(); }
 
-    if (method === "GET") return reply(structuredClone(rows.filter(match)));
-    if (method === "POST") {
+    if (method === "GET") {
+      let out = rows.filter(match);
+      if (p.get("order")) {
+        const keys = p.get("order").split(",");
+        out.sort((a, b) => { for (const k of keys) { if (a[k] < b[k]) return -1; if (a[k] > b[k]) return 1; } return 0; });
+      }
+      const offset = Number(p.get("offset") || 0);
+      out = out.slice(offset, p.get("limit") ? offset + Number(p.get("limit")) : undefined);
+      return reply(structuredClone(out));
+    }
+    if (method === "POST" && DATA.includes(table)) {
+      for (const row of body) {
+        if (row.user_id !== user.id) return reply({ message: "rls" }, 403);
+        if (table === "purchases" && !db.people.some(x => x.user_id === user.id && x.id === row.person_id)) return reply({ code: "23503" }, 409);
+        if (table === "purchases" && row.card_id && !db.cards.some(x => x.user_id === user.id && x.id === row.card_id)) return reply({ code: "23503" }, 409);
+      }
+      for (const row of body) {
+        const cur = rows.find(x => x.user_id === user.id && x.id === row.id);
+        if (cur) Object.assign(cur, row, { updated_at: stamp() });
+        else { const at = stamp(); rows.push({ ...row, created_at: at, updated_at: at }); }
+      }
+      return reply(null, 201);
+    }
+    if (method === "POST" && table === "inbox_addresses") {
       if (body.user_id !== user.id) return reply({ message: "rls" }, 403);
-      if (table === "cashflow_data") {
-        if (rows.some(r => r.user_id === user.id)) return reply({ code: "23505" }, 409);
-        rows.push({ ...body, updated_at: stamp() });
-        return reply(null, 201);
-      }
-      if (table === "inbox_addresses") {
-        const row = { user_id: user.id, address: crypto.randomUUID().replace(/-/g, "").slice(0, 12) };
-        rows.push(row);
-        return reply([{ address: row.address }], 201);
-      }
+      const row = { user_id: user.id, address: crypto.randomUUID().replace(/-/g, "").slice(0, 12) };
+      rows.push(row);
+      return reply([{ address: row.address }], 201);
     }
     if (method === "PATCH") {
-      if (hooks.beforePatch) { const h = hooks.beforePatch; hooks.beforePatch = null; h(); }
       const hit = rows.filter(match);
-      for (const r of hit) Object.assign(r, body, table === "cashflow_data" ? { updated_at: stamp() } : {});
-      return reply(structuredClone(hit));
+      for (const r of hit) Object.assign(r, body, DATA.includes(table) ? { updated_at: stamp() } : {});
+      return reply(init.headers?.Prefer?.includes("return=representation") ? structuredClone(hit) : null, init.headers?.Prefer?.includes("return=representation") ? 200 : 204);
     }
-    if (method === "DELETE") {
+    if (method === "DELETE" && !DATA.includes(table)) {
       db[table] = rows.filter(r => !match(r));
       return reply(null, 204);
     }
@@ -85,7 +106,8 @@ function client(sb, token = "good") {
   return { post, rpc, call };
 }
 
-const stored = sb => sb.db.cashflow_data.find(r => r.user_id === "u1")?.data;
+// u1'in tablolardaki verisi, uygulamadaki biçimde
+const stored = sb => Tablo.toState(Object.fromEntries(DATA.map(t => [t, sb.db[t].filter(r => r.user_id === "u1")])));
 
 test("token yoksa 401 ve kaynak bilgisi", async () => {
   const sb = fakeSupabase();
@@ -159,7 +181,6 @@ test("kart ve taksitli harcama: ödeme tarihleri kesim / son ödeme gününe gö
   const data = stored(sb);
   assert.equal(data.installments.length, 1);
   assert.equal(data.installments[0].cardId, data.cards[0].id);
-  assert.ok(data._v > 0);
 
   // Taksit başına tutar, nakit, son 4 haneyle kart
   const per = await c.call("add_purchase", { description: "Kurs", amount: 500, amount_type: "per_installment", installments: 4, card: "1234", date: "2026-10-01" });
@@ -253,15 +274,36 @@ test("kişiler ve kart silme kuralları", async () => {
   assert.equal(stored(sb).installments.length, 0);
 });
 
-test("başka cihaz araya yazarsa değişiklik kaybolmadan yeniden denenir", async () => {
+test("yalnızca değişen satırlar yazılır, silinenler işaretlenir", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  await c.call("add_card", { name: "A", cutoff_day: 12, due_day: 22 });
+  const { purchase } = await c.call("add_purchase", { description: "P", amount: 100 });
+  await c.call("add_purchase", { description: "Q", amount: 50 });
+
+  sb.calls.length = 0;
+  await c.call("update_purchase", { id: purchase.id, amount: 120 });
+  const writes = sb.calls.filter(x => x.method !== "GET");
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].path, "/rest/v1/purchases");
+  assert.deepEqual(writes[0].body.map(r => [r.id, r.total]), [[purchase.id, 120]]);
+
+  await c.call("delete_card", { card: "A" });
+  assert.equal(sb.db.purchases.length, 2);   // satırlar kalır, deleted_at alır
+  assert.ok(sb.db.purchases.every(r => r.deleted_at));
+  assert.ok(sb.db.cards[0].deleted_at);
+  assert.equal((await c.call("list_purchases")).count, 0);
+  assert.equal((await c.call("list_cards")).cards.length, 0);
+});
+
+test("başka cihaz araya yazarsa onun değişikliği kaybolmaz", async () => {
   const sb = fakeSupabase();
   const c = client(sb);
   await c.call("add_card", { name: "A", cutoff_day: 12, due_day: 22 });
   // Uygulama, MCP okuduktan sonra ama yazmadan önce bir kişi ekliyor
-  sb.hooks.beforePatch = () => {
-    const row = sb.db.cashflow_data[0];
-    row.data = { ...row.data, people: [...row.data.people, { id: "app", name: "Uygulamadan", color: 1 }] };
-    row.updated_at = sb.stamp();
+  sb.hooks.beforeWrite = () => {
+    const at = sb.stamp();
+    sb.db.people.push({ user_id: "u1", id: "app", name: "Uygulamadan", color: 1, created_at: at, updated_at: at, deleted_at: null });
   };
   await c.call("add_purchase", { description: "P", amount: 100 });
   const data = stored(sb);

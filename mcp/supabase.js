@@ -1,7 +1,9 @@
 // ---------- Supabase erişimi (kullanıcının kendi token'ıyla) ----------
 // MCP istemcisinin Supabase OAuth'tan aldığı erişim token'ı olduğu gibi Supabase'e iletilir; RLS kullanıcıyı
 // yalnızca kendi satırlarıyla sınırlar. Sunucuda service role anahtarı yoktur.
+// Kişiler, kartlar ve harcamalar ayrı tablolardadır (supabase/tablolar.sql); yalnızca değişen satırlar yazılır.
 import T from "../taksit.js";
+import Tablo from "../tablo.js";
 
 export class StoreError extends Error {
   constructor(status, body) {
@@ -20,7 +22,9 @@ export async function getUser({ url, key, token, fetch: f = fetch }) {
   return u?.id ? { id: u.id, email: u.email ?? null } : null;
 }
 
-const RETRIES = 4;   // aynı anda başka cihaz yazarsa
+const PAGE = 1000;   // PostgREST'in bir cevapta döndürdüğü en fazla satır
+const BATCH = 200;   // bir istekte yazılan / silinen en fazla satır
+const quote = v => `"${String(v).replace(/["\\]/g, "\\$&")}"`;   // PostgREST in.(…) değeri
 
 export function createStore({ url, key, token, userId, fetch: f = fetch }) {
   const base = { apikey: key, Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -32,27 +36,39 @@ export function createStore({ url, key, token, userId, fetch: f = fetch }) {
     return out ? JSON.parse(out) : null;
   }
 
-  async function readRow() {
-    const q = new URLSearchParams({ select: "data,updated_at", user_id: `eq.${userId}` });
-    const rows = await rest(`cashflow_data?${q}`);
-    return rows[0] ?? null;
+  // Silinmemiş satırlar, listedeki sırayla
+  async function readTable(table) {
+    const rows = [];
+    for (let offset = 0; ; offset += PAGE) {
+      const q = new URLSearchParams({ select: "*", user_id: `eq.${userId}`, deleted_at: "is.null", order: "created_at,id", limit: PAGE, offset });
+      const page = await rest(`${table}?${q}`);
+      rows.push(...page);
+      if (page.length < PAGE) return rows;
+    }
   }
 
-  // updated_at değişmemişse yazar (iyimser kilit); başka bir yazma araya girdiyse false
-  async function write(row, state) {
-    const updated_at = new Date().toISOString();
-    if (!row) {
-      try {
-        await rest("cashflow_data", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_id: userId, data: state, updated_at }) });
-        return true;
-      } catch (err) {
-        if (err.status === 409) return false;
-        throw err;
+  async function readAll() {
+    const lists = await Promise.all(Tablo.TABLES.map(readTable));
+    return Object.fromEntries(Tablo.TABLES.map((t, i) => [t, lists[i]]));
+  }
+
+  // Tablo.changes çıktısı: önce kişiler, kartlar, harcamalar yazılır; sonra silinenler işaretlenir
+  async function write(plan) {
+    for (const t of Tablo.TABLES) {
+      const list = plan[t].upsert;
+      for (let i = 0; i < list.length; i += BATCH) {
+        const body = list.slice(i, i + BATCH).map(x => ({ ...x.row, user_id: userId, deleted_at: null }));
+        await rest(`${t}?on_conflict=user_id,id`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(body) });
       }
     }
-    const q = new URLSearchParams({ user_id: `eq.${userId}`, updated_at: row.updated_at == null ? "is.null" : `eq.${row.updated_at}`, select: "user_id" });
-    const out = await rest(`cashflow_data?${q}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ data: state, updated_at }) });
-    return out.length > 0;
+    const deleted_at = new Date().toISOString();
+    for (const t of [...Tablo.TABLES].reverse()) {
+      const list = plan[t].delete;
+      for (let i = 0; i < list.length; i += BATCH) {
+        const q = new URLSearchParams({ user_id: `eq.${userId}`, id: `in.(${list.slice(i, i + BATCH).map(quote).join(",")})` });
+        await rest(`${t}?${q}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ deleted_at }) });
+      }
+    }
   }
 
   // inbox_* tabloları kurulmamışsa (supabase/eposta.sql) anlaşılır hata
@@ -71,19 +87,17 @@ export function createStore({ url, key, token, userId, fetch: f = fetch }) {
 
   return {
     async load() {
-      return T.hydrate((await readRow())?.data ?? {});
+      return T.hydrate(Tablo.toState(await readAll()));
     },
 
-    // fn veriyi değiştirir; uygulama (sync.js) _v'si daha yeni olan veriyi alır
+    // fn veriyi değiştirir; yalnızca değişen kayıtlar yazılır. Aynı anda başka cihazın değiştirdiği diğer kayıtlar
+    // korunur, aynı kayıt iki yerde değiştiyse sonra yazan kazanır.
     async mutate(fn) {
-      for (let attempt = 0; attempt < RETRIES; attempt++) {
-        const row = await readRow();
-        const state = T.hydrate(structuredClone(row?.data ?? {}));
-        const result = await fn(state);
-        state._v = Date.now();
-        if (await write(row, state)) return result;
-      }
-      throw new Error("Data changed on another device while saving; try again.");
+      const rows = await readAll();
+      const state = T.hydrate(Tablo.toState(rows));
+      const result = await fn(state);
+      await write(Tablo.changes(state, Tablo.baseOf(rows)));
+      return result;
     },
 
     inbox: {
