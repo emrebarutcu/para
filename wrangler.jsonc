@@ -8,5 +8,8 @@
     "directory": ".",
     "binding": "ASSETS",
     "run_worker_first": ["/mcp", "/api/*", "/.well-known/oauth-protected-resource*"]
-  }
+  },
+  // main dışındaki dallar (PR önizlemeleri) `wrangler preview` ile yayınlanır ve bu blok olmadan derleme başarısız olur.
+  // Önizleme üst seviyeden ayar devralmaz; assets üst seviyede kalır, Worker'ın değişkenlerinin varsayılanı olduğu için boş yeter.
+  "previews": {}
 }
