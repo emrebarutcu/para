@@ -12,8 +12,10 @@ const CHART_MONTHS = 12;         // özetteki grafikte gösterilecek ay
 const CASH_COLOR = "var(--cash)";
 const VIEWS = ["ozet", "akis", "harcamalar", "kartlar", "varliklar"];
 const COUNT_PRESETS = [1, 2, 3, 4, 6, 9, 12];
+const REPEAT_PRESETS = [[1, "Bir kez"], [0, "Her ay"], [3, "3 ay"], [6, "6 ay"], [12, "12 ay"]];   // varlık hareketi tekrarı
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
-const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", rates: "para.rates" };
+const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // takvim pazartesiyle başlar
+const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates" };
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
 
@@ -39,6 +41,7 @@ let focusIdx = null;          // akışta vurgulanan ay (grafikten gelince)
 let pendingScroll = null;     // render sonrası kaydırılacak öğe id'si
 let editingId = null;         // düzenlenen harcama
 let editingCardId = null;     // düzenlenen kart
+let termChange = null;        // kartın günleri değişiyorsa arada kalanlar için seçenekler (T.termChoices)
 let lastCardId = null;        // formda son seçilen kart ("" = nakit)
 let lastPersonId = null;
 let chartMonths = [];
@@ -47,6 +50,9 @@ let inboxBusy = false;
 let inboxDraftId = null;      // formda açılan e-posta kaydı
 let inboxOpenId = null;       // içeriği gösterilen e-posta
 let entryFilter = "all";      // varlıklarda seçili kişi
+let timelineKind = "all";     // özetteki zaman çizelgesi: all | in | out
+let timelineMode = readPref(PREF.timelineMode) === "calendar" ? "calendar" : "list";
+let timelineDay = null;       // takvimde seçili gün
 let editingEntryId = null;    // düzenlenen varlık hareketi
 let lastAsset = "TRY";
 let rates = readRates();      // son alınan kurlar: { rates: { TRY, USD, EUR, GAU }, updatedAt, fetchedAt }
@@ -244,6 +250,8 @@ const els = {
   nextLabel: $("nextLabel"), nextTotal: $("nextTotal"),
   remaining: $("remainingTotal"), endLabel: $("endLabel"),
   upcoming: $("upcomingList"), peopleSummary: $("peopleSummary"),
+  timelineKind: $("timelineKind"), timelineMode: $("timelineMode"), timelineSum: $("timelineSum"),
+  timelineCal: $("timelineCal"), timeline: $("timeline"),
   chartBy: $("chartBy"), legend: $("chartLegend"), chart: $("planChart"), chartEmpty: $("chartEmpty"),
   tooltip: $("chartTooltip"),
   flowMode: $("flowMode"), flowList: $("flowList"), flowTable: $("flowTable"), table: $("planTable"),
@@ -253,12 +261,14 @@ const els = {
   entryFilter: $("entryFilter"), assetGrid: $("assetGrid"), entryWrap: $("entryWrap"),
   entrySheet: $("entrySheet"), entryForm: $("entryForm"), entryTitle: $("entryTitle"), entryDelete: $("entryDelete"),
   entryUnit: $("entryUnit"), assetChips: $("assetChips"), entryPersonChips: $("entryPersonChips"), entryPreview: $("entryPreview"),
+  repeatChips: $("repeatChips"), entryDateLabel: $("entryDateLabel"),
   addLabel: $("addLabel"), fab: document.querySelector(".fab"),
   purchaseSheet: $("purchaseSheet"), purchaseForm: $("purchaseForm"), purchaseTitle: $("purchaseTitle"),
   purchaseDelete: $("purchaseDelete"), purchasePreview: $("purchasePreview"),
   countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"),
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
+  termField: $("termField"), termNote: $("termNote"), termChoices: $("termChoices"),
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
@@ -314,6 +324,7 @@ function renderOverview(months, start, last) {
 
   renderUpcoming(last);
   renderPeopleSummary(months, start);
+  renderTimeline(start);
 
   chartMonths = months.slice(0, CHART_MONTHS);
   renderLegend(chartMonths);
@@ -336,17 +347,207 @@ function renderUpcoming(last) {
     const li = payRow(ev, today, { relative: true });
     li.classList.add("clickable");
     li.tabIndex = 0;
-    const open = () => {
-      const idx = T.parseDate(ev.date).idx;
-      if (idx < T.monthIndex(currentMonth)) currentMonth = T.monthKey(idx);
-      openEventKey = ev.key;
-      pendingScroll = `ev-${ev.key}`;
-      location.hash = "#akis";
-    };
-    li.addEventListener("click", open);
-    li.addEventListener("keydown", e => { if (e.key === "Enter") open(); });
+    li.addEventListener("click", () => openEvent(ev));
+    li.addEventListener("keydown", e => { if (e.key === "Enter") openEvent(ev); });
     els.upcoming.append(li);
   }
+}
+
+// Ödemeyi akışta açık ve görünür göster
+function openEvent(ev) {
+  const idx = T.parseDate(ev.date).idx;
+  if (idx < T.monthIndex(currentMonth)) currentMonth = T.monthKey(idx);
+  openEventKey = ev.key;
+  pendingScroll = `ev-${ev.key}`;
+  location.hash = "#akis";
+}
+
+// Ayın girdi ve çıktıları gün gün: varlık hareketleri (giriş/çıkış) ve kart/nakit ödemeleri.
+// Toplamlar TL'dir; döviz ve altın güncel kurla çevrilir, kuru bilinmeyen hareket toplama girmez.
+function renderTimeline(start) {
+  for (const b of els.timelineKind.querySelectorAll("button")) {
+    b.classList.toggle("active", b.dataset.kind === timelineKind);
+    b.setAttribute("aria-pressed", String(b.dataset.kind === timelineKind));
+  }
+  for (const b of els.timelineMode.querySelectorAll("button")) {
+    b.classList.toggle("active", b.dataset.mode === timelineMode);
+    b.setAttribute("aria-pressed", String(b.dataset.mode === timelineMode));
+  }
+  const today = T.todayKey();
+  const r = rates?.rates;
+  // Tekrarlayan hareket bu aya düşen tekrarının tarihiyle gelir; varlığı bilinmeyen hareket (içe aktarma) atlanır
+  const entries = [];
+  for (const e of knownEntries()) {
+    const k = start - (T.parseDate(e.date)?.idx ?? NaN), n = V.repeatOf(e);
+    if (V.asset(e.asset) && k >= 0 && (n == null ? k === 0 : n === 0 || k < n)) entries.push({ e, date: V.occurrenceDate(e, k) });
+  }
+  const events = T.buildCashflow(state.people, state.cards, state.installments, start, start)[0].events;
+  if (entries.some(x => x.e.asset !== "TRY")) loadRates();
+
+  const order = new Map(state.entries.map((e, i) => [e.id, i]));
+  const items = [
+    ...entries.map(({ e, date }) => ({ kind: e.amount > 0 ? "in" : "out", date, entry: e, value: V.toTry(e.amount, e.asset, r), rank: order.get(e.id) })),
+    ...events.map((ev, i) => ({ kind: "out", date: ev.date, event: ev, value: -ev.total, rank: state.entries.length + i })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.rank - b.rank);
+
+  let inSum = 0, outSum = 0, missing = false;
+  for (const it of items) {
+    if (it.value == null) missing = true;
+    else if (it.value > 0) inSum += it.value;
+    else outSum -= it.value;
+  }
+  const net = Math.round((inSum - outSum) * 100) / 100;   // kuruşu aşmayan fark −₺0,00 görünmesin
+  const approx = missing ? "≈ " : "";
+  const stat = (label, text, cls) => {
+    const d = el("div");
+    d.append(el("dt", "", label), el("dd", cls, text));
+    return d;
+  };
+  els.timelineSum.replaceChildren(
+    stat("Girdi", approx + "+" + fmt(inSum), "in-text"),
+    stat("Çıktı", approx + "−" + fmt(outSum), "out-text"),
+    stat("Net", approx + (net < 0 ? "−" : net > 0 ? "+" : "") + fmt(Math.abs(net)), net < 0 ? "out-text" : net > 0 ? "in-text" : ""));
+  els.timelineSum.title = missing ? "Kuru alınamayan döviz/altın hareketleri toplama dahil değil" : "";
+
+  els.timeline.replaceChildren();
+  els.timelineCal.hidden = timelineMode !== "calendar";
+  els.timelineCal.parentElement.classList.toggle("cal-mode", timelineMode === "calendar");
+  const shown = items.filter(it => timelineKind === "all" || it.kind === timelineKind);
+  if (timelineMode === "calendar") { renderCalendar(start, shown, today, r); return; }
+  if (!shown.length) {
+    const text = timelineKind === "in" ? "Bu ay girdi yok" : timelineKind === "out" ? "Bu ay çıktı yok" : "Bu ay hareket yok";
+    els.timeline.append(el("li", "empty", text));
+    return;
+  }
+
+  // Bugün bu ayın içindeyse bugünden sonraki ilk günün önüne "Bugün" çizgisi
+  let nowPlaced = T.parseDate(today).idx !== start;
+  const days = new Map();
+  for (const it of shown) {
+    if (!days.has(it.date)) days.set(it.date, []);
+    days.get(it.date).push(it);
+  }
+  for (const [date, list] of days) {
+    if (!nowPlaced && date > today) {
+      els.timeline.append(timelineNow(today));
+      nowPlaced = true;
+    }
+    if (date === today) nowPlaced = true;
+    const day = el("li", "tl-day" + (date > today ? " planned" : ""));
+    const head = el("div", "tl-date");
+    head.append(el("span", "", `${fmtDayShort(date)} · ${WEEKDAYS[T.toDate(date).getDay()]}`));
+    if (date === today) head.append(el("span", "tl-tag", "Bugün"));
+    const ul = el("ul", "tl-items");
+    for (const it of list) ul.append(timelineItem(it, today, r));
+    day.append(head, ul);
+    els.timeline.append(day);
+  }
+  if (!nowPlaced) els.timeline.append(timelineNow(today));
+}
+
+// Takvim: günlerde o günün girdi/çıktı toplamı; seçili günün hareketleri altta
+function renderCalendar(start, shown, today, r) {
+  const byDay = new Map();
+  for (const it of shown) {
+    if (!byDay.has(it.date)) byDay.set(it.date, []);
+    byDay.get(it.date).push(it);
+  }
+  if (T.parseDate(timelineDay)?.idx !== start) {
+    timelineDay = T.parseDate(today).idx === start ? today : shown[0]?.date ?? T.dateKey(start, 1);
+  }
+
+  const grid = el("div", "cal-grid");
+  for (const w of CAL_WEEKDAYS) grid.append(el("span", "cal-wd", w));
+  const offset = (T.toDate(T.dateKey(start, 1)).getDay() + 6) % 7;
+  for (let i = 0; i < offset; i++) grid.append(el("span", "cal-pad"));
+  for (let d = 1, n = T.daysInMonth(start); d <= n; d++) {
+    const key = T.dateKey(start, d);
+    const list = byDay.get(key) || [];
+    let inSum = 0, outSum = 0, unknown = false;
+    for (const it of list) {
+      if (it.value == null) unknown = true;
+      else if (it.value > 0) inSum += it.value;
+      else outSum -= it.value;
+    }
+    const selected = key === timelineDay;
+    const b = el("button", "cal-day" + (key === today ? " today" : "") + (selected ? " selected" : "") + (key > today ? " planned" : ""));
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(selected));
+    b.setAttribute("aria-label", `${fmtDayShort(key)}: ` + (list.length
+      ? [inSum && `girdi ${fmt(inSum)}`, outSum && `çıktı ${fmt(outSum)}`, unknown && "kuru bilinmeyen hareket"].filter(Boolean).join(", ")
+      : "hareket yok"));
+    b.append(el("span", "cal-n", String(d)));
+    if (inSum) b.append(el("span", "cal-v in-text", "+" + fmtShort(inSum)));
+    if (outSum) b.append(el("span", "cal-v out-text", "−" + fmtShort(outSum)));
+    if (unknown && !inSum && !outSum) b.append(el("span", "cal-v", "•"));
+    b.addEventListener("click", () => { timelineDay = key; render(); els.timelineCal.querySelector(".cal-day.selected")?.focus(); });
+    grid.append(b);
+  }
+  els.timelineCal.replaceChildren(grid);
+
+  const list = byDay.get(timelineDay) || [];
+  const day = el("li", "tl-day" + (timelineDay > today ? " planned" : ""));
+  const head = el("div", "tl-date");
+  head.append(el("span", "", `${fmtDayShort(timelineDay)} · ${WEEKDAYS[T.toDate(timelineDay).getDay()]}`));
+  if (timelineDay === today) head.append(el("span", "tl-tag", "Bugün"));
+  day.append(head);
+  if (list.length) {
+    const ul = el("ul", "tl-items");
+    for (const it of list) ul.append(timelineItem(it, today, r));
+    day.append(ul);
+  } else {
+    day.classList.add("tl-none");
+    day.append(el("p", "tl-empty", timelineKind === "in" ? "Bu gün girdi yok" : timelineKind === "out" ? "Bu gün çıktı yok" : "Bu gün hareket yok"));
+  }
+  els.timeline.append(day);
+}
+
+function timelineNow(today) {
+  const li = el("li", "tl-now");
+  li.append(el("span", "", `Bugün · ${fmtDayShort(today)}`));
+  return li;
+}
+
+function timelineItem(it, today, r) {
+  const li = el("li", `tl-item ${it.kind}` + (it.date > today ? " planned" : ""));
+  li.tabIndex = 0;
+  li.setAttribute("role", "button");
+  const main = el("div", "tl-main");
+  const title = el("div", "tl-title");
+  const sub = el("div", "tl-sub");
+  const side = el("div", "tl-amt");
+  let open;
+
+  if (it.entry) {
+    const e = it.entry;
+    const person = personById(e.personId);
+    title.textContent = e.desc;
+    if (state.people.length > 1) {
+      const who = el("span", "who");
+      who.append(dot(seriesVar(person)), document.createTextNode(person.name));
+      sub.append(who);
+    }
+    sub.append(el("span", "", V.asset(e.asset).name));
+    side.append(el("span", "amount", fmtAsset(e.amount, e.asset, true)));
+    if (e.asset !== "TRY") side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
+    open = () => openEntrySheet(e);
+  } else {
+    const ev = it.event;
+    title.textContent = ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit";
+    if (it.date > today) sub.append(el("span", "", relDays(it.date, today)));
+    const names = [...new Set(ev.items.map(i => i.purchase.desc))];
+    const what = el("span", "who");
+    what.append(dot(cardColor(ev.cardId)), document.createTextNode(names.slice(0, 2).join(", ") + (names.length > 2 ? ` +${names.length - 2}` : "")));
+    sub.append(what);
+    side.append(el("span", "amount", "−" + fmt(ev.total)));
+    open = () => openEvent(ev);
+  }
+
+  main.append(title, sub);
+  li.append(el("span", "tl-mark"), main, side);
+  li.addEventListener("click", open);
+  li.addEventListener("keydown", e => { if (e.key === "Enter") open(); });
+  return li;
 }
 
 function renderPeopleSummary(months, start) {
@@ -896,7 +1097,7 @@ function loadRates() {
       try { localStorage.setItem(PREF.rates, JSON.stringify(rates)); } catch {}
     })
     .catch(() => { ratesFailed = true; })
-    .finally(() => { ratesLoading = null; if (view === "varliklar") render(); });
+    .finally(() => { ratesLoading = null; if (view === "varliklar" || view === "ozet") render(); });
   return ratesLoading;
 }
 
@@ -927,7 +1128,8 @@ function renderAssets() {
   if (entryFilter !== "all" && !personById(entryFilter)) entryFilter = "all";
   const all = knownEntries();
   const mine = all.filter(e => entryFilter === "all" || e.personId === entryFilter);
-  const bals = V.balances(mine);
+  const today = T.todayKey();
+  const bals = V.balances(mine, today);
   const r = rates?.rates;
   const { total, missing } = V.totalTry(bals, r);
 
@@ -970,31 +1172,50 @@ function renderAssets() {
       "TL, dolar, euro ya da gram altın girişlerini ve çıkışlarını ekle; bakiyeni güncel kurla TL olarak gösteririm.", btn));
     return;
   }
+  // Tekrarlayan hareket son işlenen tekrarının tarihiyle sıralanır (henüz işlenmediyse başlangıcıyla)
   const order = new Map(state.entries.map((e, i) => [e.id, i]));
-  const sorted = [...mine].sort((a, b) => b.date.localeCompare(a.date) || order.get(b.id) - order.get(a.id));
+  const shown = e => V.occurrenceDate(e, Math.max(V.processedCount(e, today) - 1, 0));
+  const sorted = mine.map(e => ({ e, at: shown(e) }))
+    .sort((a, b) => b.at.localeCompare(a.at) || order.get(b.e.id) - order.get(a.e.id));
   const panel = el("div", "panel list-panel");
-  for (const e of sorted) panel.append(entryRow(e, r));
+  for (const { e } of sorted) panel.append(entryRow(e, r, today));
   const head = el("header", "panel-head");
   head.append(el("h2", "", "Hareketler"));
   els.entryWrap.append(head, panel);
 }
 
-function entryRow(e, r) {
+function entryRow(e, r, today) {
   const a = V.asset(e.asset);
-  const row = el("div", "purchase");
+  const n = V.repeatOf(e);
+  const next = V.nextDate(e, today);
+  const row = el("div", "purchase" + (n != null && !next ? " done" : ""));
   row.tabIndex = 0;
   row.setAttribute("role", "button");
 
   const main = el("div", "p-main");
   main.append(el("div", "p-title", e.desc));
   const meta = el("div", "p-meta");
-  meta.append(el("span", "card-tag", a.name), el("span", "", fmtDayShort(e.date) + " " + T.yearOf(T.parseDate(e.date).idx)));
+  meta.append(el("span", "card-tag", a.name), el("span", "", fmtDay(e.date)));
+  if (n != null) meta.append(el("span", "", n ? `Her ay · ${n} kez` : "Her ay"));
   main.append(meta);
+  if (n) {
+    const done = V.processedCount(e, today);
+    const prog = el("div", "progress");
+    const bar = el("div", "bar");
+    const fill = el("span");
+    fill.style.width = `${(done / n) * 100}%`;
+    bar.append(fill);
+    prog.append(bar, el("span", "", `${done}/${n} işlendi`));
+    main.append(prog);
+  }
 
   const side = el("div", "p-side");
-  side.append(el("span", "amount " + (e.amount > 0 ? "in" : "out"), fmtAsset(e.amount, e.asset, true)));
+  const amount = el("span", "amount " + (e.amount > 0 ? "in" : "out"), fmtAsset(e.amount, e.asset, true));
+  if (n != null) amount.append(el("small", "", "/ay"));
+  side.append(amount);
   const value = V.toTry(e.amount, e.asset, r);
   if (e.asset !== "TRY") side.append(el("span", "sub", value == null ? "kur yok" : `≈ ${fmt(Math.abs(value))}`));
+  if (n != null) side.append(el("span", "sub", next ? `sonraki ${fmtDayShort(next)}` : "bitti"));
 
   row.append(avatar(personById(e.personId)), main, side);
   row.addEventListener("click", () => openEntrySheet(e));
@@ -1118,8 +1339,7 @@ function updatePurchasePreview() {
     box.append(el("div", "big", fmt(p.total)), el("div", "", `Ödeme ${fmtDay(first)}`));
   }
   if (card && p.date) {
-    const cut = T.dateKey(T.statementIndex(card, p.date), card.cutoffDay);
-    box.append(el("div", "", `${card.name} · ${fmtDay(cut)} kesimli ekstreye girer`));
+    box.append(el("div", "", `${card.name} · ${fmtDay(T.statementOf(card, p.date).cut)} kesimli ekstreye girer`));
   } else if (!card) {
     box.append(el("div", "", p.count > 1 ? "Nakit — her ay harcama gününde ödenir" : "Nakit — harcama gününde ödenir"));
   } else {
@@ -1210,6 +1430,7 @@ function openCardSheet(c) {
     f.elements.dueDay.value = c.dueDay;
     f.elements.last4.value = c.last4 || "";
   }
+  termChange = null;
   updateCardPreview();
   openSheet(els.cardSheet);
   if (!c) f.elements.name.focus();
@@ -1227,17 +1448,65 @@ function updateCardPreview() {
   tile.setAttribute("aria-hidden", "true");
   els.cardPreview = tile;
 
+  updateTermChoices(existing, v);
   if (v.cutoffDay && v.dueDay) {
-    const today = T.todayKey();
-    const s = T.statementIndex(card, today);
-    const due = T.dueIndex(card, s);
-    els.cardHint.textContent = `Bugün yapılan bir harcama ${fmtDay(T.dateKey(s, v.cutoffDay))} kesimli ekstreye girer ve ${fmtDay(T.dateKey(due, v.dueDay))} tarihinde ödenir.`;
+    const s = T.statementOf(withTerms(existing, v) || card, T.todayKey());
+    els.cardHint.textContent = `Bugün yapılan bir harcama ${fmtDay(s.cut)} kesimli ekstreye girer ve ${fmtDay(s.due)} tarihinde ödenir.`;
   } else {
     els.cardHint.textContent = "Kesim ve son ödeme gününü kart ekstrende bulabilirsin.";
   }
 }
 
-els.cardForm.addEventListener("input", e => { e.target.classList?.remove("invalid"); updateCardPreview(); });
+// Kesim / son ödeme günü değişince arada kalan harcamaların ne olacağı sorulur; yalnızca sonucu farklı seçenekler gösterilir
+function updateTermChoices(existing, v) {
+  const terms = { cutoffDay: v.cutoffDay, dueDay: v.dueDay };
+  const key = `${terms.cutoffDay}|${terms.dueDay}`;
+  if (termChange?.key === key) return;
+  const r = existing && terms.cutoffDay && terms.dueDay ? T.termChoices(existing, terms, state.installments, T.todayKey()) : null;
+  termChange = r?.choices.length ? { ...r, key, selected: null } : null;
+  els.termField.hidden = !termChange;
+  els.termChoices.classList.remove("invalid");
+  if (!termChange) { els.termChoices.replaceChildren(); return; }
+
+  const { open, next } = r;
+  els.termNote.textContent = open.count
+    ? `${fmtDay(open.cut)} kesimli ekstreye düşecek ${open.count} ödeme (${fmt(open.total)}) henüz kesilmedi. Günler değişince ne olsun?`
+    : "Bu karttaki harcamaların ödeme tarihleri değişecek. Nasıl hesaplansın?";
+  const text = {
+    old: ["Bu ekstre eski günlerle kesilsin",
+      `${fmtDay(open.cut)} kesilir, ${fmtDay(open.due)} tarihinde ödenir; sonraki ekstreler yeni günlerle`],
+    new: ["Yeni günler hemen başlasın", open.count
+      ? `Kesilmiş ekstreler kalır; açık ekstredekiler ${fmtDay(next.cut)} kesimli ekstreye girer, ${fmtDay(next.due)} tarihinde ödenir`
+      : "Kesilmiş ekstreler olduğu gibi kalır; bundan sonrakiler yeni günlerle"],
+    fix: ["Günleri yanlış girmiştim", "Şimdiki günlerle hesaplanan bütün ödemeler, geçmiş ekstreler dahil, yeni günlere göre yeniden hesaplanır; daha önceki gün değişiklikleri korunur"],
+  };
+  els.termChoices.replaceChildren(...r.choices.map(k => {
+    const label = el("label", "choice");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "termChoice";
+    input.value = k;
+    label.append(input, el("span", "choice-title", text[k][0]), el("span", "choice-sub", text[k][1]));
+    return label;
+  }));
+}
+
+// Formdaki günlerle kart: arada kalanlar için seçilen düzen, seçilmediyse kartın eski günleri korunarak
+function withTerms(existing, v) {
+  if (!existing) return null;
+  const history = termChange?.selected ? termChange.cards[termChange.selected].history : existing.history;
+  return { ...existing, ...v, history };
+}
+
+els.cardForm.addEventListener("input", e => {
+  e.target.classList?.remove("invalid");
+  if (e.target.name === "termChoice") {
+    termChange.selected = e.target.value;
+    els.termChoices.classList.remove("invalid");
+    syncChecked(els.termChoices);
+  }
+  updateCardPreview();
+});
 
 els.cardForm.addEventListener("submit", e => {
   e.preventDefault();
@@ -1256,13 +1525,19 @@ els.cardForm.addEventListener("submit", e => {
     if (firstBad === "last4") toast(last4Taken ? "Bu son 4 hane başka bir kartta kayıtlı" : "Son 4 hane 4 rakam olmalı");
     return;
   }
+  if (termChange && !termChange.selected) {
+    els.termChoices.classList.add("invalid");
+    els.termChoices.querySelector("input")?.focus();
+    toast("Arada kalan harcamalar ne olsun? Bir seçenek seç.");
+    return;
+  }
   if (!v.last4) delete v.last4;
 
   if (editingCardId) {
     state.cards = state.cards.map(c => {
       if (c.id !== editingCardId) return c;
-      const { last4, ...rest } = { ...c, ...v };
-      return v.last4 ? { ...rest, last4 } : rest;
+      const { last4, history, ...rest } = withTerms(c, v);
+      return { ...rest, ...(v.last4 && { last4 }), ...(history && { history }) };
     });
   } else {
     state.cards.push({ id: uid(), ...v, color: nextColor(state.cards) });
@@ -1313,6 +1588,9 @@ function openEntrySheet(e, asset) {
   f.elements.amount.value = e ? Math.abs(e.amount) : "";
   f.elements.desc.value = e?.desc ?? "";
   f.elements.date.value = e?.date ?? T.todayKey();
+  const repeat = V.repeatOf(e) ?? 1;
+  els.repeatChips.replaceChildren(...REPEAT_PRESETS.map(([n, label]) => radioChip("repeatPreset", String(n), label, n === repeat)));
+  f.elements.repeat.value = repeat >= 2 ? repeat : "";
   syncChecked(f);
   updateEntryForm();
   openSheet(els.entrySheet);
@@ -1325,12 +1603,17 @@ function collectEntry() {
   const amount = V.round(Number(f.amount.value), asset);
   const desc = f.desc.value.trim();
   const date = T.parseDate(f.date.value) ? f.date.value : "";
+  // "Diğer"e yazılan ay sayısı çiplerden önce gelir; 1 = tek seferlik, 0 = süresiz
+  const repeat = f.repeat.value !== "" ? Number(f.repeat.value) : Number(f.repeatPreset.value || 1);
   const errors = [];
   if (!(amount > 0)) errors.push("amount");
   if (!desc) errors.push("desc");
   if (!date) errors.push("date");
+  if (!(repeat === 1 || V.repeatOf({ repeat }) != null)) errors.push("repeat");
   if (!personById(f.person.value)) errors.push("person");
-  return { e: { personId: f.person.value, asset, amount: f.dir.value === "out" ? -amount : amount, desc, date }, errors };
+  const e = { personId: f.person.value, asset, amount: f.dir.value === "out" ? -amount : amount, desc, date };
+  if (repeat !== 1) e.repeat = repeat;
+  return { e, errors };
 }
 
 function updateEntryForm() {
@@ -1339,26 +1622,45 @@ function updateEntryForm() {
   els.entryUnit.textContent = a.symbol;
   els.entryForm.elements.amount.step = e.asset === "GAU" ? "0.001" : "0.01";
 
+  const n = V.repeatOf(e);
+  els.entryDateLabel.textContent = n != null ? "İlk tarih" : "Tarih";
+
   const box = els.entryPreview;
   box.replaceChildren();
   if (errors.includes("amount")) return;
   const r = rates?.rates;
-  box.append(el("div", "big", fmtAsset(e.amount, e.asset, true)));
+  const today = T.todayKey();
+  box.append(el("div", "big", fmtAsset(e.amount, e.asset, true) + (n != null ? " / ay" : "")));
   if (e.asset !== "TRY") {
     const value = V.toTry(Math.abs(e.amount), e.asset, r);
     box.append(el("div", "", value == null ? "Kur alınamadı — TL karşılığı sonra hesaplanır"
       : `≈ ${fmt(value)} · ${a.code === "GAU" ? "1 gr" : `1 ${a.symbol}`} = ${fmt(r[e.asset])}`));
   }
+  if (n != null && e.date && !errors.includes("repeat")) {
+    const done = V.processedCount(e, today), next = V.nextDate(e, today);
+    box.append(el("div", "", n ? `Her ay ${n} kez · son ${fmtDay(V.lastDate(e))}` : "Her ay, bitiş tarihi yok"));
+    box.append(el("div", "", [done && `Bugüne kadar ${done} kez işlendi`, next && `${done ? "sonraki" : "İlki"} ${fmtDay(next)}`]
+      .filter(Boolean).join(" · ")));
+  }
   const person = personById(e.personId);
-  if (person) {
-    const before = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId))[e.asset] ?? 0;
-    const after = V.round(before + e.amount, e.asset);
+  if (person && !errors.includes("repeat")) {
+    const before = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId), today)[e.asset] ?? 0;
+    const after = V.round(before + e.amount * (e.date ? V.processedCount(e, today) : 1), e.asset);
     box.append(el("div", after < 0 ? "warn" : "", `${person.name} · ${a.name.toLocaleLowerCase("tr-TR")} bakiyesi ${fmtAsset(before, e.asset)} → ${fmtAsset(after, e.asset)}`));
   }
 }
 
 els.entryForm.addEventListener("input", e => {
   e.target.classList?.remove("invalid");
+  const f = els.entryForm.elements;
+  if (e.target.name === "repeatPreset") {
+    f.repeat.value = Number(e.target.value) >= 2 ? e.target.value : "";
+    f.repeat.classList.remove("invalid");
+  }
+  if (e.target.name === "repeat") {
+    const v = String(Math.round(Number(f.repeat.value)));
+    for (const r of els.repeatChips.querySelectorAll("input")) r.checked = f.repeat.value !== "" && r.value === v;
+  }
   syncChecked(els.entryForm);
   updateEntryForm();
 });
@@ -1367,9 +1669,9 @@ els.entryForm.addEventListener("submit", ev => {
   ev.preventDefault();
   const { e, errors } = collectEntry();
   const f = els.entryForm.elements;
-  for (const name of ["amount", "desc", "date"]) f[name].classList.toggle("invalid", errors.includes(name));
+  for (const name of ["amount", "desc", "date", "repeat"]) f[name].classList.toggle("invalid", errors.includes(name));
   if (errors.length) {
-    const msg = { amount: "Miktarı gir.", desc: "Açıklama yaz.", date: "Tarihi gir.", person: "Kişi seç." }[errors[0]];
+    const msg = { amount: "Miktarı gir.", desc: "Açıklama yaz.", date: "Tarihi gir.", repeat: `Tekrar 2–${V.MAX_REPEAT} ay arası olmalı.`, person: "Kişi seç." }[errors[0]];
     els.entryPreview.replaceChildren(el("div", "warn", msg));
     f[errors[0]]?.focus?.();
     return;
@@ -1884,6 +2186,21 @@ els.chartBy.addEventListener("click", e => {
   if (!by || by === chartBy) return;
   chartBy = by;
   writePref(PREF.chartBy, by);
+  render();
+});
+
+els.timelineKind.addEventListener("click", e => {
+  const kind = e.target.closest("button")?.dataset.kind;
+  if (!kind || kind === timelineKind) return;
+  timelineKind = kind;
+  render();
+});
+
+els.timelineMode.addEventListener("click", e => {
+  const mode = e.target.closest("button")?.dataset.mode;
+  if (!mode || mode === timelineMode) return;
+  timelineMode = mode;
+  writePref(PREF.timelineMode, mode);
   render();
 });
 

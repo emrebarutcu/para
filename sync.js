@@ -286,11 +286,15 @@
 
   const metaKey = uid => `cashflow.v1.${uid}.sync`;
   function loadMeta(uid) {
-    try {
-      const meta = JSON.parse(localStorage.getItem(metaKey(uid)));
-      if (meta?.base && meta?.cursor) return meta;
-    } catch {}
-    return null;
+    let meta = null;
+    try { meta = JSON.parse(localStorage.getItem(metaKey(uid))); } catch {}
+    if (!meta?.base || !meta?.cursor) return null;
+    const { SCHEMA, rekey } = window.Tablo;
+    if (meta.schema !== SCHEMA) {   // önceki sürümün tabanı: yeni satır biçimine çevrilir, bütün satırlar yeniden çekilir
+      meta = { base: rekey(meta.base), cursor: {}, schema: SCHEMA };
+      try { saveMeta(uid, meta); } catch {}
+    }
+    return meta;
   }
   function saveMeta(uid, meta) {
     localStorage.setItem(metaKey(uid), JSON.stringify(meta));
@@ -361,7 +365,7 @@
         if (!cursor[t] || time(r.updated_at) > time(cursor[t])) cursor[t] = r.updated_at;
       }
     }
-    saveMeta(uid, { base, cursor });
+    saveMeta(uid, { base, cursor, schema: window.Tablo.SCHEMA });
     if (changed && typeof onRemoteDataCb === 'function') onRemoteDataCb(state);
   }
 

@@ -43,18 +43,119 @@
     return dateKey(now.getFullYear() * 12 + now.getMonth(), now.getDate());
   }
 
-  // ---------- Kart ----------
-  // { id, name, limit, cutoffDay, dueDay, color }
+  function addDays(key, n) {
+    const d = toDate(key);
+    d.setDate(d.getDate() + n);
+    return dateKey(d.getFullYear() * 12 + d.getMonth(), d.getDate());
+  }
 
-  // Harcamanın girdiği ekstrenin kesim ayı (kesim günü dahil)
-  function statementIndex(card, date) {
+  // ---------- Kart ----------
+  // { id, name, limit, cutoffDay, dueDay, color, history? }
+  // history: kesim / son ödeme günü değişmeden önceki günler, [{ until: "YYYY-MM-DD", cutoffDay, dueDay }] until'e göre
+  // sıralı. Kesimi until'e kadar olan ekstreler o günlerle kesilmiştir; sonrakiler bir sonraki günlerle (en son kartın).
+
+  // Tek bir gün düzeninde harcamanın girdiği ekstrenin kesim ayı (kesim günü dahil)
+  function statementIndex(terms, date) {
     const d = parseDate(date);
-    return d.day <= dayOf(d.idx, card.cutoffDay) ? d.idx : d.idx + 1;
+    return d.day <= dayOf(d.idx, terms.cutoffDay) ? d.idx : d.idx + 1;
   }
 
   // Kesim ayındaki ekstrenin ödendiği ay: son ödeme günü kesimden sonraysa aynı ay
-  function dueIndex(card, statementIdx) {
-    return statementIdx + (card.dueDay > card.cutoffDay ? 0 : 1);
+  function dueIndex(terms, statementIdx) {
+    return statementIdx + (terms.dueDay > terms.cutoffDay ? 0 : 1);
+  }
+
+  // Kartın dönemleri: her gün düzeninin ilk ekstresinin kesim ayı (from) ve son kesim sınırı (until; bugünkünde null)
+  function periods(card) {
+    let prev = null;
+    return [...(card.history || []), { cutoffDay: card.cutoffDay, dueDay: card.dueDay, until: null }].map(t => {
+      const from = prev == null ? -Infinity : firstAfter(t, prev);
+      prev = t.until;
+      return { cutoffDay: t.cutoffDay, dueDay: t.dueDay, until: t.until, from };
+    });
+  }
+
+  // Kesimi until gününden sonra olan ilk ekstrenin kesim ayı
+  function firstAfter(terms, until) {
+    const u = parseDate(until);
+    return dateKey(u.idx, terms.cutoffDay) > until ? u.idx : u.idx + 1;
+  }
+
+  const inPeriod = (t, idx) => t.until == null || dateKey(idx, t.cutoffDay) <= t.until;
+
+  function statementAt(ps, period, idx) {
+    const t = ps[period], due = dueIndex(t, idx);
+    return { idx, period, cut: dateKey(idx, t.cutoffDay), dueIdx: due, due: dateKey(due, t.dueDay) };
+  }
+
+  // Harcamanın girdiği ekstre: { idx (kesim ayı), period, cut, dueIdx (ödeme ayı), due } — cut / due "YYYY-MM-DD"
+  function statementOf(card, date, ps = periods(card)) {
+    for (let i = 0; i < ps.length; i++) {
+      const idx = Math.max(statementIndex(ps[i], date), ps[i].from);
+      if (inPeriod(ps[i], idx)) return statementAt(ps, i, idx);
+    }
+  }
+
+  // Bir sonraki ekstre; dönem bitince sonraki dönemin ilk ekstresi (hiç ekstresi olmayan dönem atlanır)
+  function nextStatement(ps, s) {
+    if (inPeriod(ps[s.period], s.idx + 1)) return statementAt(ps, s.period, s.idx + 1);
+    for (let i = s.period + 1; ; i++) {
+      if (inPeriod(ps[i], ps[i].from)) return statementAt(ps, i, ps[i].from);
+    }
+  }
+
+  const sameTerms = (a, b) => a.cutoffDay === b.cutoffDay && a.dueDay === b.dueDay;
+
+  // Art arda aynı günler tek dönemdir (ekstreler aylık sürer); boş history yazılmaz
+  function withHistory(card, list) {
+    const history = [];
+    for (const h of list) {
+      if (history.length && sameTerms(history[history.length - 1], h)) history[history.length - 1] = h;
+      else history.push(h);
+    }
+    if (history.length && sameTerms(history[history.length - 1], card)) history.pop();
+    const { history: _, ...rest } = card;
+    return history.length ? { ...rest, history } : rest;
+  }
+
+  // Kesimi until'e kadar olan ekstreler bugünkü düzende kalır, sonrakiler yeni günlerle kesilir
+  function retermCard(card, terms, until) {
+    const history = [];
+    for (const t of periods(card)) {
+      const end = t.until == null || t.until > until ? until : t.until;
+      history.push({ until: end, cutoffDay: t.cutoffDay, dueDay: t.dueDay });
+      if (end === until) break;
+    }
+    return withHistory({ ...card, ...terms }, history);
+  }
+
+  // Kesim / son ödeme günü değişirken arada kalan harcamalar için seçenekler:
+  //   old: açık ekstre (bugünkü harcamanın girdiği) eski günlerle kesilir, sonrakiler yeni günlerle
+  //   new: kesilmiş ekstreler kalır, yeni günler bugünden başlar; açık ekstredekiler yeni günlere göre bir ekstreye girer
+  //   fix: günler yanlış girilmişti; geçmiş ekstreler dahil bütün ödemeler yeni günlerle hesaplanır
+  // cards: her seçenekte kart. choices: bu karttaki harcamalarda farklı sonuç veren seçenekler; birden azsa sormaya gerek
+  // yoktur, card kullanılır. open: açık ekstre ve ona düşen ödemeler, next: "new" seçilirse bugünkü harcamanın girdiği ekstre.
+  function termChoices(card, terms, purchases, today) {
+    const fix = withHistory({ ...card, ...terms }, card.history || []);
+    if (sameTerms(card, terms)) return { choices: [], card: fix };
+    const open = statementOf(card, today);
+    const cards = {
+      old: retermCard(card, terms, open.cut),
+      new: retermCard(card, terms, addDays(today, -1)),
+      fix,
+    };
+    const mine = purchases.filter(p => p.cardId === card.id && parseDate(p.date));   // tarihsizler ödeme ayında kalır
+    const plan = c => JSON.stringify(mine.map(p => payments(p, c).map(x => x.key)));
+    const plans = { old: plan(cards.old), new: plan(cards.new), fix: plan(fix) };
+    const choices = ["old", "new", "fix"].filter(k => k === "new" || plans[k] !== plans.new);
+    if (choices.length < 2) return { choices: [], card: fix, cards };
+
+    const due = mine.flatMap(p => payments(p, card)).filter(x => x.idx === open.dueIdx && x.key === open.due);
+    return {
+      choices, cards,
+      open: { cut: open.cut, due: open.due, count: due.length, total: due.reduce((s, x) => s + x.amount, 0) },
+      next: statementOf(cards.new, today),
+    };
   }
 
   // ---------- Harcama ----------
@@ -69,16 +170,24 @@
   function payments(p, card) {
     const amount = perInstallment(p);
     const d = parseDate(p.date);
+    const paid = planLength(p) - p.count;
+    const out = [];
+    if (card && d) {
+      // Her taksit bir sonraki ekstreye düşer; kart günleri değiştiyse ekstre kendi günleriyle kesilip ödenir
+      const ps = periods(card);
+      for (let k = 0, s = statementOf(card, p.date, ps); k < p.count; k++, s = nextStatement(ps, s)) {
+        out.push({ idx: s.dueIdx, key: s.due, no: paid + k + 1, amount });
+      }
+      return out;
+    }
     let first, day;
     if (card) {
-      first = d ? dueIndex(card, statementIndex(card, p.date)) : monthIndex(p.firstDue);
+      first = monthIndex(p.firstDue);
       day = card.dueDay;
     } else {
       first = d ? d.idx : monthIndex(p.firstDue);
       day = d ? d.day : 1;
     }
-    const paid = planLength(p) - p.count;
-    const out = [];
     for (let k = 0; k < p.count; k++) {
       out.push({ idx: first + k, key: dateKey(first + k, day), no: paid + k + 1, amount });
     }
@@ -152,6 +261,20 @@
     return d >= 1 && d <= 31 ? d : null;
   }
 
+  // Kartın eski günleri: geçersiz kayıtlar atılır, until'e göre sıralanır; boşsa null
+  function validHistory(list) {
+    if (!Array.isArray(list)) return null;
+    const out = [];
+    for (const h of list) {
+      const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(h?.until ?? ""));
+      const cutoffDay = validDay(h?.cutoffDay), dueDay = validDay(h?.dueDay);
+      if (!m || m[2] < 1 || m[2] > 12 || m[3] < 1 || m[3] > 31 || !cutoffDay || !dueDay) continue;
+      out.push({ until: dateKey(Number(m[1]) * 12 + Number(m[2]) - 1, Number(m[3])), cutoffDay, dueDay });
+    }
+    out.sort((a, b) => a.until.localeCompare(b.until));
+    return out.length ? out : null;
+  }
+
   // Son ödeme günü bilinen ama kesimi bilinmeyen kart: kesim, yasal 10 günlük aralıkla tahmin edilir
   function defaultCard(dueDay, id, color) {
     const due = validDay(dueDay) || 22;
@@ -173,6 +296,12 @@
     if (!Array.isArray(s.cards)) s.cards = [];
     if (!Array.isArray(s.installments)) s.installments = [];
     if (!Array.isArray(s.entries)) s.entries = [];
+    s.cards = s.cards.map(c => {
+      if (!c || typeof c !== "object" || !("history" in c)) return c;
+      const { history, ...rest } = c;
+      const h = validHistory(history);
+      return h ? { ...rest, history: h } : rest;
+    });
 
     // İlk taksit sürümü: tek kart (dueDay) ve "Ekstre" ayı → varsayılan kart + ilk ödeme ayı
     if (s.installments.some(i => i.statement)) {
@@ -284,9 +413,9 @@
   const api = {
     MONTHS, MONTHS_SHORT, CASH, SERIES_COUNT,
     monthIndex, monthKey, monthName, monthShort, yearOf, daysInMonth, dayOf, dateKey, parseDate, toDate, todayKey,
-    statementIndex, dueIndex,
+    addDays, statementIndex, dueIndex, periods, statementOf, nextStatement, retermCard, termChoices,
     perInstallment, planLength, originalTotal, payments, remainingFrom, outstanding, buildCashflow,
-    defaultState, validDay, defaultCard, nextColor, hydrate,
+    defaultState, validDay, validHistory, defaultCard, nextColor, hydrate,
     normalize, titleCase, parseStatement, fromStatement, parseSheetRows, parseWorkbook,
   };
   if (typeof module === "object" && module.exports) module.exports = api;

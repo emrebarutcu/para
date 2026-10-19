@@ -26,6 +26,19 @@
     return `${m[1]}-${String(mo).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
 
+  // Kartın eski günleri (taksit.js → kart): [{ until, cutoffDay, dueDay }] ↔ [{ until, cutoff_day, due_day }];
+  // geçersizler atılır, until'e göre sıralanır, boşsa null
+  function history(list, cutoff, due) {
+    if (!Array.isArray(list)) return null;
+    const out = [];
+    for (const h of list) {
+      const until = dateKey(h?.until), c = int(h?.[cutoff], 1, 31), d = int(h?.[due], 1, 31);
+      if (until && c != null && d != null) out.push({ until, c, d });
+    }
+    out.sort((a, b) => (a.until < b.until ? -1 : a.until > b.until ? 1 : 0));
+    return out.length ? out : null;
+  }
+
   // Kayıt → satır (user_id'siz); tablonun kısıtlarını ihlal edecek kayıt için null (yalnızca yerelde kalır)
   const ROW = {
     people: p => ({ id: p.id, name: String(p.name ?? ""), color: int(p.color, 0, 999) ?? 0 }),
@@ -36,6 +49,7 @@
         id: c.id, name: String(c.name ?? ""), credit_limit: Math.max(num(c.limit) || 0, 0),
         cutoff_day: cutoff, due_day: due, color: int(c.color, 0, 999) ?? 0,
         last4: /^\d{4}$/.test(c.last4) ? c.last4 : null,
+        history: history(c.history, "cutoffDay", "dueDay")?.map(h => ({ until: h.until, cutoff_day: h.c, due_day: h.d })) ?? null,
       };
     },
     purchases: p => {
@@ -51,7 +65,11 @@
     entries: e => {
       const amount = num(e.amount), date = dateKey(e.date);
       if (!validId(e.personId) || !ASSETS.includes(e.asset) || !Number.isFinite(amount) || amount === 0 || !date) return null;
-      return { id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date };
+      const repeat = e.repeat;   // varlik.js repeatOf ile aynı: 0 ya da 2…600 tamsayı, başka her şey tek seferlik
+      return {
+        id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date,
+        repeat_count: Number.isInteger(repeat) && (repeat === 0 || (repeat >= 2 && repeat <= 600)) ? repeat : null,
+      };
     },
   };
 
@@ -61,6 +79,8 @@
     cards: r => {
       const c = { id: r.id, name: r.name, limit: Number(r.credit_limit), cutoffDay: r.cutoff_day, dueDay: r.due_day, color: r.color };
       if (r.last4) c.last4 = r.last4;
+      const h = history(r.history, "cutoff_day", "due_day");
+      if (h) c.history = h.map(x => ({ until: x.until, cutoffDay: x.c, dueDay: x.d }));
       return c;
     },
     purchases: r => {
@@ -70,12 +90,34 @@
       if (r.plan_count) p.planCount = r.plan_count;
       return p;
     },
-    entries: r => ({ id: r.id, personId: r.person_id, asset: r.asset, amount: Number(r.amount), desc: r.description, date: r.date }),
+    entries: r => {
+      const e = { id: r.id, personId: r.person_id, asset: r.asset, amount: Number(r.amount), desc: r.description, date: r.date };
+      if (r.repeat_count != null) e.repeat = r.repeat_count;
+      return e;
+    },
   };
 
   function keyOf(table, item) {
     const row = item && validId(item.id) ? ROW[table](item) : null;
     return row ? JSON.stringify(row) : null;
+  }
+
+  // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
+  // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
+  const SCHEMA = 2;   // 2: cards.history, entries.repeat_count
+
+  // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
+  function rekey(base) {
+    const out = {};
+    for (const t of TABLES) {
+      out[t] = {};
+      for (const [id, key] of Object.entries(base?.[t] || {})) {
+        let k = null;
+        try { k = keyOf(t, ITEM[t](JSON.parse(key))); } catch {}
+        if (k) out[t][id] = k;
+      }
+    }
+    return out;
   }
 
   const listOf = (state, table) => (Array.isArray(state?.[FIELD[table]]) ? state[FIELD[table]] : []);
@@ -199,7 +241,7 @@
     return out;
   }
 
-  const api = { TABLES, FIELD, keyOf, toState, baseOf, changes, merge, combine };
+  const api = { TABLES, FIELD, SCHEMA, keyOf, rekey, toState, baseOf, changes, merge, combine };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Tablo = api;
 })(this);

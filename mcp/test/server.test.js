@@ -278,6 +278,49 @@ test("kişiler ve kart silme kuralları", async () => {
   assert.equal(stored(sb).installments.length, 0);
 });
 
+test("kartın günleri değişirken arada kalan harcamalar sorulur", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  await c.call("add_card", { name: "A", cutoff_day: 10, due_day: 20 });
+  const cut = await c.call("add_purchase", { description: "Kesilmiş", amount: 100, date: "2026-10-05" });   // 10 Eki ekstresi → 20 Eki
+  const open = await c.call("add_purchase", { description: "Arada", amount: 300, installments: 3, date: "2026-10-15" });   // 10 Kas → 20 Kas
+  const dates = async id => (await c.call("get_purchase", { id })).payments.map(x => x.date);
+
+  // Yalnızca limit değişince sorulmaz
+  assert.equal((await c.call("update_card", { card: "A", limit: 1000 })).card.limit, 1000);
+
+  const ask = await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30 });
+  assert.match(ask.error, /1 payment\(s\) totalling 100 TRY .* cut on 2026-11-10/);
+  assert.match(ask.error, /"old".*"new".*"fix"/);
+  assert.equal(stored(sb).cards[0].cutoffDay, 10);
+  assert.match((await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition: "later" })).error, /transition must be "old", "new", "fix"/);
+  for (const transition of ["constructor", "__proto__", "toString", 1])
+    assert.match((await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition })).error, /transition must be/);
+
+  // Yeni günler bugünden: kesilmiş ekstre kalır, açık ekstredekiler 20 Eki ekstresine geçer
+  const upd = await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition: "new" });
+  assert.deepEqual(upd.card.purchaseToday, { statementCutoff: "2026-10-20", dueDate: "2026-10-30" });
+  assert.deepEqual(stored(sb).cards[0].history, [{ until: "2026-10-17", cutoffDay: 10, dueDay: 20 }]);
+  assert.deepEqual(await dates(cut.purchase.id), ["2026-10-20"]);
+  assert.deepEqual(await dates(open.purchase.id), ["2026-10-30", "2026-11-30", "2026-12-30"]);
+
+  // Vazgeçip açık ekstreyi eski günlerle kesmek: 10 Kas ekstresi 20 Kas'ta ödenir, sonraki taksitler yeni günlerle
+  await c.call("update_card", { card: "A", cutoff_day: 10, due_day: 20, transition: "fix" });
+  await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition: "old" });
+  assert.deepEqual(stored(sb).cards[0].history, [{ until: "2026-11-10", cutoffDay: 10, dueDay: 20 }]);
+  assert.deepEqual(await dates(open.purchase.id), ["2026-11-20", "2026-11-30", "2026-12-30"]);
+
+  // Günler yanlış girilmişti: geçmiş dahil hepsi yeniden hesaplanır, eski günler unutulmaz (kesilmiş ekstreler kalır)
+  await c.call("update_card", { card: "A", cutoff_day: 25, due_day: 5, transition: "fix" });
+  assert.deepEqual(stored(sb).cards[0].history, [{ until: "2026-11-10", cutoffDay: 10, dueDay: 20 }]);
+  assert.deepEqual(await dates(open.purchase.id), ["2026-11-20", "2026-12-05", "2027-01-05"]);
+
+  // Harcaması olmayan kartta sorulmaz
+  await c.call("add_card", { name: "B", cutoff_day: 10, due_day: 20 });
+  assert.equal((await c.call("update_card", { card: "B", cutoff_day: 15, due_day: 25 })).card.cutoffDay, 15);
+  assert.equal(stored(sb).cards[1].history, undefined);
+});
+
 test("yalnızca değişen satırlar yazılır, silinenler işaretlenir", async () => {
   const sb = fakeSupabase();
   const c = client(sb);
@@ -424,6 +467,39 @@ test("varlıklar: TL, döviz ve gram altın hareketleri, güncel kurla TL karş�
   const del = await c.call("delete_person", { person: "Ayşe" });
   assert.equal(del.deletedEntries, 1);
   assert.deepEqual(stored(sb).entries.map(e => e.desc), ["Dolar alımı", "Tatil"]);
+});
+
+test("tekrarlayan varlık hareketleri: bakiyeye yalnızca tarihi gelen tekrarlar girer", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  // Bugün 2026-10-18
+  const maas = await c.call("add_entry", { asset: "TRY", direction: "in", amount: 50000, description: "Maaş", date: "2026-08-15", repeat: 0 });
+  assert.deepEqual(maas.entry.repeat, { every: "month", times: null, lastDate: null, processed: 3, nextDate: "2026-11-15" });
+  assert.equal(maas.balance, 150000);
+  const kira = await c.call("add_entry", { asset: "TRY", direction: "out", amount: 20000, description: "Kira", date: "2026-10-20", repeat: 3 });
+  assert.deepEqual(kira.entry.repeat, { every: "month", times: 3, lastDate: "2026-12-20", processed: 0, nextDate: "2026-10-20" });
+  assert.equal(kira.balance, 150000);
+  const tek = await c.call("add_entry", { asset: "USD", direction: "in", amount: 10, description: "Tek", repeat: 1 });
+  assert.equal(tek.entry.repeat, undefined);
+  assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", repeat: 601 })).error, /repeat/);
+  for (const repeat of ["", " ", true]) assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", repeat })).error, /repeat/);
+
+  assert.equal(sb.db.entries.find(r => r.id === maas.entry.id).repeat_count, 0);
+  assert.equal(sb.db.entries.find(r => r.id === kira.entry.id).repeat_count, 3);
+  assert.equal(sb.db.entries.find(r => r.id === tek.entry.id).repeat_count, null);
+
+  // Aralık süzgeci: tekrarlayan hareket aralıkta yinelenmeye devam ediyorsa listelenir
+  const range = await c.call("list_entries", { asset: "TRY", from: "2027-01-01" });
+  assert.deepEqual(range.entries.map(e => e.description), ["Maaş"]);
+  assert.deepEqual((await c.call("list_entries", { asset: "TRY", to: "2026-10-01" })).entries.map(e => e.description), ["Maaş"]);
+
+  // Süresiz tekrarı durdurmak: repeat işlenen sayıya çekilir; diğer alanlar korunur
+  const stop = await c.call("update_entry", { id: maas.entry.id, repeat: 3 });
+  assert.equal(stop.entry.repeat.nextDate, null);
+  assert.equal(stop.entry.amount, 50000);
+  const once = await c.call("update_entry", { id: kira.entry.id, amount: 25000 });
+  assert.equal(once.entry.repeat.times, 3);
+  assert.equal((await c.call("get_assets")).assets[0].balance, 150000);
 });
 
 test("kur alınamazsa yalnızca TL sayılır", async () => {

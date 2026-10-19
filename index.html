@@ -100,6 +100,29 @@
         </section>
       </div>
 
+      <section class="panel timeline-panel">
+        <header class="panel-head">
+          <div class="panel-title">
+            <h2>Girdi ve çıktılar</h2>
+            <span class="panel-note js-month-label"></span>
+          </div>
+          <div class="panel-tools">
+            <div class="seg" id="timelineKind" role="group" aria-label="Hareketleri süz">
+              <button type="button" data-kind="all">Tümü</button>
+              <button type="button" data-kind="in">Girdi</button>
+              <button type="button" data-kind="out">Çıktı</button>
+            </div>
+            <div class="seg" id="timelineMode" role="group" aria-label="Görünüm">
+              <button type="button" data-mode="list">Liste</button>
+              <button type="button" data-mode="calendar">Takvim</button>
+            </div>
+          </div>
+        </header>
+        <dl class="tl-sum" id="timelineSum"></dl>
+        <div class="cal" id="timelineCal" hidden></div>
+        <ol class="timeline" id="timeline"></ol>
+      </section>
+
       <section class="panel chart-panel">
         <header class="panel-head">
           <h2>Aylık ödemeler</h2>
@@ -274,9 +297,18 @@
         </label>
 
         <label class="field">
-          <span class="field-label">Tarih</span>
+          <span class="field-label" id="entryDateLabel">Tarih</span>
           <input name="date" type="date" required />
         </label>
+
+        <div class="field">
+          <span class="field-label">Tekrar</span>
+          <div class="chips" id="repeatChips" role="radiogroup" aria-label="Tekrar"></div>
+          <label class="inline-input">
+            <span>Diğer</span>
+            <input name="repeat" type="number" min="2" max="600" step="1" inputmode="numeric" placeholder="ay" />
+          </label>
+        </div>
 
         <div class="field">
           <span class="field-label">Kimin</span>
@@ -329,6 +361,11 @@
           </label>
         </div>
         <p class="hint" id="cardHint"></p>
+        <div class="field" id="termField" hidden>
+          <span class="field-label">Arada kalan harcamalar</span>
+          <p class="hint" id="termNote"></p>
+          <div class="choices" id="termChoices" role="radiogroup" aria-label="Arada kalan harcamalar"></div>
+        </div>
       </div>
       <footer class="sheet-foot">
         <button type="button" class="btn btn-danger" id="cardDelete" hidden>Sil</button>
