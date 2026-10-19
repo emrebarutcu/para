@@ -13,7 +13,8 @@ const CASH_COLOR = "var(--cash)";
 const VIEWS = ["ozet", "akis", "harcamalar", "kartlar", "varliklar"];
 const COUNT_PRESETS = [1, 2, 3, 4, 6, 9, 12];
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
-const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", rates: "para.rates" };
+const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // takvim pazartesiyle başlar
+const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates" };
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
 
@@ -48,6 +49,8 @@ let inboxDraftId = null;      // formda açılan e-posta kaydı
 let inboxOpenId = null;       // içeriği gösterilen e-posta
 let entryFilter = "all";      // varlıklarda seçili kişi
 let timelineKind = "all";     // özetteki zaman çizelgesi: all | in | out
+let timelineMode = readPref(PREF.timelineMode) === "calendar" ? "calendar" : "list";
+let timelineDay = null;       // takvimde seçili gün
 let editingEntryId = null;    // düzenlenen varlık hareketi
 let lastAsset = "TRY";
 let rates = readRates();      // son alınan kurlar: { rates: { TRY, USD, EUR, GAU }, updatedAt, fetchedAt }
@@ -245,7 +248,8 @@ const els = {
   nextLabel: $("nextLabel"), nextTotal: $("nextTotal"),
   remaining: $("remainingTotal"), endLabel: $("endLabel"),
   upcoming: $("upcomingList"), peopleSummary: $("peopleSummary"),
-  timelineKind: $("timelineKind"), timelineSum: $("timelineSum"), timeline: $("timeline"),
+  timelineKind: $("timelineKind"), timelineMode: $("timelineMode"), timelineSum: $("timelineSum"),
+  timelineCal: $("timelineCal"), timeline: $("timeline"),
   chartBy: $("chartBy"), legend: $("chartLegend"), chart: $("planChart"), chartEmpty: $("chartEmpty"),
   tooltip: $("chartTooltip"),
   flowMode: $("flowMode"), flowList: $("flowList"), flowTable: $("flowTable"), table: $("planTable"),
@@ -361,6 +365,10 @@ function renderTimeline(start) {
     b.classList.toggle("active", b.dataset.kind === timelineKind);
     b.setAttribute("aria-pressed", String(b.dataset.kind === timelineKind));
   }
+  for (const b of els.timelineMode.querySelectorAll("button")) {
+    b.classList.toggle("active", b.dataset.mode === timelineMode);
+    b.setAttribute("aria-pressed", String(b.dataset.mode === timelineMode));
+  }
   const today = T.todayKey();
   const r = rates?.rates;
   const entries = knownEntries().filter(e => T.parseDate(e.date)?.idx === start);
@@ -393,7 +401,10 @@ function renderTimeline(start) {
   els.timelineSum.title = missing ? "Kuru alınamayan döviz/altın hareketleri toplama dahil değil" : "";
 
   els.timeline.replaceChildren();
+  els.timelineCal.hidden = timelineMode !== "calendar";
+  els.timelineCal.parentElement.classList.toggle("cal-mode", timelineMode === "calendar");
   const shown = items.filter(it => timelineKind === "all" || it.kind === timelineKind);
+  if (timelineMode === "calendar") { renderCalendar(start, shown, today, r); return; }
   if (!shown.length) {
     const text = timelineKind === "in" ? "Bu ay girdi yok" : timelineKind === "out" ? "Bu ay çıktı yok" : "Bu ay hareket yok";
     els.timeline.append(el("li", "empty", text));
@@ -423,6 +434,63 @@ function renderTimeline(start) {
     els.timeline.append(day);
   }
   if (!nowPlaced) els.timeline.append(timelineNow(today));
+}
+
+// Takvim: günlerde o günün girdi/çıktı toplamı; seçili günün hareketleri altta
+function renderCalendar(start, shown, today, r) {
+  const byDay = new Map();
+  for (const it of shown) {
+    if (!byDay.has(it.date)) byDay.set(it.date, []);
+    byDay.get(it.date).push(it);
+  }
+  if (T.parseDate(timelineDay)?.idx !== start) {
+    timelineDay = T.parseDate(today).idx === start ? today : shown[0]?.date ?? T.dateKey(start, 1);
+  }
+
+  const grid = el("div", "cal-grid");
+  for (const w of CAL_WEEKDAYS) grid.append(el("span", "cal-wd", w));
+  const offset = (T.toDate(T.dateKey(start, 1)).getDay() + 6) % 7;
+  for (let i = 0; i < offset; i++) grid.append(el("span", "cal-pad"));
+  for (let d = 1, n = T.daysInMonth(start); d <= n; d++) {
+    const key = T.dateKey(start, d);
+    const list = byDay.get(key) || [];
+    let inSum = 0, outSum = 0, unknown = false;
+    for (const it of list) {
+      if (it.value == null) unknown = true;
+      else if (it.value > 0) inSum += it.value;
+      else outSum -= it.value;
+    }
+    const selected = key === timelineDay;
+    const b = el("button", "cal-day" + (key === today ? " today" : "") + (selected ? " selected" : "") + (key > today ? " planned" : ""));
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(selected));
+    b.setAttribute("aria-label", `${fmtDayShort(key)}: ` + (list.length
+      ? [inSum && `girdi ${fmt(inSum)}`, outSum && `çıktı ${fmt(outSum)}`, unknown && "kuru bilinmeyen hareket"].filter(Boolean).join(", ")
+      : "hareket yok"));
+    b.append(el("span", "cal-n", String(d)));
+    if (inSum) b.append(el("span", "cal-v in-text", "+" + fmtShort(inSum)));
+    if (outSum) b.append(el("span", "cal-v out-text", "−" + fmtShort(outSum)));
+    if (unknown && !inSum && !outSum) b.append(el("span", "cal-v", "•"));
+    b.addEventListener("click", () => { timelineDay = key; render(); });
+    grid.append(b);
+  }
+  els.timelineCal.replaceChildren(grid);
+
+  const list = byDay.get(timelineDay) || [];
+  const day = el("li", "tl-day" + (timelineDay > today ? " planned" : ""));
+  const head = el("div", "tl-date");
+  head.append(el("span", "", `${fmtDayShort(timelineDay)} · ${WEEKDAYS[T.toDate(timelineDay).getDay()]}`));
+  if (timelineDay === today) head.append(el("span", "tl-tag", "Bugün"));
+  day.append(head);
+  if (list.length) {
+    const ul = el("ul", "tl-items");
+    for (const it of list) ul.append(timelineItem(it, today, r));
+    day.append(ul);
+  } else {
+    day.classList.add("tl-none");
+    day.append(el("p", "tl-empty", timelineKind === "in" ? "Bu gün girdi yok" : timelineKind === "out" ? "Bu gün çıktı yok" : "Bu gün hareket yok"));
+  }
+  els.timeline.append(day);
 }
 
 function timelineNow(today) {
@@ -2015,6 +2083,14 @@ els.timelineKind.addEventListener("click", e => {
   const kind = e.target.closest("button")?.dataset.kind;
   if (!kind || kind === timelineKind) return;
   timelineKind = kind;
+  render();
+});
+
+els.timelineMode.addEventListener("click", e => {
+  const mode = e.target.closest("button")?.dataset.mode;
+  if (!mode || mode === timelineMode) return;
+  timelineMode = mode;
+  writePref(PREF.timelineMode, mode);
   render();
 });
 
