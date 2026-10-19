@@ -3,21 +3,13 @@
 ## 1. Supabase (cloud sync)
 
 1. [supabase.com](https://supabase.com) → New project oluştur
-2. **SQL Editor** → şu sorguyu çalıştır:
+2. **SQL Editor** → `supabase/tablolar.sql` dosyasını çalıştır. Kişiler (`people`), kartlar (`cards`) ve
+   harcamalar (`purchases`) ayrı tablolardır; her kullanıcı yalnızca kendi satırlarını görür (RLS).
 
-```sql
-create table cashflow_data (
-  user_id uuid references auth.users primary key,
-  data    jsonb not null default '{}'::jsonb,
-  updated_at timestamptz default now()
-);
-
-alter table cashflow_data enable row level security;
-
-create policy "own data" on cashflow_data
-  for all using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-```
+   **Eski kurulumdan geçiş** (veri `cashflow_data`'da tek JSON olarak duruyorsa): aynı dosya, yeni sürüm yayınlanmadan
+   **önce** bir kez çalıştırılır. Herkesin JSON'unu tablolara taşır (`cashflow_data` silinmez) ve geçiş döneminde
+   önbellekteki eski sürümün yazdıklarını tablolara aktaran bir tetikleyici kurar. Sonuç dosyanın sonundaki kontrol
+   sorgusu (yorum içinde) ayrıca çalıştırılarak görülür; bütün cihazlar yeni sürüme geçince tetikleyici kaldırılabilir (dosyadaki açıklamaya bak).
 
 3. **Settings → API** sayfasından al:
    - Project URL
@@ -53,8 +45,11 @@ Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
 
 ---
 
-Sync çalışma mantığı: Her kayıtta Supabase'e 1.5s gecikmeli yazar.  
-Giriş yapınca uzak veri daha yeniyse otomatik çeker. Çevrimdışıyken localStorage'dan çalışır.
+Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.
+Her kayıttan 1.5s sonra yalnızca değişen kişi / kart / harcama satırları yazılır; silinenler satırdan kalkmaz,
+`deleted_at` ile işaretlenir. Uygulama açılınca, öne gelince ve başka cihaz (ya da asistan) yazınca (Realtime)
+son okumadan beri değişen satırlar çekilir. Aynı anda farklı kayıtlar değişirse hepsi korunur; aynı kayıt iki
+cihazda değişirse sonra yazan kazanır. Hiç eşitlenmemiş cihazda buluttaki veri esastır.
 
 ## 4. Kartlar ve nakit akışı
 
@@ -158,7 +153,8 @@ MCP sunucusunda gizli anahtar yoktur. İzinler uygulamada Ayarlar → **Yapay ze
    - **Allow dynamic client registration**: **aç** (Claude / ChatGPT kendini kaydeder; kapalıysa her asistan için
      Authentication → OAuth Apps'ten elle istemci açılır, Claude'un dönüş adresi `https://claude.ai/api/mcp/auth_callback`)
 2. (Önerilir) **Supabase → Settings → JWT Keys**: asimetrik imzalama anahtarına (ES256/RS256) geç.
-3. **Supabase → SQL Editor**: `supabase/mcp.sql` dosyasını çalıştır (asistanın yaptığı değişiklik açık uygulamada anında görünsün).
+
+Asistanın yaptığı değişiklik açık uygulamada anında görünür: tablolar `supabase/tablolar.sql` ile Realtime yayınına eklenir.
 
 Kontrol: `https://bffqfhgctlgexjdyvaup.supabase.co/.well-known/oauth-authorization-server/auth/v1` JSON döndürmeli
 (şu an `OAuth server is disabled` döner — 1. adım yapılınca düzelir).
