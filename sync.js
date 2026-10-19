@@ -3,6 +3,8 @@
   let db = null;
   let user = null;
   let pushTimer = null;
+  let pullTimer = null;
+  let getStateCb = null;
   let onRemoteDataCb = null;
   let onSyncedCb = null;
   let inboxChannel = null;
@@ -45,7 +47,10 @@
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
+  // callbacks.getState(userId): ekrandaki veri o kullanıcınınsa veri, değilse null
+  // callbacks.onRemoteData(veri): başka cihazdan / asistandan gelenler işlenmiş yeni veri
   window.syncInit = function (callbacks) {
+    getStateCb = callbacks.getState;
     onRemoteDataCb = callbacks.onRemoteData;
     onSyncedCb = callbacks.onSynced;
     if (!enabled()) { renderBtn(null); return; }
@@ -57,6 +62,7 @@
       renderBtn(user);
       if (user) { refresh(); watchInbox(); watchData(); }
     });
+    window.addEventListener('online', () => window.syncRefresh());
 
     db.auth.onAuthStateChange((event, session) => {
       user = session?.user ?? null;
@@ -77,24 +83,17 @@
     });
   };
 
-  window.syncSchedulePush = function (stateData) {
+  window.syncSchedulePush = function () {
     if (!db || !user) return;
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => push(stateData), 1500);
+    pushTimer = setTimeout(() => run(push), 1500);
   };
 
-  window.syncPushNow = async function (stateData) {
+  window.syncPushNow = function () {
     if (!db || !user) return;
     clearTimeout(pushTimer);
-    await push(stateData);
+    return run(push);
   };
-
-  async function push(stateData) {
-    await db.from('cashflow_data').upsert(
-      { user_id: user.id, data: stateData, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id' }
-    );
-  }
 
   window.syncGetUser = function () { return user; };
 
@@ -174,15 +173,21 @@
   };
 
   // Asistan (MCP) ya da başka cihaz veriyi değiştirince açık uygulama beklemeden güncellensin
-  // (supabase/mcp.sql: cashflow_data Realtime yayınında). Kendi yazdığımız veri _v'den dolayı yok sayılır.
+  // (supabase/tablolar.sql: tablolar Realtime yayınında). Kendi yazdıklarımız gelince değişiklik çıkmaz.
   function watchData() {
     unwatchData();
     if (!db || !user || typeof db.channel !== 'function') return;
-    dataChannel = db.channel('data-' + user.id)
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'cashflow_data', filter: `user_id=eq.${user.id}` },
-        () => pull())
-      .subscribe();
+    let channel = db.channel('data-' + user.id);
+    for (const table of window.Tablo.TABLES) {
+      channel = channel.on('postgres_changes',
+        { event: '*', schema: 'public', table, filter: `user_id=eq.${user.id}` }, schedulePull);
+    }
+    dataChannel = channel.subscribe();
+  }
+
+  function schedulePull() {
+    clearTimeout(pullTimer);
+    pullTimer = setTimeout(() => run(pull), 300);
   }
 
   function unwatchData() {
@@ -191,16 +196,138 @@
   }
 
   // ── Internal ────────────────────────────────────────────────────────────────
-  // Önce uzak veri çekilir, sonra e-postalar işlenir: harcama güncel verinin üstüne eklensin
+  // Önce uzak veri çekilir (ve bekleyen değişiklikler yazılır), sonra e-postalar işlenir: harcama güncel verinin
+  // üstüne eklensin
   async function refresh() {
-    await pull();
+    await run(async uid => { await pull(uid); await push(uid); });
     if (typeof onSyncedCb === 'function') onSyncedCb();
   }
 
-  async function pull() {
-    if (!db || !user) return;
-    const { data } = await db.from('cashflow_data').select('data').eq('user_id', user.id).single();
-    if (data?.data && typeof onRemoteDataCb === 'function') onRemoteDataCb(data.data);
+  // ── Veri: kişiler, kartlar, harcamalar (supabase/tablolar.sql, tablo.js) ──────
+  // Her kayıt ayrı bir satırdır; yalnızca değişenler yazılır. Kullanıcıya özel saklananlar:
+  //   base   tablo → id → son eşitlenen satır (yerel değişiklikler buna göre bulunur)
+  //   cursor tablo → okunan son updated_at (sonraki okuma oradan devam eder)
+  // Hiç eşitlenmemiş cihazda tablolarda veri varsa o esastır; tablolar boşsa yerel veri yazılır.
+  const PAGE = 1000;        // PostgREST'in bir cevapta döndürdüğü en fazla satır
+  const BATCH = 200;        // bir istekte yazılan / silinen en fazla satır
+  const OVERLAP = 30000;    // imleçten bu kadar ms geriden okunur: aynı anda biten yazmalar kaçmasın
+  let queue = Promise.resolve();
+
+  const metaKey = uid => `cashflow.v1.${uid}.sync`;
+  function loadMeta(uid) {
+    try {
+      const meta = JSON.parse(localStorage.getItem(metaKey(uid)));
+      if (meta?.base && meta?.cursor) return meta;
+    } catch {}
+    return null;
+  }
+  function saveMeta(uid, meta) {
+    localStorage.setItem(metaKey(uid), JSON.stringify(meta));
+  }
+
+  // Eşitlemeler sırayla çalışır, aynı cihazdaki başka sekmelerle de (taban aynı anda iki yerden değişmesin);
+  // hata sonraki denemeye kalır
+  function run(task) {
+    const uid = user?.id;
+    const go = () => (db && uid && user?.id === uid && getStateCb?.(uid) ? task(uid) : null);
+    queue = queue
+      .then(() => (navigator.locks ? navigator.locks.request('cashfollow-sync-' + uid, go) : go()))
+      .catch(err => console.warn('sync:', err?.message || err));
+    return queue;
+  }
+
+  // PostgREST zamanı (mikrosaniyeli) → ms; Safari yalnızca 3 haneli kesri okur
+  const time = s => Date.parse(String(s).replace(/\.(\d+)/, (_, f) => '.' + (f + '00').slice(0, 3)));
+
+  const quote = v => `"${String(v).replace(/["\\]/g, '\\$&')}"`;
+
+  // since'ten sonra değişen satırlar (silinenler dahil), updated_at sırasıyla
+  async function fetchRows(table, uid, since) {
+    const rows = [];
+    for (let last = null; ;) {
+      let q = db.from(table).select('*').eq('user_id', uid).order('updated_at').order('id').limit(PAGE);
+      if (last) {
+        const at = quote(last.updated_at);
+        q = q.or(`updated_at.gt.${at},and(updated_at.eq.${at},id.gt.${quote(last.id)})`);
+      } else if (since) {
+        q = q.gt('updated_at', since);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      rows.push(...data);
+      if (data.length < PAGE) return rows;
+      last = data[data.length - 1];
+    }
+  }
+
+  async function pull(uid) {
+    const { TABLES, toState, baseOf, merge } = window.Tablo;
+    const meta = loadMeta(uid);
+    const rows = {};
+    for (const t of TABLES) {
+      const at = meta?.cursor[t];
+      rows[t] = await fetchRows(t, uid, at && new Date(time(at) - OVERLAP).toISOString());
+    }
+    let state = getStateCb(uid);
+    if (!state || user?.id !== uid) return;   // bu arada çıkış yapıldı
+
+    let base, changed = false;
+    if (!meta && TABLES.some(t => rows[t].length)) {
+      state = { ...state, ...toState(rows) };
+      base = baseOf(rows);
+      changed = true;
+    } else {
+      base = meta?.base || {};
+      for (const t of TABLES) {
+        const out = merge(state, base, t, rows[t]);
+        ({ state, base } = out);
+        changed = changed || out.changed;
+      }
+    }
+    const cursor = { ...meta?.cursor };
+    for (const t of TABLES) {
+      for (const r of rows[t]) {
+        if (!cursor[t] || time(r.updated_at) > time(cursor[t])) cursor[t] = r.updated_at;
+      }
+    }
+    saveMeta(uid, { base, cursor });
+    if (changed && typeof onRemoteDataCb === 'function') onRemoteDataCb(state);
+  }
+
+  async function push(uid) {
+    const { TABLES, changes } = window.Tablo;
+    if (!loadMeta(uid)) await pull(uid);
+    const meta = loadMeta(uid);
+    const state = getStateCb(uid);
+    if (!meta || !state) return;
+    const plan = changes(state, meta.base);
+    const commit = (t, list, fn) => {
+      const known = meta.base[t] = { ...meta.base[t] };
+      for (const x of list) fn(known, x);
+      saveMeta(uid, meta);
+    };
+
+    for (const t of TABLES) {
+      const list = plan[t].upsert;
+      for (let i = 0; i < list.length; i += BATCH) {
+        const part = list.slice(i, i + BATCH);
+        const { error } = await db.from(t)
+          .upsert(part.map(x => ({ ...x.row, user_id: uid, deleted_at: null })), { onConflict: 'user_id,id' });
+        if (error) throw error;
+        commit(t, part, (known, x) => { known[x.id] = x.key; });
+      }
+    }
+    // Silinenler: önce harcamalar, sonra kartlar ve kişiler
+    const deletedAt = new Date().toISOString();
+    for (const t of [...TABLES].reverse()) {
+      const ids = plan[t].delete;
+      for (let i = 0; i < ids.length; i += BATCH) {
+        const part = ids.slice(i, i + BATCH);
+        const { error } = await db.from(t).update({ deleted_at: deletedAt }).eq('user_id', uid).in('id', part);
+        if (error) throw error;
+        commit(t, part, (known, id) => { delete known[id]; });
+      }
+    }
   }
 
   function renderBtn(u) {

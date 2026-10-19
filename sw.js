@@ -1,5 +1,5 @@
-const CACHE = 'cashfollow-v7';
-const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/eposta.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
+const CACHE = 'cashfollow-v8';
+const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/eposta.js', '/tablo.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

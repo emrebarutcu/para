@@ -23,6 +23,7 @@ function writePref(key, value) {
   try { value ? localStorage.setItem(key, value) : localStorage.removeItem(key); } catch {}
 }
 
+let stateOwner = null;         // state'in ait olduğu kullanıcı (girişsizse null)
 let state = loadState();
 let view = viewFromHash();
 let currentMonth = T.monthKey(todayIndex());   // özet ve akışın başladığı ay
@@ -44,6 +45,7 @@ let inboxDraftId = null;      // formda açılan e-posta kaydı
 let inboxOpenId = null;       // içeriği gösterilen e-posta
 
 function loadState() {
+  stateOwner = window.CF_USER_ID || null;
   try {
     const raw = localStorage.getItem(getStorageKey());
     if (!raw) return defaultState();
@@ -52,9 +54,8 @@ function loadState() {
 }
 
 function saveState() {
-  state._v = Date.now();
   localStorage.setItem(getStorageKey(), JSON.stringify(state));
-  if (typeof window.syncSchedulePush === 'function') window.syncSchedulePush(state);
+  if (typeof window.syncSchedulePush === 'function') window.syncSchedulePush();
 }
 
 function resetView() {
@@ -78,10 +79,18 @@ window.onAuthLogin = function (userId) {
 };
 window.onAuthLogout = function () {
   window.CF_USER_ID = null;
+  stateOwner = null;
   state = defaultState();  // temiz slate — hesap verisi ekranda kalmasın
   resetView();
   render();
 };
+
+// Aynı cihazdaki başka sekme veriyi değiştirince bu sekme de onu kullansın (eşitleme ekrandaki veriye göre yazar)
+window.addEventListener("storage", e => {
+  if (e.key !== getStorageKey() || e.newValue == null || stateOwner !== (window.CF_USER_ID || null)) return;
+  try { state = hydrate(JSON.parse(e.newValue)); } catch { return; }
+  render();
+});
 
 // ---------- Helpers ----------
 function todayIndex() {
@@ -1219,7 +1228,7 @@ async function checkInbox({ quiet = true } = {}) {
       const personId = state.people[0].id;
       for (const x of added) state.installments.push({ id: uid(), personId, ...emailPurchase(x.parsed, x.card) });
       saveState();
-      if (typeof window.syncPushNow === "function") await window.syncPushNow(state);
+      if (typeof window.syncPushNow === "function") await window.syncPushNow();
     }
     if (added.length === 1) {
       const p = emailPurchase(added[0].parsed, added[0].card);
@@ -1450,7 +1459,7 @@ els.importInput.addEventListener("change", async e => {
     alert(err.userMessage || (isExcel ? "Excel dosyası okunamadı." : "Geçersiz dosya."));
     return;
   } finally { els.importInput.value = ""; }
-  if (typeof window.syncPushNow === 'function') await window.syncPushNow(state);
+  if (typeof window.syncPushNow === 'function') await window.syncPushNow();
 });
 
 // ---------- Excel import ----------
@@ -1570,14 +1579,11 @@ if ('serviceWorker' in navigator) {
 // ---------- Boot ----------
 if (typeof window.syncInit === 'function') {
   window.syncInit({
-    onRemoteData(remote) {
-      if (!remote || typeof remote._v !== 'number') return;
-      const local = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
-      if (remote._v > (local._v || 0)) {
-        state = hydrate(remote);
-        localStorage.setItem(getStorageKey(), JSON.stringify(state));
-        render();
-      }
+    getState: userId => (stateOwner === userId ? state : null),
+    onRemoteData(next) {
+      state = hydrate(next);
+      localStorage.setItem(getStorageKey(), JSON.stringify(state));
+      render();
     },
     onSynced() { checkInbox(); },
   });

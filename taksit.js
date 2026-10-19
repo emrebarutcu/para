@@ -135,7 +135,7 @@
   }
 
   // ---------- Kayıtlı veri ----------
-  // { people: [{ id, name, color }], cards: [kart], installments: [harcama], _v }
+  // { people: [{ id, name, color }], cards: [kart], installments: [harcama] }
   const SERIES_COUNT = 8;   // styles.css'teki --s1…--s8
 
   function defaultState() {
@@ -143,7 +143,6 @@
       people: [{ id: "ben", name: "Ben", color: 0 }],
       cards: [],              // { id, name, limit, cutoffDay, dueDay, color, last4? }
       installments: [],       // harcamalar
-      _v: 0, // version timestamp — used for sync conflict resolution
     };
   }
 
@@ -166,7 +165,7 @@
   }
 
   // Eski sürümlerden gelen veriyi bugünkü biçime taşır. Nakit akışı sürümünden kalan alanlar
-  // (entriesByDate, recurring…) olduğu gibi kalır; senkronizasyon tüm nesneyi yazdığı için silinmezler.
+  // (entriesByDate, recurring…) olduğu gibi kalır; buluta yazılmazlar (cashflow_data'da dururlar).
   function hydrate(data) {
     const s = { ...defaultState(), ...data };
     if (!Array.isArray(s.people)) s.people = defaultState().people;
