@@ -53,6 +53,7 @@ let entryFilter = "all";      // varlıklarda seçili kişi
 let timelineKind = "all";     // özetteki zaman çizelgesi: all | in | out
 let timelineMode = readPref(PREF.timelineMode) === "calendar" ? "calendar" : "list";
 let timelineDay = null;       // takvimde seçili gün
+let timelineOpen = null;      // özetteki zaman çizelgesinde açılan ödeme (ayrıntısı gösterilir)
 let editingEntryId = null;    // düzenlenen varlık hareketi
 let lastAsset = "TRY";
 let rates = readRates();      // son alınan kurlar: { rates: { TRY, USD, EUR, GAU }, updatedAt, fetchedAt }
@@ -516,7 +517,7 @@ function timelineItem(it, today, r) {
   const title = el("div", "tl-title");
   const sub = el("div", "tl-sub");
   const side = el("div", "tl-amt");
-  let open;
+  let open, detail = null;
 
   if (it.entry) {
     const e = it.entry;
@@ -540,14 +541,43 @@ function timelineItem(it, today, r) {
     what.append(dot(cardColor(ev.cardId)), document.createTextNode(names.slice(0, 2).join(", ") + (names.length > 2 ? ` +${names.length - 2}` : "")));
     sub.append(what);
     side.append(el("span", "amount", "−" + fmt(ev.total)));
-    open = () => openEvent(ev);
+    // Dokununca yerinde açılır: kimin ne kadar ödeyeceği ve ödenen taksitler
+    const isOpen = timelineOpen === ev.key;
+    li.dataset.ev = ev.key;
+    li.classList.toggle("open", isOpen);
+    li.setAttribute("aria-expanded", String(isOpen));
+    if (isOpen) detail = eventDetail(ev);
+    open = () => {
+      timelineOpen = isOpen ? null : ev.key;
+      render();
+      els.timeline.querySelector(`.tl-item[data-ev="${CSS.escape(ev.key)}"]`)?.focus();
+    };
   }
 
   main.append(title, sub);
   li.append(el("span", "tl-mark"), main, side);
+  if (detail) li.append(detail);
   li.addEventListener("click", open);
-  li.addEventListener("keydown", e => { if (e.key === "Enter") open(); });
+  li.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+  });
   return li;
+}
+
+// Ödemenin ayrıntısı: kişilere düşen pay (birden çok kişi varsa) ve ödenen taksitler
+function eventDetail(ev) {
+  const box = el("div", "tl-detail");
+  const split = el("div", "month-split");
+  for (const p of state.people) {
+    const v = ev.byPerson[p.id];
+    if (!v) continue;
+    const s = el("span");
+    s.append(dot(seriesVar(p)), document.createTextNode(`${p.name} ${fmt(v)}`));
+    split.append(s);
+  }
+  if (split.childElementCount > 1) box.append(split);
+  box.append(eventItems(ev));
+  return box;
 }
 
 function renderPeopleSummary(months, start) {

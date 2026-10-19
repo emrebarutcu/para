@@ -556,6 +556,11 @@ a { color: inherit; }
 .tl-item.in .amount { color: var(--income); }
 .tl-item.out .amount { color: var(--expense); }
 .tl-item.planned .tl-main, .tl-item.planned .amount { opacity: .7; }
+.tl-detail { grid-column: 1 / -1; cursor: default; }
+.tl-detail .month-split { padding: 0 2px 4px; }
+.tl-detail .items { margin: 0; }
+.tl-item .tl-detail .amount { color: var(--text); }
+.tl-item.open .tl-mark { top: 27px; }
 .panel-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tl-date { position: relative; }
 .tl-none .tl-date::before {
