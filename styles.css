@@ -1021,6 +1021,8 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .auth-msg { font-size: 13px; margin: 8px 0 0; min-height: 18px; }
 .auth-forgot { border: none; background: transparent; color: var(--text-3); font-size: 13px; padding: 4px 0; }
 .auth-forgot:hover { color: var(--text); }
+#resendBtn { display: block; margin-bottom: 4px; color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+#resendBtn:disabled { color: var(--text-3); cursor: default; }
 .auth-user-email { font-weight: 600; margin: 0 0 16px; }
 .move-actions { display: flex; flex-direction: column; gap: 8px; }
 .move-actions .row-btn:disabled { opacity: .6; cursor: progress; }

@@ -397,7 +397,34 @@
         document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
         document.getElementById('authPassword').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
         const m = document.getElementById('authMsg'); if (m) m.textContent = '';
+        showResend(null);
       });
+    });
+
+    // Doğrulanmamış hesap: doğrulama e-postası yeniden gönderilebilir (Supabase aynı adrese 60 sn'de bir izin verir)
+    let resendEmail = null;
+    function showResend(email) {
+      resendEmail = email;
+      document.getElementById('resendBtn')?.toggleAttribute('hidden', !email);
+    }
+    function authMessage(text, ok) {
+      const msgEl = document.getElementById('authMsg');
+      msgEl.textContent = (ok ? '✓ ' : '⚠ ') + text;
+      msgEl.style.color = ok ? 'var(--income)' : 'var(--expense)';
+    }
+
+    document.getElementById('resendBtn')?.addEventListener('click', async e => {
+      if (!db || !resendEmail) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const { error } = await db.auth.resend({ type: 'signup', email: resendEmail, options: { emailRedirectTo: window.location.origin } });
+      if (error) {
+        btn.disabled = false;
+        authMessage(error.status === 429 ? 'Biraz bekleyip yeniden dene.' : error.message, false);
+        return;
+      }
+      authMessage('Doğrulama e-postası yeniden gönderildi. Gelmezse gereksiz / spam klasörüne de bak.', true);
+      setTimeout(() => { btn.disabled = false; }, 60000);
     });
 
     // Giriş / Kayıt form
@@ -411,18 +438,24 @@
 
       const { data, error } = authMode === 'login'
         ? await db.auth.signInWithPassword({ email, password })
-        : await db.auth.signUp({ email, password });
+        : await db.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
 
       btn.disabled = false;
       btn.textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
+      showResend(null);
 
-      const msgEl = document.getElementById('authMsg');
-      if (error) {
-        msgEl.textContent = '⚠ ' + (error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message);
-        msgEl.style.color = 'var(--expense)';
+      if (error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
+        authMessage('E-posta adresin henüz doğrulanmadı. E-postana gelen bağlantıya tıkla.', false);
+        showResend(email);
+      } else if (error) {
+        authMessage(error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message, false);
+      } else if (authMode === 'register' && data.user && !data.user.identities?.length) {
+        // Adres zaten kayıtlı: Supabase bunu belli etmemek için başarılı döner ama e-posta göndermez
+        authMessage('Bu e-postayla zaten bir hesap var. Giriş Yap sekmesinden gir; şifreni hatırlamıyorsan "Şifremi unuttum".', false);
       } else if (authMode === 'register') {
-        msgEl.textContent = data.session ? '✓ Kayıt olundu!' : '✓ Kayıt olundu! E-postana gelen bağlantıyla hesabını doğrula.';
-        msgEl.style.color = 'var(--income)';
+        if (data.session) { authMessage('Kayıt olundu!', true); return; }
+        authMessage('Kayıt olundu! E-postana gelen bağlantıyla hesabını doğrula. Gelmezse gereksiz / spam klasörüne de bak.', true);
+        showResend(email);
       } else {
         closeModal();
       }
