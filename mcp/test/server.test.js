@@ -294,6 +294,8 @@ test("kartın günleri değişirken arada kalan harcamalar sorulur", async () =>
   assert.match(ask.error, /"old".*"new".*"fix"/);
   assert.equal(stored(sb).cards[0].cutoffDay, 10);
   assert.match((await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition: "later" })).error, /transition must be "old", "new", "fix"/);
+  for (const transition of ["constructor", "__proto__", "toString", 1])
+    assert.match((await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition })).error, /transition must be/);
 
   // Yeni günler bugünden: kesilmiş ekstre kalır, açık ekstredekiler 20 Eki ekstresine geçer
   const upd = await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition: "new" });
@@ -480,6 +482,7 @@ test("tekrarlayan varlık hareketleri: bakiyeye yalnızca tarihi gelen tekrarlar
   const tek = await c.call("add_entry", { asset: "USD", direction: "in", amount: 10, description: "Tek", repeat: 1 });
   assert.equal(tek.entry.repeat, undefined);
   assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", repeat: 601 })).error, /repeat/);
+  for (const repeat of ["", " ", true]) assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", repeat })).error, /repeat/);
 
   assert.equal(sb.db.entries.find(r => r.id === maas.entry.id).repeat_count, 0);
   assert.equal(sb.db.entries.find(r => r.id === kira.entry.id).repeat_count, 3);

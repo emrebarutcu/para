@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import Tablo from "../../tablo.js";
 
-const { toState, baseOf, changes, merge, combine } = Tablo;
+const { toState, baseOf, changes, merge, combine, rekey } = Tablo;
 
 let clock = 0;
 const at = () => new Date(Date.UTC(2026, 9, 19, 9, 0, 0, ++clock)).toISOString().replace("Z", "+00:00");
@@ -227,4 +227,41 @@ test("kartın eski günleri: satıra çevrilir, sıralanır, geçersizler atıl�
   assert.equal(toState({ cards: [card("k2", { history: [] })] }).cards[0].history, undefined);
   assert.equal(changes(state, {}).cards.upsert.length, 1);
   assert.deepEqual(changes(toState(rows), baseOf(rows)).cards, { upsert: [], delete: [] });
+});
+
+test("repeat yalnızca 0 ya da 2…600 tamsayıysa yazılır (varlik.js repeatOf gibi); null, boş, kesirli tek seferlik", () => {
+  const state = { people: [{ id: "ben", name: "Ben", color: 0 }], entries: [null, "", false, -0.4, "12", 2.5, 1, 0, 12, 601]
+    .map((repeat, i) => ({ id: `e${i}`, personId: "ben", asset: "TRY", amount: 100, desc: "x", date: "2026-10-01", repeat })) };
+  assert.deepEqual(changes(state, {}).entries.upsert.map(x => x.row.repeat_count), [null, null, null, null, null, null, null, 0, 12, null]);
+});
+
+test("1.x tabanı (yeni sütunsuz) rekey ile çevrilir: yükseltmede bir şey yazılmaz, uzaktaki yeni sütun alınır", () => {
+  const rows = server();
+  rows.entries = [{ user_id: "u1", id: "maas", person_id: "ben", asset: "TRY", amount: 50000, description: "Maaş", date: "2026-10-15",
+    created_at: at(), updated_at: at(), deleted_at: null }];
+  const state = toState(rows);
+  // 1.x'in kaydettiği taban: satırların yeni sütunlar (history, repeat_count) olmadan JSON'u
+  const old = baseOf(rows);
+  for (const t of ["cards", "entries"]) {
+    for (const id of Object.keys(old[t])) {
+      const { history, repeat_count, ...row } = JSON.parse(old[t][id]);
+      old[t][id] = JSON.stringify(row);
+    }
+  }
+  assert.ok(changes(state, old).cards.upsert.length);   // çevrilmeden her kart yeniden yazılırdı
+
+  const base = rekey(old);
+  assert.deepEqual(base, baseOf(rows));
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(state, base)[t], { upsert: [], delete: [] }, t);
+
+  // Başka cihaz kartın eski günlerini, maaşın tekrarını yazmış: yeniden çekilince yerel kayıt güncellenir
+  const k1 = { ...rows.cards[0], history: [{ until: "2026-09-12", cutoff_day: 5, due_day: 15 }], updated_at: at() };
+  const maas = { ...rows.entries[0], repeat_count: 0, updated_at: at() };
+  let out = merge(state, base, "cards", [k1]);
+  assert.equal(out.changed, true);
+  assert.deepEqual(out.state.cards[0].history, [{ until: "2026-09-12", cutoffDay: 5, dueDay: 15 }]);
+  out = merge(out.state, out.base, "entries", [maas]);
+  assert.equal(out.changed, true);
+  assert.equal(out.state.entries[0].repeat, 0);
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(out.state, out.base)[t], { upsert: [], delete: [] }, t);
 });

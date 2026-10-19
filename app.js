@@ -375,13 +375,18 @@ function renderTimeline(start) {
   }
   const today = T.todayKey();
   const r = rates?.rates;
-  const entries = knownEntries().filter(e => T.parseDate(e.date)?.idx === start);
+  // Tekrarlayan hareket bu aya düşen tekrarının tarihiyle gelir; varlığı bilinmeyen hareket (içe aktarma) atlanır
+  const entries = [];
+  for (const e of knownEntries()) {
+    const k = start - (T.parseDate(e.date)?.idx ?? NaN), n = V.repeatOf(e);
+    if (V.asset(e.asset) && k >= 0 && (n == null ? k === 0 : n === 0 || k < n)) entries.push({ e, date: V.occurrenceDate(e, k) });
+  }
   const events = T.buildCashflow(state.people, state.cards, state.installments, start, start)[0].events;
-  if (entries.some(e => e.asset !== "TRY")) loadRates();
+  if (entries.some(x => x.e.asset !== "TRY")) loadRates();
 
   const order = new Map(state.entries.map((e, i) => [e.id, i]));
   const items = [
-    ...entries.map(e => ({ kind: e.amount > 0 ? "in" : "out", date: e.date, entry: e, value: V.toTry(e.amount, e.asset, r), rank: order.get(e.id) })),
+    ...entries.map(({ e, date }) => ({ kind: e.amount > 0 ? "in" : "out", date, entry: e, value: V.toTry(e.amount, e.asset, r), rank: order.get(e.id) })),
     ...events.map((ev, i) => ({ kind: "out", date: ev.date, event: ev, value: -ev.total, rank: state.entries.length + i })),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.rank - b.rank);
 
@@ -391,7 +396,7 @@ function renderTimeline(start) {
     else if (it.value > 0) inSum += it.value;
     else outSum -= it.value;
   }
-  const net = inSum - outSum;
+  const net = Math.round((inSum - outSum) * 100) / 100;   // kuruşu aşmayan fark −₺0,00 görünmesin
   const approx = missing ? "≈ " : "";
   const stat = (label, text, cls) => {
     const d = el("div");
@@ -475,7 +480,7 @@ function renderCalendar(start, shown, today, r) {
     if (inSum) b.append(el("span", "cal-v in-text", "+" + fmtShort(inSum)));
     if (outSum) b.append(el("span", "cal-v out-text", "−" + fmtShort(outSum)));
     if (unknown && !inSum && !outSum) b.append(el("span", "cal-v", "•"));
-    b.addEventListener("click", () => { timelineDay = key; render(); });
+    b.addEventListener("click", () => { timelineDay = key; render(); els.timelineCal.querySelector(".cal-day.selected")?.focus(); });
     grid.append(b);
   }
   els.timelineCal.replaceChildren(grid);
@@ -1473,7 +1478,7 @@ function updateTermChoices(existing, v) {
     new: ["Yeni günler hemen başlasın", open.count
       ? `Kesilmiş ekstreler kalır; açık ekstredekiler ${fmtDay(next.cut)} kesimli ekstreye girer, ${fmtDay(next.due)} tarihinde ödenir`
       : "Kesilmiş ekstreler olduğu gibi kalır; bundan sonrakiler yeni günlerle"],
-    fix: ["Günleri yanlış girmiştim", "Geçmiş ekstreler dahil bütün ödemeler yeni günlere göre yeniden hesaplanır"],
+    fix: ["Günleri yanlış girmiştim", "Şimdiki günlerle hesaplanan bütün ödemeler, geçmiş ekstreler dahil, yeni günlere göre yeniden hesaplanır; daha önceki gün değişiklikleri korunur"],
   };
   els.termChoices.replaceChildren(...r.choices.map(k => {
     const label = el("label", "choice");

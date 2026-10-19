@@ -159,7 +159,7 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
 - Kartın kesim ya da son ödeme günü değiştirilirken karttaki harcamalar etkileniyorsa uygulama arada kalanların ne
   olacağını sorar: **açık ekstre eski günlerle kesilsin** (yeni günler sonraki ekstreden başlar), **yeni günler hemen
   başlasın** (kesilmiş ekstreler kalır, henüz kesilmemişler yeni günlere göre bir ekstreye girer) ya da **günleri yanlış
-  girmiştim** (geçmiş dahil hepsi yeni günlerle). Kesilmiş ekstrelerin günleri kartta saklanır (`history`).
+  girmiştim** (şimdiki günlerle hesaplananlar, geçmiş dahil, yeni günlerle; daha önceki gün değişiklikleri kalır). Kesilmiş ekstrelerin günleri kartta saklanır (`history`).
 
 Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
 
@@ -171,7 +171,7 @@ karşılığı güncel satış kuruyla gösterilir.
 
 Hareket her ay tekrarlanabilir (maaş, kira, aidat): formdaki **Tekrar** ile belirli sayıda ay ya da süresiz. Tekrarlar
 ilk tarihin gününde düşer (ay kısaysa ayın son günü); bakiyeye yalnızca tarihi gelmiş tekrarlar girer. Süresiz
-tekrarı durdurmak için ay sayısı işlenen tekrar sayısına çekilir.
+tekrarı durdurmak için ay sayısı işlenen tekrar sayısına çekilir (hiç işlenmediyse hareket silinir; 0 süresiz demektir).
 
 Kurlar sitenin Worker'ından gelir: `GET /api/kur` → `{ rates: { TRY, USD, EUR, GAU }, updatedAt, source }`
 (`mcp/kur.js`). Kaynak [Truncgil](https://finans.truncgil.com) (Türkiye piyasası, gram altın dahil); erişilemezse

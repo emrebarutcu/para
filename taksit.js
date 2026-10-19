@@ -297,7 +297,7 @@
     if (!Array.isArray(s.installments)) s.installments = [];
     if (!Array.isArray(s.entries)) s.entries = [];
     s.cards = s.cards.map(c => {
-      if (!("history" in c)) return c;
+      if (!c || typeof c !== "object" || !("history" in c)) return c;
       const { history, ...rest } = c;
       const h = validHistory(history);
       return h ? { ...rest, history: h } : rest;

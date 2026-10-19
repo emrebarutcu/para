@@ -65,10 +65,10 @@
     entries: e => {
       const amount = num(e.amount), date = dateKey(e.date);
       if (!validId(e.personId) || !ASSETS.includes(e.asset) || !Number.isFinite(amount) || amount === 0 || !date) return null;
-      const repeat = int(e.repeat, 0, 600);
+      const repeat = e.repeat;   // varlik.js repeatOf ile aynı: 0 ya da 2…600 tamsayı, başka her şey tek seferlik
       return {
         id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date,
-        repeat_count: repeat === 0 || repeat >= 2 ? repeat : null,
+        repeat_count: Number.isInteger(repeat) && (repeat === 0 || (repeat >= 2 && repeat <= 600)) ? repeat : null,
       };
     },
   };
@@ -100,6 +100,24 @@
   function keyOf(table, item) {
     const row = item && validId(item.id) ? ROW[table](item) : null;
     return row ? JSON.stringify(row) : null;
+  }
+
+  // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
+  // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
+  const SCHEMA = 2;   // 2: cards.history, entries.repeat_count
+
+  // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
+  function rekey(base) {
+    const out = {};
+    for (const t of TABLES) {
+      out[t] = {};
+      for (const [id, key] of Object.entries(base?.[t] || {})) {
+        let k = null;
+        try { k = keyOf(t, ITEM[t](JSON.parse(key))); } catch {}
+        if (k) out[t][id] = k;
+      }
+    }
+    return out;
   }
 
   const listOf = (state, table) => (Array.isArray(state?.[FIELD[table]]) ? state[FIELD[table]] : []);
@@ -223,7 +241,7 @@
     return out;
   }
 
-  const api = { TABLES, FIELD, keyOf, toState, baseOf, changes, merge, combine };
+  const api = { TABLES, FIELD, SCHEMA, keyOf, rekey, toState, baseOf, changes, merge, combine };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Tablo = api;
 })(this);

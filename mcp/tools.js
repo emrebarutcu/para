@@ -53,6 +53,7 @@ function monthArg(v, name, today) {
 
 function intArg(v, name, min, max, fallback) {
   if (v == null) return fallback;
+  if (typeof v === "boolean" || (typeof v === "string" && !v.trim())) fail(`${name} must be an integer between ${min} and ${max}`);
   const n = Number(v);
   if (!Number.isInteger(n) || n < min || n > max) fail(`${name} must be an integer between ${min} and ${max}`);
   return n;
@@ -284,7 +285,7 @@ function transitionQuestion({ choices, open, next }, given) {
   const text = {
     old: `"old": the open statement is still cut on the old days (cutoff ${open.cut}, paid ${open.due}); later statements use the new days.`,
     new: `"new": statements already cut stay as they are; the new days start today${open.count ? ` and the open statement's payments move to the statement cut on ${next.cut}, paid ${next.due}` : ""}.`,
-    fix: `"fix": the days were entered wrong; every payment, past ones too, is recomputed with the new days.`,
+    fix: `"fix": the current days were entered wrong; every payment computed with them, past ones too, is recomputed with the new days (earlier day changes stay).`,
   };
   const head = given !== undefined ? `transition must be ${choices.map(k => `"${k}"`).join(", ")}. ` : "";
   const intro = open.count
@@ -663,7 +664,7 @@ export const TOOLS = [
       ...CARD_FIELDS,
       transition: {
         type: "string", enum: ["old", "new", "fix"],
-        description: 'Only when cutoff_day / due_day change, chosen by the user: "old" = the open statement is still cut on the old days, new days start from the next one; "new" = statements already cut stay, new days apply from today; "fix" = the days were entered wrong, recompute every payment, past ones too.',
+        description: 'Only when cutoff_day / due_day change, chosen by the user: "old" = the open statement is still cut on the old days, new days start from the next one; "new" = statements already cut stay, new days apply from today; "fix" = the current days were entered wrong, recompute every payment that used them, past ones too (earlier day changes stay).',
       },
     }, ["card"]),
     annotations: { ...WRITE, idempotentHint: true },
@@ -672,7 +673,7 @@ export const TOOLS = [
         const cur = findCard(state, args.card) ?? fail("Cash is not a card.");
         const v = { id: cur.id, ...buildCard(state, args, cur), color: cur.color };
         const change = T.termChoices(cur, { cutoffDay: v.cutoffDay, dueDay: v.dueDay }, state.installments, ctx.today);
-        const transition = change.cards?.[args.transition] ? args.transition : undefined;
+        const transition = typeof args.transition === "string" && change.cards && Object.hasOwn(change.cards, args.transition) ? args.transition : undefined;
         if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition));
         const chosen = transition ? change.cards[transition] : change.card;
         const next = chosen.history ? { ...v, history: chosen.history } : v;
@@ -849,7 +850,7 @@ export const TOOLS = [
   {
     name: "update_entry",
     title: "Update asset entry",
-    description: "Change fields of an asset entry; omitted fields stay as they are. To stop a repeating entry, set repeat to the number of times it has been processed (or 1 to keep only the first).",
+    description: "Change fields of an asset entry; omitted fields stay as they are. To stop a repeating entry, set repeat to the number of times it has been processed (or 1 to keep only the first); if it has not been processed yet, delete it instead (repeat 0 means every month with no end).",
     inputSchema: obj({ id: S.str("Entry id."), ...ENTRY_FIELDS }, ["id"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
