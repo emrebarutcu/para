@@ -196,3 +196,16 @@ test("cihazdaki veri hesaba eklenir: aynı kayıt iki kez eklenmez, aynı kişi 
   assert.equal(account.people.length, 2);   // hesabın verisi değişmez
   assert.equal(changes(out, {}).purchases.upsert.length, 4);
 });
+
+test("kartın eski günleri: satıra çevrilir, sıralanır, geçersizler atılır", () => {
+  const history = [{ until: "2026-11-10", cutoffDay: 10, dueDay: 20 }, { until: "2026-2-31", cutoffDay: "5", dueDay: 15 }, { until: "x", cutoffDay: 1, dueDay: 1 }];
+  const state = { people: [{ id: "ben", name: "Ben", color: 0 }], cards: [{ id: "k1", name: "A", limit: 0, cutoffDay: 20, dueDay: 30, color: 0, history }] };
+  const row = changes(state, {}).cards.upsert[0].row;
+  assert.deepEqual(row.history, [{ until: "2026-02-28", cutoff_day: 5, due_day: 15 }, { until: "2026-11-10", cutoff_day: 10, due_day: 20 }]);
+
+  const rows = { cards: [card("k1", { history: row.history })] };
+  assert.deepEqual(toState(rows).cards[0].history, [{ until: "2026-02-28", cutoffDay: 5, dueDay: 15 }, { until: "2026-11-10", cutoffDay: 10, dueDay: 20 }]);
+  assert.equal(toState({ cards: [card("k2", { history: [] })] }).cards[0].history, undefined);
+  assert.equal(changes(state, {}).cards.upsert.length, 1);
+  assert.deepEqual(changes(toState(rows), baseOf(rows)).cards, { upsert: [], delete: [] });
+});

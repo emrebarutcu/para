@@ -34,6 +34,11 @@ create table if not exists cards (
   primary key (user_id, id)
 );
 
+-- Kesim / son ödeme günü değişmeden önceki günler: [{ "until": "YYYY-MM-DD", "cutoff_day": 10, "due_day": 20 }], until'e
+-- göre sıralı. Kesimi until'e kadar olan ekstreler o günlerle kesilmiştir, sonrakiler sıradaki (en son cutoff_day / due_day)
+-- günlerle. Boşsa null: bütün ekstreler kartın bugünkü günleriyle.
+alter table cards add column if not exists history jsonb check (history is null or jsonb_typeof(history) = 'array');
+
 -- Tarihi bilinen harcamada ödemeler date'ten ve kartın günlerinden hesaplanır. Tarihsiz (Excel'den gelen)
 -- kayıtta first_due kalan ilk taksitin ödendiği ay, count / total kalan taksitler, plan_count asıl taksit sayısıdır.
 create table if not exists purchases (

@@ -278,6 +278,47 @@ test("kişiler ve kart silme kuralları", async () => {
   assert.equal(stored(sb).installments.length, 0);
 });
 
+test("kartın günleri değişirken arada kalan harcamalar sorulur", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  await c.call("add_card", { name: "A", cutoff_day: 10, due_day: 20 });
+  const cut = await c.call("add_purchase", { description: "Kesilmiş", amount: 100, date: "2026-10-05" });   // 10 Eki ekstresi → 20 Eki
+  const open = await c.call("add_purchase", { description: "Arada", amount: 300, installments: 3, date: "2026-10-15" });   // 10 Kas → 20 Kas
+  const dates = async id => (await c.call("get_purchase", { id })).payments.map(x => x.date);
+
+  // Yalnızca limit değişince sorulmaz
+  assert.equal((await c.call("update_card", { card: "A", limit: 1000 })).card.limit, 1000);
+
+  const ask = await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30 });
+  assert.match(ask.error, /1 payment\(s\) totalling 100 TRY .* cut on 2026-11-10/);
+  assert.match(ask.error, /"old".*"new".*"fix"/);
+  assert.equal(stored(sb).cards[0].cutoffDay, 10);
+  assert.match((await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition: "later" })).error, /transition must be "old", "new", "fix"/);
+
+  // Yeni günler bugünden: kesilmiş ekstre kalır, açık ekstredekiler 20 Eki ekstresine geçer
+  const upd = await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition: "new" });
+  assert.deepEqual(upd.card.purchaseToday, { statementCutoff: "2026-10-20", dueDate: "2026-10-30" });
+  assert.deepEqual(stored(sb).cards[0].history, [{ until: "2026-10-17", cutoffDay: 10, dueDay: 20 }]);
+  assert.deepEqual(await dates(cut.purchase.id), ["2026-10-20"]);
+  assert.deepEqual(await dates(open.purchase.id), ["2026-10-30", "2026-11-30", "2026-12-30"]);
+
+  // Vazgeçip açık ekstreyi eski günlerle kesmek: 10 Kas ekstresi 20 Kas'ta ödenir, sonraki taksitler yeni günlerle
+  await c.call("update_card", { card: "A", cutoff_day: 10, due_day: 20, transition: "fix" });
+  await c.call("update_card", { card: "A", cutoff_day: 20, due_day: 30, transition: "old" });
+  assert.deepEqual(stored(sb).cards[0].history, [{ until: "2026-11-10", cutoffDay: 10, dueDay: 20 }]);
+  assert.deepEqual(await dates(open.purchase.id), ["2026-11-20", "2026-11-30", "2026-12-30"]);
+
+  // Günler yanlış girilmişti: geçmiş dahil hepsi yeniden hesaplanır, eski günler unutulmaz (kesilmiş ekstreler kalır)
+  await c.call("update_card", { card: "A", cutoff_day: 25, due_day: 5, transition: "fix" });
+  assert.deepEqual(stored(sb).cards[0].history, [{ until: "2026-11-10", cutoffDay: 10, dueDay: 20 }]);
+  assert.deepEqual(await dates(open.purchase.id), ["2026-11-20", "2026-12-05", "2027-01-05"]);
+
+  // Harcaması olmayan kartta sorulmaz
+  await c.call("add_card", { name: "B", cutoff_day: 10, due_day: 20 });
+  assert.equal((await c.call("update_card", { card: "B", cutoff_day: 15, due_day: 25 })).card.cutoffDay, 15);
+  assert.equal(stored(sb).cards[1].history, undefined);
+});
+
 test("yalnızca değişen satırlar yazılır, silinenler işaretlenir", async () => {
   const sb = fakeSupabase();
   const c = client(sb);

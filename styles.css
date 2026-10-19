@@ -230,6 +230,28 @@ a { color: inherit; }
 .chip:has(input:focus-visible) { outline: 2px solid var(--text-2); outline-offset: 2px; }
 .chip .count { color: inherit; opacity: .6; font-weight: 500; }
 
+/* Açıklamalı seçenekler — radio ile */
+.choices { display: flex; flex-direction: column; gap: 8px; }
+.choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.choice:hover { background: var(--surface-2); }
+.choice input { position: absolute; opacity: 0; pointer-events: none; }
+.choice.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.choice:has(input:focus-visible) { outline: 2px solid var(--text-2); outline-offset: 2px; }
+.choices.invalid .choice { border-color: var(--danger); }
+.choice-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.choice-sub { font-size: 13px; color: var(--text-2); line-height: 1.4; }
+
 .dot {
   display: inline-block;
   width: 8px; height: 8px;

@@ -157,7 +157,7 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     v.remainingTotalAtImport = v.total;
     v.total = round(T.originalTotal(p));
   }
-  if (card && p.date) v.statementCutoff = T.dateKey(T.statementIndex(card, p.date), card.cutoffDay);
+  if (card && p.date) v.statementCutoff = T.statementOf(card, p.date).cut;
   if (schedule) v.payments = pays.map(x => ({ no: x.no, date: x.key, amount: round(x.amount), paid: x.key < today }));
   return v;
 }
@@ -169,7 +169,7 @@ function cardView(state, c, today) {
   const upcoming = pays.filter(x => x.key >= today);
   const next = upcoming.reduce((min, x) => (!min || x.key < min ? x.key : min), null);
   const used = T.outstanding(pays, today);
-  const s = T.statementIndex(c, today);
+  const s = T.statementOf(c, today);
   return {
     id: c.id,
     name: c.name,
@@ -181,7 +181,7 @@ function cardView(state, c, today) {
     dueDay: c.dueDay,
     nextPayment: next ? { date: next, amount: round(upcoming.filter(x => x.key === next).reduce((t, x) => t + x.amount, 0)) } : null,
     purchaseCount: mine.length,
-    purchaseToday: { statementCutoff: T.dateKey(s, c.cutoffDay), dueDate: T.dateKey(T.dueIndex(c, s), c.dueDay) },
+    purchaseToday: { statementCutoff: s.cut, dueDate: s.due },
   };
 }
 
@@ -213,7 +213,7 @@ function preview(state, p) {
     firstPayment: pays[0]?.key ?? null,
     lastPayment: pays.length ? pays[pays.length - 1].key : null,
   };
-  if (card && p.date) out.statementCutoff = T.dateKey(T.statementIndex(card, p.date), card.cutoffDay);
+  if (card && p.date) out.statementCutoff = T.statementOf(card, p.date).cut;
   if (!card) out.note = p.count > 1 ? "Cash — paid each month on the purchase day" : "Cash — paid on the purchase day";
   return out;
 }
@@ -277,6 +277,20 @@ function buildCard(state, args, base = null) {
   if (v.last4 && state.cards.some(c => c.id !== base?.id && c.last4 === v.last4)) fail(`Another card already has last4 ${v.last4}.`);
   const { last4, ...rest } = v;
   return last4 ? { ...rest, last4 } : rest;
+}
+
+// Kesim / son ödeme günü değişirken kullanıcıya sorulacak seçenekler (app.js'teki kart formuyla aynı)
+function transitionQuestion({ choices, open, next }, given) {
+  const text = {
+    old: `"old": the open statement is still cut on the old days (cutoff ${open.cut}, paid ${open.due}); later statements use the new days.`,
+    new: `"new": statements already cut stay as they are; the new days start today${open.count ? ` and the open statement's payments move to the statement cut on ${next.cut}, paid ${next.due}` : ""}.`,
+    fix: `"fix": the days were entered wrong; every payment, past ones too, is recomputed with the new days.`,
+  };
+  const head = given !== undefined ? `transition must be ${choices.map(k => `"${k}"`).join(", ")}. ` : "";
+  const intro = open.count
+    ? `Changing the days affects purchases in between: ${open.count} payment(s) totalling ${round(open.total)} TRY in the statement to be cut on ${open.cut} are not cut yet.`
+    : "Changing the days changes payment dates of this card's purchases.";
+  return `${head}${intro} Ask the user which one and pass it as transition: ${choices.map(k => text[k]).join(" ")}`;
 }
 
 function personNameArg(state, v, exceptId) {
@@ -622,13 +636,25 @@ export const TOOLS = [
   {
     name: "update_card",
     title: "Update card",
-    description: "Change a card's name, limit, cutoff / due day or last 4 digits; omitted fields stay as they are. Payment dates of its purchases are recomputed.",
-    inputSchema: obj({ card: S.str("Card id, name or last 4 digits."), ...CARD_FIELDS }, ["card"]),
+    description: "Change a card's name, limit, cutoff / due day or last 4 digits; omitted fields stay as they are. When the cutoff or due day changes and it matters for the card's purchases, the call fails listing the options for the purchases in between (transition); ask the user which one and call again with it.",
+    inputSchema: obj({
+      card: S.str("Card id, name or last 4 digits."),
+      ...CARD_FIELDS,
+      transition: {
+        type: "string", enum: ["old", "new", "fix"],
+        description: 'Only when cutoff_day / due_day change, chosen by the user: "old" = the open statement is still cut on the old days, new days start from the next one; "new" = statements already cut stay, new days apply from today; "fix" = the days were entered wrong, recompute every payment, past ones too.',
+      },
+    }, ["card"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
       return ctx.mutate(state => {
         const cur = findCard(state, args.card) ?? fail("Cash is not a card.");
-        const next = { id: cur.id, ...buildCard(state, args, cur), color: cur.color };
+        const v = { id: cur.id, ...buildCard(state, args, cur), color: cur.color };
+        const change = T.termChoices(cur, { cutoffDay: v.cutoffDay, dueDay: v.dueDay }, state.installments, ctx.today);
+        const transition = change.cards?.[args.transition] ? args.transition : undefined;
+        if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition));
+        const chosen = transition ? change.cards[transition] : change.card;
+        const next = chosen.history ? { ...v, history: chosen.history } : v;
         state.cards = state.cards.map(c => (c.id === cur.id ? next : c));
         return { saved: true, card: cardView(state, next, ctx.today) };
       });
@@ -991,6 +1017,7 @@ export const TOOLS = [
 export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (single or in installments / taksit) for one or more people, and shows when each installment is paid.
 - Amounts are Turkish lira (TRY). Dates are YYYY-MM-DD, months YYYY-MM, in Turkey time.
 - A card has a statement cutoff day (hesap kesim günü) and a due day (son ödeme günü). A purchase on or before the cutoff day goes into that month's statement; the statement is paid on the due day (same month if the due day is after the cutoff, otherwise the next month). Installments fall into the following statements one month apart. Cash purchases are paid on the purchase day.
+- When a card's cutoff / due day changes, statements already cut keep their dates; update_card asks (transition) what happens to the purchases in between — ask the user, don't pick yourself.
 - A card's used limit is the sum of installments still to be paid.
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
 - Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out; balances are their sums. get_assets values them in TRY at the current Turkish market rate.

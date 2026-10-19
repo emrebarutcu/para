@@ -39,6 +39,7 @@ let focusIdx = null;          // akışta vurgulanan ay (grafikten gelince)
 let pendingScroll = null;     // render sonrası kaydırılacak öğe id'si
 let editingId = null;         // düzenlenen harcama
 let editingCardId = null;     // düzenlenen kart
+let termChange = null;        // kartın günleri değişiyorsa arada kalanlar için seçenekler (T.termChoices)
 let lastCardId = null;        // formda son seçilen kart ("" = nakit)
 let lastPersonId = null;
 let chartMonths = [];
@@ -259,6 +260,7 @@ const els = {
   countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"),
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
+  termField: $("termField"), termNote: $("termNote"), termChoices: $("termChoices"),
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
@@ -1118,8 +1120,7 @@ function updatePurchasePreview() {
     box.append(el("div", "big", fmt(p.total)), el("div", "", `Ödeme ${fmtDay(first)}`));
   }
   if (card && p.date) {
-    const cut = T.dateKey(T.statementIndex(card, p.date), card.cutoffDay);
-    box.append(el("div", "", `${card.name} · ${fmtDay(cut)} kesimli ekstreye girer`));
+    box.append(el("div", "", `${card.name} · ${fmtDay(T.statementOf(card, p.date).cut)} kesimli ekstreye girer`));
   } else if (!card) {
     box.append(el("div", "", p.count > 1 ? "Nakit — her ay harcama gününde ödenir" : "Nakit — harcama gününde ödenir"));
   } else {
@@ -1210,6 +1211,7 @@ function openCardSheet(c) {
     f.elements.dueDay.value = c.dueDay;
     f.elements.last4.value = c.last4 || "";
   }
+  termChange = null;
   updateCardPreview();
   openSheet(els.cardSheet);
   if (!c) f.elements.name.focus();
@@ -1227,17 +1229,65 @@ function updateCardPreview() {
   tile.setAttribute("aria-hidden", "true");
   els.cardPreview = tile;
 
+  updateTermChoices(existing, v);
   if (v.cutoffDay && v.dueDay) {
-    const today = T.todayKey();
-    const s = T.statementIndex(card, today);
-    const due = T.dueIndex(card, s);
-    els.cardHint.textContent = `Bugün yapılan bir harcama ${fmtDay(T.dateKey(s, v.cutoffDay))} kesimli ekstreye girer ve ${fmtDay(T.dateKey(due, v.dueDay))} tarihinde ödenir.`;
+    const s = T.statementOf(withTerms(existing, v) || card, T.todayKey());
+    els.cardHint.textContent = `Bugün yapılan bir harcama ${fmtDay(s.cut)} kesimli ekstreye girer ve ${fmtDay(s.due)} tarihinde ödenir.`;
   } else {
     els.cardHint.textContent = "Kesim ve son ödeme gününü kart ekstrende bulabilirsin.";
   }
 }
 
-els.cardForm.addEventListener("input", e => { e.target.classList?.remove("invalid"); updateCardPreview(); });
+// Kesim / son ödeme günü değişince arada kalan harcamaların ne olacağı sorulur; yalnızca sonucu farklı seçenekler gösterilir
+function updateTermChoices(existing, v) {
+  const terms = { cutoffDay: v.cutoffDay, dueDay: v.dueDay };
+  const key = `${terms.cutoffDay}|${terms.dueDay}`;
+  if (termChange?.key === key) return;
+  const r = existing && terms.cutoffDay && terms.dueDay ? T.termChoices(existing, terms, state.installments, T.todayKey()) : null;
+  termChange = r?.choices.length ? { ...r, key, selected: null } : null;
+  els.termField.hidden = !termChange;
+  els.termChoices.classList.remove("invalid");
+  if (!termChange) { els.termChoices.replaceChildren(); return; }
+
+  const { open, next } = r;
+  els.termNote.textContent = open.count
+    ? `${fmtDay(open.cut)} kesimli ekstreye düşecek ${open.count} ödeme (${fmt(open.total)}) henüz kesilmedi. Günler değişince ne olsun?`
+    : "Bu karttaki harcamaların ödeme tarihleri değişecek. Nasıl hesaplansın?";
+  const text = {
+    old: ["Bu ekstre eski günlerle kesilsin",
+      `${fmtDay(open.cut)} kesilir, ${fmtDay(open.due)} tarihinde ödenir; sonraki ekstreler yeni günlerle`],
+    new: ["Yeni günler hemen başlasın", open.count
+      ? `Kesilmiş ekstreler kalır; açık ekstredekiler ${fmtDay(next.cut)} kesimli ekstreye girer, ${fmtDay(next.due)} tarihinde ödenir`
+      : "Kesilmiş ekstreler olduğu gibi kalır; bundan sonrakiler yeni günlerle"],
+    fix: ["Günleri yanlış girmiştim", "Geçmiş ekstreler dahil bütün ödemeler yeni günlere göre yeniden hesaplanır"],
+  };
+  els.termChoices.replaceChildren(...r.choices.map(k => {
+    const label = el("label", "choice");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "termChoice";
+    input.value = k;
+    label.append(input, el("span", "choice-title", text[k][0]), el("span", "choice-sub", text[k][1]));
+    return label;
+  }));
+}
+
+// Formdaki günlerle kart: arada kalanlar için seçilen düzen, seçilmediyse kartın eski günleri korunarak
+function withTerms(existing, v) {
+  if (!existing) return null;
+  const history = termChange?.selected ? termChange.cards[termChange.selected].history : existing.history;
+  return { ...existing, ...v, history };
+}
+
+els.cardForm.addEventListener("input", e => {
+  e.target.classList?.remove("invalid");
+  if (e.target.name === "termChoice") {
+    termChange.selected = e.target.value;
+    els.termChoices.classList.remove("invalid");
+    syncChecked(els.termChoices);
+  }
+  updateCardPreview();
+});
 
 els.cardForm.addEventListener("submit", e => {
   e.preventDefault();
@@ -1256,13 +1306,19 @@ els.cardForm.addEventListener("submit", e => {
     if (firstBad === "last4") toast(last4Taken ? "Bu son 4 hane başka bir kartta kayıtlı" : "Son 4 hane 4 rakam olmalı");
     return;
   }
+  if (termChange && !termChange.selected) {
+    els.termChoices.classList.add("invalid");
+    els.termChoices.querySelector("input")?.focus();
+    toast("Arada kalan harcamalar ne olsun? Bir seçenek seç.");
+    return;
+  }
   if (!v.last4) delete v.last4;
 
   if (editingCardId) {
     state.cards = state.cards.map(c => {
       if (c.id !== editingCardId) return c;
-      const { last4, ...rest } = { ...c, ...v };
-      return v.last4 ? { ...rest, last4 } : rest;
+      const { last4, history, ...rest } = withTerms(c, v);
+      return { ...rest, ...(v.last4 && { last4 }), ...(history && { history }) };
     });
   } else {
     state.cards.push({ id: uid(), ...v, color: nextColor(state.cards) });

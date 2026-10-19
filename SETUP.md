@@ -107,6 +107,14 @@ aynı sürüm yakalanır ve sürüm yeniden artırılır.
 
 Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca cihazlardaki eski dosyalar kendiliğinden yenilenir.
 
+### Yükseltme notları
+
+- **2.0.0** — Kartın eski kesim / son ödeme günleri (`cards.history`). Yayından **önce** `supabase/tablolar.sql` yeniden
+  çalıştırılır (`sh supabase/sql.sh supabase/tablolar.sql`); sütun yoksa yeni sürüm kartları buluta yazamaz. Önbellekteki
+  eski sürüm sütunu yazmaz, olduğu gibi bırakır (eski günleri bilmediği için kartın bütün ödemelerini bugünkü günlerle
+  gösterir). MCP'de `update_card` günler değişince, karttaki harcamaları etkiliyorsa `transition` ister: araç seçenekleri
+  hata olarak döndürür, asistan kullanıcıya sorup yeniden çağırır.
+
 ## 3. Mobil (iPhone / Android)
 
 **iPhone (Safari):**  
@@ -144,6 +152,10 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
   (ör. kesim 12 / son ödeme 22 → 12 Eki ekstresi 22 Eki'de; kesim 25 / son ödeme 5 → 25 Eki ekstresi 5 Kas'ta).
 - Taksitler sonraki ekstrelere birer ay kayarak düşer. Ay kısaysa gün ayın son gününe çekilir.
 - Nakit harcama kendi gününde ödenir.
+- Kartın kesim ya da son ödeme günü değiştirilirken karttaki harcamalar etkileniyorsa uygulama arada kalanların ne
+  olacağını sorar: **açık ekstre eski günlerle kesilsin** (yeni günler sonraki ekstreden başlar), **yeni günler hemen
+  başlasın** (kesilmiş ekstreler kalır, henüz kesilmemişler yeni günlere göre bir ekstreye girer) ya da **günleri yanlış
+  girmiştim** (geçmiş dahil hepsi yeni günlerle). Kesilmiş ekstrelerin günleri kartta saklanır (`history`).
 
 Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
 
