@@ -38,8 +38,21 @@ Email Routing'in (banka e-postaları, bölüm 6) SPF / DMARC kayıtlarına dokun
    sender `noreply@mail.cashfollow.app` / `CashFollow`, host `smtp-relay.brevo.com`, port `587`,
    username Brevo'daki Login, password SMTP key.
 5. **Authentication → Rate Limits**: özel SMTP'de e-posta sınırı saatte 30'dur, gerekirse artırılır.
-6. **Authentication → Emails → Templates**: "Confirm signup" ve "Reset password" metinleri Türkçe; `{{ .ConfirmationURL }}`
-   olduğu gibi kalır.
+6. **Authentication → Emails → Templates**: şablonlar `supabase/eposta-sablonlari/`'ndadır; dosyanın tamamı **Message body**'ye
+   (Source), konu **Subject**'e yapıştırılır:
+
+   | Supabase şablonu | Dosya | Konu |
+   | --- | --- | --- |
+   | Confirm signup | `hesap-dogrulama.html` | CashFollow hesabını doğrula |
+   | Reset password | `sifre-sifirlama.html` | CashFollow şifreni sıfırla |
+   | Change email address | `eposta-degisikligi.html` | CashFollow e-posta adresini değiştir |
+
+   Bağlantılar Supabase'in adresine değil uygulamaya gider: `{{ .SiteURL }}/?token_hash={{ .TokenHash }}&type=…`. Uygulama
+   (`sync.js` → `handleEmailLink`) bağlantıyı `verifyOtp` ile doğrular; şifre sıfırlamada yeni şifre formunu açar. Gönderenle
+   bağlantının alan adı aynı olduğu için spam filtrelerine daha az takılır, bağlantıya önceden tıklayan e-posta tarayıcıları
+   da tek kullanımlık bağlantıyı tüketemez. **Site URL** `https://cashfollow.app` olmalı (bölüm 2); logo
+   `{{ .SiteURL }}/icon-192.png`'den gelir. Şablonlardaki "1 saat geçerlidir" Supabase'in varsayılan süresidir
+   (Authentication → Providers → Email → Email OTP Expiration).
 
 E-posta gelmezse önce **Brevo → Transactional → Email logs**'a bakılır. Uygulama kayıttan sonra ve doğrulanmamış hesapla
 girişte "Doğrulama e-postasını yeniden gönder" gösterir; adres zaten kayıtlıysa (Supabase bu durumda başarılı döner ama
