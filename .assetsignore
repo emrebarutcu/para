@@ -1,0 +1,11 @@
+# Statik olarak sunulmayacaklar (wrangler.jsonc → assets.directory = ".")
+.git
+.claude
+.wrangler
+node_modules
+mcp
+workers
+supabase
+*.md
+wrangler.jsonc
+netlify.toml
