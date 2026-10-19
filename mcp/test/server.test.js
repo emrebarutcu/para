@@ -7,9 +7,11 @@ const NOW = () => new Date("2026-10-18T09:00:00Z");
 const ORIGIN = "https://cashfollow.app";
 
 // Bellekte Supabase: auth/v1/user ve kullanılan PostgREST uçları (RLS: yalnızca token sahibinin satırları)
-const DATA = ["people", "cards", "purchases"];
+const DATA = ["people", "cards", "purchases", "entries"];
+const RATES = { USD: { Selling: 40 }, EUR: { Selling: 45 }, GRA: { Selling: 4000 }, Update_Date: "2026-10-18 12:00:00" };
 function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { id: "u2", email: "x@y.z" } } } = {}) {
-  const db = { people: [], cards: [], purchases: [], inbox_messages: [], inbox_addresses: [] };
+  const db = { people: [], cards: [], purchases: [], entries: [], inbox_messages: [], inbox_addresses: [] };
+  const rates = { down: false };
   let clock = 0;
   const stamp = () => new Date(Date.UTC(2026, 9, 18, 9, 0, 0, ++clock)).toISOString().replace("Z", "+00:00");
   const calls = [];
@@ -27,6 +29,8 @@ function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { i
     const user = users[token];
     const reply = (out, status = 200) => new Response(out === null ? null : JSON.stringify(out), { status });
 
+    if (url.hostname === "finans.truncgil.com") return rates.down ? reply({}, 503) : reply(RATES);
+    if (url.hostname === "open.er-api.com" || url.hostname === "api.gold-api.com") return reply({}, 503);
     if (url.pathname === "/auth/v1/user") return user ? reply(user) : reply({ msg: "bad jwt" }, 403);
     if (!user) return reply({ message: "JWT expired" }, 401);
 
@@ -56,7 +60,7 @@ function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { i
     if (method === "POST" && DATA.includes(table)) {
       for (const row of body) {
         if (row.user_id !== user.id) return reply({ message: "rls" }, 403);
-        if (table === "purchases" && !db.people.some(x => x.user_id === user.id && x.id === row.person_id)) return reply({ code: "23503" }, 409);
+        if ((table === "purchases" || table === "entries") && !db.people.some(x => x.user_id === user.id && x.id === row.person_id)) return reply({ code: "23503" }, 409);
         if (table === "purchases" && row.card_id && !db.cards.some(x => x.user_id === user.id && x.id === row.card_id)) return reply({ code: "23503" }, 409);
       }
       for (const row of body) {
@@ -83,7 +87,7 @@ function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { i
     }
     return reply({}, 405);
   };
-  return { fetch: fn, db, calls, hooks, stamp };
+  return { fetch: fn, db, calls, hooks, stamp, rates };
 }
 
 function client(sb, token = "good") {
@@ -375,6 +379,69 @@ test("e-posta adresi ve yenileme", async () => {
   assert.equal(sb.db.inbox_addresses.length, 1);
 });
 
+test("varlıklar: TL, döviz ve gram altın hareketleri, güncel kurla TL karşılığı", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  await c.call("add_person", { name: "Ayşe" });
+  const maas = await c.call("add_entry", { asset: "TRY", direction: "in", amount: 50000, description: "Maaş" });
+  assert.equal(maas.entry.date, "2026-10-18");
+  assert.equal(maas.entry.person, "Ben");
+  await c.call("add_entry", { asset: "dolar", direction: "in", amount: 100, description: "Dolar alımı", date: "2026-10-01" });
+  await c.call("add_entry", { asset: "USD", direction: "out", amount: 30, description: "Tatil" });
+  const gold = await c.call("add_entry", { asset: "gram altın", direction: "in", amount: 2.5, description: "Altın", person: "Ayşe" });
+  assert.equal(gold.entry.asset, "GAU");
+  assert.equal(gold.entry.tryValueNow, 10000);
+  assert.equal(gold.balance, 2.5);
+
+  assert.match((await c.call("add_entry", { asset: "BTC", direction: "in", amount: 1, description: "x" })).error, /TRY, USD, EUR, GAU/);
+  assert.match((await c.call("add_entry", { asset: "USD", direction: "in", amount: -5, description: "x" })).error, /positive/);
+  assert.match((await c.call("add_entry", { asset: "USD", direction: "in", amount: 5, description: "x", date: "2026-02-30" })).error, /valid date/);
+
+  const all = await c.call("get_assets");
+  const by = Object.fromEntries(all.assets.map(a => [a.asset, a]));
+  assert.equal(by.TRY.balance, 50000);
+  assert.equal(by.USD.balance, 70);
+  assert.equal(by.USD.tryValue, 2800);
+  assert.equal(by.EUR.balance, 0);
+  assert.equal(by.GAU.balance, 2.5);
+  assert.equal(all.totalTry, 50000 + 2800 + 10000);
+  assert.deepEqual(all.rates, { TRY: 1, USD: 40, EUR: 45, GAU: 4000, updatedAt: "2026-10-18T09:00:00.000Z", source: "truncgil" });
+  assert.equal((await c.call("get_assets", { person: "ayşe" })).totalTry, 10000);
+
+  const list = await c.call("list_entries", { asset: "USD" });
+  assert.deepEqual(list.entries.map(e => [e.description, e.direction, e.amount]), [["Tatil", "out", 30], ["Dolar alımı", "in", 100]]);
+  const upd = await c.call("update_entry", { id: list.entries[0].id, amount: 40 });
+  assert.equal(upd.entry.direction, "out");
+  assert.equal((await c.call("get_assets")).assets[1].balance, 60);
+
+  // Tabloya varlığın kendi biriminde, işaretli yazılır
+  const row = sb.db.entries.find(r => r.description === "Tatil");
+  assert.equal(row.amount, -40);
+  assert.equal(row.asset, "USD");
+
+  await c.call("delete_entry", { id: maas.entry.id });
+  assert.ok(sb.db.entries.find(r => r.id === maas.entry.id).deleted_at);
+  const del = await c.call("delete_person", { person: "Ayşe" });
+  assert.equal(del.deletedEntries, 1);
+  assert.deepEqual(stored(sb).entries.map(e => e.desc), ["Dolar alımı", "Tatil"]);
+});
+
+test("kur alınamazsa yalnızca TL sayılır", async () => {
+  const { clearRates } = await import("../kur.js");
+  clearRates();
+  const sb = fakeSupabase();
+  sb.rates.down = true;
+  const c = client(sb);
+  await c.call("add_entry", { asset: "TRY", direction: "in", amount: 100, description: "Nakit" });
+  await c.call("add_entry", { asset: "EUR", direction: "in", amount: 10, description: "Euro" });
+  const out = await c.call("get_assets");
+  assert.equal(out.totalTry, 100);
+  assert.deepEqual(out.notIncludedInTotal, ["EUR"]);
+  assert.equal(out.rates, null);
+  assert.match(out.ratesError, /unavailable/);
+  clearRates();
+});
+
 test("dışa / içe aktarma", async () => {
   const sb = fakeSupabase();
   const c = client(sb);
@@ -384,7 +451,7 @@ test("dışa / içe aktarma", async () => {
 
   // Eski sürüm yedeği (statement alanlı) uygulamadaki gibi taşınır
   const out = await c.call("import_data", { data: { people: [{ id: "ben", name: "Ben", color: 0 }], installments: [{ id: "x", personId: "ben", desc: "Eski", statement: "2026-09", count: 3, total: 300 }], dueDay: 22 } });
-  assert.deepEqual(out, { imported: true, people: 1, cards: 1, purchases: 1 });
+  assert.deepEqual(out, { imported: true, people: 1, cards: 1, purchases: 1, entries: 0 });
   const data = stored(sb);
   assert.equal(data.installments[0].firstDue, "2026-10");
   assert.equal(data.cards[0].dueDay, 22);

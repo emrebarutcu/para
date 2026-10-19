@@ -5,6 +5,7 @@
 // cashfollow.app/oauth/consent'te izin verir. Bağımlılığı yoktur; sitenin Worker'ından çağrılır (worker.js).
 import { TOOLS, INSTRUCTIONS, ToolError, todayKey } from "./tools.js";
 import { createStore, getUser } from "./supabase.js";
+import { getRates } from "./kur.js";
 
 // config.js ile aynı (herkese açık değerler); Worker → Settings → Variables ile değiştirilebilir
 const DEFAULTS = {
@@ -143,6 +144,7 @@ export async function handle(request, env = {}, { fetch: f = fetch, now = () => 
     load: store.load,
     mutate: store.mutate,
     inbox: { ...store.inbox, address: renew => store.inbox.address(renew, cfg.domain) },
+    rates: () => getRates({ fetch: f }),
   };
 
   const batch = Array.isArray(body);

@@ -6,8 +6,10 @@
 //   ctx.load()           → hydrate edilmiş veri
 //   ctx.mutate(fn)       → fn(veri) çalışır, değişen kişi / kart / harcamalar kaydedilir
 //   ctx.inbox            → pending(), claim(ids), release(ids), address(renew)
+//   ctx.rates()          → { rates: { TRY, USD, EUR, GAU }, updatedAt, source } (kur.js)
 import T from "../taksit.js";
 import E from "../eposta.js";
+import V from "../varlik.js";
 
 export const TIME_ZONE = "Europe/Istanbul";
 const MAX_MONTHS = 60;       // akıştaki en fazla ay (app.js ile aynı)
@@ -84,6 +86,18 @@ function findCard(state, ref) {
 
 function findPurchase(state, id) {
   return state.installments.find(p => p.id === String(id ?? "")) ?? fail(`No purchase with id "${id}". Use list_purchases to find ids.`);
+}
+
+function findEntry(state, id) {
+  return state.entries.find(e => e.id === String(id ?? "")) ?? fail(`No entry with id "${id}". Use list_entries to find ids.`);
+}
+
+// "USD", "dolar", "gram altın"… → varlık kodu
+const ASSET_NAMES = { tl: "TRY", try: "TRY", lira: "TRY", usd: "USD", dolar: "USD", dollar: "USD", eur: "EUR", euro: "EUR",
+  gau: "GAU", altın: "GAU", altin: "GAU", gold: "GAU", "gram altın": "GAU", "gram altin": "GAU", "gram gold": "GAU" };
+function assetArg(v, name = "asset") {
+  const code = ASSET_NAMES[T.normalize(v)];
+  return code ?? fail(`${name} must be one of TRY, USD, EUR, GAU (gram gold).`);
 }
 
 // Kart belirtilmezse: tek kart varsa o, hiç yoksa nakit; birden çok kartta LLM sormalı
@@ -311,6 +325,50 @@ function emailView(x, { body = false } = {}) {
   return v;
 }
 
+// ---------- Varlıklar ----------
+async function ratesOrNull(ctx) {
+  try { return await ctx.rates(); } catch (err) { console.warn("kur:", err.message); return null; }
+}
+
+function entryView(state, e, rates) {
+  const value = V.toTry(e.amount, e.asset, rates?.rates);
+  return {
+    id: e.id,
+    date: e.date,
+    description: e.desc,
+    asset: e.asset,
+    direction: e.amount > 0 ? "in" : "out",
+    amount: Math.abs(e.amount),
+    tryValueNow: value == null ? null : round(Math.abs(value)),
+    person: personName(state, e.personId),
+    personId: e.personId,
+  };
+}
+
+function knownEntries(state) {
+  const known = new Set(state.people.map(p => p.id));
+  return state.entries.filter(e => known.has(e.personId));
+}
+
+// Yeni ya da düzenlenen hareket; base verilirse belirtilmeyen alanlar ondan gelir
+function buildEntry(state, args, today, base = null) {
+  const asset = args.asset !== undefined ? assetArg(args.asset) : base?.asset ?? fail("asset is required.");
+  const dir = args.direction ?? (base ? (base.amount > 0 ? "in" : "out") : fail('direction is required ("in" or "out").'));
+  if (!["in", "out"].includes(dir)) fail('direction must be "in" or "out".');
+  let amount = base ? Math.abs(base.amount) : null;
+  if (args.amount !== undefined) {
+    amount = V.round(Number(args.amount), asset);
+    if (!(amount > 0)) fail("amount must be a positive number (use direction for outflows).");
+  }
+  if (amount == null) fail("amount is required.");
+  const desc = args.description !== undefined ? text(args.description, "description") : base?.desc ?? "";
+  if (!desc) fail("description must not be empty.");
+  const date = args.date ?? base?.date ?? today;
+  if (!validDate(date)) fail("date must be a valid date like 2026-10-19.");
+  const personId = args.person !== undefined ? findPerson(state, args.person).id : base?.personId ?? state.people[0].id;
+  return { personId, asset, amount: dir === "out" ? -amount : amount, desc, date };
+}
+
 // ---------- Şema yardımcıları ----------
 const S = {
   str: description => ({ type: "string", description }),
@@ -337,6 +395,16 @@ const CARD_FIELDS = {
   cutoff_day: S.int("Statement cutoff day of month (hesap kesim günü).", 1, 31),
   due_day: S.int("Payment due day of month (son ödeme günü).", 1, 31),
   last4: S.str('Last 4 digits of the card (used to match bank e-mails). "" removes it.'),
+};
+
+const ASSET = { type: "string", enum: ["TRY", "USD", "EUR", "GAU"], description: "TRY (Turkish lira), USD, EUR or GAU (gold, in grams)." };
+const ENTRY_FIELDS = {
+  asset: ASSET,
+  direction: { type: "string", enum: ["in", "out"], description: '"in" = money / gold received or bought (giriş), "out" = spent, sold or given (çıkış).' },
+  amount: S.num("Positive amount in the asset's own unit (lira, dollars, euros or grams of gold)."),
+  description: S.str("What it is, e.g. Maaş, altın alımı."),
+  date: S.date("Date, YYYY-MM-DD."),
+  person: S.str("Person id or name."),
 };
 
 const READ = { readOnlyHint: true, openWorldHint: false };
@@ -638,7 +706,7 @@ export const TOOLS = [
   {
     name: "delete_person",
     title: "Delete person",
-    description: "Permanently delete a person AND all of their purchases. At least one person must remain.",
+    description: "Permanently delete a person AND all of their purchases and asset entries. At least one person must remain.",
     inputSchema: obj({ person: S.str("Person id or name.") }, ["person"]),
     annotations: DESTROY,
     async run(args, ctx) {
@@ -646,9 +714,117 @@ export const TOOLS = [
         const p = findPerson(state, args.person);
         if (state.people.length === 1) fail("At least one person must remain.");
         const n = state.installments.filter(i => i.personId === p.id).length;
+        const m = state.entries.filter(e => e.personId === p.id).length;
         state.people = state.people.filter(x => x.id !== p.id);
         state.installments = state.installments.filter(i => i.personId !== p.id);
-        return { deleted: { id: p.id, name: p.name }, deletedPurchases: n };
+        state.entries = state.entries.filter(e => e.personId !== p.id);
+        return { deleted: { id: p.id, name: p.name }, deletedPurchases: n, deletedEntries: m };
+      });
+    },
+  },
+
+  // ── Varlıklar (TL, döviz, altın) ──
+  {
+    name: "get_assets",
+    title: "Assets (Varlıklar)",
+    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries), each with its value in TRY at the current market rate, and the total in TRY.",
+    inputSchema: obj({ person: S.str("Only this person's assets (id or name).") }),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const person = args.person !== undefined ? findPerson(state, args.person) : null;
+      const rates = await ratesOrNull(ctx);
+      const bals = V.balances(knownEntries(state).filter(e => !person || e.personId === person.id));
+      const { total, missing } = V.totalTry(bals, rates?.rates);
+      return {
+        person: person?.name ?? "all",
+        assets: V.ASSETS.map(a => {
+          const value = V.toTry(bals[a.code] ?? 0, a.code, rates?.rates);
+          return { asset: a.code, name: a.name, balance: bals[a.code] ?? 0, unit: a.code === "GAU" ? "gram" : a.code, tryValue: value == null ? null : round(value) };
+        }),
+        totalTry: round(total),
+        ...(missing.length ? { notIncludedInTotal: missing } : {}),
+        rates: rates ? { ...rates.rates, updatedAt: rates.updatedAt, source: rates.source } : null,
+        ...(rates ? {} : { ratesError: "Current rates are unavailable; only TRY balances are counted in the total." }),
+      };
+    },
+  },
+  {
+    name: "list_entries",
+    title: "List asset entries",
+    description: "Lira / foreign currency / gold inflows and outflows, newest first.",
+    inputSchema: obj({
+      person: S.str("Only this person's entries (id or name)."),
+      asset: ASSET,
+      from: S.date("Only entries on or after this date."),
+      to: S.date("Only entries on or before this date."),
+      search: S.str("Case-insensitive text to look for in the description."),
+      limit: S.int("Maximum number of entries (default 100).", 1, 1000),
+    }),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const person = args.person !== undefined ? findPerson(state, args.person) : null;
+      const asset = args.asset !== undefined ? assetArg(args.asset) : null;
+      for (const k of ["from", "to"]) if (args[k] !== undefined && !validDate(args[k])) fail(`${k} must be a date like 2026-10-19.`);
+      const q = args.search ? T.normalize(args.search) : "";
+      const order = new Map(state.entries.map((e, i) => [e.id, i]));
+      const all = knownEntries(state)
+        .filter(e => (!person || e.personId === person.id) && (!asset || e.asset === asset))
+        .filter(e => (!args.from || e.date >= args.from) && (!args.to || e.date <= args.to))
+        .filter(e => !q || T.normalize(e.desc).includes(q))
+        .sort((a, b) => b.date.localeCompare(a.date) || order.get(b.id) - order.get(a.id));
+      const rates = all.some(e => e.asset !== "TRY") ? await ratesOrNull(ctx) : null;
+      const limit = intArg(args.limit, "limit", 1, 1000, 100);
+      return { count: all.length, entries: all.slice(0, limit).map(e => entryView(state, e, rates)) };
+    },
+  },
+  {
+    name: "add_entry",
+    title: "Add asset entry",
+    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency) or going out (spending, selling). Credit card purchases go to add_purchase instead.",
+    inputSchema: obj({
+      ...ENTRY_FIELDS,
+      date: S.date("Date, YYYY-MM-DD. Default: today."),
+      person: S.str("Person id or name. Default: the first person."),
+    }, ["asset", "direction", "amount", "description"]),
+    annotations: WRITE,
+    async run(args, ctx) {
+      const rates = await ratesOrNull(ctx);
+      return ctx.mutate(state => {
+        const e = { id: uid(), ...buildEntry(state, args, ctx.today) };
+        state.entries.push(e);
+        return { saved: true, entry: entryView(state, e, rates), balance: V.balances(knownEntries(state).filter(x => x.personId === e.personId))[e.asset] ?? 0 };
+      });
+    },
+  },
+  {
+    name: "update_entry",
+    title: "Update asset entry",
+    description: "Change fields of an asset entry; omitted fields stay as they are.",
+    inputSchema: obj({ id: S.str("Entry id."), ...ENTRY_FIELDS }, ["id"]),
+    annotations: { ...WRITE, idempotentHint: true },
+    async run(args, ctx) {
+      const rates = await ratesOrNull(ctx);
+      return ctx.mutate(state => {
+        const cur = findEntry(state, args.id);
+        const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur) };
+        state.entries = state.entries.map(x => (x.id === cur.id ? next : x));
+        return { saved: true, entry: entryView(state, next, rates) };
+      });
+    },
+  },
+  {
+    name: "delete_entry",
+    title: "Delete asset entry",
+    description: "Permanently delete an asset entry.",
+    inputSchema: obj({ id: S.str("Entry id.") }, ["id"]),
+    annotations: { ...DESTROY, idempotentHint: true },
+    async run(args, ctx) {
+      return ctx.mutate(state => {
+        const e = findEntry(state, args.id);
+        state.entries = state.entries.filter(x => x.id !== e.id);
+        return { deleted: { id: e.id, description: e.desc } };
       });
     },
   },
@@ -784,7 +960,7 @@ export const TOOLS = [
   {
     name: "export_data",
     title: "Export data",
-    description: "The user's complete data as JSON (people, cards, purchases) — the same backup as Ayarlar → Dışa aktar.",
+    description: "The user's complete data as JSON (people, cards, purchases, asset entries) — the same backup as Ayarlar → Dışa aktar.",
     inputSchema: obj(),
     annotations: READ,
     async run(args, ctx) {
@@ -805,7 +981,7 @@ export const TOOLS = [
         const next = T.hydrate(data);
         for (const k of Object.keys(state)) delete state[k];
         Object.assign(state, next);
-        return { imported: true, people: next.people.length, cards: next.cards.length, purchases: next.installments.length };
+        return { imported: true, people: next.people.length, cards: next.cards.length, purchases: next.installments.length, entries: next.entries.length };
       });
     },
   },
@@ -817,5 +993,6 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - A card has a statement cutoff day (hesap kesim günü) and a due day (son ödeme günü). A purchase on or before the cutoff day goes into that month's statement; the statement is paid on the due day (same month if the due day is after the cutoff, otherwise the next month). Installments fall into the following statements one month apart. Cash purchases are paid on the purchase day.
 - A card's used limit is the sum of installments still to be paid.
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
-- Deleting a card or a person also deletes their purchases; confirm destructive actions with the user.
+- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out; balances are their sums. get_assets values them in TRY at the current Turkish market rate.
+- Deleting a card or a person also deletes their purchases (a person also their asset entries); confirm destructive actions with the user.
 - Reply to the user in their language (the app is Turkish).`;
