@@ -73,6 +73,11 @@ create table if not exists entries (
   foreign key (user_id, person_id) references people (user_id, id)
 );
 
+-- Tekrarlayan hareket (1.x'te yoktu; var olan tabloya eklenir): date'ten başlayıp her ay aynı gün yinelenir.
+-- N: N kez, 0: süresiz, boş: tek seferlik. Bakiyeye yalnızca tarihi gelmiş tekrarlar girer (varlik.js).
+alter table entries add column if not exists repeat_count integer
+  check (repeat_count = 0 or repeat_count between 2 and 600);
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);

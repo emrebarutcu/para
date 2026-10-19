@@ -107,6 +107,15 @@ aynı sürüm yakalanır ve sürüm yeniden artırılır.
 
 Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca cihazlardaki eski dosyalar kendiliğinden yenilenir.
 
+### Yükseltme notları
+
+- **2.0.0 — tekrarlayan varlık hareketleri.** `entries` tablosuna `repeat_count` sütunu eklenir. Yeni sürüm hareketleri
+  bu sütunla yazar; sütun yoksa eşitleme durur. Birleştirmeden **önce** `supabase/tablolar.sql` yeniden çalıştırılır
+  (`sh supabase/sql.sh supabase/tablolar.sql`; zararsızdır, yalnızca eksik sütunu ekler). Önbellekteki 1.x sürümleri
+  sütunu tanımaz: tekrarlayan hareketi tek seferlik gösterir, düzenlerse tekrar bilgisi korunur. MCP: varlık araçlarına
+  isteğe bağlı `repeat` parametresi, cevaplara `repeat` alanı eklendi; `get_assets` tekrarlayan hareketin yalnızca
+  tarihi gelmiş tekrarlarını sayar.
+
 ## 3. Mobil (iPhone / Android)
 
 **iPhone (Safari):**  
@@ -152,6 +161,10 @@ Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
 **Varlıklar** sekmesinde tarihli giriş / çıkış hareketleri tutulur (maaş, döviz ya da altın alımı, harcama, satış).
 Miktar varlığın kendi birimindedir (altında gram); bakiye hareketlerin toplamıdır. Her varlığın ve toplamın TL
 karşılığı güncel satış kuruyla gösterilir.
+
+Hareket her ay tekrarlanabilir (maaş, kira, aidat): formdaki **Tekrar** ile belirli sayıda ay ya da süresiz. Tekrarlar
+ilk tarihin gününde düşer (ay kısaysa ayın son günü); bakiyeye yalnızca tarihi gelmiş tekrarlar girer. Süresiz
+tekrarı durdurmak için ay sayısı işlenen tekrar sayısına çekilir.
 
 Kurlar sitenin Worker'ından gelir: `GET /api/kur` → `{ rates: { TRY, USD, EUR, GAU }, updatedAt, source }`
 (`mcp/kur.js`). Kaynak [Truncgil](https://finans.truncgil.com) (Türkiye piyasası, gram altın dahil); erişilemezse

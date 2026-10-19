@@ -330,9 +330,10 @@ async function ratesOrNull(ctx) {
   try { return await ctx.rates(); } catch (err) { console.warn("kur:", err.message); return null; }
 }
 
-function entryView(state, e, rates) {
+function entryView(state, e, rates, today) {
   const value = V.toTry(e.amount, e.asset, rates?.rates);
-  return {
+  const n = V.repeatOf(e);
+  const v = {
     id: e.id,
     date: e.date,
     description: e.desc,
@@ -343,6 +344,22 @@ function entryView(state, e, rates) {
     person: personName(state, e.personId),
     personId: e.personId,
   };
+  if (n != null) {
+    v.repeat = {
+      every: "month",
+      times: n || null,
+      lastDate: V.lastDate(e),
+      processed: V.processedCount(e, today),
+      nextDate: V.nextDate(e, today),
+    };
+  }
+  return v;
+}
+
+// Tekrarlayan hareketin [from, to] aralığına düşen tekrarı var mı (tek seferlikte tarihi)
+function entryInRange(e, from, to) {
+  const last = V.lastDate(e);
+  return (!to || e.date <= to) && (!from || last == null || last >= from);
 }
 
 function knownEntries(state) {
@@ -366,7 +383,10 @@ function buildEntry(state, args, today, base = null) {
   const date = args.date ?? base?.date ?? today;
   if (!validDate(date)) fail("date must be a valid date like 2026-10-19.");
   const personId = args.person !== undefined ? findPerson(state, args.person).id : base?.personId ?? state.people[0].id;
-  return { personId, asset, amount: dir === "out" ? -amount : amount, desc, date };
+  const repeat = args.repeat !== undefined ? intArg(args.repeat, "repeat", 0, V.MAX_REPEAT) : V.repeatOf(base) ?? 1;
+  const e = { personId, asset, amount: dir === "out" ? -amount : amount, desc, date };
+  if (repeat !== 1) e.repeat = repeat;
+  return e;
 }
 
 // ---------- Şema yardımcıları ----------
@@ -403,8 +423,9 @@ const ENTRY_FIELDS = {
   direction: { type: "string", enum: ["in", "out"], description: '"in" = money / gold received or bought (giriş), "out" = spent, sold or given (çıkış).' },
   amount: S.num("Positive amount in the asset's own unit (lira, dollars, euros or grams of gold)."),
   description: S.str("What it is, e.g. Maaş, altın alımı."),
-  date: S.date("Date, YYYY-MM-DD."),
+  date: S.date("Date, YYYY-MM-DD. For a repeating entry, the date of the first time."),
   person: S.str("Person id or name."),
+  repeat: S.int("Monthly repetition on the same day of month as date: 1 = once (default), N = N months in a row, 0 = every month with no end (e.g. salary, rent).", 0, 600),
 };
 
 const READ = { readOnlyHint: true, openWorldHint: false };
@@ -727,14 +748,14 @@ export const TOOLS = [
   {
     name: "get_assets",
     title: "Assets (Varlıklar)",
-    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries), each with its value in TRY at the current market rate, and the total in TRY.",
+    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries; repeating entries only up to today), each with its value in TRY at the current market rate, and the total in TRY.",
     inputSchema: obj({ person: S.str("Only this person's assets (id or name).") }),
     annotations: READ,
     async run(args, ctx) {
       const state = await ctx.load();
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
       const rates = await ratesOrNull(ctx);
-      const bals = V.balances(knownEntries(state).filter(e => !person || e.personId === person.id));
+      const bals = V.balances(knownEntries(state).filter(e => !person || e.personId === person.id), ctx.today);
       const { total, missing } = V.totalTry(bals, rates?.rates);
       return {
         person: person?.name ?? "all",
@@ -752,12 +773,12 @@ export const TOOLS = [
   {
     name: "list_entries",
     title: "List asset entries",
-    description: "Lira / foreign currency / gold inflows and outflows, newest first.",
+    description: "Lira / foreign currency / gold inflows and outflows, newest first. A repeating entry is one item (amount per month) with its repeat details.",
     inputSchema: obj({
       person: S.str("Only this person's entries (id or name)."),
       asset: ASSET,
-      from: S.date("Only entries on or after this date."),
-      to: S.date("Only entries on or before this date."),
+      from: S.date("Only entries on or after this date (repeating ones: still repeating on or after it)."),
+      to: S.date("Only entries on or before this date (repeating ones: starting on or before it)."),
       search: S.str("Case-insensitive text to look for in the description."),
       limit: S.int("Maximum number of entries (default 100).", 1, 1000),
     }),
@@ -771,18 +792,18 @@ export const TOOLS = [
       const order = new Map(state.entries.map((e, i) => [e.id, i]));
       const all = knownEntries(state)
         .filter(e => (!person || e.personId === person.id) && (!asset || e.asset === asset))
-        .filter(e => (!args.from || e.date >= args.from) && (!args.to || e.date <= args.to))
+        .filter(e => entryInRange(e, args.from, args.to))
         .filter(e => !q || T.normalize(e.desc).includes(q))
         .sort((a, b) => b.date.localeCompare(a.date) || order.get(b.id) - order.get(a.id));
       const rates = all.some(e => e.asset !== "TRY") ? await ratesOrNull(ctx) : null;
       const limit = intArg(args.limit, "limit", 1, 1000, 100);
-      return { count: all.length, entries: all.slice(0, limit).map(e => entryView(state, e, rates)) };
+      return { count: all.length, entries: all.slice(0, limit).map(e => entryView(state, e, rates, ctx.today)) };
     },
   },
   {
     name: "add_entry",
     title: "Add asset entry",
-    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency) or going out (spending, selling). Credit card purchases go to add_purchase instead.",
+    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency) or going out (spending, selling, rent), once or repeating monthly. Credit card purchases go to add_purchase instead.",
     inputSchema: obj({
       ...ENTRY_FIELDS,
       date: S.date("Date, YYYY-MM-DD. Default: today."),
@@ -794,14 +815,15 @@ export const TOOLS = [
       return ctx.mutate(state => {
         const e = { id: uid(), ...buildEntry(state, args, ctx.today) };
         state.entries.push(e);
-        return { saved: true, entry: entryView(state, e, rates), balance: V.balances(knownEntries(state).filter(x => x.personId === e.personId))[e.asset] ?? 0 };
+        const balance = V.balances(knownEntries(state).filter(x => x.personId === e.personId), ctx.today)[e.asset] ?? 0;
+        return { saved: true, entry: entryView(state, e, rates, ctx.today), balance };
       });
     },
   },
   {
     name: "update_entry",
     title: "Update asset entry",
-    description: "Change fields of an asset entry; omitted fields stay as they are.",
+    description: "Change fields of an asset entry; omitted fields stay as they are. To stop a repeating entry, set repeat to the number of times it has been processed (or 1 to keep only the first).",
     inputSchema: obj({ id: S.str("Entry id."), ...ENTRY_FIELDS }, ["id"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
@@ -810,7 +832,7 @@ export const TOOLS = [
         const cur = findEntry(state, args.id);
         const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur) };
         state.entries = state.entries.map(x => (x.id === cur.id ? next : x));
-        return { saved: true, entry: entryView(state, next, rates) };
+        return { saved: true, entry: entryView(state, next, rates, ctx.today) };
       });
     },
   },
@@ -993,6 +1015,6 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - A card has a statement cutoff day (hesap kesim günü) and a due day (son ödeme günü). A purchase on or before the cutoff day goes into that month's statement; the statement is paid on the due day (same month if the due day is after the cutoff, otherwise the next month). Installments fall into the following statements one month apart. Cash purchases are paid on the purchase day.
 - A card's used limit is the sum of installments still to be paid.
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
-- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out; balances are their sums. get_assets values them in TRY at the current Turkish market rate.
+- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums (repeating entries count only the times up to today). get_assets values them in TRY at the current Turkish market rate.
 - Deleting a card or a person also deletes their purchases (a person also their asset entries); confirm destructive actions with the user.
 - Reply to the user in their language (the app is Turkish).`;

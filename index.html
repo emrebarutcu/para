@@ -274,9 +274,18 @@
         </label>
 
         <label class="field">
-          <span class="field-label">Tarih</span>
+          <span class="field-label" id="entryDateLabel">Tarih</span>
           <input name="date" type="date" required />
         </label>
+
+        <div class="field">
+          <span class="field-label">Tekrar</span>
+          <div class="chips" id="repeatChips" role="radiogroup" aria-label="Tekrar"></div>
+          <label class="inline-input">
+            <span>Diğer</span>
+            <input name="repeat" type="number" min="2" max="600" step="1" inputmode="numeric" placeholder="ay" />
+          </label>
+        </div>
 
         <div class="field">
           <span class="field-label">Kimin</span>

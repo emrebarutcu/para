@@ -161,8 +161,27 @@ test("varlık hareketleri: satıra çevrilir, geçersizler ve kişisi olmayanlar
     { id: "yetim", personId: "yok", asset: "TRY", amount: 5, desc: "Kişisi yok", date: "2026-10-19" },
   );
   const plan = changes(state, base);
-  assert.deepEqual(plan.entries.upsert.map(x => x.row), [{ id: "e2", person_id: "ali", asset: "USD", amount: -30, description: "Tatil", date: "2026-10-19" }]);
+  assert.deepEqual(plan.entries.upsert.map(x => x.row), [{ id: "e2", person_id: "ali", asset: "USD", amount: -30, description: "Tatil", date: "2026-10-19", repeat_count: null }]);
   assert.deepEqual(toState({}).entries, []);
+});
+
+test("tekrarlayan varlık hareketi: repeat_count ↔ repeat (0 süresiz, 1 tek seferlik sayılır)", () => {
+  const rows = server();
+  rows.entries = [
+    { user_id: "u1", id: "maas", person_id: "ben", asset: "TRY", amount: "50000", description: "Maaş", date: "2026-10-15", repeat_count: 0,
+      created_at: at(), updated_at: at(), deleted_at: null },
+    { user_id: "u1", id: "kira", person_id: "ben", asset: "TRY", amount: "-20000", description: "Kira", date: "2026-10-01", repeat_count: 12,
+      created_at: at(), updated_at: at(), deleted_at: null },
+  ];
+  const base = baseOf(rows);
+  const state = toState(rows);
+  assert.deepEqual(state.entries.map(e => [e.id, e.repeat]), [["maas", 0], ["kira", 12]]);
+  assert.deepEqual(changes(state, base).entries, { upsert: [], delete: [] });
+
+  state.entries = state.entries.map(e => (e.id === "kira" ? { ...e, repeat: 1 } : e));
+  state.entries.push({ id: "aidat", personId: "ben", asset: "TRY", amount: -500, desc: "Aidat", date: "2026-10-05", repeat: 6 });
+  const plan = changes(state, base);
+  assert.deepEqual(plan.entries.upsert.map(x => [x.id, x.row.repeat_count]), [["kira", null], ["aidat", 6]]);
 });
 
 test("cihazdaki veri hesaba eklenir: aynı kayıt iki kez eklenmez, aynı kişi / kart birleşir", () => {

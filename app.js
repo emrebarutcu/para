@@ -12,6 +12,7 @@ const CHART_MONTHS = 12;         // özetteki grafikte gösterilecek ay
 const CASH_COLOR = "var(--cash)";
 const VIEWS = ["ozet", "akis", "harcamalar", "kartlar", "varliklar"];
 const COUNT_PRESETS = [1, 2, 3, 4, 6, 9, 12];
+const REPEAT_PRESETS = [[1, "Bir kez"], [0, "Her ay"], [3, "3 ay"], [6, "6 ay"], [12, "12 ay"]];   // varlık hareketi tekrarı
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", rates: "para.rates" };
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
@@ -253,6 +254,7 @@ const els = {
   entryFilter: $("entryFilter"), assetGrid: $("assetGrid"), entryWrap: $("entryWrap"),
   entrySheet: $("entrySheet"), entryForm: $("entryForm"), entryTitle: $("entryTitle"), entryDelete: $("entryDelete"),
   entryUnit: $("entryUnit"), assetChips: $("assetChips"), entryPersonChips: $("entryPersonChips"), entryPreview: $("entryPreview"),
+  repeatChips: $("repeatChips"), entryDateLabel: $("entryDateLabel"),
   addLabel: $("addLabel"), fab: document.querySelector(".fab"),
   purchaseSheet: $("purchaseSheet"), purchaseForm: $("purchaseForm"), purchaseTitle: $("purchaseTitle"),
   purchaseDelete: $("purchaseDelete"), purchasePreview: $("purchasePreview"),
@@ -927,7 +929,8 @@ function renderAssets() {
   if (entryFilter !== "all" && !personById(entryFilter)) entryFilter = "all";
   const all = knownEntries();
   const mine = all.filter(e => entryFilter === "all" || e.personId === entryFilter);
-  const bals = V.balances(mine);
+  const today = T.todayKey();
+  const bals = V.balances(mine, today);
   const r = rates?.rates;
   const { total, missing } = V.totalTry(bals, r);
 
@@ -970,31 +973,50 @@ function renderAssets() {
       "TL, dolar, euro ya da gram altın girişlerini ve çıkışlarını ekle; bakiyeni güncel kurla TL olarak gösteririm.", btn));
     return;
   }
+  // Tekrarlayan hareket son işlenen tekrarının tarihiyle sıralanır (henüz işlenmediyse başlangıcıyla)
   const order = new Map(state.entries.map((e, i) => [e.id, i]));
-  const sorted = [...mine].sort((a, b) => b.date.localeCompare(a.date) || order.get(b.id) - order.get(a.id));
+  const shown = e => V.occurrenceDate(e, Math.max(V.processedCount(e, today) - 1, 0));
+  const sorted = mine.map(e => ({ e, at: shown(e) }))
+    .sort((a, b) => b.at.localeCompare(a.at) || order.get(b.e.id) - order.get(a.e.id));
   const panel = el("div", "panel list-panel");
-  for (const e of sorted) panel.append(entryRow(e, r));
+  for (const { e } of sorted) panel.append(entryRow(e, r, today));
   const head = el("header", "panel-head");
   head.append(el("h2", "", "Hareketler"));
   els.entryWrap.append(head, panel);
 }
 
-function entryRow(e, r) {
+function entryRow(e, r, today) {
   const a = V.asset(e.asset);
-  const row = el("div", "purchase");
+  const n = V.repeatOf(e);
+  const next = V.nextDate(e, today);
+  const row = el("div", "purchase" + (n != null && !next ? " done" : ""));
   row.tabIndex = 0;
   row.setAttribute("role", "button");
 
   const main = el("div", "p-main");
   main.append(el("div", "p-title", e.desc));
   const meta = el("div", "p-meta");
-  meta.append(el("span", "card-tag", a.name), el("span", "", fmtDayShort(e.date) + " " + T.yearOf(T.parseDate(e.date).idx)));
+  meta.append(el("span", "card-tag", a.name), el("span", "", fmtDay(e.date)));
+  if (n != null) meta.append(el("span", "", n ? `Her ay · ${n} kez` : "Her ay"));
   main.append(meta);
+  if (n) {
+    const done = V.processedCount(e, today);
+    const prog = el("div", "progress");
+    const bar = el("div", "bar");
+    const fill = el("span");
+    fill.style.width = `${(done / n) * 100}%`;
+    bar.append(fill);
+    prog.append(bar, el("span", "", `${done}/${n} işlendi`));
+    main.append(prog);
+  }
 
   const side = el("div", "p-side");
-  side.append(el("span", "amount " + (e.amount > 0 ? "in" : "out"), fmtAsset(e.amount, e.asset, true)));
+  const amount = el("span", "amount " + (e.amount > 0 ? "in" : "out"), fmtAsset(e.amount, e.asset, true));
+  if (n != null) amount.append(el("small", "", "/ay"));
+  side.append(amount);
   const value = V.toTry(e.amount, e.asset, r);
   if (e.asset !== "TRY") side.append(el("span", "sub", value == null ? "kur yok" : `≈ ${fmt(Math.abs(value))}`));
+  if (n != null) side.append(el("span", "sub", next ? `sonraki ${fmtDayShort(next)}` : "bitti"));
 
   row.append(avatar(personById(e.personId)), main, side);
   row.addEventListener("click", () => openEntrySheet(e));
@@ -1313,6 +1335,9 @@ function openEntrySheet(e, asset) {
   f.elements.amount.value = e ? Math.abs(e.amount) : "";
   f.elements.desc.value = e?.desc ?? "";
   f.elements.date.value = e?.date ?? T.todayKey();
+  const repeat = V.repeatOf(e) ?? 1;
+  els.repeatChips.replaceChildren(...REPEAT_PRESETS.map(([n, label]) => radioChip("repeatPreset", String(n), label, n === repeat)));
+  f.elements.repeat.value = repeat >= 2 ? repeat : "";
   syncChecked(f);
   updateEntryForm();
   openSheet(els.entrySheet);
@@ -1325,12 +1350,17 @@ function collectEntry() {
   const amount = V.round(Number(f.amount.value), asset);
   const desc = f.desc.value.trim();
   const date = T.parseDate(f.date.value) ? f.date.value : "";
+  // "Diğer"e yazılan ay sayısı çiplerden önce gelir; 1 = tek seferlik, 0 = süresiz
+  const repeat = f.repeat.value !== "" ? Number(f.repeat.value) : Number(f.repeatPreset.value || 1);
   const errors = [];
   if (!(amount > 0)) errors.push("amount");
   if (!desc) errors.push("desc");
   if (!date) errors.push("date");
+  if (!(repeat === 1 || V.repeatOf({ repeat }) != null)) errors.push("repeat");
   if (!personById(f.person.value)) errors.push("person");
-  return { e: { personId: f.person.value, asset, amount: f.dir.value === "out" ? -amount : amount, desc, date }, errors };
+  const e = { personId: f.person.value, asset, amount: f.dir.value === "out" ? -amount : amount, desc, date };
+  if (repeat !== 1) e.repeat = repeat;
+  return { e, errors };
 }
 
 function updateEntryForm() {
@@ -1339,26 +1369,45 @@ function updateEntryForm() {
   els.entryUnit.textContent = a.symbol;
   els.entryForm.elements.amount.step = e.asset === "GAU" ? "0.001" : "0.01";
 
+  const n = V.repeatOf(e);
+  els.entryDateLabel.textContent = n != null ? "İlk tarih" : "Tarih";
+
   const box = els.entryPreview;
   box.replaceChildren();
   if (errors.includes("amount")) return;
   const r = rates?.rates;
-  box.append(el("div", "big", fmtAsset(e.amount, e.asset, true)));
+  const today = T.todayKey();
+  box.append(el("div", "big", fmtAsset(e.amount, e.asset, true) + (n != null ? " / ay" : "")));
   if (e.asset !== "TRY") {
     const value = V.toTry(Math.abs(e.amount), e.asset, r);
     box.append(el("div", "", value == null ? "Kur alınamadı — TL karşılığı sonra hesaplanır"
       : `≈ ${fmt(value)} · ${a.code === "GAU" ? "1 gr" : `1 ${a.symbol}`} = ${fmt(r[e.asset])}`));
   }
+  if (n != null && e.date && !errors.includes("repeat")) {
+    const done = V.processedCount(e, today), next = V.nextDate(e, today);
+    box.append(el("div", "", n ? `Her ay ${n} kez · son ${fmtDay(V.lastDate(e))}` : "Her ay, bitiş tarihi yok"));
+    box.append(el("div", "", [done && `Bugüne kadar ${done} kez işlendi`, next && `${done ? "sonraki" : "İlki"} ${fmtDay(next)}`]
+      .filter(Boolean).join(" · ")));
+  }
   const person = personById(e.personId);
-  if (person) {
-    const before = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId))[e.asset] ?? 0;
-    const after = V.round(before + e.amount, e.asset);
+  if (person && !errors.includes("repeat")) {
+    const before = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId), today)[e.asset] ?? 0;
+    const after = V.round(before + e.amount * (e.date ? V.processedCount(e, today) : 1), e.asset);
     box.append(el("div", after < 0 ? "warn" : "", `${person.name} · ${a.name.toLocaleLowerCase("tr-TR")} bakiyesi ${fmtAsset(before, e.asset)} → ${fmtAsset(after, e.asset)}`));
   }
 }
 
 els.entryForm.addEventListener("input", e => {
   e.target.classList?.remove("invalid");
+  const f = els.entryForm.elements;
+  if (e.target.name === "repeatPreset") {
+    f.repeat.value = Number(e.target.value) >= 2 ? e.target.value : "";
+    f.repeat.classList.remove("invalid");
+  }
+  if (e.target.name === "repeat") {
+    const v = String(Math.round(Number(f.repeat.value)));
+    for (const r of els.repeatChips.querySelectorAll("input")) r.checked = f.repeat.value !== "" && r.value === v;
+  }
   syncChecked(els.entryForm);
   updateEntryForm();
 });
@@ -1367,9 +1416,9 @@ els.entryForm.addEventListener("submit", ev => {
   ev.preventDefault();
   const { e, errors } = collectEntry();
   const f = els.entryForm.elements;
-  for (const name of ["amount", "desc", "date"]) f[name].classList.toggle("invalid", errors.includes(name));
+  for (const name of ["amount", "desc", "date", "repeat"]) f[name].classList.toggle("invalid", errors.includes(name));
   if (errors.length) {
-    const msg = { amount: "Miktarı gir.", desc: "Açıklama yaz.", date: "Tarihi gir.", person: "Kişi seç." }[errors[0]];
+    const msg = { amount: "Miktarı gir.", desc: "Açıklama yaz.", date: "Tarihi gir.", repeat: `Tekrar 2–${V.MAX_REPEAT} ay arası olmalı.`, person: "Kişi seç." }[errors[0]];
     els.entryPreview.replaceChildren(el("div", "warn", msg));
     f[errors[0]]?.focus?.();
     return;
