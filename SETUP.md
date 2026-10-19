@@ -36,6 +36,21 @@ Site, `para` adlı bir Cloudflare Worker'dır (Workers Builds, ayarları `wrangl
 `main`'e her birleştirmede site kendiliğinden yayınlanır. Güvenlik ve önbellek başlıkları `_headers` dosyasında.
 Netlify'da da çalışır (`netlify.toml`); yeni adres yerleştikten sonra eski site kapatılabilir.
 
+### Sürüm
+
+Uygulamanın sürümü `version.js`'tedir (`1.4.2` gibi) ve Ayarlar'ın altında görünür. `main`'e açılan her PR sürümü
+artırmalıdır; `.github/workflows/surum.yml` ("Sürüm" denetimi) artmamışsa PR'ı kırmızıya çeker:
+
+```sh
+scripts/surum.sh          # düzeltme: 1.4.2 → 1.4.3
+scripts/surum.sh minor    # yeni özellik: 1.4.2 → 1.5.0
+scripts/surum.sh major    # büyük değişiklik: 1.4.2 → 2.0.0
+```
+
+Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca cihazlardaki eski dosyalar kendiliğinden yenilenir.
+Denetimin birleştirmeyi gerçekten engellemesi için GitHub → Settings → Branches → `main` kuralında
+"Require status checks to pass" altında **Sürüm** seçilir.
+
 ## 3. Mobil (iPhone / Android)
 
 **iPhone (Safari):**  
@@ -47,6 +62,8 @@ Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
 ---
 
 Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.
+Giriş yapmamış kullanıcıya ilk açılışta giriş / kayıt penceresi çıkar; altındaki "Çevrimdışı devam et" seçilirse
+pencere bir daha çıkmaz (`para.offline`), Özet'in üstünde verilerin yalnızca bu cihazda durduğunu söyleyen bir not görünür.
 Her kayıttan 1.5s sonra yalnızca değişen kişi / kart / harcama / varlık hareketi satırları yazılır; silinenler satırdan kalkmaz,
 `deleted_at` ile işaretlenir. Uygulama açılınca, öne gelince ve başka cihaz (ya da asistan) yazınca (Realtime)
 son okumadan beri değişen satırlar çekilir. Aynı anda farklı kayıtlar değişirse hepsi korunur; aynı kayıt iki

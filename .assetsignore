@@ -1,6 +1,8 @@
 # Statik olarak sunulmayacaklar (wrangler.jsonc → assets.directory = ".")
 .git
 .claude
+.github
+scripts
 .wrangler
 node_modules
 mcp

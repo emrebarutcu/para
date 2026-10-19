@@ -1694,6 +1694,7 @@ els.themeSeg.addEventListener("click", e => {
 });
 
 els.settingsBtn.addEventListener("click", () => { renderThemeSeg(); openSheet(els.settingsSheet); });
+if (window.APP_VERSION) $("appVersion").textContent = `CashFollow v${window.APP_VERSION}`;
 // Giriş penceresi (sync.js) ayarların üstünde açılsın diye önce ayarları kapat
 els.authBtn.addEventListener("click", () => els.settingsSheet.close());
 

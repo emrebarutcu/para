@@ -1,0 +1,27 @@
+# main'e açılan her PR sürümü (version.js) main'dekinden büyük yapmalı
+name: Sürüm
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  surum:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Sürüm artırıldı mı
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          ver() { grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1; }
+          head=$(ver < version.js)
+          base=$(git show "origin/$BASE:version.js" 2>/dev/null | ver || true)
+          echo "main: ${base:-yok}, bu PR: $head"
+          if [ -z "$head" ]; then echo "::error file=version.js::Sürüm okunamadı"; exit 1; fi
+          if [ -n "$base" ] && { [ "$head" = "$base" ] || [ "$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)" != "$head" ]; }; then
+            echo "::error file=version.js::Sürüm artırılmalı (main: $base, bu PR: $head). scripts/surum.sh çalıştır."
+            exit 1
+          fi
