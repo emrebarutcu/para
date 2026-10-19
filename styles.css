@@ -279,7 +279,7 @@ a { color: inherit; }
   left: 0; right: 0; bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--surface) 86%, transparent);
   backdrop-filter: saturate(1.6) blur(18px);
@@ -412,6 +412,8 @@ a { color: inherit; }
 }
 .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hero-label { font-size: 14px; color: var(--text-2); font-weight: 500; }
+.hero-note { font-size: 12px; color: var(--text-3); text-align: right; }
+.hero-note.warn-text { color: var(--danger); }
 .hero-amount {
   margin: 14px 0 18px;
   font-size: clamp(40px, 11vw, 56px);
@@ -624,6 +626,44 @@ a { color: inherit; }
 .section-toggle .ic { width: 16px; height: 16px; transition: transform .2s; }
 .section-toggle.open .ic { transform: rotate(180deg); }
 .purchase-groups { display: flex; flex-direction: column; gap: 12px; }
+
+/* ── Assets ── */
+.asset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.asset {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s;
+}
+.asset:hover { background: var(--surface-2); }
+.asset-name { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.asset-sym {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px; height: 26px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+.asset-bal { font-size: 19px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.asset-bal.neg { color: var(--expense); }
+.asset-try { font-size: 13px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asset.empty-asset { opacity: .55; }
+.p-side .amount.in { color: var(--income); }
+.p-side .amount.out { color: var(--expense); }
 
 /* ── Credit cards ── */
 .card-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
@@ -1050,6 +1090,7 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   .grid-2 { grid-template-columns: 1fr 1fr; gap: 20px; }
   .panel { padding: 20px 22px; }
   .card-grid { grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .asset-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; }
   .toast { bottom: 28px; }
 }
 

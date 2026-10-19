@@ -1,5 +1,5 @@
 // cashfollow.app — Cloudflare Workers Builds (Worker adı: para). main'e her birleştirmede yayınlanır.
-// Statik site kök dizinden sunulur; yalnızca MCP adresleri Worker kodundan geçer (mcp/worker.js).
+// Statik site kök dizinden sunulur; yalnızca MCP adresleri ve /api/kur Worker kodundan geçer (mcp/worker.js).
 {
   "name": "para",
   "main": "mcp/worker.js",
@@ -7,6 +7,6 @@
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
-    "run_worker_first": ["/mcp", "/.well-known/oauth-protected-resource*"]
+    "run_worker_first": ["/mcp", "/api/*", "/.well-known/oauth-protected-resource*"]
   }
 }

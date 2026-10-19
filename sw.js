@@ -1,5 +1,5 @@
-const CACHE = 'cashfollow-v8';
-const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/eposta.js', '/tablo.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
+const CACHE = 'cashfollow-v9';
+const ASSETS = ['/', '/index.html', '/styles.css', '/app.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/sync.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -17,9 +17,9 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   // Network-first for Supabase API, cache-first for local assets
-  // MCP sunucusu ve OAuth izin sayfası önbelleğe alınmaz (her istek ayrı authorization_id taşır)
+  // MCP sunucusu, OAuth izin sayfası (her istek ayrı authorization_id taşır) ve kurlar önbelleğe alınmaz
   const path = new URL(e.request.url).pathname;
-  if (path === '/mcp' || path.startsWith('/oauth/') || path.startsWith('/.well-known/')) return;
+  if (path === '/mcp' || path.startsWith('/oauth/') || path.startsWith('/.well-known/') || path.startsWith('/api/')) return;
   if (e.request.url.includes('supabase.co')) {
     e.respondWith(fetch(e.request).catch(() => new Response('', { status: 503 })));
     return;
