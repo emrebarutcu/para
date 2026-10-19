@@ -38,22 +38,35 @@ Netlify'da da çalışır (`netlify.toml`); yeni adres yerleştikten sonra eski 
 
 ### Sürüm
 
-Uygulamanın sürümü `version.js`'tedir ve Ayarlar'ın altında görünür. Biçim **`YIL.AYGÜN.SIRA`**: `2026.1019.1` 19 Ekim
-2026'nın ilk yayını, `2026.1019.2` aynı günün ikincisi. Ay ve gün tek parçadadır (ay × 100 + gün, başta sıfır olmadan:
-5 Ocak → `105`), çünkü App Store en fazla üç tam sayı kabul eder; sayısal sıralama tarih sırasıyla aynıdır.
-Google Play'in `versionCode`'u gerekince sürümden üretilir: `YILAYGÜNSIRA`, ör. `2026.1019.2` → `2026101902`.
-
-`main`'e açılan her PR sürümü artırır:
+Uygulamanın sürümü `version.js`'tedir (`MAJOR.MINOR.PATCH`, ör. `1.4.2`) ve Ayarlar'ın altında görünür. `main`'e açılan
+her PR sürümü artırır:
 
 ```sh
-scripts/surum.sh    # bugünün ilk yayını 2026.1019.1, aynı gün tekrar çalıştırılınca 2026.1019.2
+scripts/surum.sh          # PATCH: 1.4.2 → 1.4.3
+scripts/surum.sh minor    # MINOR: 1.4.2 → 1.5.0
+scripts/surum.sh major    # MAJOR: 1.4.2 → 2.0.0
 ```
+
+Hangisinin artacağı, değişikliğin kodun dışında kalan ve bizim yönetmediğimiz şeyleri bozup bozmadığına göre seçilir:
+cihazlarda önbellekte kalan eski sürümler (aynı tablolara yazmayı sürdürürler), Supabase şeması, asistanların çağırdığı
+MCP araçları ve kullanıcının mevcut verisinin anlamı.
+
+| | Ne zaman | Örnek |
+| --- | --- | --- |
+| **MAJOR** | Eski sürümü bozan ya da yayından önce elle SQL gerektiren şema değişikliği; MCP aracının kaldırılması, adının ya da parametre / cevap biçiminin uyumsuz değişmesi; mevcut verideki tutarları ya da ödeme tarihlerini değiştiren hesaplama kuralı (kesim / son ödeme, taksitin düştüğü ay); bir özelliğin ya da içe aktarma biçiminin kaldırılması | JSON'dan ayrı tablolara geçiş |
+| **MINOR** | Geriye uyumlu yeni yetenek: yeni sekme ya da özellik, yeni MCP aracı ya da isteğe bağlı parametre, eklemeli şema değişikliği (yeni tablo, varsayılanı olan sütun), veri ve davranışı aynı bırakan büyük arayüz değişikliği | Varlıklar sekmesi, banka e-postaları, giriş penceresi |
+| **PATCH** | Yeni yetenek yok: hata düzeltmesi, metin, stil, performans, belgeler, yalnızca altyapı (Worker paketleme, önbellek başlıkları) | Çıkışta verinin temizlenmesi |
+
+Bir PR'da birden fazla değişiklik varsa en yükseği belirler; kararsız kalınırsa yükseği seçilir. MAJOR'da bu dosyaya
+yükseltme notu (çalıştırılacak SQL, MCP kullananların dikkat edeceği) yazılır. Mağaza sürümü (App Store
+`CFBundleShortVersionString`) gönderim anındaki web sürümüdür; Google Play `versionCode`'u ondan üretilir:
+`MAJOR × 1000000 + MINOR × 1000 + PATCH` (ör. `1.4.2` → `1004002`).
 
 `.github/workflows/surum.yml` ("Sürüm" denetimi) sürüm main'dekinden büyük değilse PR'ı kırmızıya çeker.
 GitHub → Settings → Branches → `main` kuralında şu ikisi açılmalı: **Require status checks to pass** (altında **Sürüm**)
 ve **Require branches to be up to date before merging**. İkincisi olmazsa paralel iki PR aynı sürümü yazıp ikisi de
 birleşebilir (aynı satırdaki aynı değişiklik git'te çakışma sayılmaz); PR main'i alınca denetim yeniden çalışır,
-aynı sürüm yakalanır, `scripts/surum.sh` yeniden çalıştırılır.
+aynı sürüm yakalanır ve sürüm yeniden artırılır.
 
 Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca cihazlardaki eski dosyalar kendiliğinden yenilenir.
 

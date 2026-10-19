@@ -22,6 +22,6 @@ jobs:
           echo "main: ${base:-yok}, bu PR: $head"
           if [ -z "$head" ]; then echo "::error file=version.js::Sürüm okunamadı"; exit 1; fi
           if [ -n "$base" ] && { [ "$head" = "$base" ] || [ "$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)" != "$head" ]; }; then
-            echo "::error file=version.js::Sürüm artırılmalı (main: $base, bu PR: $head). scripts/surum.sh çalıştır."
+            echo "::error file=version.js::Sürüm artırılmalı (main: $base, bu PR: $head). scripts/surum.sh [patch|minor|major] çalıştır."
             exit 1
           fi
