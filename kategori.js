@@ -120,7 +120,7 @@
   // q: açıklamanın vektörü (normalize), protos: [{ id, v }] kategori kelimeleri, users: [{ id, v }] kullanıcı örnekleri.
   // Kategori puanı: kelimelerinden en benzer ikisinin ortalaması; kullanıcı örneği daha benzerse onun benzerliği.
   // → { category, confidence, scores } — confidence: puanların yumuşak en büyüğünde seçilenin payı (0…1)
-  function rank(q, protos, users = []) {
+  function rank(q, protos, users = [], { sharpness = SHARPNESS } = {}) {
     const by = new Map(CATEGORIES.map(c => [c.id, []]));
     for (const p of protos) by.get(p.id)?.push(dot(q, p.v));
     const scores = {};
@@ -131,7 +131,7 @@
     for (const u of users) if (u.id in scores) scores[u.id] = Math.max(scores[u.id], dot(q, u.v) + USER_BONUS);
     const order = Object.entries(scores).sort((a, b) => b[1] - a[1]);
     const top = order[0][1];
-    const total = order.reduce((s, [, x]) => s + Math.exp(SHARPNESS * (x - top)), 0);
+    const total = order.reduce((s, [, x]) => s + Math.exp(sharpness * (x - top)), 0);
     return { category: order[0][0], confidence: 1 / total, scores };
   }
 

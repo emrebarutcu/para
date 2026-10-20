@@ -29,7 +29,7 @@ function json(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...CORS, ...headers } });
 }
 
-function config(env = {}) {
+export function config(env = {}) {
   return {
     url: (env.SUPABASE_URL || DEFAULTS.SUPABASE_URL).replace(/\/+$/, ""),
     key: env.SUPABASE_ANON_KEY || DEFAULTS.SUPABASE_ANON_KEY,
@@ -58,7 +58,7 @@ function unauthorized(origin, error) {
 // Token → kullanıcı; her araç çağrısında Supabase'e sormamak için kısa süreli önbellek
 const USER_TTL = 60_000;
 const users = new Map();
-async function userFor(token, cfg, f) {
+export async function userFor(token, cfg, f) {
   const now = Date.now();
   const hit = users.get(token);
   if (hit && hit.exp > now) return hit.user;

@@ -291,7 +291,7 @@ const els = {
   inboxAddress: $("inboxAddress"),
   aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"),
   aiAppsGroup: $("aiAppsGroup"), aiApps: $("aiApps"),
-  aiLocalTitle: $("aiLocalTitle"), aiLocalSub: $("aiLocalSub"), aiLocalBtn: $("aiLocalBtn"), aiProgress: $("aiProgress"),
+  aiLocalTitle: $("aiLocalTitle"), aiLocalSub: $("aiLocalSub"), aiModeSeg: $("aiModeSeg"), aiProgress: $("aiProgress"),
   aiBackfill: $("aiBackfill"), aiAddNote: $("aiAddNote"), aiOther: $("aiOther"),
   insightPanel: $("insightPanel"), insightList: $("insightList"), insightMore: $("insightMore"),
   catPanel: $("catPanel"), catList: $("catList"), catTotal: $("catTotal"), catNote: $("catNote"),
@@ -416,7 +416,7 @@ function renderCategories(idx) {
   }));
   const loose = b.rows.some(r => !r.id);
   els.catNote.textContent = "Taksitli alışveriş tamamıyla alındığı aya yazılır."
-    + (loose && !YZ.enabled ? " Kategorisizleri cihazdaki yapay zekâ ayırabilir: Ayarlar → Yapay zekâ." : "");
+    + (loose && !YZ.enabled ? " Kategorisizleri yapay zekâ ayırabilir: Ayarlar → Yapay zekâ." : "");
 }
 
 function renderUpcoming(last) {
@@ -1669,13 +1669,14 @@ async function guessCategory(desc) {
 async function suggestCategory() {
   const seq = ++suggestSeq;
   const desc = els.purchaseForm.elements.desc.value.trim();
-  if (categoryTouched || categorySource === "user") return;
+  if (categoryTouched || categorySource === "user" || !els.purchaseSheet.open) return;
   if (!desc) { pickCategory(null, null); setCategoryHint(""); return; }
   const known = K.remembered(desc, K.learned(state.installments));
   if (known) { pickCategory(known, "memory", desc); setCategoryHint("önceki seçimin"); return; }
   if (!YZ.enabled) {
     pickCategory(null, null);
-    setCategoryHint("", YZ.supported() ? { label: "Yapay zekâ önersin", run: openAiSheet } : null);
+    const label = YZ.mode === "cloud" ? "giriş yapınca önerilir" : YZ.mode === "off" ? "Yapay zekâ önersin" : null;
+    setCategoryHint("", label && { label, run: openAiSheet });
     return;
   }
   setCategoryHint("öneriliyor…");
@@ -1827,6 +1828,8 @@ els.purchaseForm.addEventListener("submit", e => {
     f[errors[0]]?.focus?.();
     return;
   }
+  clearTimeout(suggestTimer);   // bekleyen öneri: kayıttan sonra classifyAfterSave verir
+  suggestSeq++;
   // Kullanıcı seçmediyse: başka bir açıklamaya göre verilmiş kategori düşer; aynı işyerine önceki seçimi hemen,
   // modelin önerisi kayıttan sonra gelir
   if (p.categoryBy !== "user") {
@@ -1851,10 +1854,12 @@ els.purchaseForm.addEventListener("submit", e => {
   lastPersonId = personId;
   saveState();
   els.purchaseSheet.close();
-  const nudge = !p.category && !YZ.enabled && YZ.supported() && !aiNudged;
+  const nudge = !p.category && !YZ.enabled && YZ.mode !== "local" && !aiNudged;
   if (nudge) aiNudged = true;
   toast((editingId ? "Harcama güncellendi" : "Harcama eklendi")
-    + (p.category ? ` · ${K.category(p.category).name}` : nudge ? " · kategori için Ayarlar → Yapay zekâ'yı aç" : ""));
+    + (p.category ? ` · ${K.category(p.category).name}`
+      : !nudge ? ""
+      : YZ.mode === "cloud" ? " · giriş yapınca kategoriler otomatik önerilir" : " · kategori önerisi için Ayarlar → Yapay zekâ"));
   editingId = null;
   render();
   classifyAfterSave(id);
@@ -2442,19 +2447,23 @@ async function backfillCategories({ manual = false } = {}) {
     if (!YZ.enabled) return;
 
     const todo = state.installments.filter(p => !K.valid(p.category) && p.desc?.trim() && !unsure.has(p.id))
-      .sort((a, b) => (b.date ?? b.firstDue ?? "").localeCompare(a.date ?? a.firstDue ?? "")).map(p => p.id);
+      .sort((a, b) => (b.date ?? b.firstDue ?? "").localeCompare(a.date ?? a.firstDue ?? ""));
+    // Bulutta toplu (bir istekte 25), cihazda tek tek; her parçadan sonra kaydedilir
+    const size = YZ.mode === "cloud" ? 25 : 5;
     let done = 0, skipped = 0;
-    for (const id of todo) {
+    for (let i = 0; i < todo.length; i += size) {
       if (stateOwner !== owner || !YZ.enabled) break;
-      const p = state.installments.find(x => x.id === id);
-      if (!p || K.valid(p.category)) continue;
-      const r = await YZ.suggest(p.desc, memory);
-      if (!r) break;
-      const cur = state.installments.find(x => x.id === id);
-      if (stateOwner !== owner || !cur || K.valid(cur.category)) continue;
-      if (r.confidence < K.SURE) { unsure.add(id); skipped++; continue; }
-      update(id, r.category);
-      if (++done % 5 === 0) { saveState(); render(); }
+      const part = todo.slice(i, i + size);
+      const results = await YZ.suggestMany(part.map(p => p.desc), memory);
+      if (!results || stateOwner !== owner) break;
+      part.forEach((p, k) => {
+        const r = results[k], cur = state.installments.find(x => x.id === p.id);
+        if (!r || !cur || K.valid(cur.category) || cur.desc !== p.desc) return;
+        if (r.confidence < K.SURE) { unsure.add(p.id); skipped++; return; }
+        update(p.id, r.category);
+        done++;
+      });
+      if (done) { saveState(); render(); }
       if (els.aiSheet.open) renderAiStatus();
     }
     if (done) { saveState(); render(); }
@@ -2469,44 +2478,48 @@ async function backfillCategories({ manual = false } = {}) {
   }
 }
 
-// ---------- Yapay zekâ: cihazdaki model ve asistanlar (MCP) ----------
-// Cihazdaki model: yz.js. Asistanlar /mcp'ye (mcp/worker.js) bağlanır; kullanıcı oauth/consent.html'de izin verir.
+// ---------- Yapay zekâ: kategori önerisi ve asistanlar (MCP) ----------
+// Kategori önerisi yz.js'te: bulut (giriş yapmış kullanıcıda varsayılan), cihazda ya da kapalı.
+// Asistanlar /mcp'ye (mcp/worker.js) bağlanır; kullanıcı oauth/consent.html'de izin verir.
 const mb = n => Math.round((n || 0) / 1e6);
 
 function renderAiStatus() {
-  const i = YZ.info, on = YZ.enabled;
+  const i = YZ.info, mode = YZ.mode, local = YZ.supported();
   const loose = knownPurchases().filter(p => !K.valid(p.category) && !unsure.has(p.id)).length;
   const left = knownPurchases().filter(p => !K.valid(p.category) && unsure.has(p.id)).length;
+  for (const b of els.aiModeSeg.querySelectorAll("button")) {
+    b.classList.toggle("active", b.dataset.mode === mode);
+    b.setAttribute("aria-checked", String(b.dataset.mode === mode));
+    if (b.dataset.mode === "local") { b.disabled = !local; b.title = local ? "" : "Bu tarayıcıda çalışmıyor"; }
+  }
   els.aiProgress.hidden = true;
   els.aiBackfill.hidden = true;
-  if (!YZ.supported()) {
-    els.aiLocalTitle.textContent = "Bu tarayıcıda çalışmıyor";
-    els.aiLocalSub.textContent = "Güncel Chrome, Edge, Safari ya da Firefox gerekir.";
-    els.aiLocalBtn.hidden = true;
+  const show = (title, sub) => { els.aiLocalTitle.textContent = title; els.aiLocalSub.textContent = sub; };
+  const unsureNote = left ? ` ${left} harcamada emin olamadı; kategorisini Harcamalar'dan seçebilirsin.` : "";
+
+  if (mode === "off") {
+    show("Kapalı", "Yalnızca daha önce seçtiğin kategoriler aynı işyerlerine verilir.");
     return;
   }
-  els.aiLocalBtn.hidden = false;
-  els.aiLocalBtn.textContent = on ? "Kapat ve sil" : "İndir ve aç";
-  els.aiLocalBtn.className = on ? "btn btn-ghost sm" : "btn btn-primary sm";
-  if (!on) {
-    els.aiLocalTitle.textContent = "Kapalı";
-    els.aiLocalSub.textContent = `Model bir kez indirilir: yaklaşık ${YZ.SIZE_MB} MB. Wi-Fi önerilir.`;
-    return;
-  }
-  if (i.status === "loading") {
-    els.aiLocalTitle.textContent = i.total && i.loaded < i.total ? "İndiriliyor…" : "Yükleniyor…";
-    els.aiLocalSub.textContent = i.total ? `${mb(i.loaded)} / ${mb(i.total)} MB` : "Hazırlanıyor";
+  if (mode === "cloud") {
+    if (!window.syncGetUser?.()) {
+      show("Bulut · giriş gerekli", "Giriş yapınca çalışır. Girişsiz kullanımda Cihazda seçeneğini kullanabilirsin.");
+      return;
+    }
+    show("Bulut · açık", "Harcama açıklamaların CashFollow sunucusunda (Cloudflare) büyük bir dil modeliyle sınıflandırılır, "
+      + "saklanmaz. İndirme gerekmez." + unsureNote);
+  } else if (i.status === "loading") {
+    show(i.total && i.loaded < i.total ? "Cihazda · indiriliyor…" : "Cihazda · yükleniyor…",
+      i.total ? `${mb(i.loaded)} / ${mb(i.total)} MB` : "Hazırlanıyor");
     els.aiProgress.hidden = !i.total;
     els.aiProgress.firstElementChild.style.width = `${i.total ? Math.min(100, (i.loaded / i.total) * 100) : 0}%`;
   } else if (i.status === "error") {
-    els.aiLocalTitle.textContent = "Açılamadı";
-    els.aiLocalSub.textContent = `${i.error} — kapatıp yeniden dene.`;
+    show("Cihazda · açılamadı", `${i.error} — Bulut'a geçebilir ya da yeniden seçebilirsin.`);
   } else {
-    els.aiLocalTitle.textContent = "Açık";
-    els.aiLocalSub.textContent = (i.status === "ready" ? "Hazır" : "Gerektiğinde yüklenir")
-      + (left ? ` · ${left} harcamada emin olamadı; kategorisini Harcamalar'dan seçebilirsin` : "");
+    show("Cihazda · açık", `Model bu cihazda (~${YZ.SIZE_MB} MB), internetsiz çalışır; veri cihazdan çıkmaz. `
+      + (i.status === "ready" ? "Hazır." : "Gerektiğinde yüklenir.") + unsureNote);
   }
-  if (loose && i.status !== "error") {
+  if (loose && YZ.enabled) {
     els.aiBackfill.hidden = false;
     els.aiBackfill.disabled = backfillBusy;
     els.aiBackfill.textContent = backfillBusy ? `Ayrılıyor… ${loose} kaldı` : `${loose} kategorisiz harcamayı ayır`;
@@ -2515,19 +2528,19 @@ function renderAiStatus() {
 
 YZ.onChange(() => { if (els.aiSheet.open) renderAiStatus(); });
 
-els.aiLocalBtn.addEventListener("click", async () => {
-  if (YZ.enabled) {
-    if (!confirm("Cihazdaki yapay zekâ kapatılsın ve indirilen model silinsin mi? Verilen kategoriler kalır.")) return;
-    await YZ.disable();
-    renderAiStatus();
-    render();
-    return;
-  }
-  const ok = await YZ.enable();
+els.aiModeSeg.addEventListener("click", async e => {
+  const next = e.target.closest("button")?.dataset.mode;
+  if (!next || next === YZ.mode) return;
+  if (YZ.mode === "local" && !confirm("Cihaza indirilen model silinsin mi? Verilen kategoriler kalır.")) return;
+  if (next === "local" && !confirm(`Model bu cihaza indirilecek (yaklaşık ${YZ.SIZE_MB} MB). Wi-Fi önerilir. Devam edelim mi?`)) return;
+  unsure.clear();
+  const pending = YZ.setMode(next);
+  renderAiStatus();
+  const ok = await pending;
   renderAiStatus();
   render();
-  if (ok) { toast("Cihazdaki yapay zekâ hazır"); backfillCategories(); }
-  else toast("Model yüklenemedi");
+  if (next === "local") toast(ok ? "Cihazdaki model hazır" : "Model yüklenemedi");
+  if (YZ.enabled) backfillCategories();
 });
 
 els.aiBackfill.addEventListener("click", () => { backfillCategories({ manual: true }); renderAiStatus(); });

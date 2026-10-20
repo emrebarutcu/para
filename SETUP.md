@@ -199,8 +199,8 @@ Ek ayar ya da anahtar gerekmez.
 Harcamaların kategorisi vardır (`kategori.js`: Market, Yeme-içme, Ulaşım, Alışveriş, Elektronik, Ev, Faturalar, Sağlık ve
 bakım, Eğitim, Eğlence, Seyahat, Diğer). Formda seçilir; kullanıcının seçtiği kategori öğrenilir (`category_by = 'user'`):
 aynı işyerinin sonraki harcamasına (farklı yazılışı dahil: "MIGROS TICARET A.S." / "Migros Ticaret A.Ş. 0042") aynı
-kategori verilir. Sabit bir işyeri sözlüğü yoktur; öğrenilmemiş işyerine cihazdaki dil modeli kategori önerir
-(`category_by = 'ai'`, aşağıda). Kullanıcı düzeltirse düzeltmesi öğrenilir.
+kategori verilir. Sabit bir işyeri sözlüğü yoktur; öğrenilmemiş işyerine dil modeli kategori önerir
+(`category_by = 'ai'`, aşağıda: bulutta ya da cihazda). Kullanıcı düzeltirse düzeltmesi öğrenilir.
 
 Özet'te **İçgörüler** (`icgoru.js`, model gerekmez; MCP `get_insights` aynısını döndürür): bu ayın serbest nakdi ya da
 açık veren ilk ay (gelir ve sabit giderler varlıklardaki tekrarlayan giriş / çıkışlardan), önümüzdeki 6 ayın taksit /
@@ -211,33 +211,42 @@ tekrarlayan çıkışlar), diğer kişilerin bu ayki payı, son taksitin ayı. A
 düğme o kişinin ayın taksitlerini, kart ve tarihleriyle paylaşım menüsüne (yoksa WhatsApp'a) metin olarak verir.
 Harcama formu, başka bir kartla ilk ödeme en az 10 gün daha geç geliyorsa söyler.
 
-### Cihazdaki yapay zekâ
+### Kategori önerisi: bulut ve cihaz
 
-Ayarlar → **Yapay zekâ** → **İndir ve aç**. Küçük, çok dilli bir dil modeli (`yz.js` → `MODEL`:
-[multilingual-e5-small](https://huggingface.co/Xenova/multilingual-e5-small), 8 bit ONNX, ~135 MB) tarayıcıda
-[transformers.js](https://huggingface.co/docs/transformers.js) ile çalışır: bir kez Hugging Face'ten indirilir,
-tarayıcının önbelleğinde kalır, sonra internetsiz ve ücretsizdir; harcama verisi cihazdan çıkmaz. Model `yz-worker.js`'te
-(Web Worker, WASM) çalışır; harcama formu açılınca önceden yüklenir, 5 dakika kullanılmazsa bellek bırakılır.
-**Kapat ve sil** modeli ve vektörleri siler. Service worker yalnızca kendi `cashfollow-<sürüm>` önbelleklerini temizler;
-model ve vektörler sürüm güncellemesinde silinmez.
+Ayarlar → **Yapay zekâ** → **Kategori önerisi**: **Bulut** (varsayılan), **Cihazda** ya da **Kapalı** (`yz.js`). İkisi de aynı
+sıralamayı kullanır (`kategori.js`): açıklama, her kategorinin anlam kelimelerine (Türkçe ve İngilizce, işyeri adı
+değil) ve kullanıcının kategorisini seçtiği son 64 harcamaya olan benzerliğe göre sıralanır. Açıklama temizlenerek gider
+(`Kategori.clean`: tarih / tutar gibi sayılar, parantez içi notlar ve "taksit" sözleri atılır). Güveni `Kategori.SURE`'un
+(0,3) altındaki tahmin kendiliğinden verilmez; formda "emin değilim · … olabilir" önerisine dokunup seçilir.
 
-Model metni anlam vektörüne çevirir; `kategori.js` açıklamayı her kategorinin anlam kelimelerine (Türkçe ve İngilizce,
-işyeri adı değil) ve kullanıcının kategorisini seçtiği son 64 harcamaya olan benzerliğe göre sıralar. Vektörler cihazda
-saklanır (Cache Storage `yz-vektor`), her açılışta yeniden hesaplanmaz. Açıklama modele temizlenerek gider
-(`Kategori.clean`: tarih / tutar gibi sayılar, parantez içi notlar ve "taksit" sözleri atılır). Ölçümler (bu ortamda, tek çekirdek WASM):
-öneri başına 12–50 ms; model önbellekten açılırken ilk öneri ~3 sn. 115 harcamalık, test markalarını hiç görmemiş bir
-denemede bütün tahminlerin %63'ü doğru; kaçanlar çoğunlukla modelin tanımadığı marka adları (ör. "TEKNOSA"). Bu yüzden
-güveni `Kategori.SURE`'un (0,3) altındaki tahmin kendiliğinden verilmez: eşiği geçen tahminlerin %91'i doğru, harcamaların
-%57'si eşiği geçiyor; kalanını kullanıcı seçer (formda "emin değilim · … olabilir"). Kullanıcı bir işyerinin
-kategorisini bir kez seçince o işyeri hep doğru gelir, benzerlerinde örnek olur.
+**Bulut** — giriş yapmış kullanıcılara. Sitenin Worker'ı `POST /api/kategori` (`mcp/kategori.js`):
+`Authorization: Bearer <Supabase oturum anahtarı>` (MCP'deki gibi doğrulanır), gövde `{ items: [açıklama…] (≤ 50),
+examples: [{ text, id }] (≤ 64) }`, cevap `{ model, results: [{ category, confidence }] }`. Vektörler
+[Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) `@cf/baai/bge-m3` ile (`wrangler.jsonc` → `ai`
+bağlaması; hesapta Workers AI açık olmalı). Veri saklanmaz; vektörler yalnızca Worker örneğinin belleğinde önbellekte.
+Kullanıcı başına dakikada 300 açıklama sınırı (Worker örneği içinde). Maliyet: günde 10.000 neuron ücretsiz, bge-m3
+milyon token başına 1.075 neuron; bir açıklama ~10–20 token, yani ücretsiz kota günde yüz binlerce öneriye yeter.
+PR önizlemelerinde (`previews`) AI bağlaması yok; uç orada 503 döner, uygulama öneri göstermez.
+
+Ölçüm (115 harcamalık, test markalarını hiç görmemiş deneme): bge-m3'te güveni ≥ 0,3 olan tahminlerin %96'sı doğru,
+harcamaların %59'u eşiği geçiyor (cls ya da mean havuzlamada aynı). qwen3-embedding-0.6b daha çok atıyor ama doğru oranı
+%85'te kaldı.
+
+**Cihazda** — internetsiz ve verinin cihazdan çıkmaması için (mobil uygulama için de). Küçük, çok dilli model
+([multilingual-e5-small](https://huggingface.co/Xenova/multilingual-e5-small), 8 bit ONNX, ~135 MB) tarayıcıda
+[transformers.js](https://huggingface.co/docs/transformers.js) ile çalışır: seçilince bir kez Hugging Face'ten indirilir,
+tarayıcının önbelleğinde kalır. `yz-worker.js`'te (Web Worker, WASM) çalışır; harcama formu açılınca önceden yüklenir,
+5 dakika kullanılmazsa bellek bırakılır. Başka seçeneğe geçince model ve vektörler silinir. Service worker yalnızca
+kendi `cashfollow-<sürüm>` önbelleklerini temizler; model sürüm güncellemesinde silinmez. Vektörler cihazda saklanır
+(Cache Storage `yz-vektor`). Ölçümler (tek çekirdek WASM): öneri başına 12–50 ms; model önbellekten açılırken ilk
+öneri ~3 sn; aynı denemede güveni ≥ 0,3 olanların %91'i doğru, harcamaların %57'si eşiği geçiyor.
 
 Neden metin üreten bir model değil: 0.3–1 milyar parametreli modeller (Gemma 3 270M / 1B, Qwen 2.5 0.5B, Qwen 3 0.6B)
 aynı denemede %13–38 doğru buldu, 300–800 MB indirme ve telefonda öneri başına saniyeler gerektirdi.
 
-Açılışta, eşitlemeden sonra ve e-postadan harcama eklenince kategorisiz harcamalar en yeniden başlayarak ayrılır.
-Aynı model ileride mobil uygulamada da kullanılabilir: uygulama web görünümüyle (Capacitor gibi) paketlenirse bu kod
-olduğu gibi çalışır; yerel (native) uygulamada aynı ONNX dosyası ONNX Runtime Mobile ile çalıştırılır, sıralama
-`kategori.js`'teki gibidir.
+Açılışta, eşitlemeden sonra ve e-postadan harcama eklenince kategorisiz harcamalar en yeniden başlayarak ayrılır
+(bulutta 25'erli istekler). Mobil uygulamada: web görünümüyle (Capacitor gibi) paketlenirse bu kod olduğu gibi çalışır;
+yerel (native) uygulamada aynı ONNX dosyası ONNX Runtime Mobile ile çalıştırılır, sıralama `kategori.js`'teki gibidir.
 
 ## 5. Taksitler Excel'ini içe aktarma
 

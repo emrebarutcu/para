@@ -262,7 +262,7 @@
     if (loose >= UNCATEGORIZED) {
       add({
         id: "kategorisiz", tone: "info", title: `${loose} harcamanın kategorisi yok`,
-        text: "Cihazdaki yapay zekâ harcamalarını kategorilere ayırabilir; veri telefonundan çıkmaz.",
+        text: "Yapay zekâ harcamalarını kategorilere ayırabilir; elle seçtiklerinden de öğrenir.",
         action: { kind: "ai", label: "Kategorilere ayır" },
       });
     }
