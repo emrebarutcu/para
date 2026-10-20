@@ -98,12 +98,26 @@
       <section class="panel cash-panel">
         <header class="panel-head">
           <div class="panel-title">
-            <h2>Nakit · önümüzdeki 30 gün</h2>
-            <span class="panel-note" id="cashRange"></span>
+            <h2>Nakit</h2>
+            <div class="month-switch">
+              <button type="button" class="icon-btn sm" data-cash-shift="-1" aria-label="Önceki dönem"><svg class="ic"><use href="#i-left"/></svg></button>
+              <button type="button" class="month-name cash-range" id="cashRange" title="Bugünün dönemine dön"></button>
+              <button type="button" class="icon-btn sm" data-cash-shift="1" aria-label="Sonraki dönem"><svg class="ic"><use href="#i-right"/></svg></button>
+            </div>
+          </div>
+          <div class="panel-tools">
+            <label class="cash-start">
+              <span>Başlangıç</span>
+              <select id="cashStart" aria-label="Dönemin başladığı gün"></select>
+            </label>
+            <div class="seg" id="cashMode" role="group" aria-label="Grafikte gösterilen">
+              <button type="button" data-mode="balance">Bakiye</button>
+              <button type="button" data-mode="net">Dönem net</button>
+            </div>
           </div>
         </header>
         <dl class="tl-sum" id="cashSum"></dl>
-        <svg id="cashChart" class="chart cash-chart" role="img" tabindex="0" aria-label="Önümüzdeki 30 günün TL bakiyesi"></svg>
+        <svg id="cashChart" class="chart cash-chart" role="img" tabindex="0" aria-label="Dönemin TL nakdi"></svg>
         <p id="cashEmpty" class="empty" hidden></p>
         <p class="footnote" id="cashNote">TL hareketleri (tekrarlayanlar dahil) ile kart ve nakit ödemeleri; döviz ve altın dahil değil.</p>
       </section>

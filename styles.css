@@ -727,6 +727,22 @@ a { color: inherit; }
 .chart .cf-hit { cursor: pointer; outline: none; }
 
 /* Nakit · 30 gün: basamaklı bakiye çizgisi, sıfırın altı tehlike rengi */
+.cash-panel .panel-head { flex-wrap: wrap; }
+.cash-panel .month-name { min-width: 0; font-size: 13px; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.cash-start { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-3); }
+.cash-start select {
+  appearance: none;
+  border: none;
+  border-radius: 11px;
+  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a90a0' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9.5 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center / 14px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 28px 7px 12px;
+  max-width: 190px;
+  cursor: pointer;
+}
+.cash-start select:focus-visible { outline: 2px solid var(--text-2); outline-offset: 1px; }
 .cash-panel .footnote { margin-top: 10px; padding: 0; font-size: 12px; }
 .cash-chart { touch-action: pan-y; outline: none; border-radius: 8px; }
 .cash-chart:focus-visible { box-shadow: 0 0 0 3px var(--focus); }
@@ -1290,6 +1306,8 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   .cal-v { font-size: 9.5px; letter-spacing: -.02em; }
 }
 @media (max-width: 420px) {
+  .cash-start > span { display: none; }
+  .cash-start select { max-width: 150px; }
   .hero-stats dd { font-size: 13px; letter-spacing: -.01em; }
   .tl-sum { gap: 6px; }
   .tl-sum > div { padding: 8px; }

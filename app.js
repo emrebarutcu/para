@@ -12,14 +12,14 @@ function getStorageKey() {
 
 const MAX_MONTHS = 60;           // akışta gösterilecek en fazla ay
 const CHART_MONTHS = 12;         // özetteki grafikte gösterilecek ay
-const CASH_DAYS = 30;            // özetteki nakit grafiğinin bugünden sonra gösterdiği gün
 const CASH_COLOR = "var(--cash)";
 const VIEWS = ["ozet", "akis", "harcamalar", "kartlar", "varliklar"];
 const COUNT_PRESETS = [1, 2, 3, 4, 6, 9, 12];
 const REPEAT_PRESETS = [[1, "Bir kez"], [0, "Her ay"], [3, "3 ay"], [6, "6 ay"], [12, "12 ay"]];   // varlık hareketi tekrarı
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // takvim pazartesiyle başlar
-const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates" };
+const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates",
+  cashStart: "para.cashStart", cashMode: "para.cashMode" };
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
 const INSIGHTS_SHOWN = 3;        // özette ilk görünen içgörü sayısı
@@ -59,6 +59,9 @@ let entryFilter = "all";      // varlıklarda seçili kişi
 let timelineKind = "all";     // özetteki zaman çizelgesi: all | in | out
 let timelineMode = readPref(PREF.timelineMode) === "calendar" ? "calendar" : "list";
 let timelineDay = null;       // takvimde seçili gün
+let cashStart = /^([1-9]|[12]\d|3[01])$/.test(readPref(PREF.cashStart) ?? "") ? readPref(PREF.cashStart) : "today";   // nakit dönemi: "today" | ayın günü
+let cashMode = readPref(PREF.cashMode) === "net" ? "net" : "balance";
+let cashShift = 0;            // nakit grafiğinde bugünün döneminden kaç dönem uzakta
 let editingEntryId = null;    // düzenlenen varlık hareketi
 let lastAsset = "TRY";
 let rates = readRates();      // son alınan kurlar: { rates: { TRY, USD, EUR, GAU }, updatedAt, fetchedAt }
@@ -267,7 +270,7 @@ const els = {
   timelineCal: $("timelineCal"), timeline: $("timeline"),
   chartBy: $("chartBy"), legend: $("chartLegend"), chart: $("planChart"), chartEmpty: $("chartEmpty"),
   tooltip: $("chartTooltip"),
-  cashRange: $("cashRange"), cashSum: $("cashSum"), cashChart: $("cashChart"), cashEmpty: $("cashEmpty"), cashNote: $("cashNote"),
+  cashRange: $("cashRange"), cashStart: $("cashStart"), cashMode: $("cashMode"), cashSum: $("cashSum"), cashChart: $("cashChart"), cashEmpty: $("cashEmpty"), cashNote: $("cashNote"),
   flowMode: $("flowMode"), flowList: $("flowList"), flowTable: $("flowTable"), table: $("planTable"),
   personFilter: $("personFilter"), purchaseWrap: $("purchaseWrap"), managePeople: $("managePeople"),
   cardGrid: $("cardGrid"), addCard: $("addCard"),
@@ -998,78 +1001,148 @@ function showTooltip(m, series, x, y) {
 
 function hideTooltip() { els.tooltip.hidden = true; }
 
-// ---------- Nakit · önümüzdeki 30 gün ----------
-// Bugünkü TL bakiyesi gün gün ileri taşınır: TL hareketleri (tekrarlayanın her tekrarı kendi gününde) ve kart / nakit
-// ödemeleri. Tarihi gelmemiş tek seferlik hareket de kendi gününde girer (bakiyeye bugünden yazılmaz).
-// days[d]: bugünden d gün sonrası, value o günün sonundaki bakiye. Döviz ve altın nakit sayılmaz.
-function cashForecast(today) {
-  const end = T.addDays(today, CASH_DAYS);
-  const from = T.parseDate(today).idx, to = T.parseDate(end).idx;
+// ---------- Nakit (dönem dönem) ----------
+// Dönem başlangıç gününden (bugün ya da ayın seçilen günü, ör. maaş günü) bir ay sonrasının bir gün öncesine kadar sürer.
+// Hareketler: TL hareketleri (tekrarlayanın her tekrarı kendi gününde) ile kart / nakit ödemeleri; döviz ve altın nakit
+// sayılmaz. Bakiye bugüne bağlanır: bugünün sonu = bugüne kadarki TL bakiyesi − bugün ödenecekler (henüz ödenmedi
+// sayılır). Sonraki günler hareketlerle ileri, önceki günler geri taşınır; tarihi gelmemiş tek seferlik hareket de kendi
+// gününde girer. Dönem net'i dönem başından o güne hareketlerin toplamıdır.
+
+// Seçili başlangıçla bugünün dönemi; shift dönem kaydırır
+function cashPeriod(today, start, shift) {
+  const t = T.parseDate(today);
+  let idx = t.idx, day = t.day;
+  if (start !== "today") {
+    day = Number(start);
+    if (t.day < T.dayOf(idx, day)) idx--;
+  }
+  idx += shift;
+  return { from: T.dateKey(idx, day), to: T.addDays(T.dateKey(idx + 1, day), -1) };
+}
+
+function cashSeries(from, to, today) {
+  const lo = from < today ? from : today, hi = to > today ? to : today;
+  const loIdx = T.parseDate(lo).idx, hiIdx = T.parseDate(hi).idx;
   const moves = new Map();   // tarih → [{ desc, value }]
   const add = (date, m) => {
     if (!moves.has(date)) moves.set(date, []);
     moves.get(date).push(m);
   };
 
-  let balance = 0, any = false;
+  let anchor = 0, any = false;   // anchor: bugüne kadarki TL bakiyesi (bugünkü hareketler dahil)
   for (const e of knownEntries()) {
     if (e.asset !== "TRY" || !Number.isFinite(e.amount)) continue;
     any = true;
     if (V.repeatOf(e) == null) {
-      if (e.date <= today) balance += e.amount;
-      else if (e.date <= end) add(e.date, { desc: e.desc, value: e.amount });
+      if (e.date <= today) anchor += e.amount;
+      if (e.date >= lo && e.date <= hi) add(e.date, { desc: e.desc, value: e.amount });
       continue;
     }
-    balance += e.amount * V.processedCount(e, today);   // bugünkü tekrar dahil
-    for (let idx = from; idx <= to; idx++) {
+    anchor += e.amount * V.processedCount(e, today);
+    for (let idx = loIdx; idx <= hiIdx; idx++) {
       const date = V.occurrenceIn(e, idx);
-      if (date && date > today && date <= end) add(date, { desc: e.desc, value: e.amount });
+      if (date && date >= lo && date <= hi) add(date, { desc: e.desc, value: e.amount });
     }
   }
-  // Bugün ödenecekler henüz ödenmemiş sayılır, bugünün sonuna düşer
-  for (const m of T.buildCashflow(state.people, state.cards, state.installments, from, to)) {
+  for (const m of T.buildCashflow(state.people, state.cards, state.installments, loIdx, hiIdx)) {
     for (const ev of m.events) {
-      if (ev.date < today || ev.date > end) continue;
-      any = true;
+      if (ev.date < lo || ev.date > hi) continue;
+      if (ev.date === today) anchor -= ev.total;
       add(ev.date, { desc: ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit ödemeler", value: -ev.total });
     }
   }
 
-  const start = Math.round(balance * 100) / 100;
+  const sum = date => (moves.get(date) || []).reduce((s, m) => s + m.value, 0);
+  const r2 = v => Math.round(v * 100) / 100;
+  const end = new Map([[today, anchor]]);   // gün sonu bakiyeleri
+  for (let d = T.addDays(today, 1), v = anchor; d <= hi; d = T.addDays(d, 1)) end.set(d, v += sum(d));
+  for (let d = today, v = anchor; d > lo; d = T.addDays(d, -1)) end.set(T.addDays(d, -1), v -= sum(d));
+
   const days = [];
-  for (let d = 0, v = start; d <= CASH_DAYS; d++) {
-    const date = T.addDays(today, d);
-    const list = moves.get(date) || [];
-    for (const m of list) v += m.value;
-    v = Math.round(v * 100) / 100;
-    days.push({ date, value: v, moves: list });
+  let net = 0, inSum = 0, outSum = 0;
+  for (let d = from; d <= to; d = T.addDays(d, 1)) {
+    const list = moves.get(d) || [];
+    for (const m of list) {
+      net += m.value;
+      if (m.value > 0) inSum += m.value; else outSum -= m.value;
+    }
+    days.push({ date: d, balance: r2(end.get(d)), net: r2(net), moves: list });
   }
-  return { start, days, any };
+  const before = r2(end.get(from) - sum(from));   // dönem başlamadan önceki bakiye
+  return { days, before, inSum: r2(inSum), outSum: r2(outSum), any: any || inSum > 0 || outSum > 0 };
+}
+
+// Ayın günü iyelik ekiyle: 1'i, 6'sı, 15'i, 20'si, 30'u
+function dayWithSuffix(n) {
+  const last = n % 10;
+  const suffix = last ? ["i", "si", "ü", "ü", "i", "sı", "si", "i", "u"][last - 1] : n === 20 ? "si" : "u";
+  return `${n}'${suffix}`;
+}
+
+// Başlangıç seçenekleri: bugün, süren tekrarlayan TL girişlerinin günleri (en büyük 3), ayın her günü
+function renderCashStart(today) {
+  const incomes = knownEntries()
+    .filter(e => e.asset === "TRY" && e.amount > 0 && V.repeatOf(e) != null && V.nextDate(e, today))
+    .sort((a, b) => b.amount - a.amount);
+  const seen = new Set(), opts = [];
+  for (const e of incomes) {
+    const day = T.parseDate(e.date)?.day;
+    if (!day || seen.has(day)) continue;
+    seen.add(day);
+    opts.push([String(day), `${e.desc} · ${dayWithSuffix(day)}`]);
+    if (opts.length === 3) break;
+  }
+  const option = ([value, text]) => {
+    const o = el("option", "", text);
+    o.value = value;
+    return o;
+  };
+  const group = (label, list) => {
+    const g = el("optgroup");
+    g.label = label;
+    g.append(...list.map(option));
+    return g;
+  };
+  const days = Array.from({ length: 31 }, (_, i) => [String(i + 1), `Ayın ${dayWithSuffix(i + 1)}`]);
+  els.cashStart.replaceChildren(option(["today", "Bugün"]), ...(opts.length ? [group("Gelir günü", opts)] : []), group("Ayın günü", days));
+  els.cashStart.value = cashStart;
 }
 
 let cashHover = null;   // klavyeyle / işaretçiyle seçili gün
 
 function renderCash() {
+  for (const b of els.cashMode.querySelectorAll("button")) {
+    b.classList.toggle("active", b.dataset.mode === cashMode);
+    b.setAttribute("aria-pressed", String(b.dataset.mode === cashMode));
+  }
   const today = T.todayKey();
-  const data = cashForecast(today);
-  const { start, days } = data;
+  renderCashStart(today);
+  const { from, to } = cashPeriod(today, cashStart, cashShift);
+  const data = cashSeries(from, to, today);
+  const { days } = data;
+  const net = cashMode === "net";
+  const value = x => (net ? x.net : x.balance);
+  const initial = net ? 0 : data.before;
   const lastDay = days[days.length - 1];
-  els.cashRange.textContent = `${fmtDayShort(today)} – ${fmtDayShort(lastDay.date)}`;
+  const todayAt = days.findIndex(x => x.date === today);
+  els.cashRange.textContent = `${fmtDayShort(from)} – ${fmtDayShort(to)}`;
 
-  const low = days.reduce((a, b) => (b.value < a.value ? b : a));
-  const signed = n => (n < 0 ? "−" : "") + fmt(Math.abs(n));
-  const delta = Math.round((lastDay.value - start) * 100) / 100;
-  const stat = (label, text, cls, title) => {
+  const signed = (n, plus) => (n < 0 ? "−" : plus && n > 0 ? "+" : "") + fmt(Math.abs(n));
+  const tone = n => (n < 0 ? "out-text" : net && n > 0 ? "in-text" : "");
+  const stat = (label, text, cls) => {
     const d = el("div");
     d.append(el("dt", "", label), el("dd", cls, text));
-    if (title) d.title = title;
     return d;
   };
-  els.cashSum.replaceChildren(
-    stat("Bugün", signed(start), start < 0 ? "out-text" : ""),
-    stat(`${fmtDayShort(lastDay.date)} sonunda`, signed(lastDay.value), lastDay.value < 0 ? "out-text" : "",
-      delta ? `30 günde ${delta > 0 ? "+" : "−"}${fmt(Math.abs(delta))}` : ""),
-    stat(`En düşük · ${fmtDayShort(low.date)}`, signed(low.value), low.value < 0 ? "out-text" : ""));
+  const low = days.reduce((a, b) => (value(b) < value(a) ? b : a));
+  els.cashSum.replaceChildren(...(net
+    ? [stat("Girdi", "+" + fmt(data.inSum), "in-text"),
+       stat("Çıktı", "−" + fmt(data.outSum), "out-text"),
+       stat("Net", signed(lastDay.net, true), tone(lastDay.net))]
+    : [todayAt >= 0 ? stat("Bugün", signed(days[todayAt].balance), tone(days[todayAt].balance))
+                    : stat("Dönem başı", signed(data.before), tone(data.before)),
+       stat(`${fmtDayShort(to)} sonunda`, signed(lastDay.balance), tone(lastDay.balance)),
+       stat(`En düşük · ${fmtDayShort(low.date)}`, signed(low.balance), tone(low.balance))]));
   els.cashSum.hidden = !data.any;
 
   const svg = els.cashChart;
@@ -1077,8 +1150,9 @@ function renderCash() {
   els.cashEmpty.hidden = data.any;
   els.cashNote.hidden = !data.any;
   svg.style.display = data.any ? "" : "none";
+  svg.setAttribute("aria-label", `${fmtDayShort(from)} – ${fmtDayShort(to)} ${net ? "dönem net nakit hareketi" : "TL bakiyesi"}`);
   if (!data.any) {
-    els.cashEmpty.textContent = "TL girişlerini ve çıkışlarını Varlıklar'a ekleyince nakdin önümüzdeki 30 günü burada görünür.";
+    els.cashEmpty.textContent = "TL girişlerini ve çıkışlarını Varlıklar'a ekleyince nakdin dönem dönem seyri burada görünür.";
     svg.innerHTML = "";
     return;
   }
@@ -1088,7 +1162,7 @@ function renderCash() {
   const plotW = W - PL - PR, plotH = H - PT - PB;
   const n = days.length;
   const toX = d => PL + plotW * d / n;   // d. gün [d, d+1) aralığını kaplar
-  const values = [start, ...days.map(x => x.value)];
+  const values = [initial, ...days.map(value)];
   const lo = Math.min(0, ...values), hi = Math.max(0, ...values);
   const { step } = niceScale(hi - lo || 1000, 4);
   const bottom = Math.floor(lo / step + 1e-9) * step, top = Math.max(Math.ceil(hi / step - 1e-9) * step, bottom + step);
@@ -1104,21 +1178,29 @@ function renderCash() {
   const every = 7 * Math.max(1, Math.ceil(70 / (plotW / n * 7)));   // haftalık; dar ekranda iki haftada bir
   for (let d = 0; d < n; d += every) {
     const x = toX(d + 0.5);
-    xLblSvg += `<text x="${x.toFixed(1)}" y="${H - 6}" text-anchor="${d ? "middle" : "start"}" font-size="11" fill="var(--text-3)">${d ? fmtDayShort(days[d].date) : "Bugün"}</text>`;
+    const label = days[d].date === today ? "Bugün" : fmtDayShort(days[d].date);
+    xLblSvg += `<text x="${(d ? x : toX(0)).toFixed(1)}" y="${H - 6}" text-anchor="${d ? "middle" : "start"}" font-size="11" fill="var(--text-3)">${label}</text>`;
+  }
+  // Dönemin içindeki bugün: dikey çizgi ve üstte etiket (ilk gün değilse)
+  let nowSvg = "";
+  if (todayAt > 0) {
+    const x = toX(todayAt + 0.5).toFixed(1);
+    nowSvg = `<line x1="${x}" y1="${PT - 4}" x2="${x}" y2="${PT + plotH}" stroke="var(--text-3)" stroke-width="1"/>
+      <text x="${x}" y="${PT - 9}" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text-2)">Bugün</text>`;
   }
 
   // Basamaklı çizgi: değer gün başında değişir, gün boyunca sabit kalır
-  let line = `M${toX(0).toFixed(1)},${toY(start).toFixed(1)}`;
-  days.forEach((x, d) => { line += ` H${toX(d).toFixed(1)} V${toY(x.value).toFixed(1)}`; });
+  let line = `M${toX(0).toFixed(1)},${toY(initial).toFixed(1)}`;
+  days.forEach((x, d) => { line += ` H${toX(d).toFixed(1)} V${toY(value(x)).toFixed(1)}`; });
   line += ` H${toX(n).toFixed(1)}`;
   const area = `${line} V${y0.toFixed(1)} H${toX(0).toFixed(1)} Z`;
 
-  const dotAt = (d, cls = "") => `<circle class="${cls}" cx="${toX(d + 0.5).toFixed(1)}" cy="${toY(days[d].value).toFixed(1)}" r="4" fill="${days[d].value < 0 ? "var(--danger)" : "var(--text)"}" stroke="var(--surface)" stroke-width="2"/>`;
+  const dotAt = d => `<circle cx="${toX(d + 0.5).toFixed(1)}" cy="${toY(value(days[d])).toFixed(1)}" r="4" fill="${value(days[d]) < 0 ? "var(--danger)" : "var(--text)"}" stroke="var(--surface)" stroke-width="2"/>`;
   const lowIdx = days.indexOf(low);
   let marks = dotAt(n - 1);
-  if (low.value < start && lowIdx !== n - 1) marks += dotAt(lowIdx);
-  const endY = toY(lastDay.value);
-  const endLbl = `<text x="${(W - PR).toFixed(1)}" y="${(endY < PT + 14 ? endY + 18 : endY - 9).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="var(--text)">${fmtShort(lastDay.value)}</text>`;
+  const endV = value(lastDay), endY = toY(endV);
+  if (value(low) < initial && value(low) < endV) marks += dotAt(lowIdx);
+  const endLbl = `<text x="${(W - PR).toFixed(1)}" y="${(endY < PT + 14 ? endY + 18 : endY - 9).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="var(--text)">${net && endV > 0 ? "+" : ""}${fmtShort(endV)}</text>`;
 
   // Sıfırın üstü mürekkep, altı tehlike rengi (aynı çizgi iki kırpmayla)
   const id = "cash-clip";
@@ -1126,7 +1208,7 @@ function renderCash() {
   svg.innerHTML = `<defs>
       <clipPath id="${id}-pos"><rect x="0" y="0" width="${W}" height="${y0.toFixed(1)}"/></clipPath>
       <clipPath id="${id}-neg"><rect x="0" y="${y0.toFixed(1)}" width="${W}" height="${(H - y0).toFixed(1)}"/></clipPath>
-    </defs>${gridSvg}
+    </defs>${gridSvg}${nowSvg}
     <path d="${area}" class="cash-area" clip-path="url(#${id}-pos)"/>
     <path d="${area}" class="cash-area neg" clip-path="url(#${id}-neg)"/>
     <path d="${line}" class="cash-line" clip-path="url(#${id}-pos)"/>
@@ -1137,20 +1219,21 @@ function renderCash() {
   const cross = svg.querySelector(".cash-cross");
   const show = (d, x, y) => {
     cashHover = d;
-    const cx = toX(d + 0.5).toFixed(1), cy = toY(days[d].value).toFixed(1);
+    const v = value(days[d]);
+    const cx = toX(d + 0.5).toFixed(1), cy = toY(v).toFixed(1);
     cross.setAttribute("visibility", "visible");
     cross.querySelector("line").setAttribute("x1", cx);
     cross.querySelector("line").setAttribute("x2", cx);
     const c = cross.querySelector("circle");
     c.setAttribute("cx", cx);
     c.setAttribute("cy", cy);
-    c.setAttribute("fill", days[d].value < 0 ? "var(--danger)" : "var(--text)");
+    c.setAttribute("fill", v < 0 ? "var(--danger)" : "var(--text)");
     if (x == null) {
       const b = svg.getBoundingClientRect();
       x = b.left + b.width * cx / W;
       y = b.top + b.height * cy / H;
     }
-    showCashTooltip(days[d], x, y);
+    showCashTooltip(days[d], net, x, y);
   };
   const hide = () => { cashHover = null; cross.setAttribute("visibility", "hidden"); hideTooltip(); };
   const dayAt = clientX => {
@@ -1161,7 +1244,7 @@ function renderCash() {
   svg.onpointermove = e => show(dayAt(e.clientX), e.clientX, e.clientY);
   svg.onpointerleave = hide;
   svg.onblur = hide;
-  svg.onfocus = () => show(cashHover ?? 0);
+  svg.onfocus = () => show(Math.min(cashHover ?? Math.max(todayAt, 0), n - 1));
   svg.onkeydown = e => {
     const move = { ArrowRight: 1, ArrowLeft: -1, End: n, Home: -n }[e.key];
     if (!move) { if (e.key === "Escape") hide(); return; }
@@ -1170,7 +1253,7 @@ function renderCash() {
   };
 }
 
-function showCashTooltip(day, x, y) {
+function showCashTooltip(day, net, x, y) {
   const tt = els.tooltip;
   const today = T.todayKey();
   tt.replaceChildren(el("span", "tt-date", `${fmtDayShort(day.date)} · ${WEEKDAYS[T.toDate(day.date).getDay()]} · ${relDays(day.date, today)}`));
@@ -1184,7 +1267,8 @@ function showCashTooltip(day, x, y) {
   }
   if (day.moves.length > shown.length) tt.append(el("span", "tt-name", `+${day.moves.length - shown.length} hareket daha`));
   if (!day.moves.length) tt.append(el("span", "tt-name", "Hareket yok"));
-  tt.append(el("span", "tt-total", `Gün sonu ${day.value < 0 ? "−" : ""}${fmt(Math.abs(day.value))}`));
+  const v = net ? day.net : day.balance;
+  tt.append(el("span", "tt-total", `${net ? "Dönem net" : "Gün sonu"} ${v < 0 ? "−" : net && v > 0 ? "+" : ""}${fmt(Math.abs(v))}`));
   tt.hidden = false;
   const w = tt.offsetWidth, h = tt.offsetHeight;
   const left = x + 14 + w > window.innerWidth - 8 ? x - 14 - w : x + 14;
@@ -3030,6 +3114,25 @@ els.chartBy.addEventListener("click", e => {
   writePref(PREF.chartBy, by);
   render();
 });
+
+els.cashStart.addEventListener("change", () => {
+  cashStart = els.cashStart.value;
+  cashShift = 0;
+  writePref(PREF.cashStart, cashStart);
+  render();
+});
+els.cashMode.addEventListener("click", e => {
+  const mode = e.target.closest("button")?.dataset.mode;
+  if (!mode || mode === cashMode) return;
+  cashMode = mode;
+  writePref(PREF.cashMode, mode);
+  render();
+});
+document.querySelector(".cash-panel").addEventListener("click", e => {
+  const b = e.target.closest("[data-cash-shift]");
+  if (b) { cashShift += Number(b.dataset.cashShift); render(); }
+});
+els.cashRange.addEventListener("click", () => { cashShift = 0; render(); });
 
 els.timelineKind.addEventListener("click", e => {
   const kind = e.target.closest("button")?.dataset.kind;
