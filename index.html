@@ -257,6 +257,11 @@
         </label>
 
         <div class="field">
+          <span class="field-label">Kategori <small id="categoryHint" class="cat-hint" aria-live="polite"></small></span>
+          <div class="chips scroll-x" id="categoryChips" role="radiogroup" aria-label="Kategori"></div>
+        </div>
+
+        <div class="field">
           <span class="field-label">Taksit</span>
           <div class="chips scroll-x" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
           <label class="inline-input">
@@ -279,11 +284,6 @@
             </div>
             <input name="date" type="date" aria-label="Harcama tarihi" />
           </div>
-        </div>
-
-        <div class="field">
-          <span class="field-label">Kategori <small id="categoryHint" class="cat-hint" aria-live="polite"></small></span>
-          <div class="chips scroll-x" id="categoryChips" role="radiogroup" aria-label="Kategori"></div>
         </div>
 
         <div class="field" id="personField">
@@ -554,13 +554,15 @@
       </header>
       <div class="sheet-body">
         <div class="settings-group">
-          <span class="group-label">Cihazdaki yapay zekâ</span>
-          <p class="hint">Küçük bir dil modeli harcamalarını kategorilere ayırır, yeni harcamada kategori önerir. Bir kez indirilir; sonra internetsiz ve ücretsiz çalışır, verin telefonundan çıkmaz. Senin seçtiğin kategorilerden öğrenir.</p>
+          <span class="group-label">Kategori önerisi</span>
+          <p class="hint">Harcamalarını kategorilere ayırır, yeni harcamada kategori önerir; senin seçtiğin kategorilerden öğrenir. Ücretsiz.</p>
+          <div class="seg seg-full" id="aiModeSeg" role="radiogroup" aria-label="Kategori önerisi">
+            <button type="button" role="radio" data-mode="cloud">Bulut</button>
+            <button type="button" role="radio" data-mode="local">Cihazda</button>
+            <button type="button" role="radio" data-mode="off">Kapalı</button>
+          </div>
           <div class="ai-local" id="aiLocal">
-            <div class="ai-local-row">
-              <span class="row-text"><strong id="aiLocalTitle">Kapalı</strong><small id="aiLocalSub"></small></span>
-              <button type="button" class="btn btn-primary sm" id="aiLocalBtn">İndir ve aç</button>
-            </div>
+            <span class="row-text"><strong id="aiLocalTitle"></strong><small id="aiLocalSub"></small></span>
             <div class="ai-progress" id="aiProgress" hidden><span></span></div>
             <button type="button" class="btn btn-ghost sm" id="aiBackfill" hidden></button>
           </div>

@@ -1,14 +1,21 @@
-// ---------- Cihazdaki yapay zekâ: harcama kategorisi ----------
-// Kullanıcı Ayarlar → Yapay zekâ'dan açar; model (çok dilli metin gömme, ~135 MB) bir kez indirilir (tarayıcı
-// önbelleği), sonra çevrimdışı çalışır. Ücretsizdir ve veri cihazdan çıkmaz. Model yz-worker.js'te yalnızca gerektiğinde
-// yüklenir; bir süre kullanılmazsa worker kapatılıp bellek bırakılır. Kategori kelimelerinin ve kullanıcı örneklerinin
-// vektörleri cihazda saklanır (Cache Storage), her açılışta yeniden hesaplanmaz. Sıralama kategori.js'te.
+// ---------- Yapay zekâ: harcama kategorisi ----------
+// İki yol, aynı sıralama (kategori.js):
+//   cloud: giriş yapmış kullanıcıda varsayılan. Sitenin Worker'ı (/api/kategori, Cloudflare Workers AI) büyük çok dilli
+//          modelle önerir; indirme yok. Açıklamalar sunucuya gider (saklanmaz).
+//   local: cihazdaki küçük model (çok dilli metin gömme, ~135 MB) bir kez indirilir (tarayıcı önbelleği), sonra çevrimdışı
+//          çalışır; veri cihazdan çıkmaz (mobil uygulama ve çevrimdışı kullanım için). Model yz-worker.js'te yalnızca
+//          gerektiğinde yüklenir; bir süre kullanılmazsa worker kapatılıp bellek bırakılır. Kategori kelimelerinin ve
+//          kullanıcı örneklerinin vektörleri cihazda saklanır (Cache Storage), her açılışta yeniden hesaplanmaz.
+//   off:   kapalı (kullanıcının daha önce seçtiği kategoriler yine öğrenilir; app.js)
 (function (root) {
   const K = root.Kategori;
   const MODEL = "Xenova/multilingual-e5-small";
   const DTYPE = "q8";
   const SIZE_MB = 135;                          // indirilecek model + tokenizer (yaklaşık)
-  const PREF = "para.ai";                       // "on": kullanıcı açtı
+  const PREF = "para.ai";                       // "cloud" (varsayılan) | "local" | "off"; eski "on" = local
+  const MODES = ["cloud", "local", "off"];
+  const CLOUD = "/api/kategori";
+  const CLOUD_BATCH = 50;                       // bir istekte en fazla açıklama (mcp/kategori.js)
   const CACHE = "transformers-cache";           // transformers.js'in Cache Storage adı
   const STORE = "yz-vektor";                    // saklanan vektörler (service worker'ın sürüm önbelleği değil)
   const STORE_KEY = "/__yz/vektorler.json";
@@ -19,10 +26,16 @@
   const pending = new Map();
   const listeners = new Set();
   const vectors = new Map();                    // metin → Float32Array
-  let info = { status: readPref() === "on" ? "idle" : "off", loaded: 0, total: 0, error: null };
-
   function readPref() { try { return localStorage.getItem(PREF); } catch { return null; } }
   function writePref(v) { try { v ? localStorage.setItem(PREF, v) : localStorage.removeItem(PREF); } catch {} }
+  function mode() {
+    const v = readPref();
+    return v === "on" ? "local" : MODES.includes(v) ? v : "cloud";
+  }
+  const loggedIn = () => !!root.syncGetUser?.();
+
+  // info: cihazdaki modelin durumu (off | idle | loading | ready | error) ve indirme ilerlemesi
+  let info = { status: mode() === "local" ? "idle" : "off", loaded: 0, total: 0, error: null };
 
   function set(patch) {
     info = { ...info, ...patch };
@@ -131,46 +144,84 @@
     return texts.map(t => vectors.get(t));
   }
 
+  // Cihazdaki modelle: { category, confidence }
+  async function localSuggest(text, memory) {
+    const words = K.words(), users = K.examples(memory);
+    const all = await embed([text, ...words.map(w => w.text), ...users.map(u => u.text)]);
+    const protos = words.map((w, i) => ({ id: w.id, v: all[1 + i] }));
+    const mine = users.map((u, i) => ({ id: u.id, v: all[1 + words.length + i] }));
+    const r = K.rank(all[0], protos, mine);
+    return { category: r.category, confidence: r.confidence };
+  }
+
+  // Sunucuda: açıklamalar ve kullanıcının son seçimleri gider, sırayla öneriler gelir. Olmazsa (çevrimdışı, oturum
+  // düştü, sınır) null.
+  async function cloudSuggest(texts, memory) {
+    const token = await root.syncAccessToken?.();
+    if (!token) return null;
+    const examples = K.examples(memory);
+    const out = [];
+    for (let i = 0; i < texts.length; i += CLOUD_BATCH) {
+      const res = await fetch(CLOUD, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ items: texts.slice(i, i + CLOUD_BATCH), examples }),
+      }).catch(() => null);
+      if (!res?.ok) return null;
+      const { results } = await res.json();
+      if (!Array.isArray(results)) return null;
+      out.push(...results);
+    }
+    return out;
+  }
+
   const api = {
     MODEL,
     SIZE_MB,
     get info() { return info; },
-    get enabled() { return readPref() === "on"; },
+    get mode() { return mode(); },
+    // Öneri verilebilir mi: bulutta giriş yapılmış olmalı, cihazdakinde model açılabilmiş olmalı
+    get enabled() { return mode() === "cloud" ? loggedIn() : mode() === "local" && info.status !== "error"; },
     supported,
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
 
-    // Açar: modeli indirir, yükler ve kategori kelimelerini hazırlar
-    async enable() {
-      writePref("on");
+    // Yol değişir. Cihazdakinden çıkınca indirilen model silinir; cihazdakine geçince indirilir.
+    // → cihazdakine geçişte model açılabildi mi
+    async setMode(next) {
+      if (!MODES.includes(next)) return false;
+      const was = mode();
+      writePref(next);
+      if (was === "local" && next !== "local") {
+        stop();
+        vectors.clear();
+        restored = null;
+        set({ status: "off", loaded: 0, total: 0, error: null });
+        try { await caches.delete(CACHE); await caches.delete(STORE); } catch {}
+      }
+      if (next !== "local") { set({}); return true; }
+      set({ status: "idle", error: null });
       try { await start(); await embed(K.words().map(w => w.text)); return true; } catch { return false; }
     },
 
-    // Kapatır ve indirilen modeli siler
-    async disable() {
-      writePref(null);
-      stop();
-      vectors.clear();
-      restored = null;
-      set({ status: "off", loaded: 0, total: 0, error: null });
-      try { await caches.delete(CACHE); await caches.delete(STORE); } catch {}
-    },
-
-    // Model açıksa önceden yükler (form açılınca: ilk öneri beklemesin)
+    // Cihazdaki model seçiliyse önceden yükler (form açılınca: ilk öneri beklemesin)
     warm() {
-      if (api.enabled && info.status !== "error") start().catch(() => {});
+      if (mode() === "local" && info.status !== "error") start().catch(() => {});
     },
 
-    // desc için kategori önerisi: { category, confidence }; kapalıysa ya da model açılamadıysa null
-    // (açılamadıysa her harcamada yeniden denenmez; kullanıcı kapatıp açınca denenir)
+    // Açıklamalar için kategori önerileri: [{ category, confidence }] (sırayla); kapalıysa ya da alınamadıysa null
+    async suggestMany(descs, memory) {
+      if (!api.enabled) return null;
+      const texts = descs.map(d => K.clean(d).slice(0, 200) || "-");
+      if (mode() === "cloud") return cloudSuggest(texts, memory);
+      const out = [];
+      for (const t of texts) out.push(await localSuggest(t, memory));
+      return out;
+    },
+
+    // Tek açıklama: { category, confidence } ya da null
     async suggest(desc, memory) {
-      const text = String(desc ?? "").trim().slice(0, 200);
-      if (!api.enabled || info.status === "error" || !text) return null;
-      const words = K.words(), users = K.examples(memory);
-      const all = await embed([text, ...words.map(w => w.text), ...users.map(u => u.text)]);
-      const protos = words.map((w, i) => ({ id: w.id, v: all[1 + i] }));
-      const mine = users.map((u, i) => ({ id: u.id, v: all[1 + words.length + i] }));
-      const r = K.rank(all[0], protos, mine);
-      return { category: r.category, confidence: r.confidence };
+      if (!String(desc ?? "").trim()) return null;
+      return (await api.suggestMany([desc], memory))?.[0] ?? null;
     },
   };
   root.YZ = api;

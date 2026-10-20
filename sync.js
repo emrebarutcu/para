@@ -165,6 +165,13 @@
 
   window.syncGetUser = function () { return user; };
 
+  // Sitenin sunucu uçları için (ör. /api/kategori) oturum anahtarı; girişsizse null
+  window.syncAccessToken = async function () {
+    if (!db || !user) return null;
+    const { data } = await db.auth.getSession();
+    return data?.session?.access_token ?? null;
+  };
+
   // Bu cihazda hesabın verisi en az bir kez çekildi mi
   window.syncPulled = function () { return !!(user && loadMeta(user.id)); };
 

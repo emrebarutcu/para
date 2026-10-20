@@ -24,7 +24,9 @@
       "bilgisayar mağazası", "ses sistemi", "akıllı telefon", "electronics store", "consumer electronics retailer"] },
     { id: "ev", name: "Ev", hint: "kira, aidat, mobilya, beyaz eşya, ev eşyası", words: [
       "kira", "site aidatı", "mobilya", "beyaz eşya", "ev eşyası dekorasyon", "yapı market", "ev tekstili", "mutfak eşyası",
-      "beyaz eşya bayisi", "oturma grubu", "yapı market dekorasyon", "furniture home appliances", "home furnishing store"] },
+      "beyaz eşya bayisi", "oturma grubu", "yapı market dekorasyon", "koltuk kanepe", "masa sandalye", "dolap gardırop",
+      "avize lamba abajur aydınlatma", "portmanto ayna", "yatak baza", "halı perde", "furniture home appliances",
+      "home furnishing store", "furniture lighting home decor"] },
     { id: "fatura", name: "Faturalar", hint: "elektrik, su, doğalgaz, internet, cep telefonu faturası", words: [
       "elektrik faturası", "su faturası", "doğalgaz faturası", "internet faturası", "cep telefonu faturası GSM operatörü",
       "telekom operatörü", "mobil operatör", "fiber internet", "elektrik dağıtım şirketi", "su idaresi", "utility bill",
@@ -41,7 +43,8 @@
       "video platformu üyeliği", "oyun platformu", "bilet satış", "streaming subscription games cinema", "streaming service video music"] },
     { id: "seyahat", name: "Seyahat", hint: "uçak, otobüs bileti, otel, tatil", words: [
       "uçak bileti havayolu", "otobüs bileti", "otel konaklama", "tatil", "tur", "havayolu şirketi", "otobüs bileti satış",
-      "otel rezervasyon sitesi", "tur şirketi", "flight hotel travel", "airline hotel booking"] },
+      "otel rezervasyon sitesi", "tur şirketi", "havalimanı transferi", "tatil rezervasyonu", "flight hotel travel",
+      "airline hotel booking", "resort booking transfer"] },
     { id: "diger", name: "Diğer", hint: "hiçbirine uymayan", words: [
       "noter", "vergi", "bağış", "hediye", "avukat", "harç", "ceza", "sigorta", "kargo"] },
   ];
@@ -93,6 +96,17 @@
     return found;
   }
 
+  // Modele giden açıklama: tarih / tutar gibi sayılar, parantez içi notlar ve taksit sözleri anlam taşımaz, modeli
+  // yanıltır ("taksit" → "taksi"). Geriye bir şey kalmazsa açıklama olduğu gibi.
+  function clean(desc) {
+    const s = String(desc ?? "")
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/\S*\d\S*/g, " ")
+      .replace(/\btaksit\S*/giu, " ")
+      .replace(/\s+/g, " ").trim();
+    return s || String(desc ?? "").trim();
+  }
+
   // Modele verilecek metinler: kategori kelimeleri ve kullanıcının son seçimleri (anahtar → kategori)
   const words = () => CATEGORIES.flatMap(c => c.words.map(text => ({ id: c.id, text })));
   const examples = memory => [...(memory || new Map())].slice(-EXAMPLES).map(([text, id]) => ({ id, text }));
@@ -106,7 +120,7 @@
   // q: açıklamanın vektörü (normalize), protos: [{ id, v }] kategori kelimeleri, users: [{ id, v }] kullanıcı örnekleri.
   // Kategori puanı: kelimelerinden en benzer ikisinin ortalaması; kullanıcı örneği daha benzerse onun benzerliği.
   // → { category, confidence, scores } — confidence: puanların yumuşak en büyüğünde seçilenin payı (0…1)
-  function rank(q, protos, users = []) {
+  function rank(q, protos, users = [], { sharpness = SHARPNESS } = {}) {
     const by = new Map(CATEGORIES.map(c => [c.id, []]));
     for (const p of protos) by.get(p.id)?.push(dot(q, p.v));
     const scores = {};
@@ -117,11 +131,11 @@
     for (const u of users) if (u.id in scores) scores[u.id] = Math.max(scores[u.id], dot(q, u.v) + USER_BONUS);
     const order = Object.entries(scores).sort((a, b) => b[1] - a[1]);
     const top = order[0][1];
-    const total = order.reduce((s, [, x]) => s + Math.exp(SHARPNESS * (x - top)), 0);
+    const total = order.reduce((s, [, x]) => s + Math.exp(sharpness * (x - top)), 0);
     return { category: order[0][0], confidence: 1 / total, scores };
   }
 
-  const api = { CATEGORIES, OTHER, PREFIX, EXAMPLES, SURE, category, valid, keyOf, learned, remembered, words, examples, rank };
+  const api = { CATEGORIES, OTHER, PREFIX, EXAMPLES, SURE, category, valid, keyOf, clean, learned, remembered, words, examples, rank };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Kategori = api;
 })(this);
