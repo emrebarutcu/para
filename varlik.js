@@ -45,6 +45,14 @@
     return d ? dateAt(d.idx + k, d.day) : e.date;
   }
 
+  // Hareketin ay sırası idx olan aya düşen tekrarının tarihi; o ay yoksa null
+  function occurrenceIn(e, idx) {
+    const d = parse(e.date), n = repeatOf(e);
+    if (!d) return null;
+    const k = idx - d.idx;
+    return k >= 0 && (n == null ? k === 0 : n === 0 || k < n) ? dateAt(idx, d.day) : null;
+  }
+
   // Son tekrarın tarihi; süresizse null
   function lastDate(e) {
     const n = repeatOf(e);
@@ -98,7 +106,7 @@
     return { total, missing };
   }
 
-  const api = { ASSETS, MAX_REPEAT, asset, round, repeatOf, occurrenceDate, lastDate, processedCount, nextDate, balances, toTry, totalTry };
+  const api = { ASSETS, MAX_REPEAT, asset, round, repeatOf, occurrenceDate, occurrenceIn, lastDate, processedCount, nextDate, balances, toTry, totalTry };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Varlik = api;
 })(this);

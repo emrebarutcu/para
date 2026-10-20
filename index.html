@@ -33,6 +33,10 @@
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7.5 18.5a4.5 4.5 0 0 1-.7-8.95A5.75 5.75 0 0 1 17.9 9a4.75 4.75 0 0 1-.4 9.5z"/></symbol>
     <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6 8.5-6"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5c.6 4.4 2.6 6.4 7 7-4.4.6-6.4 2.6-7 7-.6-4.4-2.6-6.4-7-7 4.4-.6 6.4-2.6 7-7zM18.5 15.5c.25 1.8 1 2.55 2.75 2.75-1.75.25-2.5 1-2.75 2.75-.25-1.75-1-2.5-2.75-2.75 1.75-.2 2.5-.95 2.75-2.75z"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3.5m0 0L8 7.5m4-4 4 4M7.5 11H6a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 18 11h-1.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4zM12 10v4.5M12 17.2v.3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.2 12.3 2.6 2.6 5-5.2"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 17.5h6M10 20.5h4M12 3.5a5.5 5.5 0 0 0-3.3 9.9c.7.6 1.3 1.4 1.3 2.3v.3h4v-.3c0-.9.6-1.7 1.3-2.3A5.5 5.5 0 0 0 12 3.5z"/></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 20a6.5 6.5 0 0 0-2.6-5.2"/></symbol>
   </svg>
 
@@ -83,6 +87,14 @@
         </dl>
       </div>
 
+      <section class="panel insight-panel" id="insightPanel" hidden>
+        <header class="panel-head">
+          <h2>İçgörüler</h2>
+          <button type="button" class="link" id="insightMore" hidden></button>
+        </header>
+        <ul class="insights" id="insightList"></ul>
+      </section>
+
       <div class="grid-2">
         <section class="panel">
           <header class="panel-head">
@@ -121,6 +133,18 @@
         <dl class="tl-sum" id="timelineSum"></dl>
         <div class="cal" id="timelineCal" hidden></div>
         <ol class="timeline" id="timeline"></ol>
+      </section>
+
+      <section class="panel cat-panel" id="catPanel" hidden>
+        <header class="panel-head">
+          <div class="panel-title">
+            <h2>Harcamalar · kategoriye göre</h2>
+            <span class="panel-note js-month-label"></span>
+          </div>
+          <span class="panel-note" id="catTotal"></span>
+        </header>
+        <ul class="cat-list" id="catList"></ul>
+        <p class="footnote" id="catNote"></p>
       </section>
 
       <section class="panel chart-panel">
@@ -217,6 +241,11 @@
           <span class="field-label">Ne aldın?</span>
           <input name="desc" type="text" placeholder="örn. IKEA" autocomplete="off" required />
         </label>
+
+        <div class="field">
+          <span class="field-label">Kategori <small id="categoryHint" class="cat-hint" aria-live="polite"></small></span>
+          <div class="chips" id="categoryChips" role="radiogroup" aria-label="Kategori"></div>
+        </div>
 
         <div class="field">
           <span class="field-label">Tutar</span>
@@ -451,7 +480,7 @@
           </button>
           <button type="button" class="row-btn" id="aiBtn">
             <svg class="ic"><use href="#i-spark"/></svg>
-            <span class="row-text"><strong>Yapay zekâ asistanları</strong><small>Claude, ChatGPT gibi asistanlar harcamalarını yönetsin (MCP)</small></span>
+            <span class="row-text"><strong>Yapay zekâ</strong><small>Cihazda kategori önerisi; Claude, ChatGPT gibi asistanlar (MCP)</small></span>
           </button>
         </div>
         <div class="settings-group">
@@ -510,10 +539,23 @@
   <dialog class="sheet" id="aiSheet" aria-labelledby="aiTitle">
     <div class="sheet-form">
       <header class="sheet-head">
-        <h2 id="aiTitle">Yapay zekâ asistanları</h2>
+        <h2 id="aiTitle">Yapay zekâ</h2>
         <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
       <div class="sheet-body">
+        <div class="settings-group">
+          <span class="group-label">Cihazdaki yapay zekâ</span>
+          <p class="hint">Küçük bir dil modeli harcamalarını kategorilere ayırır, yeni harcamada kategori önerir. Bir kez indirilir; sonra internetsiz ve ücretsiz çalışır, verin telefonundan çıkmaz. Senin seçtiğin kategorilerden öğrenir.</p>
+          <div class="ai-local" id="aiLocal">
+            <div class="ai-local-row">
+              <span class="row-text"><strong id="aiLocalTitle">Kapalı</strong><small id="aiLocalSub"></small></span>
+              <button type="button" class="btn btn-primary sm" id="aiLocalBtn">İndir ve aç</button>
+            </div>
+            <div class="ai-progress" id="aiProgress" hidden><span></span></div>
+            <button type="button" class="btn btn-ghost sm" id="aiBackfill" hidden></button>
+          </div>
+        </div>
+        <span class="group-label">Asistanlar (MCP)</span>
         <p class="hint">CashFollow'u MCP destekleyen bir asistana bağla; "Telefonu 6 taksitle Bonus'a ekle", "Bu ay ne kadar ödeyeceğim?" gibi isteklerle harcama, kart ve kişileri yönetsin.</p>
         <div class="copy-row copy-row-lg">
           <code id="mcpUrl">…</code>
@@ -621,6 +663,9 @@
   <script src="taksit.js"></script>
   <script src="varlik.js"></script>
   <script src="eposta.js"></script>
+  <script src="kategori.js"></script>
+  <script src="icgoru.js"></script>
+  <script src="yz.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

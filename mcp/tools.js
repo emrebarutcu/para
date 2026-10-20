@@ -10,6 +10,8 @@
 import T from "../taksit.js";
 import E from "../eposta.js";
 import V from "../varlik.js";
+import K from "../kategori.js";
+import I from "../icgoru.js";
 
 export const TIME_ZONE = "Europe/Istanbul";
 const MAX_MONTHS = 60;       // akıştaki en fazla ay (app.js ile aynı)
@@ -101,6 +103,14 @@ function assetArg(v, name = "asset") {
   return code ?? fail(`${name} must be one of TRY, USD, EUR, GAU (gram gold).`);
 }
 
+// Kategori kimliği ya da adı ("market", "Yeme-içme", "yeme içme"…); null kategoriyi kaldırır
+function categoryArg(v) {
+  if (v === null || v === "") return null;
+  const s = K.keyOf(v);
+  const c = K.CATEGORIES.find(x => x.id === s || K.keyOf(x.name) === s);
+  return c ? c.id : fail(`category must be one of ${K.CATEGORIES.map(x => `"${x.id}" (${x.name})`).join(", ")}, or null.`);
+}
+
 // Kart belirtilmezse: tek kart varsa o, hiç yoksa nakit; birden çok kartta LLM sormalı
 function defaultCardFor(state) {
   if (state.cards.length <= 1) return state.cards[0] ?? null;
@@ -151,6 +161,8 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     nextPayment: left[0] ? { date: left[0].key, amount: round(left[0].amount) } : null,
     lastPaymentDate: pays.length ? pays[pays.length - 1].key : null,
     status: left.length ? "active" : "done",
+    category: K.valid(p.category) ? p.category : null,
+    categoryName: K.category(p.category)?.name ?? null,
   };
   if (!p.date) {
     // Excel'den gelen tarihsiz kayıt: total/count kalan taksitlerdir
@@ -252,6 +264,15 @@ function buildPurchase(state, args, today, base = null) {
     : defaultCardFor(state);
 
   const p = { desc, cardId: card ? card.id : null, count, total };
+  // Kategori: verilirse kullanıcının seçimi sayılır (uygulama bundan öğrenir); verilmezse düzenlenen kayıttaki kalır,
+  // yeni kayıtta kullanıcının aynı işyerine daha önce verdiği kategori önerilir
+  const category = args.category !== undefined ? categoryArg(args.category) : undefined;
+  if (category) Object.assign(p, { category, categoryBy: "user" });
+  else if (category === undefined && K.valid(base?.category)) Object.assign(p, { category: base.category, ...(base.categoryBy && { categoryBy: base.categoryBy }) });
+  else if (category === undefined && !base?.id) {
+    const guess = K.remembered(desc, K.learned(state.installments));
+    if (guess) Object.assign(p, { category: guess, categoryBy: "ai" });
+  }
   if (date) {
     p.date = date;
   } else {
@@ -309,6 +330,12 @@ function emailCard(state, parsed) {
 
 function emailPurchase(parsed, card) {
   return { desc: parsed.merchant || "Kart harcaması", cardId: card?.id ?? null, count: parsed.count, total: parsed.amount, date: parsed.date };
+}
+
+// Kullanıcının aynı işyerine daha önce verdiği kategori (app.js'teki gibi)
+function withRemembered(state, p) {
+  const guess = K.remembered(p.desc, K.learned(state.installments));
+  return guess ? { ...p, category: guess, categoryBy: "ai" } : p;
 }
 
 function emailItem(state, row) {
@@ -423,6 +450,10 @@ const PURCHASE_FIELDS = {
   date: S.date("Purchase date, YYYY-MM-DD. Decides which statement (ekstre) it falls into."),
   card: { type: ["string", "null"], description: 'Card id, name or last 4 digits; "nakit" (or null) for cash / debit card.' },
   person: S.str("Person id or name the purchase belongs to."),
+  category: {
+    type: ["string", "null"], enum: [...K.CATEGORIES.map(c => c.id), null],
+    description: `Spending category: ${K.CATEGORIES.map(c => `${c.id} = ${c.name} (${c.hint})`).join("; ")}. null removes it. Omit on add to reuse the category the user gave the same merchant before.`,
+  },
 };
 const CARD_FIELDS = {
   name: S.str("Card name, e.g. bank name."),
@@ -535,6 +566,7 @@ export const TOOLS = [
       person: S.str("Only this person's purchases (id or name)."),
       card: { type: ["string", "null"], description: 'Only this card (id, name or last 4); "nakit" for cash.' },
       search: S.str("Case-insensitive text to look for in the description."),
+      category: { ...PURCHASE_FIELDS.category, description: 'Only this category (id); null = purchases without a category.' },
       limit: S.int("Maximum number of purchases (default 100).", 1, 1000),
     }),
     annotations: READ,
@@ -545,7 +577,9 @@ export const TOOLS = [
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
       const card = args.card !== undefined ? findCard(state, args.card) : undefined;
       const q = args.search ? T.normalize(args.search) : "";
+      const category = args.category !== undefined ? categoryArg(args.category) : undefined;
       const all = knownPurchases(state)
+        .filter(p => category === undefined || (category ? p.category === category : !K.valid(p.category)))
         .filter(p => !person || p.personId === person.id)
         .filter(p => card === undefined || (card ? p.cardId === card.id : !cardById(state, p.cardId)))
         .filter(p => !q || T.normalize(p.desc).includes(q))
@@ -930,7 +964,7 @@ export const TOOLS = [
             const personId = fresh.people[0].id;
             return toAdd.map(x => {
               const card = emailCard(fresh, x.parsed);
-              const p = { id: uid(), personId, ...emailPurchase(x.parsed, card) };
+              const p = withRemembered(fresh, { id: uid(), personId, ...emailPurchase(x.parsed, card) });
               fresh.installments.push(p);
               return purchaseView(fresh, p, ctx.today);
             });
@@ -1005,6 +1039,94 @@ export const TOOLS = [
     },
   },
 
+  // ── İçgörüler ──
+  {
+    name: "get_insights",
+    title: "Insights (İçgörüler)",
+    description: "The app's insight cards, most important first: free cash this month (income from asset entries minus card payments and outflows) or the first month that runs short, installment-to-income ratio for the next months, cards close to their limit, an upcoming jump in payments, a category spending more than usual, which card gives the latest first payment for a purchase made today, recurring payments (subscriptions, rent), other people's share this month, the month installments end. Texts are Turkish; data has the numbers.",
+    inputSchema: obj(),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const rates = await ratesOrNull(ctx);
+      return { today: ctx.today, insights: I.insights(state, { today: ctx.today, rates: rates?.rates }), currency: "TRY" };
+    },
+  },
+  {
+    name: "spending_by_category",
+    title: "Spending by category",
+    description: "What was bought each month by category (by purchase date; an installment purchase counts fully in the month it was bought), with each category's share and its average over the previous 3 months. Purchases without a category are listed as category null.",
+    inputSchema: obj({
+      month: S.month("Last month, YYYY-MM. Default: current month."),
+      months: S.int("How many months back to include (default 1).", 1, 24),
+      person: S.str("Only this person's purchases (id or name)."),
+    }),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const last = monthArg(args.month, "month", ctx.today);
+      const count = intArg(args.months, "months", 1, 24, 1);
+      const person = args.person !== undefined ? findPerson(state, args.person) : null;
+      const scoped = person ? { ...state, people: [person] } : state;
+      const months = [];
+      for (let idx = last - count + 1; idx <= last; idx++) {
+        const b = I.categoryBreakdown(scoped, idx);
+        months.push({
+          month: T.monthKey(idx),
+          total: round(b.total),
+          categories: b.rows.map(r => ({
+            category: r.id || null, name: r.name, amount: round(r.value), share: Math.round(r.share * 1000) / 1000,
+            previous3MonthAverage: r.average == null ? null : round(r.average),
+          })),
+        });
+      }
+      return { months, currency: "TRY" };
+    },
+  },
+  {
+    name: "simulate_purchase",
+    title: "Simulate purchase",
+    description: "What a purchase would change, without saving it: its payment schedule, each affected month's total payments and free cash before and after (free cash = income minus card payments and outflows, from asset entries), and the card's used limit after. Also compares every card for a purchase on that date (first payment date). Use it to answer \"can I afford this?\" or \"which card should I use?\".",
+    inputSchema: obj({
+      ...PURCHASE_FIELDS,
+      date: S.date("Purchase date, YYYY-MM-DD. Default: today."),
+      card: { ...PURCHASE_FIELDS.card, description: PURCHASE_FIELDS.card.description + " Default: the card whose first payment comes latest." },
+      person: S.str("Person id or name. Default: the first person."),
+    }, ["amount"]),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const rates = (await ratesOrNull(ctx))?.rates;
+      const date = args.date ?? ctx.today;
+      if (!validDate(date)) fail('date must be a valid date like "2026-10-18".');
+      const timing = I.cardTiming(state, date).filter(x => !x.full);
+      const fields = { description: "Simülasyon", ...args, date };
+      if (args.card === undefined) fields.card = timing[0]?.card.id ?? null;
+      const { personId, p } = buildPurchase(state, fields, ctx.today);
+      const purchase = { id: "simulasyon", personId, ...p };
+      const after = { ...state, installments: [...state.installments, purchase] };
+      const pays = T.payments(purchase, cardById(state, purchase.cardId));
+      const from = pays[0].idx, to = pays[pays.length - 1].idx;
+      const flowsOf = s => T.buildCashflow(s.people, s.cards, s.installments, from, to);
+      const before = flowsOf(state), next = flowsOf(after);
+      const card = cardById(state, purchase.cardId);
+      return {
+        purchase: purchaseView(after, purchase, ctx.today, { schedule: true }),
+        months: next.map((m, i) => {
+          const a = I.monthFlows(state, m.idx, rates, before), b = I.monthFlows(after, m.idx, rates, next);
+          return {
+            month: T.monthKey(m.idx),
+            paymentsBefore: round(before[i].total), paymentsAfter: round(m.total),
+            freeCashBefore: round(a.net), freeCashAfter: round(b.net),
+          };
+        }),
+        card: card ? { name: card.name, limit: round(card.limit), usedAfter: cardView(after, card, ctx.today).used, availableAfter: cardView(after, card, ctx.today).available } : null,
+        cardsCompared: timing.map(x => ({ card: x.card.name, firstPayment: x.due, daysUntilFirstPayment: x.days, available: x.available == null ? null : round(x.available) })),
+        currency: "TRY",
+      };
+    },
+  },
+
   // ── Yedek ──
   {
     name: "export_data",
@@ -1045,4 +1167,6 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
 - Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums (repeating entries count only the times up to today). get_assets values them in TRY at the current Turkish market rate.
 - Deleting a card or a person also deletes their purchases (a person also their asset entries); confirm destructive actions with the user.
+- Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
+- get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.
 - Reply to the user in their language (the app is Turkish).`;

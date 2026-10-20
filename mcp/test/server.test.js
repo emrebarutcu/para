@@ -543,3 +543,40 @@ test("dışa / içe aktarma", async () => {
 
   assert.match((await c.call("import_data", { data: { foo: 1 } })).error, /people and installments/);
 });
+
+test("kategoriler, içgörüler, kategori dağılımı ve alışveriş simülasyonu", async () => {
+  const sb = fakeSupabase();
+  const { call } = client(sb);
+  await call("add_card", { name: "Bonus", cutoff_day: 19, due_day: 29, limit: 20000 });
+  await call("add_card", { name: "World", cutoff_day: 25, due_day: 5 });
+  await call("add_entry", { asset: "TRY", direction: "in", amount: 30000, description: "Maaş", date: "2026-01-15", repeat: 0 });
+
+  const a = await call("add_purchase", { description: "MIGROS TICARET A.S.", amount: 2000, card: "Bonus", date: "2026-10-10", category: "Market" });
+  assert.equal(a.purchase.category, "market");
+  assert.equal(stored(sb).installments[0].categoryBy, "user");
+  // Aynı işyerinin farklı yazılışı: kullanıcının kategorisi önerilir
+  const b = await call("add_purchase", { description: "Migros Ticaret A.Ş. 0042", amount: 800, card: "World", date: "2026-10-12" });
+  assert.equal(b.purchase.categoryName, "Market");
+  assert.equal(stored(sb).installments[1].categoryBy, "ai");
+  assert.match((await call("add_purchase", { description: "x", amount: 1, card: "nakit", category: "kumar" })).error, /category must be one of/);
+  // Düzenlemede verilmeyen kategori kalır, null kaldırır
+  assert.equal((await call("update_purchase", { id: a.purchase.id, amount: 2100 })).purchase.category, "market");
+  assert.equal((await call("update_purchase", { id: b.purchase.id, category: null })).purchase.category, null);
+  assert.equal((await call("list_purchases", { category: null })).count, 1);
+  assert.equal((await call("list_purchases", { category: "market" })).count, 1);
+
+  const cats = await call("spending_by_category", { month: "2026-10" });
+  assert.deepEqual(cats.months[0].categories.map(c => [c.category, c.amount]), [["market", 2100], [null, 800]]);
+
+  const { insights } = await call("get_insights");
+  const ids = insights.map(x => x.id);
+  assert.deepEqual(ids, ["yuk", "serbest", "bitis"]);   // bugün (18 Eki) iki kartın ilk ödemesi arasında 7 gün var: öneri yok
+
+  const sim = await call("simulate_purchase", { amount: 12000, installments: 3, date: "2026-10-20" });
+  assert.equal(sim.purchase.card, "Bonus");   // ilk ödemesi en geç (29 Kas)
+  assert.equal(sim.purchase.payments[0].date, "2026-11-29");
+  assert.deepEqual(sim.months.map(m => [m.month, m.paymentsBefore, m.paymentsAfter]), [["2026-11", 800, 4800], ["2026-12", 0, 4000], ["2027-01", 0, 4000]]);
+  assert.deepEqual([sim.months[0].freeCashBefore, sim.months[0].freeCashAfter], [29200, 25200]);
+  assert.equal(sim.card.availableAfter, 20000 - 2100 - 12000);
+  assert.equal(stored(sb).installments.length, 2);   // kaydedilmedi
+});

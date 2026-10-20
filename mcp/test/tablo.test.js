@@ -57,7 +57,7 @@ test("yeni, değişen ve silinen kayıtlar bulunur", () => {
   assert.deepEqual(plan.cards.upsert.map(x => x.id), ["k2"]);
   assert.deepEqual(plan.purchases.upsert.map(x => x.row), [{
     id: "p3", person_id: "ali", card_id: "k2", description: "Yeni", total: 100, count: 1, date: "2026-10-19",
-    first_due: null, plan_count: null,
+    first_due: null, plan_count: null, category: null, category_by: null,
   }]);
   assert.deepEqual(plan.purchases.delete, ["p1"]);
   assert.deepEqual(plan.people.delete, []);
@@ -264,4 +264,33 @@ test("1.x tabanı (yeni sütunsuz) rekey ile çevrilir: yükseltmede bir şey ya
   assert.equal(out.changed, true);
   assert.equal(out.state.entries[0].repeat, 0);
   for (const t of Tablo.TABLES) assert.deepEqual(changes(out.state, out.base)[t], { upsert: [], delete: [] }, t);
+});
+
+test("harcama kategorisi: satıra çevrilir, geçersizi yazılmaz; kimin verdiği yalnızca kategoriyle", () => {
+  const rows = server();
+  const base = baseOf(rows);
+  const state = toState(rows);
+  state.installments[0] = { ...state.installments[0], category: "market", categoryBy: "user" };
+  state.installments[1] = { ...state.installments[1], category: "Market!", categoryBy: "ai" };
+  state.installments.push({ id: "p3", personId: "ben", cardId: null, desc: "x", total: 5, count: 1, date: "2026-10-19", categoryBy: "user" });
+  const rowsOut = changes(state, base).purchases.upsert.map(x => x.row);
+  assert.deepEqual(rowsOut.map(r => [r.id, r.category, r.category_by]), [["p1", "market", "user"], ["p3", null, null]]);
+
+  const back = toState({ ...rows, purchases: [purchase("p4", { category: "yeme", category_by: "ai" }), purchase("p5", { category: "yeme", category_by: "kim" })] });
+  assert.deepEqual(back.installments.map(p => [p.category, p.categoryBy]), [["yeme", "ai"], ["yeme", undefined]]);
+});
+
+test("2.x tabanı (kategori sütunsuz) rekey ile çevrilir: yükseltmede harcamalar yeniden yazılmaz", () => {
+  const rows = server();
+  const state = toState(rows);
+  const old = baseOf(rows);
+  for (const id of Object.keys(old.purchases)) {
+    const { category, category_by, ...row } = JSON.parse(old.purchases[id]);
+    old.purchases[id] = JSON.stringify(row);
+  }
+  assert.ok(changes(state, old).purchases.upsert.length);
+  const base = rekey(old);
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(state, base)[t], { upsert: [], delete: [] }, t);
+  const out = merge(state, base, "purchases", [{ ...rows.purchases[0], category: "ev", category_by: "user", updated_at: at() }]);
+  assert.equal(out.state.installments[0].category, "ev");
 });
