@@ -277,7 +277,9 @@ const els = {
   addLabel: $("addLabel"), fab: document.querySelector(".fab"),
   purchaseSheet: $("purchaseSheet"), purchaseForm: $("purchaseForm"), purchaseTitle: $("purchaseTitle"),
   purchaseDelete: $("purchaseDelete"), purchasePreview: $("purchasePreview"),
-  countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"),
+  countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"), personField: $("personField"),
+  purchaseSum: $("purchaseSum"), purchaseStatus: $("purchaseStatus"), purchaseCopy: $("purchaseCopy"),
+  dateChips: $("dateChips"), descList: $("descList"),
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
   termField: $("termField"), termNote: $("termNote"), termChoices: $("termChoices"),
@@ -1498,7 +1500,22 @@ function radioChip(name, value, label, checked, color) {
 }
 
 // ---------- Harcama formu ----------
-// draft: kayıtlı olmayan, önceden doldurulmuş harcama (e-postadan gelen)
+// Sıra: tutar (odakta), ne alındığı (önceki açıklamalardan öneri), taksit, kart (her kartta ilk ödeme tarihi), tarih,
+// kategori, kişi. Altta sabit özet. Düzenlemede ödeme durumu ve planı; "Kopyala" aynısından yeni harcama açar.
+// draft: kayıtlı olmayan, önceden doldurulmuş harcama (e-postadan gelen ya da kopyalanan)
+let planOpen = false;         // önizlemedeki ödeme planı açık
+let categoryFor = null;       // kullanıcı seçmediyse formdaki kategorinin hangi açıklamaya göre verildiği
+
+// "1.250,50", "1250,5", "1250.50", "1.250" → sayı (Türkçe yazımda nokta binlik, virgül ondalık)
+function parseAmount(v) {
+  const t = String(v ?? "").replace(/[₺\s]/g, "");
+  if (!t) return NaN;
+  if (t.includes(",")) return Number(t.replace(/\./g, "").replace(",", "."));
+  if (/^\d{1,3}(\.\d{3})+$/.test(t)) return Number(t.replace(/\./g, ""));
+  return Number(t);
+}
+const amountText = n => String(Math.round(n * 100) / 100).replace(".", ",");
+
 function openPurchaseSheet(p, draft) {
   if (!state.people.length) { openPeopleSheet(); toast("Önce bir kişi ekle"); return; }
   editingId = p?.id ?? null;
@@ -1507,8 +1524,10 @@ function openPurchaseSheet(p, draft) {
   const f = els.purchaseForm;
   f.reset();
   for (const n of f.querySelectorAll(".invalid")) n.classList.remove("invalid");
-  els.purchaseTitle.textContent = p ? "Harcamayı düzenle" : draft ? "E-postadan harcama" : "Yeni harcama";
+  els.purchaseTitle.textContent = p ? "Harcamayı düzenle" : draft?.inboxId != null ? "E-postadan harcama" : "Yeni harcama";
   els.purchaseDelete.hidden = !p;
+  els.purchaseCopy.hidden = !p;
+  planOpen = false;
 
   const count = src?.count ?? 1;
   els.countChips.replaceChildren(...COUNT_PRESETS.map(n =>
@@ -1517,32 +1536,92 @@ function openPurchaseSheet(p, draft) {
 
   const cardId = p ? (p.cardId && cardById(p.cardId) ? p.cardId : "")
     : draft?.cardId && cardById(draft.cardId) ? draft.cardId
+    : draft ? ""
     : (lastCardId != null && (lastCardId === "" || cardById(lastCardId)) ? lastCardId : state.cards[0]?.id ?? "");
-  els.cardChips.replaceChildren(
-    ...state.cards.map(c => radioChip("card", c.id, c.name, c.id === cardId, seriesVar(c))),
-    radioChip("card", "", "Nakit / banka kartı", cardId === "", CASH_COLOR));
 
-  const personId = p ? p.personId
+  const personId = src?.personId && personById(src.personId) ? src.personId
     : personFilter !== "all" ? personFilter
     : personById(lastPersonId) ? lastPersonId : state.people[0].id;
   els.personChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
+  els.personField.hidden = state.people.length < 2;
 
   f.elements.desc.value = src?.desc ?? "";
-  f.elements.amount.value = src?.total ? Math.round(src.total * 100) / 100 : "";
+  f.elements.amount.value = src?.total ? amountText(src.total) : "";
   f.elements.date.value = p ? p.date || "" : draft?.date || T.todayKey();
+  renderCardChips(cardId);
+  renderDescList();
 
   YZ.warm();
   categoryTouched = false;
   categorySource = K.valid(src?.category) ? (src.categoryBy === "user" ? "user" : "ai") : null;
+  categoryFor = categorySource === "ai" ? src.desc : null;
   els.categoryChips.replaceChildren(...K.CATEGORIES.map(c => radioChip("category", c.id, c.name, c.id === src?.category)));
   setCategoryHint(categorySource === "ai" ? "öneri" : "");
+  renderPurchaseStatus(p);
   syncChecked(f);
   updatePurchasePreview();
   openSheet(els.purchaseSheet);
-  if (!p) f.elements.desc.focus();
+  showPicked(els.countChips);
+  showPickedCategory();
+  if (!p) f.elements.amount.focus();
   if (draft?.desc && !categorySource) suggestCategory();
 }
+
+// Kart çipleri: her kartta bu tarihli harcamanın ilk ödemesi; ilk ödemesi belirgin biçimde en geç olan işaretli
+function renderCardChips(selected) {
+  const date = T.parseDate(els.purchaseForm.elements.date.value) ? els.purchaseForm.elements.date.value : null;
+  const timing = date ? I.cardTiming(state, date) : [];
+  const usable = timing.filter(x => !x.full);
+  const best = usable.length > 1 && usable[0].days - usable[usable.length - 1].days >= 10 ? usable[0].card.id : null;
+  const chip = (id, name, color, sub, tag) => {
+    const c = radioChip("card", id, name, id === selected, color);
+    if (sub) c.append(el("small", "chip-sub", sub));
+    if (tag) c.append(el("span", "chip-tag", tag));
+    return c;
+  };
+  els.cardChips.replaceChildren(
+    ...state.cards.map(c => {
+      const t = timing.find(x => x.card.id === c.id);
+      return chip(c.id, c.name, seriesVar(c), t && fmtDayShort(t.due), t?.full ? "limit dolu" : c.id === best ? "en geç" : null);
+    }),
+    chip("", "Nakit / banka kartı", CASH_COLOR, date && "aynı gün"));
+  syncChecked(els.cardChips);
+}
+
+// Önceki harcamaların açıklamaları (en yeniler önce): yazarken öneri
+function renderDescList() {
+  const seen = new Set(), out = [];
+  for (let i = state.installments.length - 1; i >= 0 && out.length < 60; i--) {
+    const d = state.installments[i].desc?.trim();
+    const k = K.keyOf(d);
+    if (!d || !k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(Object.assign(document.createElement("option"), { value: d }));
+  }
+  els.descList.replaceChildren(...out);
+}
+
+// Düzenlenen harcamanın durumu: kaç taksit ödendi, kalan, sonraki ödeme
+function renderPurchaseStatus(p) {
+  els.purchaseStatus.hidden = !p;
+  if (!p) return;
+  const today = T.todayKey();
+  const pays = paymentsOf(p), plan = T.planLength(p);
+  const left = pays.filter(x => x.key >= today);
+  const parts = plan > 1
+    ? [`${plan - left.length}/${plan} taksit ödendi`, left.length ? `kalan ${fmt(left.reduce((s, x) => s + x.amount, 0))}` : "bitti"]
+    : [left.length ? "Ödenmedi" : "Ödendi"];
+  if (left[0]) parts.push(`sonraki ${fmtDay(left[0].key)}`);
+  els.purchaseStatus.textContent = parts.join(" · ");
+}
+
+// Kayan çip satırlarında seçili çip görünsün (dikey kaydırmadan)
+function showPicked(row) {
+  const chip = row.querySelector(".on");
+  if (chip) row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
+}
+const showPickedCategory = () => showPicked(els.categoryChips);
 
 // ---------- Kategori önerisi ----------
 // Önce kullanıcının aynı işyerine verdiği kategori (kategori.js), yoksa cihazdaki model (yz.js). Kullanıcı bir
@@ -1559,10 +1638,22 @@ function setCategoryHint(text, action) {
   }
 }
 
-function pickCategory(id, source) {
+function pickCategory(id, source, desc = null) {
   for (const r of els.categoryChips.querySelectorAll("input")) r.checked = r.value === id;
   categorySource = source;
+  categoryFor = id ? desc : null;
   syncChecked(els.categoryChips);
+  showPickedCategory();
+}
+
+// Açıklamanın kategorisi: kullanıcının aynı işyerine verdiği (hemen) ya da cihazdaki modelin (açıksa) önerisi.
+// → { category, confidence, from: "memory" | "ai" } ya da null
+async function guessCategory(desc) {
+  const memory = K.learned(state.installments);
+  const known = K.remembered(desc, memory);
+  if (known) return { category: known, confidence: 1, from: "memory" };
+  const r = YZ.enabled ? await YZ.suggest(desc, memory) : null;
+  return r && { ...r, from: "ai" };
 }
 
 async function suggestCategory() {
@@ -1570,9 +1661,8 @@ async function suggestCategory() {
   const desc = els.purchaseForm.elements.desc.value.trim();
   if (categoryTouched || categorySource === "user") return;
   if (!desc) { pickCategory(null, null); setCategoryHint(""); return; }
-  const memory = K.learned(state.installments);
-  const known = K.remembered(desc, memory);
-  if (known) { pickCategory(known, "memory"); setCategoryHint("önceki seçimin"); return; }
+  const known = K.remembered(desc, K.learned(state.installments));
+  if (known) { pickCategory(known, "memory", desc); setCategoryHint("önceki seçimin"); return; }
   if (!YZ.enabled) {
     pickCategory(null, null);
     setCategoryHint("", YZ.supported() ? { label: "Yapay zekâ önersin", run: openAiSheet } : null);
@@ -1580,7 +1670,7 @@ async function suggestCategory() {
   }
   setCategoryHint("öneriliyor…");
   try {
-    const r = await YZ.suggest(desc, memory);
+    const r = await guessCategory(desc);
     if (seq !== suggestSeq || categoryTouched || !els.purchaseSheet.open) return;
     if (!r) { setCategoryHint(""); return; }
     if (r.confidence < K.SURE) {
@@ -1588,23 +1678,39 @@ async function suggestCategory() {
       setCategoryHint(`emin değilim · ${K.category(r.category).name} olabilir`);
       return;
     }
-    pickCategory(r.category, "ai");
+    pickCategory(r.category, "ai", desc);
     setCategoryHint("öneri");
   } catch {
     if (seq === suggestSeq) setCategoryHint("öneri alınamadı");
   }
 }
 
+// Kaydedilen harcamaya, kullanıcı kategori seçmediyse kategori verilir (öneri gelmeden kaydedildiyse ya da açıklama
+// değiştiyse). Model yüklenirken form beklemesin diye kayıttan sonra; bu arada harcama değiştiyse dokunulmaz.
+async function classifyAfterSave(id) {
+  const p = state.installments.find(x => x.id === id);
+  if (!p || K.valid(p.category) || !p.desc?.trim() || !YZ.enabled) return;
+  const owner = stateOwner;
+  let r = null;
+  try { r = await guessCategory(p.desc); } catch {}
+  const cur = state.installments.find(x => x.id === id);
+  if (!r || r.confidence < K.SURE || stateOwner !== owner || !cur || K.valid(cur.category) || cur.desc !== p.desc) return;
+  state.installments = state.installments.map(x => (x.id === id ? { ...x, category: r.category, categoryBy: "ai" } : x));
+  saveState();
+  render();
+  toast(`${cur.desc} · ${K.category(r.category).name}`);
+}
+
 function collectPurchase() {
   const f = els.purchaseForm.elements;
   const editing = editingId ? state.installments.find(x => x.id === editingId) : null;
   const desc = f.desc.value.trim();
-  const amount = Number(f.amount.value);
+  const amount = parseAmount(f.amount.value);
   const count = Math.round(Number(f.count.value || 1));
   const date = T.parseDate(f.date.value) ? f.date.value : "";
   const errors = [];
-  if (!desc) errors.push("desc");
   if (!(amount > 0)) errors.push("amount");
+  if (!desc) errors.push("desc");
   if (!(count >= 1 && count <= 60)) errors.push("count");
   if (!date && !editing?.firstDue) errors.push("date");
   if (!personById(f.person.value)) errors.push("person");
@@ -1626,31 +1732,47 @@ function updatePurchasePreview() {
   const { p, errors } = collectPurchase();
   const box = els.purchasePreview;
   box.replaceChildren();
+  els.purchaseSum.replaceChildren();
+  const today = T.todayKey();
+  for (const b of els.dateChips.querySelectorAll("[data-day]")) {
+    b.classList.toggle("on", els.purchaseForm.elements.date.value === T.addDays(today, Number(b.dataset.day)));
+  }
   if (errors.some(e => e === "amount" || e === "count" || e === "date")) return;
 
   const card = cardById(p.cardId);
   const pays = T.payments(p, card);
   const first = pays[0].key, last = pays[pays.length - 1].key;
-  if (p.count > 1) {
-    box.append(el("div", "big", `${p.count} × ${fmt(T.perInstallment(p))}`),
-      el("div", "", `Toplam ${fmt(p.total)} · ilk ödeme ${fmtDay(first)}, son ${fmtDay(last)}`));
-  } else {
-    box.append(el("div", "big", fmt(p.total)), el("div", "", `Ödeme ${fmtDay(first)}`));
-  }
+  els.purchaseSum.append(el("strong", "", p.count > 1 ? `${p.count} × ${fmt(T.perInstallment(p))}` : fmt(p.total)),
+    el("span", "", `${p.count > 1 ? "ilk ödeme" : "ödeme"} ${fmtDayShort(first)} · ${relDays(first, today).toLocaleLowerCase("tr-TR")}`));
+
+  if (p.count > 1) box.append(el("div", "", `Toplam ${fmt(p.total)} · son taksit ${fmtDay(last)}`));
   if (card && p.date) {
-    box.append(el("div", "", `${card.name} · ${fmtDay(T.statementOf(card, p.date).cut)} kesimli ekstreye girer`));
+    box.append(el("div", "", `${card.name} · ${fmtDay(T.statementOf(card, p.date).cut)} kesimli ekstreye girer, ${fmtDay(first)} ödenir`));
   } else if (!card) {
     box.append(el("div", "", p.count > 1 ? "Nakit — her ay harcama gününde ödenir" : "Nakit — harcama gününde ödenir"));
   } else {
     box.append(el("div", "", "Excel'den aktarılan kayıt — tarih girmezsen ödeme ayı korunur"));
   }
-  // Başka bir kartla ilk ödeme belirgin biçimde daha geç geliyorsa söylenir
-  if (card && p.date && !editingId) {
-    const timing = I.cardTiming(state, p.date).filter(x => !x.full);
-    const mine = timing.find(x => x.card.id === card.id), best = timing[0];
-    if (mine && best && best.card.id !== card.id && best.days - mine.days >= 10) {
-      box.append(el("div", "tip", `İpucu: ${best.card.name} ile ilk ödeme ${fmtDay(best.due)}, ${best.days - mine.days} gün daha geç.`));
+  const t = card && p.date ? I.cardTiming(state, p.date).find(x => x.card.id === card.id) : null;
+  if (t?.available != null) {
+    const own = editingId ? state.installments.find(x => x.id === editingId) : null;
+    const before = own && own.cardId === card.id ? T.outstanding(paymentsOf(own), today) : 0;
+    const after = t.available + before - T.outstanding(pays, today);
+    box.append(el("div", after < 0 ? "warn" : "", after < 0 ? `${card.name} limiti ${fmt(-after)} aşılır` : `${card.name} kullanılabilir limit sonra ${fmt(after)}`));
+  }
+  if (pays.length > 1) {
+    const details = el("details", "plan");
+    details.open = planOpen;
+    details.addEventListener("toggle", () => { planOpen = details.open; });
+    details.append(el("summary", "", `Ödeme planı (${pays.length} taksit)`));
+    const ol = el("ol", "plan-list");
+    for (const x of pays) {
+      const li = el("li", x.key < today ? "paid" : "");
+      li.append(el("span", "", `${x.no}. ${fmtDay(x.key)}`), el("span", "amount", fmt(x.amount)));
+      ol.append(li);
     }
+    details.append(ol);
+    box.append(details);
   }
 }
 
@@ -1661,6 +1783,7 @@ els.purchaseForm.addEventListener("input", e => {
   if (e.target.name === "count") {
     for (const r of els.countChips.querySelectorAll("input")) r.checked = r.value === String(Math.round(Number(f.count.value)));
   }
+  if (e.target.name === "date") renderCardChips(f.card.value);
   if (e.target.name === "category") {
     categoryTouched = true;
     categorySource = "user";
@@ -1675,6 +1798,14 @@ els.purchaseForm.addEventListener("input", e => {
   updatePurchasePreview();
 });
 
+els.dateChips.addEventListener("click", e => {
+  const b = e.target.closest("[data-day]");
+  if (!b) return;
+  const input = els.purchaseForm.elements.date;
+  input.value = T.addDays(T.todayKey(), Number(b.dataset.day));
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
 els.purchaseForm.addEventListener("submit", e => {
   e.preventDefault();
   const { p, personId, errors } = collectPurchase();
@@ -1686,15 +1817,23 @@ els.purchaseForm.addEventListener("submit", e => {
     f[errors[0]]?.focus?.();
     return;
   }
+  // Kullanıcı seçmediyse: başka bir açıklamaya göre verilmiş kategori düşer; aynı işyerine önceki seçimi hemen,
+  // modelin önerisi kayıttan sonra gelir
+  if (p.categoryBy !== "user") {
+    if (categoryFor !== p.desc) { delete p.category; delete p.categoryBy; }
+    const known = !p.category && K.remembered(p.desc, K.learned(state.installments));
+    if (known) Object.assign(p, { category: known, categoryBy: "ai" });
+  }
+  const id = editingId ?? uid();
   if (editingId) {
     state.installments = state.installments.map(x => (x.id === editingId ? { id: x.id, personId, ...p } : x));
   } else {
-    state.installments.push({ id: uid(), personId, ...p });
+    state.installments.push({ id, personId, ...p });
   }
   if (inboxDraftId != null) {
-    const id = inboxDraftId;
-    inbox = inbox.filter(x => x.row.id !== id);
-    window.syncInboxClaim?.([id]);
+    const inboxId = inboxDraftId;
+    inbox = inbox.filter(x => x.row.id !== inboxId);
+    window.syncInboxClaim?.([inboxId]);
   }
   inboxDraftId = null;
   if (p.categoryBy === "user") unsure.clear();   // yeni örnekle emin olunamayanlar yeniden denenebilir
@@ -1702,9 +1841,18 @@ els.purchaseForm.addEventListener("submit", e => {
   lastPersonId = personId;
   saveState();
   els.purchaseSheet.close();
-  toast(editingId ? "Harcama güncellendi" : "Harcama eklendi");
+  toast((editingId ? "Harcama güncellendi" : "Harcama eklendi") + (p.category ? ` · ${K.category(p.category).name}` : ""));
   editingId = null;
   render();
+  classifyAfterSave(id);
+});
+
+els.purchaseCopy.addEventListener("click", () => {
+  const p = state.installments.find(x => x.id === editingId);
+  if (!p) return;
+  const { id, date, firstDue, planCount, ...rest } = p;
+  els.purchaseSheet.close();
+  openPurchaseSheet(null, { ...rest, count: T.planLength(p), total: T.originalTotal(p), date: T.todayKey() });
 });
 
 els.purchaseDelete.addEventListener("click", () => {

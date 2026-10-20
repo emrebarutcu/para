@@ -237,21 +237,12 @@
         <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
       <div class="sheet-body">
-        <label class="field">
-          <span class="field-label">Ne aldın?</span>
-          <input name="desc" type="text" placeholder="örn. IKEA" autocomplete="off" required />
-        </label>
+        <p class="p-status" id="purchaseStatus" hidden></p>
 
         <div class="field">
-          <span class="field-label">Kategori <small id="categoryHint" class="cat-hint" aria-live="polite"></small></span>
-          <div class="chips" id="categoryChips" role="radiogroup" aria-label="Kategori"></div>
-        </div>
-
-        <div class="field">
-          <span class="field-label">Tutar</span>
           <div class="amount-input">
             <span class="cur">₺</span>
-            <input name="amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0,00" required aria-label="Tutar" />
+            <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Tutar" />
           </div>
           <div class="seg seg-full" role="radiogroup" aria-label="Tutar türü">
             <label><input type="radio" name="mode" value="total" checked /><span>Toplam tutar</span></label>
@@ -259,9 +250,15 @@
           </div>
         </div>
 
+        <label class="field">
+          <span class="field-label">Ne aldın?</span>
+          <input name="desc" type="text" placeholder="örn. IKEA" autocomplete="off" list="descList" enterkeyhint="done" required />
+          <datalist id="descList"></datalist>
+        </label>
+
         <div class="field">
           <span class="field-label">Taksit</span>
-          <div class="chips" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
+          <div class="chips scroll-x" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
           <label class="inline-input">
             <span>Diğer</span>
             <input name="count" type="number" min="1" max="60" step="1" inputmode="numeric" />
@@ -269,24 +266,37 @@
         </div>
 
         <div class="field">
-          <span class="field-label">Ödeme şekli</span>
+          <span class="field-label">Ödeme şekli <small>· ilk ödeme</small></span>
           <div class="chips" id="cardChips" role="radiogroup" aria-label="Kart"></div>
         </div>
 
-        <label class="field">
+        <div class="field">
           <span class="field-label">Harcama tarihi</span>
-          <input name="date" type="date" />
-        </label>
+          <div class="date-row">
+            <div class="chips" id="dateChips" role="group" aria-label="Tarih kısayolları">
+              <button type="button" class="chip" data-day="0">Bugün</button>
+              <button type="button" class="chip" data-day="-1">Dün</button>
+            </div>
+            <input name="date" type="date" aria-label="Harcama tarihi" />
+          </div>
+        </div>
 
         <div class="field">
+          <span class="field-label">Kategori <small id="categoryHint" class="cat-hint" aria-live="polite"></small></span>
+          <div class="chips scroll-x" id="categoryChips" role="radiogroup" aria-label="Kategori"></div>
+        </div>
+
+        <div class="field" id="personField">
           <span class="field-label">Kimin için</span>
           <div class="chips" id="personChips" role="radiogroup" aria-label="Kişi"></div>
         </div>
 
         <div class="preview" id="purchasePreview" aria-live="polite"></div>
       </div>
-      <footer class="sheet-foot">
+      <footer class="sheet-foot wrap">
+        <div class="sheet-sum" id="purchaseSum" aria-live="polite"></div>
         <button type="button" class="btn btn-danger" id="purchaseDelete" hidden>Sil</button>
+        <button type="button" class="btn btn-ghost" id="purchaseCopy" hidden>Kopyala</button>
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Vazgeç</button>
         <button type="submit" class="btn btn-primary">Kaydet</button>

@@ -169,6 +169,14 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
 
 Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
 
+Harcama formu: tutar en üstte (Türkçe yazım: `1.250,50`), açıklamada önceki harcamalardan öneri, taksit, kart
+(her kartta bu tarihli harcamanın ilk ödemesi; ilk ödemesi belirgin biçimde en geç olan "en geç", limiti dolan
+"limit dolu"), Bugün / Dün kısayollu tarih, kategori, kişi (tek kişide gizli). Altta sabit özet (taksit × tutar, ilk
+ödeme), önizlemede ekstre, karttaki kullanılabilir limit ve açılır ödeme planı. Düzenlemede ödenen / kalan taksit;
+**Kopyala** aynı harcamayı bugünün tarihiyle yeni harcama olarak açar. Kategori elle seçilmediyse kaydedince verilir:
+kullanıcının aynı işyerine önceki seçimi hemen, cihazdaki modelin önerisi kayıttan sonra (açıklama değiştiyse önceki
+otomatik kategori yenilenir; elle seçilen kategoriye dokunulmaz).
+
 ### Varlıklar: TL, dolar, euro, gram altın
 
 **Varlıklar** sekmesinde tarihli giriş / çıkış hareketleri tutulur (maaş, döviz ya da altın alımı, harcama, satış).

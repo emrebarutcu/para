@@ -1394,3 +1394,21 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .ai-other summary { cursor: pointer; color: var(--text-2); font-weight: 500; }
 .ai-other[open] summary { margin-bottom: 8px; }
 .ai-other .hint { margin-top: 8px; }
+
+/* ── Harcama formu ── */
+.p-status { font-size: 13px; font-weight: 500; color: var(--text-2); padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-2); }
+.chip .chip-sub { font-size: 12px; font-weight: 500; opacity: .65; font-variant-numeric: tabular-nums; }
+.chip .chip-tag { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); }
+.chip.on .chip-tag { background: color-mix(in srgb, var(--on-primary) 22%, transparent); color: var(--on-primary); }
+.date-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.date-row .chips { flex-wrap: nowrap; }
+.date-row input[type="date"] { flex: 1; min-width: 150px; }
+.preview .plan { margin-top: 4px; }
+.preview .plan summary { cursor: pointer; font-weight: 600; color: var(--text); }
+.plan-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-variant-numeric: tabular-nums; }
+.plan-list li { display: flex; justify-content: space-between; gap: 12px; }
+.plan-list li.paid { color: var(--text-3); text-decoration: line-through; }
+.sheet-foot.wrap { flex-wrap: wrap; }
+.sheet-sum { flex-basis: 100%; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+.sheet-sum:empty { display: none; }
+.sheet-sum strong { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
