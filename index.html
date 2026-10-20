@@ -239,56 +239,53 @@
       <div class="sheet-body">
         <p class="p-status" id="purchaseStatus" hidden></p>
 
-        <div class="field">
-          <div class="amount-input">
-            <span class="cur">₺</span>
-            <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Tutar" />
-          </div>
-          <div class="seg seg-full" role="radiogroup" aria-label="Tutar türü">
-            <label><input type="radio" name="mode" value="total" checked /><span>Toplam tutar</span></label>
-            <label><input type="radio" name="mode" value="per" /><span>Taksit başına</span></label>
-          </div>
+        <div class="amount-input">
+          <span class="cur">₺</span>
+          <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Tutar" />
         </div>
 
-        <label class="field">
-          <span class="field-label">Ne aldın?</span>
-          <input name="desc" type="text" placeholder="örn. IKEA" autocomplete="off" list="descList" enterkeyhint="done" required />
-          <datalist id="descList"></datalist>
-        </label>
-
-        <div class="field">
-          <span class="field-label">Kategori <small id="categoryHint" class="cat-hint" aria-live="polite"></small></span>
-          <div class="chips scroll-x" id="categoryChips" role="radiogroup" aria-label="Kategori"></div>
-        </div>
+        <input class="desc-input" name="desc" type="text" placeholder="Ne aldın? örn. IKEA" autocomplete="off" list="descList" enterkeyhint="done" required aria-label="Ne aldın?" />
+        <datalist id="descList"></datalist>
 
         <div class="field">
           <span class="field-label">Taksit</span>
           <div class="chips scroll-x" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
-          <label class="inline-input">
-            <span>Diğer</span>
-            <input name="count" type="number" min="1" max="60" step="1" inputmode="numeric" />
+          <label class="inline-input" id="countOther" hidden>
+            <input name="count" type="number" min="1" max="60" step="1" inputmode="numeric" aria-label="Taksit sayısı" />
+            <span>taksit</span>
           </label>
+          <label class="check" id="perRow" hidden><input type="checkbox" name="per" /> Yazdığım tutar taksit başına</label>
         </div>
 
         <div class="field">
-          <span class="field-label">Ödeme şekli <small>· ilk ödeme</small></span>
+          <span class="field-label">Kart</span>
           <div class="chips" id="cardChips" role="radiogroup" aria-label="Kart"></div>
+          <button type="button" class="card-tip" id="cardTip" hidden></button>
         </div>
 
-        <div class="field">
-          <span class="field-label">Harcama tarihi</span>
-          <div class="date-row">
-            <div class="chips" id="dateChips" role="group" aria-label="Tarih kısayolları">
-              <button type="button" class="chip" data-day="0">Bugün</button>
-              <button type="button" class="chip" data-day="-1">Dün</button>
+        <div class="rows">
+          <details class="row" id="dateRow">
+            <summary><span>Tarih</span><span class="val" id="dateVal"></span></summary>
+            <div class="row-body date-row">
+              <div class="chips" id="dateChips" role="group" aria-label="Tarih kısayolları">
+                <button type="button" class="chip" data-day="0">Bugün</button>
+                <button type="button" class="chip" data-day="-1">Dün</button>
+              </div>
+              <input name="date" type="date" aria-label="Harcama tarihi" />
             </div>
-            <input name="date" type="date" aria-label="Harcama tarihi" />
-          </div>
-        </div>
-
-        <div class="field" id="personField">
-          <span class="field-label">Kimin için</span>
-          <div class="chips" id="personChips" role="radiogroup" aria-label="Kişi"></div>
+          </details>
+          <details class="row" id="categoryRow">
+            <summary><span>Kategori</span><span class="val"><b id="categoryVal"></b><small id="categoryHint" class="cat-hint" aria-live="polite"></small></span></summary>
+            <div class="row-body">
+              <div class="chips" id="categoryChips" role="radiogroup" aria-label="Kategori"></div>
+            </div>
+          </details>
+          <details class="row" id="personField">
+            <summary><span>Kimin için</span><span class="val" id="personVal"></span></summary>
+            <div class="row-body">
+              <div class="chips" id="personChips" role="radiogroup" aria-label="Kişi"></div>
+            </div>
+          </details>
         </div>
 
         <div class="preview" id="purchasePreview" aria-live="polite"></div>
