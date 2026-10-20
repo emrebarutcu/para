@@ -1441,29 +1441,37 @@ function renderPurchases() {
     return { p, pays, plan, left: left.length, paid: plan - left.length, next: left[0]?.key ?? null };
   });
 
+  // Düzenli giderler: tekrarlayan varlık çıkışları (kira, aidat); sürenler sonda
+  const regular = knownEntries().filter(e => e.amount < 0 && V.repeatOf(e) != null)
+    .map(e => ({ e, next: V.nextDate(e, today) }));
+
   renderPersonFilter(els.personFilter, personFilter,
-    id => all.filter(x => x.left && (id === "all" || x.p.personId === id)).length,
+    id => all.filter(x => x.left && (id === "all" || x.p.personId === id)).length
+      + regular.filter(x => x.next && (id === "all" || x.e.personId === id)).length,
     id => { personFilter = id; });
 
   const mine = all.filter(x => personFilter === "all" || x.p.personId === personFilter);
+  const myRegular = regular.filter(x => personFilter === "all" || x.e.personId === personFilter)
+    .sort((a, b) => (!a.next - !b.next) || (a.next ?? "").localeCompare(b.next ?? "") || a.e.desc.localeCompare(b.e.desc, "tr"));
   const active = mine.filter(x => x.left).sort((a, b) => a.next.localeCompare(b.next) || a.p.desc.localeCompare(b.p.desc, "tr"));
   const done = mine.filter(x => !x.left).sort((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key));
 
   els.purchaseWrap.replaceChildren();
   if (inbox.length) els.purchaseWrap.append(inboxPanel());
-  if (!mine.length) {
+  if (!mine.length && !myRegular.length) {
     const btn = el("button", "btn btn-primary");
     btn.type = "button";
     btn.append(icon("plus"), document.createTextNode("Harcama ekle"));
     btn.addEventListener("click", () => openPurchaseSheet());
     els.purchaseWrap.append(emptyState("receipt", "Henüz harcama yok",
-      "Peşin ya da taksitli harcamalarını ekle; ödeme tarihlerini kartının kesim ve son ödeme gününe göre hesaplarım.", btn));
+      "Peşin ya da taksitli harcamalarını ekle; ödeme tarihlerini kartının kesim ve son ödeme gününe göre hesaplarım.", btn),
+      regularHead());
     return;
   }
 
   const groups = el("div", "purchase-groups");
   if (active.length) groups.append(purchaseList(active, today));
-  else groups.append(el("p", "empty", "Devam eden harcama yok"));
+  else if (mine.length) groups.append(el("p", "empty", "Devam eden harcama yok"));
 
   if (done.length) {
     const toggle = el("button", "section-toggle" + (showDone ? " open" : ""));
@@ -1474,7 +1482,29 @@ function renderPurchases() {
     groups.append(toggle);
     if (showDone) groups.append(purchaseList(done, today));
   }
+
+  groups.append(regularHead());
+  if (myRegular.length) {
+    const panel = el("div", "panel list-panel");
+    for (const { e } of myRegular) panel.append(entryRow(e, rates?.rates, today));
+    groups.append(panel);
+  } else {
+    groups.append(el("p", "empty", "Kira, aidat gibi her ay ödediklerini ekle; nakit akışına ve varlıklarına da yansır."));
+  }
   els.purchaseWrap.append(groups);
+}
+
+// Düzenli giderler başlığı ve ekleme düğmesi (kayıt varlık hareketi olarak tutulur: TL çıkışı, her ay)
+function regularHead() {
+  const head = el("header", "panel-head");
+  const add = el("button", "btn btn-ghost sm");
+  add.type = "button";
+  add.append(icon("plus"), el("span", "", "Ekle"));
+  add.addEventListener("click", () => openEntrySheet(null, "TRY", {
+    dir: "out", repeat: 0, personId: personFilter !== "all" ? personFilter : null,
+  }));
+  head.append(el("h2", "", "Düzenli giderler"), add);
+  return head;
 }
 
 function purchaseList(items, today) {
@@ -2368,12 +2398,13 @@ function openEntrySheet(e, asset, draft) {
   const code = e?.asset ?? asset ?? lastAsset;
   els.assetChips.replaceChildren(...V.ASSETS.map(a => radioChip("asset", a.code, a.name, a.code === code)));
   const personId = e ? e.personId
+    : personById(draft?.personId) ? draft.personId
     : entryFilter !== "all" ? entryFilter
     : personById(lastPersonId) ? lastPersonId : state.people[0].id;
   els.entryPersonChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
 
-  f.elements.dir.value = e && e.amount < 0 ? "out" : "in";
+  f.elements.dir.value = e ? (e.amount < 0 ? "out" : "in") : draft?.dir ?? "in";
   f.elements.amount.value = e ? Math.abs(e.amount) : "";
   f.elements.desc.value = e?.desc ?? draft?.desc ?? "";
   f.elements.date.value = e?.date ?? T.todayKey();
