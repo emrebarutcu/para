@@ -266,10 +266,12 @@ function buildPurchase(state, args, today, base = null) {
   const p = { desc, cardId: card ? card.id : null, count, total };
   // Kategori: verilirse kullanıcının seçimi sayılır (uygulama bundan öğrenir); verilmezse düzenlenen kayıttaki kalır,
   // yeni kayıtta kullanıcının aynı işyerine daha önce verdiği kategori önerilir
+  // Açıklama değişince kullanıcının seçmediği (önerilmiş) kategori yeniden önerilir (app.js'teki gibi)
   const category = args.category !== undefined ? categoryArg(args.category) : undefined;
+  const keep = K.valid(base?.category) && (base.categoryBy === "user" || base.desc === desc);
   if (category) Object.assign(p, { category, categoryBy: "user" });
-  else if (category === undefined && K.valid(base?.category)) Object.assign(p, { category: base.category, ...(base.categoryBy && { categoryBy: base.categoryBy }) });
-  else if (category === undefined && !base?.id) {
+  else if (category === undefined && keep) Object.assign(p, { category: base.category, ...(base.categoryBy && { categoryBy: base.categoryBy }) });
+  else if (category === undefined) {
     const guess = K.remembered(desc, K.learned(state.installments));
     if (guess) Object.assign(p, { category: guess, categoryBy: "ai" });
   }

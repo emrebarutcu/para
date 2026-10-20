@@ -561,6 +561,10 @@ test("kategoriler, içgörüler, kategori dağılımı ve alışveriş simülasy
   assert.match((await call("add_purchase", { description: "x", amount: 1, card: "nakit", category: "kumar" })).error, /category must be one of/);
   // Düzenlemede verilmeyen kategori kalır, null kaldırır
   assert.equal((await call("update_purchase", { id: a.purchase.id, amount: 2100 })).purchase.category, "market");
+  // Önerilmiş kategori açıklama değişince yeniden önerilir; kullanıcının seçtiği kalır
+  assert.equal((await call("update_purchase", { id: b.purchase.id, description: "Kira" })).purchase.category, null);
+  assert.equal((await call("update_purchase", { id: b.purchase.id, description: "MIGROS TICARET A.S. 01" })).purchase.category, "market");
+  assert.equal((await call("update_purchase", { id: a.purchase.id, description: "Migros Kadıköy" })).purchase.category, "market");
   assert.equal((await call("update_purchase", { id: b.purchase.id, category: null })).purchase.category, null);
   assert.equal((await call("list_purchases", { category: null })).count, 1);
   assert.equal((await call("list_purchases", { category: "market" })).count, 1);
