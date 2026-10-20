@@ -149,7 +149,8 @@ cihazda değişirse sonra yazan kazanır. Hiç eşitlenmemiş cihazda buluttaki 
 
 ## 4. Kartlar ve nakit akışı
 
-Uygulama beş sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, sıradaki ödemeler, kişiler, kategoriler, aylık grafik),
+Uygulama beş sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, önümüzdeki 30 günün nakit grafiği, sıradaki ödemeler,
+kişiler, kategoriler, aylık grafik),
 **Akış** (ödemeler ay ay, tarih + kart bazında; "Tablo" görünümü Excel'deki ay × kişi özeti),
 **Harcamalar**, **Kartlar** ve **Varlıklar**. Yeni harcama (Varlıklar'da yeni hareket) `+` düğmesiyle eklenir;
 içe/dışa aktarma ve tema ayarlardadır.
@@ -201,6 +202,11 @@ bakım, Eğitim, Eğlence, Seyahat, Diğer). Formda seçilir; kullanıcının se
 aynı işyerinin sonraki harcamasına (farklı yazılışı dahil: "MIGROS TICARET A.S." / "Migros Ticaret A.Ş. 0042") aynı
 kategori verilir. Sabit bir işyeri sözlüğü yoktur; öğrenilmemiş işyerine dil modeli kategori önerir
 (`category_by = 'ai'`, aşağıda: bulutta ya da cihazda). Kullanıcı düzeltirse düzeltmesi öğrenilir.
+
+Özet'teki **Nakit · önümüzdeki 30 gün** grafiği bugünkü TL bakiyesini gün gün ileri taşır: TL hareketleri (tekrarlayanın
+her tekrarı kendi gününde, tarihi gelmemiş tek seferlik hareket de kendi gününde) ve kart / nakit ödemeleri (bugün
+ödenecekler dahil). Döviz ve altın nakit sayılmaz. Bakiye sıfırın altına inen günler kırmızıdır; üzerine gelince (ya da
+odaklanıp ok tuşlarıyla) o günün hareketleri ve gün sonu bakiyesi görünür.
 
 Özet'te **İçgörüler** (`icgoru.js`, model gerekmez; MCP `get_insights` aynısını döndürür): bu ayın serbest nakdi ya da
 açık veren ilk ay (gelir ve sabit giderler varlıklardaki tekrarlayan giriş / çıkışlardan), önümüzdeki 6 ayın taksit /

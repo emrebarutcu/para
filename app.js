@@ -12,6 +12,7 @@ function getStorageKey() {
 
 const MAX_MONTHS = 60;           // akışta gösterilecek en fazla ay
 const CHART_MONTHS = 12;         // özetteki grafikte gösterilecek ay
+const CASH_DAYS = 30;            // özetteki nakit grafiğinin bugünden sonra gösterdiği gün
 const CASH_COLOR = "var(--cash)";
 const VIEWS = ["ozet", "akis", "harcamalar", "kartlar", "varliklar"];
 const COUNT_PRESETS = [1, 2, 3, 4, 6, 9, 12];
@@ -266,6 +267,7 @@ const els = {
   timelineCal: $("timelineCal"), timeline: $("timeline"),
   chartBy: $("chartBy"), legend: $("chartLegend"), chart: $("planChart"), chartEmpty: $("chartEmpty"),
   tooltip: $("chartTooltip"),
+  cashRange: $("cashRange"), cashSum: $("cashSum"), cashChart: $("cashChart"), cashEmpty: $("cashEmpty"), cashNote: $("cashNote"),
   flowMode: $("flowMode"), flowList: $("flowList"), flowTable: $("flowTable"), table: $("planTable"),
   personFilter: $("personFilter"), purchaseWrap: $("purchaseWrap"), managePeople: $("managePeople"),
   cardGrid: $("cardGrid"), addCard: $("addCard"),
@@ -344,6 +346,7 @@ function renderOverview(months, start, last) {
   els.endLabel.textContent = months.length ? `${T.monthShort(months[months.length - 1].idx)} ${T.yearOf(months[months.length - 1].idx)}` : "—";
 
   renderInsights();
+  renderCash();
   renderUpcoming(last);
   renderPeopleSummary(months, start);
   renderTimeline(start);
@@ -994,6 +997,200 @@ function showTooltip(m, series, x, y) {
 }
 
 function hideTooltip() { els.tooltip.hidden = true; }
+
+// ---------- Nakit · önümüzdeki 30 gün ----------
+// Bugünkü TL bakiyesi gün gün ileri taşınır: TL hareketleri (tekrarlayanın her tekrarı kendi gününde) ve kart / nakit
+// ödemeleri. Tarihi gelmemiş tek seferlik hareket de kendi gününde girer (bakiyeye bugünden yazılmaz).
+// days[d]: bugünden d gün sonrası, value o günün sonundaki bakiye. Döviz ve altın nakit sayılmaz.
+function cashForecast(today) {
+  const end = T.addDays(today, CASH_DAYS);
+  const from = T.parseDate(today).idx, to = T.parseDate(end).idx;
+  const moves = new Map();   // tarih → [{ desc, value }]
+  const add = (date, m) => {
+    if (!moves.has(date)) moves.set(date, []);
+    moves.get(date).push(m);
+  };
+
+  let balance = 0, any = false;
+  for (const e of knownEntries()) {
+    if (e.asset !== "TRY" || !Number.isFinite(e.amount)) continue;
+    any = true;
+    if (V.repeatOf(e) == null) {
+      if (e.date <= today) balance += e.amount;
+      else if (e.date <= end) add(e.date, { desc: e.desc, value: e.amount });
+      continue;
+    }
+    balance += e.amount * V.processedCount(e, today);   // bugünkü tekrar dahil
+    for (let idx = from; idx <= to; idx++) {
+      const date = V.occurrenceIn(e, idx);
+      if (date && date > today && date <= end) add(date, { desc: e.desc, value: e.amount });
+    }
+  }
+  // Bugün ödenecekler henüz ödenmemiş sayılır, bugünün sonuna düşer
+  for (const m of T.buildCashflow(state.people, state.cards, state.installments, from, to)) {
+    for (const ev of m.events) {
+      if (ev.date < today || ev.date > end) continue;
+      any = true;
+      add(ev.date, { desc: ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit ödemeler", value: -ev.total });
+    }
+  }
+
+  const start = Math.round(balance * 100) / 100;
+  const days = [];
+  for (let d = 0, v = start; d <= CASH_DAYS; d++) {
+    const date = T.addDays(today, d);
+    const list = moves.get(date) || [];
+    for (const m of list) v += m.value;
+    v = Math.round(v * 100) / 100;
+    days.push({ date, value: v, moves: list });
+  }
+  return { start, days, any };
+}
+
+let cashHover = null;   // klavyeyle / işaretçiyle seçili gün
+
+function renderCash() {
+  const today = T.todayKey();
+  const data = cashForecast(today);
+  const { start, days } = data;
+  const lastDay = days[days.length - 1];
+  els.cashRange.textContent = `${fmtDayShort(today)} – ${fmtDayShort(lastDay.date)}`;
+
+  const low = days.reduce((a, b) => (b.value < a.value ? b : a));
+  const signed = n => (n < 0 ? "−" : "") + fmt(Math.abs(n));
+  const delta = Math.round((lastDay.value - start) * 100) / 100;
+  const stat = (label, text, cls, title) => {
+    const d = el("div");
+    d.append(el("dt", "", label), el("dd", cls, text));
+    if (title) d.title = title;
+    return d;
+  };
+  els.cashSum.replaceChildren(
+    stat("Bugün", signed(start), start < 0 ? "out-text" : ""),
+    stat(`${fmtDayShort(lastDay.date)} sonunda`, signed(lastDay.value), lastDay.value < 0 ? "out-text" : "",
+      delta ? `30 günde ${delta > 0 ? "+" : "−"}${fmt(Math.abs(delta))}` : ""),
+    stat(`En düşük · ${fmtDayShort(low.date)}`, signed(low.value), low.value < 0 ? "out-text" : ""));
+  els.cashSum.hidden = !data.any;
+
+  const svg = els.cashChart;
+  hideTooltip();
+  els.cashEmpty.hidden = data.any;
+  els.cashNote.hidden = !data.any;
+  svg.style.display = data.any ? "" : "none";
+  if (!data.any) {
+    els.cashEmpty.textContent = "TL girişlerini ve çıkışlarını Varlıklar'a ekleyince nakdin önümüzdeki 30 günü burada görünür.";
+    svg.innerHTML = "";
+    return;
+  }
+
+  const W = Math.round(svg.getBoundingClientRect().width) || 880, H = 200;
+  const PL = 46, PR = 8, PT = 22, PB = 26;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+  const n = days.length;
+  const toX = d => PL + plotW * d / n;   // d. gün [d, d+1) aralığını kaplar
+  const values = [start, ...days.map(x => x.value)];
+  const lo = Math.min(0, ...values), hi = Math.max(0, ...values);
+  const { step } = niceScale(hi - lo || 1000, 4);
+  const bottom = Math.floor(lo / step + 1e-9) * step, top = Math.max(Math.ceil(hi / step - 1e-9) * step, bottom + step);
+  const toY = v => PT + plotH * (top - v) / (top - bottom);
+  const y0 = toY(0);
+
+  let gridSvg = "", yLblSvg = "", xLblSvg = "";
+  for (let v = bottom; v <= top + step * 0.01; v += step) {
+    const y = toY(v).toFixed(1);
+    gridSvg += `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="${Math.abs(v) < step * 1e-6 ? "var(--line-2)" : "var(--line)"}" stroke-width="1"/>`;
+    yLblSvg += `<text x="${PL - 10}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="var(--text-3)">${fmtShort(v)}</text>`;
+  }
+  const every = 7 * Math.max(1, Math.ceil(70 / (plotW / n * 7)));   // haftalık; dar ekranda iki haftada bir
+  for (let d = 0; d < n; d += every) {
+    const x = toX(d + 0.5);
+    xLblSvg += `<text x="${x.toFixed(1)}" y="${H - 6}" text-anchor="${d ? "middle" : "start"}" font-size="11" fill="var(--text-3)">${d ? fmtDayShort(days[d].date) : "Bugün"}</text>`;
+  }
+
+  // Basamaklı çizgi: değer gün başında değişir, gün boyunca sabit kalır
+  let line = `M${toX(0).toFixed(1)},${toY(start).toFixed(1)}`;
+  days.forEach((x, d) => { line += ` H${toX(d).toFixed(1)} V${toY(x.value).toFixed(1)}`; });
+  line += ` H${toX(n).toFixed(1)}`;
+  const area = `${line} V${y0.toFixed(1)} H${toX(0).toFixed(1)} Z`;
+
+  const dotAt = (d, cls = "") => `<circle class="${cls}" cx="${toX(d + 0.5).toFixed(1)}" cy="${toY(days[d].value).toFixed(1)}" r="4" fill="${days[d].value < 0 ? "var(--danger)" : "var(--text)"}" stroke="var(--surface)" stroke-width="2"/>`;
+  const lowIdx = days.indexOf(low);
+  let marks = dotAt(n - 1);
+  if (low.value < start && lowIdx !== n - 1) marks += dotAt(lowIdx);
+  const endY = toY(lastDay.value);
+  const endLbl = `<text x="${(W - PR).toFixed(1)}" y="${(endY < PT + 14 ? endY + 18 : endY - 9).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="var(--text)">${fmtShort(lastDay.value)}</text>`;
+
+  // Sıfırın üstü mürekkep, altı tehlike rengi (aynı çizgi iki kırpmayla)
+  const id = "cash-clip";
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = `<defs>
+      <clipPath id="${id}-pos"><rect x="0" y="0" width="${W}" height="${y0.toFixed(1)}"/></clipPath>
+      <clipPath id="${id}-neg"><rect x="0" y="${y0.toFixed(1)}" width="${W}" height="${(H - y0).toFixed(1)}"/></clipPath>
+    </defs>${gridSvg}
+    <path d="${area}" class="cash-area" clip-path="url(#${id}-pos)"/>
+    <path d="${area}" class="cash-area neg" clip-path="url(#${id}-neg)"/>
+    <path d="${line}" class="cash-line" clip-path="url(#${id}-pos)"/>
+    <path d="${line}" class="cash-line neg" clip-path="url(#${id}-neg)"/>
+    ${marks}${endLbl}${yLblSvg}${xLblSvg}
+    <g class="cash-cross" visibility="hidden"><line x1="0" y1="${PT}" x2="0" y2="${PT + plotH}" stroke="var(--line-2)" stroke-width="1"/><circle r="4" stroke="var(--surface)" stroke-width="2"/></g>`;
+
+  const cross = svg.querySelector(".cash-cross");
+  const show = (d, x, y) => {
+    cashHover = d;
+    const cx = toX(d + 0.5).toFixed(1), cy = toY(days[d].value).toFixed(1);
+    cross.setAttribute("visibility", "visible");
+    cross.querySelector("line").setAttribute("x1", cx);
+    cross.querySelector("line").setAttribute("x2", cx);
+    const c = cross.querySelector("circle");
+    c.setAttribute("cx", cx);
+    c.setAttribute("cy", cy);
+    c.setAttribute("fill", days[d].value < 0 ? "var(--danger)" : "var(--text)");
+    if (x == null) {
+      const b = svg.getBoundingClientRect();
+      x = b.left + b.width * cx / W;
+      y = b.top + b.height * cy / H;
+    }
+    showCashTooltip(days[d], x, y);
+  };
+  const hide = () => { cashHover = null; cross.setAttribute("visibility", "hidden"); hideTooltip(); };
+  const dayAt = clientX => {
+    const b = svg.getBoundingClientRect();
+    const x = (clientX - b.left) * W / b.width;
+    return Math.min(n - 1, Math.max(0, Math.floor((x - PL) / plotW * n)));
+  };
+  svg.onpointermove = e => show(dayAt(e.clientX), e.clientX, e.clientY);
+  svg.onpointerleave = hide;
+  svg.onblur = hide;
+  svg.onfocus = () => show(cashHover ?? 0);
+  svg.onkeydown = e => {
+    const move = { ArrowRight: 1, ArrowLeft: -1, End: n, Home: -n }[e.key];
+    if (!move) { if (e.key === "Escape") hide(); return; }
+    e.preventDefault();
+    show(Math.min(n - 1, Math.max(0, (cashHover ?? 0) + move)));
+  };
+}
+
+function showCashTooltip(day, x, y) {
+  const tt = els.tooltip;
+  const today = T.todayKey();
+  tt.replaceChildren(el("span", "tt-date", `${fmtDayShort(day.date)} · ${WEEKDAYS[T.toDate(day.date).getDay()]} · ${relDays(day.date, today)}`));
+  const shown = day.moves.slice(0, 4);
+  for (const m of shown) {
+    const line = el("span", "tt-row");
+    const key = el("i", "tt-key");
+    key.style.background = m.value > 0 ? "var(--income)" : "var(--expense)";
+    line.append(key, el("strong", "", (m.value > 0 ? "+" : "−") + fmt(Math.abs(m.value))), el("span", "tt-name", m.desc));
+    tt.append(line);
+  }
+  if (day.moves.length > shown.length) tt.append(el("span", "tt-name", `+${day.moves.length - shown.length} hareket daha`));
+  if (!day.moves.length) tt.append(el("span", "tt-name", "Hareket yok"));
+  tt.append(el("span", "tt-total", `Gün sonu ${day.value < 0 ? "−" : ""}${fmt(Math.abs(day.value))}`));
+  tt.hidden = false;
+  const w = tt.offsetWidth, h = tt.offsetHeight;
+  const left = x + 14 + w > window.innerWidth - 8 ? x - 14 - w : x + 14;
+  tt.style.left = Math.max(8, left) + "px";
+  tt.style.top = Math.max(8, y - h - 12) + "px";
+}
 
 // ---------- Akış ----------
 function renderFlow(months) {
@@ -2860,7 +3057,7 @@ els.flowMode.addEventListener("click", e => {
 let resizeFrame = 0;
 window.addEventListener("resize", () => {
   cancelAnimationFrame(resizeFrame);
-  resizeFrame = requestAnimationFrame(() => { if (view === "ozet") renderChart(chartMonths); });
+  resizeFrame = requestAnimationFrame(() => { if (view === "ozet") { renderChart(chartMonths); renderCash(); } });
 });
 
 // ---------- Service Worker ----------

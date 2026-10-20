@@ -726,6 +726,15 @@ a { color: inherit; }
 .chart .col.hover { opacity: .78; }
 .chart .cf-hit { cursor: pointer; outline: none; }
 
+/* Nakit · 30 gün: basamaklı bakiye çizgisi, sıfırın altı tehlike rengi */
+.cash-panel .footnote { margin-top: 10px; padding: 0; font-size: 12px; }
+.cash-chart { touch-action: pan-y; outline: none; border-radius: 8px; }
+.cash-chart:focus-visible { box-shadow: 0 0 0 3px var(--focus); }
+.cash-line { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.cash-line.neg { stroke: var(--danger); }
+.cash-area { fill: color-mix(in srgb, var(--text) 7%, transparent); stroke: none; }
+.cash-area.neg { fill: color-mix(in srgb, var(--danger) 12%, transparent); }
+
 .chart-tooltip {
   position: fixed;
   z-index: 60;
