@@ -83,6 +83,11 @@ create table if not exists entries (
 alter table entries add column if not exists repeat_count integer
   check (repeat_count = 0 or repeat_count between 2 and 600);
 
+-- Harcama kategorisi (2.x'te yoktu; var olan tabloya eklenir): kategori.js'teki kimlik (market, yeme, …). category_by:
+-- 'user' kullanıcı seçti ya da onayladı (uygulama bundan öğrenir), 'ai' cihazdaki dil modeli önerdi. Boşsa kategorisiz.
+alter table purchases add column if not exists category text check (category ~ '^[a-z]{1,20}$');
+alter table purchases add column if not exists category_by text check (category_by in ('user', 'ai'));
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);

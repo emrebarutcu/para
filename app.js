@@ -2,6 +2,9 @@
 const T = window.Taksit;
 const E = window.Eposta;
 const V = window.Varlik;
+const K = window.Kategori;
+const I = window.Icgoru;
+const YZ = window.YZ;
 const STORAGE_KEY_BASE = "cashflow.v1";
 function getStorageKey() {
   return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
@@ -18,6 +21,8 @@ const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // ta
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates" };
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
+const INSIGHTS_SHOWN = 3;        // özette ilk görünen içgörü sayısı
+const SUGGEST_DELAY = 450;       // açıklama yazılırken kategori önerisi için bekleme (ms)
 
 const { SERIES_COUNT, defaultState, validDay, defaultCard, nextColor, hydrate } = T;
 
@@ -59,6 +64,13 @@ let rates = readRates();      // son alınan kurlar: { rates: { TRY, USD, EUR, G
 let ratesFailed = false;
 let ratesTriedAt = 0;
 let ratesLoading = null;
+let insightsOpen = false;     // özette bütün içgörüler açık
+let categoryTouched = false;  // formda kategoriyi kullanıcı seçti
+let categorySource = null;    // formdaki kategori kimden: "user" | "memory" (aynı işyerine önceki seçim) | "ai"
+let suggestTimer = 0;
+let suggestSeq = 0;
+let backfillBusy = false;     // kategorisiz harcamalar ayrılıyor
+const unsure = new Set();     // modelin emin olamadığı harcamalar (bu oturumda yeniden denenmez)
 
 function loadState() {
   stateOwner = window.CF_USER_ID || null;
@@ -277,6 +289,11 @@ const els = {
   inboxAddress: $("inboxAddress"),
   aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"),
   aiAppsGroup: $("aiAppsGroup"), aiApps: $("aiApps"),
+  aiLocalTitle: $("aiLocalTitle"), aiLocalSub: $("aiLocalSub"), aiLocalBtn: $("aiLocalBtn"), aiProgress: $("aiProgress"),
+  aiBackfill: $("aiBackfill"), aiAddNote: $("aiAddNote"), aiOther: $("aiOther"),
+  insightPanel: $("insightPanel"), insightList: $("insightList"), insightMore: $("insightMore"),
+  catPanel: $("catPanel"), catList: $("catList"), catTotal: $("catTotal"), catNote: $("catNote"),
+  categoryChips: $("categoryChips"), categoryHint: $("categoryHint"),
   inboxCheck: $("inboxCheck"), inboxRenew: $("inboxRenew"), inboxTry: $("inboxTry"), inboxTryResult: $("inboxTryResult"),
   moveModal: $("moveModal"), moveSummary: $("moveSummary"), moveKeepBtn: $("moveKeepBtn"), moveDropBtn: $("moveDropBtn"), moveMsg: $("moveMsg"),
   authBtn: $("authBtn"), exportBtn: $("exportBtn"), importInput: $("importInput"),
@@ -324,13 +341,80 @@ function renderOverview(months, start, last) {
   els.remaining.textContent = fmt(months.reduce((s, m) => s + m.total, 0));
   els.endLabel.textContent = months.length ? `${T.monthShort(months[months.length - 1].idx)} ${T.yearOf(months[months.length - 1].idx)}` : "—";
 
+  renderInsights();
   renderUpcoming(last);
   renderPeopleSummary(months, start);
   renderTimeline(start);
+  renderCategories(start);
 
   chartMonths = months.slice(0, CHART_MONTHS);
   renderLegend(chartMonths);
   renderChart(chartMonths);
+}
+
+// ---------- İçgörüler (icgoru.js) ----------
+function renderInsights() {
+  const list = I.insights(state, { today: T.todayKey(), rates: rates?.rates });
+  els.insightPanel.hidden = !list.length;
+  els.insightMore.hidden = list.length <= INSIGHTS_SHOWN;
+  els.insightMore.textContent = insightsOpen ? "Daha az" : `Tümü (${list.length})`;
+  els.insightList.replaceChildren(...(insightsOpen ? list : list.slice(0, INSIGHTS_SHOWN)).map(insightItem));
+}
+
+function insightItem(x) {
+  const li = el("li", `insight ${x.tone}`);
+  li.append(icon(x.tone === "warn" ? "alert" : x.tone === "good" ? "check" : "bulb"));
+  const body = el("div", "insight-body");
+  body.append(el("strong", "", x.title), el("p", "", x.text));
+  li.append(body);
+  if (x.action) {
+    const b = el("button", "btn btn-ghost sm", x.action.label);
+    b.type = "button";
+    b.addEventListener("click", () => insightAction(x));
+    li.append(b);
+  }
+  return li;
+}
+
+function insightAction(x) {
+  if (x.action.kind === "entry") openEntrySheet(null, "TRY", { desc: "Maaş", repeat: 0 });
+  else if (x.action.kind === "ai") openAiSheet();
+  else if (x.action.kind === "share") {
+    const person = x.data.length === 1 ? personById(x.data[0].personId) : null;
+    if (person) sharePerson(person, T.monthIndex(currentMonth));
+    else els.peopleSummary.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+}
+
+els.insightMore.addEventListener("click", () => { insightsOpen = !insightsOpen; renderInsights(); });
+
+// Ayın harcamaları kategoriye göre (harcama tarihine göre; taksitli alışveriş tamamıyla), önceki 3 ayın ortalamasıyla
+function renderCategories(idx) {
+  const b = I.categoryBreakdown(state, idx);
+  els.catPanel.hidden = !b.total;
+  if (!b.total) return;
+  els.catTotal.textContent = fmt(b.total);
+  const max = b.rows[0].value;
+  els.catList.replaceChildren(...b.rows.map(r => {
+    const li = el("li", "cat-row" + (r.id ? "" : " none"));
+    const head = el("div", "cat-head");
+    head.append(el("span", "cat-name", r.name), el("span", "cat-amt", fmt(r.value)));
+    const bar = el("div", "cat-bar");
+    const fill = el("span");
+    fill.style.width = `${(r.value / max) * 100}%`;
+    bar.append(fill);
+    const meta = el("div", "cat-meta");
+    meta.append(el("span", "", `%${Math.round(r.share * 100)}`));
+    if (r.id && r.average > 0) {
+      const d = r.value / r.average - 1;
+      if (Math.abs(d) >= 0.1) meta.append(el("span", d > 0 ? "out-text" : "in-text", `${d > 0 ? "↑" : "↓"} 3 ay ortalamasından %${Math.round(Math.abs(d) * 100)} ${d > 0 ? "fazla" : "az"}`));
+    }
+    li.append(head, bar, meta);
+    return li;
+  }));
+  const loose = b.rows.some(r => !r.id);
+  els.catNote.textContent = "Taksitli alışveriş tamamıyla alındığı aya yazılır."
+    + (loose && !YZ.enabled ? " Kategorisizleri cihazdaki yapay zekâ ayırabilir: Ayarlar → Yapay zekâ." : "");
 }
 
 function renderUpcoming(last) {
@@ -384,8 +468,8 @@ function renderTimeline(start) {
   // Tekrarlayan hareket bu aya düşen tekrarının tarihiyle gelir; varlığı bilinmeyen hareket (içe aktarma) atlanır
   const entries = [];
   for (const e of knownEntries()) {
-    const k = start - (T.parseDate(e.date)?.idx ?? NaN), n = V.repeatOf(e);
-    if (V.asset(e.asset) && k >= 0 && (n == null ? k === 0 : n === 0 || k < n)) entries.push({ e, date: V.occurrenceDate(e, k) });
+    const date = V.asset(e.asset) ? V.occurrenceIn(e, start) : null;
+    if (date) entries.push({ e, date });
   }
   const events = T.buildCashflow(state.people, state.cards, state.installments, start, start)[0].events;
   if (entries.some(x => x.e.asset !== "TRY")) loadRates();
@@ -669,17 +753,53 @@ function eventItemRows(ev) {
   });
 }
 
+// İlk kişi uygulamayı kullanan; diğerlerine (aile üyesi ya da kartını kullanan) ayın ödeme özeti gönderilebilir
 function renderPeopleSummary(months, start) {
   const thisMonth = months.find(m => m.idx === start);
   els.peopleSummary.replaceChildren();
-  for (const p of state.people) {
+  state.people.forEach((p, i) => {
     const remaining = months.reduce((s, m) => s + (m.byPerson[p.id] || 0), 0);
+    const due = thisMonth?.byPerson[p.id] || 0;
     const li = el("li");
     const info = el("div");
     info.append(el("div", "name", p.name), el("div", "sub", remaining ? `kalan ${fmt(remaining)}` : "borç yok"));
-    li.append(avatar(p), info, el("div", "amount", fmt(thisMonth?.byPerson[p.id] || 0)));
+    li.append(avatar(p), info, el("div", "amount", fmt(due)));
+    if (i > 0 && due > 0) {
+      const b = el("button", "icon-btn sm share-btn");
+      b.type = "button";
+      b.setAttribute("aria-label", `${p.name} için ${T.monthName(start)} ödeme özetini gönder`);
+      b.title = "Ödeme özetini gönder";
+      b.append(icon("share"));
+      b.addEventListener("click", () => sharePerson(p, start));
+      li.append(b);
+    }
     els.peopleSummary.append(li);
+  });
+}
+
+// "Merhaba Ali, Ekim 2026 ödemelerin: …" — taksit taksit, kart ve tarihle; kalan toplam
+function shareText(person, idx) {
+  const last = lastPaymentIndex();
+  const months = T.buildCashflow(state.people, state.cards, state.installments, idx, Math.max(idx, last));
+  const lines = [];
+  for (const ev of months[0].events) {
+    for (const it of ev.items) {
+      if (it.purchase.personId !== person.id) continue;
+      const plan = T.planLength(it.purchase);
+      lines.push(`• ${it.purchase.desc}${plan > 1 ? ` (${it.no}/${plan}. taksit)` : ""}: ${fmt(it.amount)} — ${cardName(ev.cardId)}, ${fmtDayShort(ev.date)}`);
+    }
   }
+  const rest = months.slice(1).reduce((s, m) => s + (m.byPerson[person.id] || 0), 0);
+  return [`Merhaba ${person.name}, ${monthLong(idx)} ödemelerin:`, ...lines, `Toplam: ${fmt(months[0].byPerson[person.id] || 0)}`,
+    rest ? `Sonraki aylarda kalan: ${fmt(rest)}` : null].filter(Boolean).join("\n");
+}
+
+async function sharePerson(person, idx) {
+  const text = shareText(person, idx);
+  if (navigator.share) {
+    try { await navigator.share({ text }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
 }
 
 // Ödeme satırı: tarih rozeti, kart, kişi dağılımı ya da kalan gün, tutar
@@ -1094,6 +1214,7 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   meta.append(tag);
   if (p.date) meta.append(el("span", "", fmtDayShort(p.date) + " " + T.yearOf(T.parseDate(p.date).idx)));
   meta.append(el("span", "", plan > 1 ? `${plan} taksit` : "Peşin"));
+  if (K.valid(p.category)) meta.append(el("span", "cat-tag" + (p.categoryBy === "user" ? "" : " ai"), K.category(p.category).name));
   main.append(meta);
   if (plan > 1) {
     const prog = el("div", "progress");
@@ -1410,10 +1531,68 @@ function openPurchaseSheet(p, draft) {
   f.elements.desc.value = src?.desc ?? "";
   f.elements.amount.value = src?.total ? Math.round(src.total * 100) / 100 : "";
   f.elements.date.value = p ? p.date || "" : draft?.date || T.todayKey();
+
+  YZ.warm();
+  categoryTouched = false;
+  categorySource = K.valid(src?.category) ? (src.categoryBy === "user" ? "user" : "ai") : null;
+  els.categoryChips.replaceChildren(...K.CATEGORIES.map(c => radioChip("category", c.id, c.name, c.id === src?.category)));
+  setCategoryHint(categorySource === "ai" ? "öneri" : "");
   syncChecked(f);
   updatePurchasePreview();
   openSheet(els.purchaseSheet);
   if (!p) f.elements.desc.focus();
+  if (draft?.desc && !categorySource) suggestCategory();
+}
+
+// ---------- Kategori önerisi ----------
+// Önce kullanıcının aynı işyerine verdiği kategori (kategori.js), yoksa cihazdaki model (yz.js). Kullanıcı bir
+// kategori seçince öneri durur; seçtiği kategori öğrenilir (categoryBy: "user").
+function setCategoryHint(text, action) {
+  const h = els.categoryHint;
+  h.replaceChildren();
+  if (text) h.append(document.createTextNode(text));
+  if (action) {
+    const b = el("button", "link", action.label);
+    b.type = "button";
+    b.addEventListener("click", action.run);
+    h.append(b);
+  }
+}
+
+function pickCategory(id, source) {
+  for (const r of els.categoryChips.querySelectorAll("input")) r.checked = r.value === id;
+  categorySource = source;
+  syncChecked(els.categoryChips);
+}
+
+async function suggestCategory() {
+  const seq = ++suggestSeq;
+  const desc = els.purchaseForm.elements.desc.value.trim();
+  if (categoryTouched || categorySource === "user") return;
+  if (!desc) { pickCategory(null, null); setCategoryHint(""); return; }
+  const memory = K.learned(state.installments);
+  const known = K.remembered(desc, memory);
+  if (known) { pickCategory(known, "memory"); setCategoryHint("önceki seçimin"); return; }
+  if (!YZ.enabled) {
+    pickCategory(null, null);
+    setCategoryHint("", YZ.supported() ? { label: "Yapay zekâ önersin", run: openAiSheet } : null);
+    return;
+  }
+  setCategoryHint("öneriliyor…");
+  try {
+    const r = await YZ.suggest(desc, memory);
+    if (seq !== suggestSeq || categoryTouched || !els.purchaseSheet.open) return;
+    if (!r) { setCategoryHint(""); return; }
+    if (r.confidence < K.SURE) {
+      pickCategory(null, null);
+      setCategoryHint(`emin değilim · ${K.category(r.category).name} olabilir`);
+      return;
+    }
+    pickCategory(r.category, "ai");
+    setCategoryHint("öneri");
+  } catch {
+    if (seq === suggestSeq) setCategoryHint("öneri alınamadı");
+  }
 }
 
 function collectPurchase() {
@@ -1432,6 +1611,7 @@ function collectPurchase() {
 
   const total = f.mode.value === "per" ? Math.round(amount * count * 100) / 100 : amount;
   const p = { desc, cardId: f.card.value || null, count, total };
+  if (K.valid(f.category.value)) Object.assign(p, { category: f.category.value, categoryBy: categorySource === "user" ? "user" : "ai" });
   if (date) {
     p.date = date;
   } else if (editing?.firstDue) {
@@ -1464,6 +1644,14 @@ function updatePurchasePreview() {
   } else {
     box.append(el("div", "", "Excel'den aktarılan kayıt — tarih girmezsen ödeme ayı korunur"));
   }
+  // Başka bir kartla ilk ödeme belirgin biçimde daha geç geliyorsa söylenir
+  if (card && p.date && !editingId) {
+    const timing = I.cardTiming(state, p.date).filter(x => !x.full);
+    const mine = timing.find(x => x.card.id === card.id), best = timing[0];
+    if (mine && best && best.card.id !== card.id && best.days - mine.days >= 10) {
+      box.append(el("div", "tip", `İpucu: ${best.card.name} ile ilk ödeme ${fmtDay(best.due)}, ${best.days - mine.days} gün daha geç.`));
+    }
+  }
 }
 
 els.purchaseForm.addEventListener("input", e => {
@@ -1472,6 +1660,16 @@ els.purchaseForm.addEventListener("input", e => {
   if (e.target.name === "countPreset") f.count.value = e.target.value;
   if (e.target.name === "count") {
     for (const r of els.countChips.querySelectorAll("input")) r.checked = r.value === String(Math.round(Number(f.count.value)));
+  }
+  if (e.target.name === "category") {
+    categoryTouched = true;
+    categorySource = "user";
+    suggestSeq++;
+    setCategoryHint("");
+  }
+  if (e.target.name === "desc") {
+    clearTimeout(suggestTimer);
+    suggestTimer = setTimeout(suggestCategory, SUGGEST_DELAY);
   }
   syncChecked(els.purchaseForm);
   updatePurchasePreview();
@@ -1499,6 +1697,7 @@ els.purchaseForm.addEventListener("submit", e => {
     window.syncInboxClaim?.([id]);
   }
   inboxDraftId = null;
+  if (p.categoryBy === "user") unsure.clear();   // yeni örnekle emin olunamayanlar yeniden denenebilir
   lastCardId = p.cardId || "";
   lastPersonId = personId;
   saveState();
@@ -1686,7 +1885,8 @@ els.cardDelete.addEventListener("click", () => {
 els.addCard.addEventListener("click", () => openCardSheet());
 
 // ---------- Varlık hareketi formu ----------
-function openEntrySheet(e, asset) {
+// draft: kayıtlı olmayan, önceden doldurulmuş hareket ({ desc, repeat }; içgörüdeki "Gelir ekle")
+function openEntrySheet(e, asset, draft) {
   if (!state.people.length) { openPeopleSheet(); toast("Önce bir kişi ekle"); return; }
   editingEntryId = e?.id ?? null;
   const f = els.entryForm;
@@ -1705,9 +1905,9 @@ function openEntrySheet(e, asset) {
 
   f.elements.dir.value = e && e.amount < 0 ? "out" : "in";
   f.elements.amount.value = e ? Math.abs(e.amount) : "";
-  f.elements.desc.value = e?.desc ?? "";
+  f.elements.desc.value = e?.desc ?? draft?.desc ?? "";
   f.elements.date.value = e?.date ?? T.todayKey();
-  const repeat = V.repeatOf(e) ?? 1;
+  const repeat = V.repeatOf(e ?? draft) ?? 1;
   els.repeatChips.replaceChildren(...REPEAT_PRESETS.map(([n, label]) => radioChip("repeatPreset", String(n), label, n === repeat)));
   f.elements.repeat.value = repeat >= 2 ? repeat : "";
   syncChecked(f);
@@ -1918,6 +2118,7 @@ async function checkInbox({ quiet = true } = {}) {
       for (const x of added) state.installments.push({ id: uid(), personId, ...emailPurchase(x.parsed, x.card) });
       saveState();
       if (typeof window.syncPushNow === "function") await window.syncPushNow();
+      backfillCategories();
     }
     if (added.length === 1) {
       const p = emailPurchase(added[0].parsed, added[0].card);
@@ -2057,10 +2258,161 @@ async function copyFrom(e) {
 }
 els.inboxSheet.addEventListener("click", copyFrom);
 
-// ---------- Yapay zekâ asistanları (MCP) ----------
-// Asistanlar /mcp'ye (mcp/worker.js) bağlanır; kullanıcı oauth/consent.html'de izin verir.
+// ---------- Kategorisiz harcamaları ayırma ----------
+// Önce kullanıcının aynı işyerine verdiği kategori (model gerekmez, her zaman), sonra cihazdaki model (açıksa), en
+// yeni harcamadan başlayarak. Modelin verdiği kategori "ai" işaretlidir; kullanıcı düzeltirse öğrenilir.
+// manual: kullanıcı düğmeye bastı (emin olunamayanlar da söylenir)
+async function backfillCategories({ manual = false } = {}) {
+  if (backfillBusy) return;
+  backfillBusy = true;
+  const owner = stateOwner;
+  const update = (id, category) => {
+    state.installments = state.installments.map(x => (x.id === id ? { ...x, category, categoryBy: "ai" } : x));
+  };
+  try {
+    const memory = K.learned(state.installments);
+    let changed = 0;
+    for (const p of state.installments) {
+      if (K.valid(p.category)) continue;
+      const c = K.remembered(p.desc, memory);
+      if (c) { update(p.id, c); changed++; }
+    }
+    if (changed) { saveState(); render(); }
+    if (!YZ.enabled) return;
+
+    const todo = state.installments.filter(p => !K.valid(p.category) && p.desc?.trim() && !unsure.has(p.id))
+      .sort((a, b) => (b.date ?? b.firstDue ?? "").localeCompare(a.date ?? a.firstDue ?? "")).map(p => p.id);
+    let done = 0, skipped = 0;
+    for (const id of todo) {
+      if (stateOwner !== owner || !YZ.enabled) break;
+      const p = state.installments.find(x => x.id === id);
+      if (!p || K.valid(p.category)) continue;
+      const r = await YZ.suggest(p.desc, memory);
+      if (!r) break;
+      const cur = state.installments.find(x => x.id === id);
+      if (stateOwner !== owner || !cur || K.valid(cur.category)) continue;
+      if (r.confidence < K.SURE) { unsure.add(id); skipped++; continue; }
+      update(id, r.category);
+      if (++done % 5 === 0) { saveState(); render(); }
+      if (els.aiSheet.open) renderAiStatus();
+    }
+    if (done) { saveState(); render(); }
+    if (done || (manual && skipped)) {
+      toast([done && `${done} harcama kategorilere ayrıldı`, skipped && `${skipped} harcamada emin olamadım`].filter(Boolean).join(" · "));
+    }
+  } catch {
+    // model açılamadı: durum yapay zekâ penceresinde görünür
+  } finally {
+    backfillBusy = false;
+    if (els.aiSheet.open) renderAiStatus();
+  }
+}
+
+// ---------- Yapay zekâ: cihazdaki model ve asistanlar (MCP) ----------
+// Cihazdaki model: yz.js. Asistanlar /mcp'ye (mcp/worker.js) bağlanır; kullanıcı oauth/consent.html'de izin verir.
+const mb = n => Math.round((n || 0) / 1e6);
+
+function renderAiStatus() {
+  const i = YZ.info, on = YZ.enabled;
+  const loose = knownPurchases().filter(p => !K.valid(p.category) && !unsure.has(p.id)).length;
+  const left = knownPurchases().filter(p => !K.valid(p.category) && unsure.has(p.id)).length;
+  els.aiProgress.hidden = true;
+  els.aiBackfill.hidden = true;
+  if (!YZ.supported()) {
+    els.aiLocalTitle.textContent = "Bu tarayıcıda çalışmıyor";
+    els.aiLocalSub.textContent = "Güncel Chrome, Edge, Safari ya da Firefox gerekir.";
+    els.aiLocalBtn.hidden = true;
+    return;
+  }
+  els.aiLocalBtn.hidden = false;
+  els.aiLocalBtn.textContent = on ? "Kapat ve sil" : "İndir ve aç";
+  els.aiLocalBtn.className = on ? "btn btn-ghost sm" : "btn btn-primary sm";
+  if (!on) {
+    els.aiLocalTitle.textContent = "Kapalı";
+    els.aiLocalSub.textContent = `Model bir kez indirilir: yaklaşık ${YZ.SIZE_MB} MB. Wi-Fi önerilir.`;
+    return;
+  }
+  if (i.status === "loading") {
+    els.aiLocalTitle.textContent = i.total && i.loaded < i.total ? "İndiriliyor…" : "Yükleniyor…";
+    els.aiLocalSub.textContent = i.total ? `${mb(i.loaded)} / ${mb(i.total)} MB` : "Hazırlanıyor";
+    els.aiProgress.hidden = !i.total;
+    els.aiProgress.firstElementChild.style.width = `${i.total ? Math.min(100, (i.loaded / i.total) * 100) : 0}%`;
+  } else if (i.status === "error") {
+    els.aiLocalTitle.textContent = "Açılamadı";
+    els.aiLocalSub.textContent = `${i.error} — kapatıp yeniden dene.`;
+  } else {
+    els.aiLocalTitle.textContent = "Açık";
+    els.aiLocalSub.textContent = (i.status === "ready" ? "Hazır" : "Gerektiğinde yüklenir")
+      + (left ? ` · ${left} harcamada emin olamadı; kategorisini Harcamalar'dan seçebilirsin` : "");
+  }
+  if (loose && i.status !== "error") {
+    els.aiBackfill.hidden = false;
+    els.aiBackfill.disabled = backfillBusy;
+    els.aiBackfill.textContent = backfillBusy ? `Ayrılıyor… ${loose} kaldı` : `${loose} kategorisiz harcamayı ayır`;
+  }
+}
+
+YZ.onChange(() => { if (els.aiSheet.open) renderAiStatus(); });
+
+els.aiLocalBtn.addEventListener("click", async () => {
+  if (YZ.enabled) {
+    if (!confirm("Cihazdaki yapay zekâ kapatılsın ve indirilen model silinsin mi? Verilen kategoriler kalır.")) return;
+    await YZ.disable();
+    renderAiStatus();
+    render();
+    return;
+  }
+  const ok = await YZ.enable();
+  renderAiStatus();
+  render();
+  if (ok) { toast("Cihazdaki yapay zekâ hazır"); backfillCategories(); }
+  else toast("Model yüklenemedi");
+});
+
+els.aiBackfill.addEventListener("click", () => { backfillCategories({ manual: true }); renderAiStatus(); });
+
+// Asistana tek tıkla ekleme. Claude'un resmi kurulum bağlantısı "Özel bağlayıcı ekle" penceresini adı ve adresi dolu
+// açar, kullanıcı onaylar. ChatGPT ve Gemini'de adresi dolduran bir bağlantı yok: adres panoya kopyalanır, eklendiği
+// sayfa açılır. Bağlanınca asistan CashFollow izin sayfasını açar (oauth/consent.html).
+const mcpAddress = () => `${location.origin}/mcp`;
+const AI_CLIENTS = {
+  claude: {
+    url: mcp => `https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=CashFollow&connectorUrl=${encodeURIComponent(mcp)}`,
+    note: "Claude'da açılan pencerede adres hazır: Ekle'ye dokun, sonra CashFollow sayfasında giriş yapıp İzin ver'e dokun.",
+  },
+  chatgpt: {
+    url: () => "https://chatgpt.com/plugins",
+    copy: true,
+    note: "Adres kopyalandı. ChatGPT'de + → Add custom MCP server: ad olarak CashFollow yaz, adresi yapıştır, kimlik doğrulamada OAuth seç ve Create as a plugin'e dokun. Sonra CashFollow sayfasında İzin ver.",
+  },
+  gemini: {
+    url: () => "https://gemini.google.com/apps",
+    copy: true,
+    note: "Adres kopyalandı. Gemini'de Custom apps → Add a custom app: adresi yapıştır, Next'e dokun, sonra CashFollow sayfasında İzin ver. Gemini'de özel uygulamalar şimdilik ABD'de, kişisel Google hesabıyla ve İngilizce arayüzde açık.",
+  },
+};
+
+els.aiSheet.addEventListener("click", e => {
+  const b = e.target.closest("[data-ai-add]");
+  if (!b) return;
+  const client = AI_CLIENTS[b.dataset.aiAdd], mcp = mcpAddress();
+  let note = client.note;
+  // Pano, yeni sekme açılmadan (sayfa odaktayken) yazılır; sekme dokunuşun içinde açılır ki engellenmesin
+  if (client.copy) {
+    navigator.clipboard?.writeText(mcp).catch(() => {
+      els.aiAddNote.textContent = note.replace("Adres kopyalandı.", `Adres kopyalanamadı, elle kopyala: ${mcp}`);
+      els.aiOther.open = true;
+    });
+  }
+  window.open(client.url(mcp), "_blank", "noopener");
+  els.aiAddNote.textContent = note;
+  els.aiAddNote.hidden = false;
+});
+
 async function openAiSheet() {
-  els.mcpUrl.textContent = `${location.origin}/mcp`;
+  renderAiStatus();
+  els.aiAddNote.hidden = true;
+  els.mcpUrl.textContent = mcpAddress();
   const loggedIn = !!window.syncGetUser?.();
   els.aiLoginNote.hidden = loggedIn;
   els.aiAppsGroup.hidden = true;
@@ -2351,7 +2703,7 @@ if (typeof window.syncInit === 'function') {
       localStorage.setItem(getStorageKey(), JSON.stringify(state));
       render();
     },
-    onSynced() { checkInbox(); },
+    onSynced() { checkInbox(); backfillCategories(); },
   });
 }
 
@@ -2360,3 +2712,5 @@ document.addEventListener("visibilitychange", () => {
 });
 
 render();
+// Açılışta: kullanıcının daha önce verdiği kategoriler ve (açıksa) cihazdaki modelle kategorisizler
+setTimeout(() => backfillCategories(), 4000);

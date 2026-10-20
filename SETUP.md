@@ -109,6 +109,12 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
 
 ### Yükseltme notları
 
+- **3.0.0** — Harcama kategorisi (`purchases.category`, `purchases.category_by`). Yayından **önce**
+  `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh supabase/tablolar.sql`; yalnızca eksik sütunları
+  ekler); sütunlar yoksa yeni sürüm eşitleyemez. Önbellekteki 2.x sürümleri kategoriyi yazmaz, olduğu gibi bırakır
+  (upsert yalnızca gönderilen sütunları değiştirir). 3.0'a geçen cihaz ilk eşitlemede bütün satırları yeniden çeker.
+  MCP: harcama araçlarına isteğe bağlı `category`, cevaplara `category` / `categoryName`; yeni araçlar `get_insights`,
+  `spending_by_category`, `simulate_purchase`. Kaldırılan ya da uyumsuz değişen araç yok.
 - **2.0.0** — Kartın eski kesim / son ödeme günleri (`cards.history`) ve tekrarlayan varlık hareketleri
   (`entries.repeat_count`). Yayından **önce** `supabase/tablolar.sql` yeniden çalıştırılır
   (`sh supabase/sql.sh supabase/tablolar.sql`; zararsızdır, yalnızca eksik sütunları ekler); sütunlar yoksa yeni sürüm
@@ -143,7 +149,7 @@ cihazda değişirse sonra yazan kazanır. Hiç eşitlenmemiş cihazda buluttaki 
 
 ## 4. Kartlar ve nakit akışı
 
-Uygulama beş sekmeden oluşur: **Özet** (bu ayın ödemesi, sıradaki ödemeler, kişiler, aylık grafik),
+Uygulama beş sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, sıradaki ödemeler, kişiler, kategoriler, aylık grafik),
 **Akış** (ödemeler ay ay, tarih + kart bazında; "Tablo" görünümü Excel'deki ay × kişi özeti),
 **Harcamalar**, **Kartlar** ve **Varlıklar**. Yeni harcama (Varlıklar'da yeni hareket) `+` düğmesiyle eklenir;
 içe/dışa aktarma ve tema ayarlardadır.
@@ -178,6 +184,50 @@ Kurlar sitenin Worker'ından gelir: `GET /api/kur` → `{ rates: { TRY, USD, EUR
 dolar / euro open.er-api.com'dan, gram altın gold-api.com'un ons fiyatından hesaplanır (Kapalıçarşı farkı olmaz).
 Sonuç 10 dakika önbellekte tutulur; uygulama son alınan kuru cihazda saklar, çevrimdışıyken onu kullanır.
 Ek ayar ya da anahtar gerekmez.
+
+### Kategoriler ve içgörüler
+
+Harcamaların kategorisi vardır (`kategori.js`: Market, Yeme-içme, Ulaşım, Alışveriş, Elektronik, Ev, Faturalar, Sağlık ve
+bakım, Eğitim, Eğlence, Seyahat, Diğer). Formda seçilir; kullanıcının seçtiği kategori öğrenilir (`category_by = 'user'`):
+aynı işyerinin sonraki harcamasına (farklı yazılışı dahil: "MIGROS TICARET A.S." / "Migros Ticaret A.Ş. 0042") aynı
+kategori verilir. Sabit bir işyeri sözlüğü yoktur; öğrenilmemiş işyerine cihazdaki dil modeli kategori önerir
+(`category_by = 'ai'`, aşağıda). Kullanıcı düzeltirse düzeltmesi öğrenilir.
+
+Özet'te **İçgörüler** (`icgoru.js`, model gerekmez; MCP `get_insights` aynısını döndürür): bu ayın serbest nakdi ya da
+açık veren ilk ay (gelir ve sabit giderler varlıklardaki tekrarlayan giriş / çıkışlardan), önümüzdeki 6 ayın taksit /
+gelir oranı, dolmak üzere olan limitler, yaklaşan ödeme sıçraması, bir kategoride önceki 3 ayın ortalamasının üstüne
+çıkan harcama, bugünkü alışverişte ilk ödemesi en geç gelen kart, düzenli ödemeler (her ay aynı işyerine peşin ödeme,
+tekrarlayan çıkışlar), diğer kişilerin bu ayki payı, son taksitin ayı. Altında ayın harcamaları kategoriye göre
+(harcama tarihine göre; taksitli alışveriş tamamıyla alındığı aya). Kişiler listesinde diğer kişilerin yanındaki
+düğme o kişinin ayın taksitlerini, kart ve tarihleriyle paylaşım menüsüne (yoksa WhatsApp'a) metin olarak verir.
+Harcama formu, başka bir kartla ilk ödeme en az 10 gün daha geç geliyorsa söyler.
+
+### Cihazdaki yapay zekâ
+
+Ayarlar → **Yapay zekâ** → **İndir ve aç**. Küçük, çok dilli bir dil modeli (`yz.js` → `MODEL`:
+[multilingual-e5-small](https://huggingface.co/Xenova/multilingual-e5-small), 8 bit ONNX, ~135 MB) tarayıcıda
+[transformers.js](https://huggingface.co/docs/transformers.js) ile çalışır: bir kez Hugging Face'ten indirilir,
+tarayıcının önbelleğinde kalır, sonra internetsiz ve ücretsizdir; harcama verisi cihazdan çıkmaz. Model `yz-worker.js`'te
+(Web Worker, WASM) çalışır; harcama formu açılınca önceden yüklenir, 5 dakika kullanılmazsa bellek bırakılır.
+**Kapat ve sil** modeli ve vektörleri siler. Service worker yalnızca kendi `cashfollow-<sürüm>` önbelleklerini temizler;
+model ve vektörler sürüm güncellemesinde silinmez.
+
+Model metni anlam vektörüne çevirir; `kategori.js` açıklamayı her kategorinin anlam kelimelerine (Türkçe ve İngilizce,
+işyeri adı değil) ve kullanıcının kategorisini seçtiği son 64 harcamaya olan benzerliğe göre sıralar. Vektörler cihazda
+saklanır (Cache Storage `yz-vektor`), her açılışta yeniden hesaplanmaz. Ölçümler (bu ortamda, tek çekirdek WASM):
+öneri başına 12–50 ms; model önbellekten açılırken ilk öneri ~3 sn. 115 harcamalık, test markalarını hiç görmemiş bir
+denemede bütün tahminlerin %63'ü doğru; kaçanlar çoğunlukla modelin tanımadığı marka adları (ör. "TEKNOSA"). Bu yüzden
+güveni `Kategori.SURE`'un (0,3) altındaki tahmin kendiliğinden verilmez: eşiği geçen tahminlerin %91'i doğru, harcamaların
+%57'si eşiği geçiyor; kalanını kullanıcı seçer (formda "emin değilim · … olabilir"). Kullanıcı bir işyerinin
+kategorisini bir kez seçince o işyeri hep doğru gelir, benzerlerinde örnek olur.
+
+Neden metin üreten bir model değil: 0.3–1 milyar parametreli modeller (Gemma 3 270M / 1B, Qwen 2.5 0.5B, Qwen 3 0.6B)
+aynı denemede %13–38 doğru buldu, 300–800 MB indirme ve telefonda öneri başına saniyeler gerektirdi.
+
+Açılışta, eşitlemeden sonra ve e-postadan harcama eklenince kategorisiz harcamalar en yeniden başlayarak ayrılır.
+Aynı model ileride mobil uygulamada da kullanılabilir: uygulama web görünümüyle (Capacitor gibi) paketlenirse bu kod
+olduğu gibi çalışır; yerel (native) uygulamada aynı ONNX dosyası ONNX Runtime Mobile ile çalıştırılır, sıralama
+`kategori.js`'teki gibidir.
 
 ## 5. Taksitler Excel'ini içe aktarma
 
@@ -247,6 +297,7 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 | Kişiler | `list_people`, `add_person`, `rename_person`, `delete_person` |
 | Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı), `list_entries`, `add_entry`, `update_entry`, `delete_entry` |
 | Banka e-postaları | `get_inbox_address`, `renew_inbox_address`, `list_inbox`, `check_inbox`, `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
+| İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |
 | Yedek | `export_data`, `import_data` |
 
 Ödeme tarihleri uygulamayla aynı kodla (`taksit.js`, `eposta.js`) hesaplanır; doğrulama kuralları formlardakiyle aynıdır.
@@ -273,8 +324,16 @@ Kontrol: `https://bffqfhgctlgexjdyvaup.supabase.co/.well-known/oauth-authorizati
 
 ### Kullanıcı tarafı
 
+Uygulamada Ayarlar → **Yapay zekâ** → **Tek tıkla ekle** (`app.js` → `AI_CLIENTS`): **Claude** düğmesi Claude'un resmi
+kurulum bağlantısıyla ([install link](https://claude.com/docs/connectors/building/directory-vs-custom#custom-connector-install-link))
+"Özel bağlayıcı ekle" penceresini ad ve adres dolu açar, kullanıcı onaylar. ChatGPT ve Gemini'de adresi dolduran bir
+bağlantı yok: **ChatGPT** ve **Gemini** düğmeleri adresi panoya kopyalar, ekleneceği sayfayı açar
+(`chatgpt.com/plugins` → + → Add custom MCP server; `gemini.google.com/apps` → Custom apps → Add a custom app; Gemini'de
+özel uygulamalar şimdilik ABD'de, kişisel hesapla ve İngilizce) ve ne yapılacağını yazar. Elle:
+
 - **Claude (claude.ai / masaüstü / mobil)**: Ayarlar → Bağlayıcılar → **Özel bağlayıcı ekle** → `https://cashfollow.app/mcp`
-- **ChatGPT**: Ayarlar → Uygulamalar → geliştirici modunda yeni uygulama → `https://cashfollow.app/mcp`, kimlik doğrulama OAuth
+- **ChatGPT**: [chatgpt.com/plugins](https://chatgpt.com/plugins) → + → **Add custom MCP server** → `https://cashfollow.app/mcp`, kimlik doğrulama OAuth
+- **Gemini**: [gemini.google.com/apps](https://gemini.google.com/apps) → Custom apps → **Add a custom app** → `https://cashfollow.app/mcp`
 - **Claude Code**: `claude mcp add --transport http cashfollow https://cashfollow.app/mcp`, sonra `/mcp` ile giriş
 
 Bağlanırken CashFollow izin sayfası açılır; giriş yapıp **İzin ver**'e dokunulur. Sonra "Telefonu 6 taksitle Bonus karta ekle",

@@ -15,6 +15,9 @@
     return n >= lo && n <= hi ? n : null;
   }
   const validId = id => typeof id === "string" && id.length > 0 && id.length <= 100;
+  // Harcama kategorisi (kategori.js) ve kimin verdiği: "user" kullanıcı seçti / onayladı, "ai" cihazdaki model önerdi
+  const validCategory = c => typeof c === "string" && /^[a-z]{1,20}$/.test(c);
+  const CATEGORY_BY = ["user", "ai"];
 
   // "YYYY-MM-DD"; ayı aşan gün ayın son gününe çekilir (taksit.js'teki gibi), geçersizse null
   function dateKey(s) {
@@ -60,6 +63,8 @@
         id: p.id, person_id: p.personId, card_id: validId(p.cardId) ? p.cardId : null,
         description: String(p.desc ?? ""), total, count, date, first_due: firstDue,
         plan_count: int(p.planCount, 1, 100000),
+        category: validCategory(p.category) ? p.category : null,
+        category_by: validCategory(p.category) && CATEGORY_BY.includes(p.categoryBy) ? p.categoryBy : null,
       };
     },
     entries: e => {
@@ -88,6 +93,10 @@
       if (r.date) p.date = r.date;
       if (r.first_due) p.firstDue = r.first_due;
       if (r.plan_count) p.planCount = r.plan_count;
+      if (validCategory(r.category)) {
+        p.category = r.category;
+        if (CATEGORY_BY.includes(r.category_by)) p.categoryBy = r.category_by;
+      }
       return p;
     },
     entries: r => {
@@ -104,7 +113,7 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 2;   // 2: cards.history, entries.repeat_count
+  const SCHEMA = 3;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base) {

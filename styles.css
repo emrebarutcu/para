@@ -1331,3 +1331,66 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ── İçgörüler (icgoru.js) ── */
+.insights { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.insight {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: start;
+  gap: 12px;
+  padding: 11px 0;
+}
+.insight + .insight { border-top: 1px solid var(--line); }
+.insight > .ic { width: 20px; height: 20px; margin-top: 1px; color: var(--text-3); }
+.insight.warn > .ic { color: var(--warn); }
+.insight.good > .ic { color: var(--ok); }
+.insight-body strong { display: block; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.insight-body p { margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.insight > .btn { align-self: center; white-space: nowrap; }
+@media (max-width: 480px) {
+  .insight { grid-template-columns: 22px 1fr; }
+  .insight > .btn { grid-column: 2; justify-self: start; }
+}
+#insightMore { border: none; background: transparent; padding: 0; cursor: pointer; }
+
+/* ── Kategoriye göre harcamalar ── */
+.cat-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.cat-head { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.cat-name { font-weight: 600; }
+.cat-amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cat-bar { height: 6px; margin: 6px 0 4px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.cat-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--text-2); }
+.cat-row.none .cat-name { color: var(--text-3); font-weight: 500; }
+.cat-row.none .cat-bar > span { background: var(--line-2); }
+.cat-meta { display: flex; gap: 10px; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.cat-panel .footnote { padding: 0; }
+
+/* Harcama satırındaki kategori; modelin önerdiği soluk */
+.p-meta .cat-tag { color: var(--text-2); }
+.p-meta .cat-tag.ai { color: var(--text-3); }
+.cat-hint { margin-left: 6px; font-weight: 500; color: var(--text-3); }
+.cat-hint .link { border: none; background: transparent; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.preview .tip { color: var(--text-2); }
+
+/* Kişiye ödeme özeti */
+.people-sum li:has(.share-btn) { grid-template-columns: 36px 1fr auto auto; }
+.share-btn .ic { width: 17px; height: 17px; }
+
+/* ── Cihazdaki yapay zekâ ── */
+.ai-local { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
+.ai-local-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ai-local .row-text { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.ai-local .row-text small { font-size: 12px; color: var(--text-3); }
+.ai-progress { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.ai-progress > span { display: block; height: 100%; width: 0; background: var(--text); transition: width .2s; }
+#aiBackfill { align-self: flex-start; }
+
+/* Asistana tek tıkla ekleme */
+.ai-add { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ai-add .btn { justify-content: center; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+.ai-add-note { padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); }
+.ai-other { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.ai-other summary { cursor: pointer; color: var(--text-2); font-weight: 500; }
+.ai-other[open] summary { margin-bottom: 8px; }
+.ai-other .hint { margin-top: 8px; }
