@@ -149,7 +149,8 @@ cihazda değişirse sonra yazan kazanır. Hiç eşitlenmemiş cihazda buluttaki 
 
 ## 4. Kartlar ve nakit akışı
 
-Uygulama beş sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, sıradaki ödemeler, kişiler, kategoriler, aylık grafik),
+Uygulama beş sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, dönemlik nakit grafiği, sıradaki ödemeler,
+kişiler, kategoriler, aylık grafik),
 **Akış** (ödemeler ay ay, tarih + kart bazında; "Tablo" görünümü Excel'deki ay × kişi özeti),
 **Harcamalar**, **Kartlar** ve **Varlıklar**. Yeni harcama (Varlıklar'da yeni hareket) `+` düğmesiyle eklenir;
 içe/dışa aktarma ve tema ayarlardadır.
@@ -202,6 +203,16 @@ bakım, Eğitim, Eğlence, Seyahat, Diğer). Formda seçilir; kullanıcının se
 aynı işyerinin sonraki harcamasına (farklı yazılışı dahil: "MIGROS TICARET A.S." / "Migros Ticaret A.Ş. 0042") aynı
 kategori verilir. Sabit bir işyeri sözlüğü yoktur; öğrenilmemiş işyerine dil modeli kategori önerir
 (`category_by = 'ai'`, aşağıda: bulutta ya da cihazda). Kullanıcı düzeltirse düzeltmesi öğrenilir.
+
+Özet'teki **Nakit** grafiği bir dönemin TL nakdini gün gün gösterir. Dönem, seçilen başlangıç gününden (Bugün, süren
+tekrarlayan bir TL girişinin günü — ör. maaş günü — ya da ayın herhangi bir günü) bir ay sonrasının bir gün öncesine kadar
+sürer; oklarla önceki / sonraki döneme geçilir, tarih aralığına dokununca bugünün dönemine dönülür. Hareketler TL
+hareketleri (tekrarlayanın her tekrarı kendi gününde, tarihi gelmemiş tek seferlik hareket de kendi gününde) ve kart /
+nakit ödemeleridir; döviz ve altın nakit sayılmaz. **Bakiye** görünümü bugüne bağlıdır: bugünün sonu, bugüne kadarki TL
+bakiyesinden bugün ödenecekler düşülerek bulunur; sonraki günler hareketlerle ileri, önceki günler geri taşınır.
+**Dönem net** görünümü dönem başında sıfırdan başlar, girdi / çıktı / net toplamlarını gösterir. Sıfırın altı kırmızıdır;
+üzerine gelince (ya da odaklanıp ok tuşlarıyla) o günün hareketleri görünür. Seçimler cihazda saklanır
+(`para.cashStart`, `para.cashMode`).
 
 Özet'te **İçgörüler** (`icgoru.js`, model gerekmez; MCP `get_insights` aynısını döndürür): bu ayın serbest nakdi ya da
 açık veren ilk ay (gelir ve sabit giderler varlıklardaki tekrarlayan giriş / çıkışlardan), önümüzdeki 6 ayın taksit /
