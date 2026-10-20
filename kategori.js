@@ -24,7 +24,9 @@
       "bilgisayar mağazası", "ses sistemi", "akıllı telefon", "electronics store", "consumer electronics retailer"] },
     { id: "ev", name: "Ev", hint: "kira, aidat, mobilya, beyaz eşya, ev eşyası", words: [
       "kira", "site aidatı", "mobilya", "beyaz eşya", "ev eşyası dekorasyon", "yapı market", "ev tekstili", "mutfak eşyası",
-      "beyaz eşya bayisi", "oturma grubu", "yapı market dekorasyon", "furniture home appliances", "home furnishing store"] },
+      "beyaz eşya bayisi", "oturma grubu", "yapı market dekorasyon", "koltuk kanepe", "masa sandalye", "dolap gardırop",
+      "avize lamba abajur aydınlatma", "portmanto ayna", "yatak baza", "halı perde", "furniture home appliances",
+      "home furnishing store", "furniture lighting home decor"] },
     { id: "fatura", name: "Faturalar", hint: "elektrik, su, doğalgaz, internet, cep telefonu faturası", words: [
       "elektrik faturası", "su faturası", "doğalgaz faturası", "internet faturası", "cep telefonu faturası GSM operatörü",
       "telekom operatörü", "mobil operatör", "fiber internet", "elektrik dağıtım şirketi", "su idaresi", "utility bill",
@@ -41,7 +43,8 @@
       "video platformu üyeliği", "oyun platformu", "bilet satış", "streaming subscription games cinema", "streaming service video music"] },
     { id: "seyahat", name: "Seyahat", hint: "uçak, otobüs bileti, otel, tatil", words: [
       "uçak bileti havayolu", "otobüs bileti", "otel konaklama", "tatil", "tur", "havayolu şirketi", "otobüs bileti satış",
-      "otel rezervasyon sitesi", "tur şirketi", "flight hotel travel", "airline hotel booking"] },
+      "otel rezervasyon sitesi", "tur şirketi", "havalimanı transferi", "tatil rezervasyonu", "flight hotel travel",
+      "airline hotel booking", "resort booking transfer"] },
     { id: "diger", name: "Diğer", hint: "hiçbirine uymayan", words: [
       "noter", "vergi", "bağış", "hediye", "avukat", "harç", "ceza", "sigorta", "kargo"] },
   ];
@@ -93,6 +96,17 @@
     return found;
   }
 
+  // Modele giden açıklama: tarih / tutar gibi sayılar, parantez içi notlar ve taksit sözleri anlam taşımaz, modeli
+  // yanıltır ("taksit" → "taksi"). Geriye bir şey kalmazsa açıklama olduğu gibi.
+  function clean(desc) {
+    const s = String(desc ?? "")
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/\S*\d\S*/g, " ")
+      .replace(/\btaksit\S*/giu, " ")
+      .replace(/\s+/g, " ").trim();
+    return s || String(desc ?? "").trim();
+  }
+
   // Modele verilecek metinler: kategori kelimeleri ve kullanıcının son seçimleri (anahtar → kategori)
   const words = () => CATEGORIES.flatMap(c => c.words.map(text => ({ id: c.id, text })));
   const examples = memory => [...(memory || new Map())].slice(-EXAMPLES).map(([text, id]) => ({ id, text }));
@@ -121,7 +135,7 @@
     return { category: order[0][0], confidence: 1 / total, scores };
   }
 
-  const api = { CATEGORIES, OTHER, PREFIX, EXAMPLES, SURE, category, valid, keyOf, learned, remembered, words, examples, rank };
+  const api = { CATEGORIES, OTHER, PREFIX, EXAMPLES, SURE, category, valid, keyOf, clean, learned, remembered, words, examples, rank };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Kategori = api;
 })(this);

@@ -169,9 +169,10 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
 
 Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
 
-Harcama formu: tutar en üstte (Türkçe yazım: `1.250,50`), açıklamada önceki harcamalardan öneri, taksit, kart
+Harcama formu: tutar en üstte (Türkçe yazım: `1.250,50`), açıklamada önceki harcamalardan öneri, kategori (kategorisiz
+harcama düzenlenmek üzere açılınca öneri hemen gelir; model emin değilse "… olabilir" önerisine dokunup seçilir), taksit, kart
 (her kartta bu tarihli harcamanın ilk ödemesi; ilk ödemesi belirgin biçimde en geç olan "en geç", limiti dolan
-"limit dolu"), Bugün / Dün kısayollu tarih, kategori, kişi (tek kişide gizli). Altta sabit özet (taksit × tutar, ilk
+"limit dolu"), Bugün / Dün kısayollu tarih, kişi (tek kişide gizli). Altta sabit özet (taksit × tutar, ilk
 ödeme), önizlemede ekstre, karttaki kullanılabilir limit ve açılır ödeme planı. Düzenlemede ödenen / kalan taksit;
 **Kopyala** aynı harcamayı bugünün tarihiyle yeni harcama olarak açar. Kategori elle seçilmediyse kaydedince verilir:
 kullanıcının aynı işyerine önceki seçimi hemen, cihazdaki modelin önerisi kayıttan sonra (açıklama değiştiyse önceki
@@ -222,7 +223,8 @@ model ve vektörler sürüm güncellemesinde silinmez.
 
 Model metni anlam vektörüne çevirir; `kategori.js` açıklamayı her kategorinin anlam kelimelerine (Türkçe ve İngilizce,
 işyeri adı değil) ve kullanıcının kategorisini seçtiği son 64 harcamaya olan benzerliğe göre sıralar. Vektörler cihazda
-saklanır (Cache Storage `yz-vektor`), her açılışta yeniden hesaplanmaz. Ölçümler (bu ortamda, tek çekirdek WASM):
+saklanır (Cache Storage `yz-vektor`), her açılışta yeniden hesaplanmaz. Açıklama modele temizlenerek gider
+(`Kategori.clean`: tarih / tutar gibi sayılar, parantez içi notlar ve "taksit" sözleri atılır). Ölçümler (bu ortamda, tek çekirdek WASM):
 öneri başına 12–50 ms; model önbellekten açılırken ilk öneri ~3 sn. 115 harcamalık, test markalarını hiç görmemiş bir
 denemede bütün tahminlerin %63'ü doğru; kaçanlar çoğunlukla modelin tanımadığı marka adları (ör. "TEKNOSA"). Bu yüzden
 güveni `Kategori.SURE`'un (0,3) altındaki tahmin kendiliğinden verilmez: eşiği geçen tahminlerin %91'i doğru, harcamaların

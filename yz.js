@@ -163,7 +163,7 @@
     // desc için kategori önerisi: { category, confidence }; kapalıysa ya da model açılamadıysa null
     // (açılamadıysa her harcamada yeniden denenmez; kullanıcı kapatıp açınca denenir)
     async suggest(desc, memory) {
-      const text = String(desc ?? "").trim().slice(0, 200);
+      const text = K.clean(desc).slice(0, 200);
       if (!api.enabled || info.status === "error" || !text) return null;
       const words = K.words(), users = K.examples(memory);
       const all = await embed([text, ...words.map(w => w.text), ...users.map(u => u.text)]);

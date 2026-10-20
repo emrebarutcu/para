@@ -1500,11 +1500,12 @@ function radioChip(name, value, label, checked, color) {
 }
 
 // ---------- Harcama formu ----------
-// Sıra: tutar (odakta), ne alındığı (önceki açıklamalardan öneri), taksit, kart (her kartta ilk ödeme tarihi), tarih,
-// kategori, kişi. Altta sabit özet. Düzenlemede ödeme durumu ve planı; "Kopyala" aynısından yeni harcama açar.
+// Sıra: tutar (odakta), ne alındığı (önceki açıklamalardan öneri), kategori, taksit, kart (her kartta ilk ödeme tarihi),
+// tarih, kişi. Altta sabit özet. Düzenlemede ödeme durumu ve planı; "Kopyala" aynısından yeni harcama açar.
 // draft: kayıtlı olmayan, önceden doldurulmuş harcama (e-postadan gelen ya da kopyalanan)
 let planOpen = false;         // önizlemedeki ödeme planı açık
 let categoryFor = null;       // kullanıcı seçmediyse formdaki kategorinin hangi açıklamaya göre verildiği
+let aiNudged = false;         // kategorisiz kayıtta yapay zekâyı açma önerisi bu oturumda gösterildi
 
 // "1.250,50", "1250,5", "1250.50", "1.250" → sayı (Türkçe yazımda nokta binlik, virgül ondalık)
 function parseAmount(v) {
@@ -1565,7 +1566,7 @@ function openPurchaseSheet(p, draft) {
   showPicked(els.countChips);
   showPickedCategory();
   if (!p) f.elements.amount.focus();
-  if (draft?.desc && !categorySource) suggestCategory();
+  if (src?.desc && !categorySource) suggestCategory();   // düzenlenen ya da e-postadan gelen kategorisiz harcama
 }
 
 // Kart çipleri: her kartta bu tarihli harcamanın ilk ödemesi; ilk ödemesi belirgin biçimde en geç olan işaretli
@@ -1646,6 +1647,15 @@ function pickCategory(id, source, desc = null) {
   showPickedCategory();
 }
 
+// Önerilen kategoriyi kullanıcı seçti (öneriye dokundu): kendi seçimi sayılır, öğrenilir
+function chooseCategory(id) {
+  pickCategory(id, "user");
+  categoryTouched = true;
+  suggestSeq++;
+  setCategoryHint("");
+  updatePurchasePreview();
+}
+
 // Açıklamanın kategorisi: kullanıcının aynı işyerine verdiği (hemen) ya da cihazdaki modelin (açıksa) önerisi.
 // → { category, confidence, from: "memory" | "ai" } ya da null
 async function guessCategory(desc) {
@@ -1675,7 +1685,7 @@ async function suggestCategory() {
     if (!r) { setCategoryHint(""); return; }
     if (r.confidence < K.SURE) {
       pickCategory(null, null);
-      setCategoryHint(`emin değilim · ${K.category(r.category).name} olabilir`);
+      setCategoryHint("emin değilim · ", { label: `${K.category(r.category).name} olabilir`, run: () => chooseCategory(r.category) });
       return;
     }
     pickCategory(r.category, "ai", desc);
@@ -1841,7 +1851,10 @@ els.purchaseForm.addEventListener("submit", e => {
   lastPersonId = personId;
   saveState();
   els.purchaseSheet.close();
-  toast((editingId ? "Harcama güncellendi" : "Harcama eklendi") + (p.category ? ` · ${K.category(p.category).name}` : ""));
+  const nudge = !p.category && !YZ.enabled && YZ.supported() && !aiNudged;
+  if (nudge) aiNudged = true;
+  toast((editingId ? "Harcama güncellendi" : "Harcama eklendi")
+    + (p.category ? ` · ${K.category(p.category).name}` : nudge ? " · kategori için Ayarlar → Yapay zekâ'yı aç" : ""));
   editingId = null;
   render();
   classifyAfterSave(id);
