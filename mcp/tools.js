@@ -125,13 +125,23 @@ function knownPurchases(state) {
 
 function paymentsOf(state, p) { return T.payments(p, cardById(state, p.cardId)); }
 
-function lastPaymentIndex(state) {
+// Son ödemenin ayı; süresiz tekrarlayan harcamanın (kira) sonu yoktur, sayılmaz
+function lastPaymentIndex(state, list = knownPurchases(state)) {
   let last = -Infinity;
-  for (const p of knownPurchases(state)) {
+  for (const p of list) {
+    if (T.repeatOf(p) === 0) continue;
     const pays = paymentsOf(state, p);
     if (pays.length) last = Math.max(last, pays[pays.length - 1].idx);
   }
   return last;
+}
+
+// Borç: taksitler ve tek seferlik harcamalar (tekrarlayan harcama borç değildir)
+function debtPurchases(state) { return knownPurchases(state).filter(p => T.repeatOf(p) == null); }
+
+// Harcama ödemeleri: TL bakiyesinden düşer (varlik.js balances)
+function spentOf(state, personId = null) {
+  return knownPurchases(state).filter(p => !personId || p.personId === personId).flatMap(p => paymentsOf(state, p));
 }
 
 const byName = (state, map, nameOf) =>
@@ -169,6 +179,13 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     v.firstDueMonth = p.firstDue;
     v.remainingTotalAtImport = v.total;
     v.total = round(T.originalTotal(p));
+  }
+  const n = T.repeatOf(p);
+  if (n != null) {
+    const next = T.nextOccurrence(p, today);
+    v.repeat = { every: "month", times: n || null, lastDate: n ? T.occurrenceDate(p, n - 1) : null, nextDate: next };
+    v.paidInstallments = pays.length - left.length;
+    if (!n) Object.assign(v, { remainingInstallments: null, remainingAmount: null, lastPaymentDate: null });
   }
   if (card && p.date) v.statementCutoff = T.statementOf(card, p.date).cut;
   if (schedule) v.payments = pays.map(x => ({ no: x.no, date: x.key, amount: round(x.amount), paid: x.key < today }));
@@ -210,7 +227,7 @@ function eventView(state, ev, { items = true } = {}) {
       purchaseId: x.purchase.id,
       description: x.purchase.desc,
       person: personName(state, x.purchase.personId),
-      installment: `${x.no}/${T.planLength(x.purchase)}`,
+      installment: T.repeatOf(x.purchase) != null ? `repeat ${x.no}` : `${x.no}/${T.planLength(x.purchase)}`,
       amount: round(x.amount),
     }));
   }
@@ -227,7 +244,7 @@ function preview(state, p) {
     lastPayment: pays.length ? pays[pays.length - 1].key : null,
   };
   if (card && p.date) out.statementCutoff = T.statementOf(card, p.date).cut;
-  if (!card) out.note = p.count > 1 ? "Cash — paid each month on the purchase day" : "Cash — paid on the purchase day";
+  if (!card) out.note = p.count > 1 || T.repeatOf(p) != null ? "Cash — paid each month on the purchase day" : "Cash — paid on the purchase day";
   return out;
 }
 
@@ -281,6 +298,12 @@ function buildPurchase(state, args, today, base = null) {
     // Excel'den gelen tarihsiz kayıt: ödeme ayı ve plan korunur
     p.firstDue = base.firstDue;
     if (base.planCount) p.planCount = base.planCount;
+  }
+  // Tekrar yalnızca peşin ve tarihli harcamada; taksite geçen harcamanın tekrarı düşer
+  const repeat = args.repeat !== undefined ? intArg(args.repeat, "repeat", 0, T.MAX_REPEAT) : T.repeatOf(base) ?? 1;
+  if (repeat !== 1) {
+    if (T.repeatOf({ ...p, repeat }) != null) p.repeat = repeat;
+    else if (args.repeat !== undefined) fail("repeat needs a single-payment purchase (installments 1) with a date.");
   }
   return { personId: person.id, p };
 }
@@ -452,6 +475,7 @@ const PURCHASE_FIELDS = {
   date: S.date("Purchase date, YYYY-MM-DD. Decides which statement (ekstre) it falls into."),
   card: { type: ["string", "null"], description: 'Card id, name or last 4 digits; "nakit" (or null) for cash / debit card.' },
   person: S.str("Person id or name the purchase belongs to."),
+  repeat: S.int("Monthly repetition of a single-payment purchase on the same day of month as date (regular expenses: rent, dues, subscriptions): 1 = once (default), N = N months in a row, 0 = every month with no end.", 0, 600),
   category: {
     type: ["string", "null"], enum: [...K.CATEGORIES.map(c => c.id), null],
     description: `Spending category: ${K.CATEGORIES.map(c => `${c.id} = ${c.name} (${c.hint})`).join("; ")}. null removes it. Omit on add to reuse the category the user gave the same merchant before.`,
@@ -468,12 +492,12 @@ const CARD_FIELDS = {
 const ASSET = { type: "string", enum: ["TRY", "USD", "EUR", "GAU"], description: "TRY (Turkish lira), USD, EUR or GAU (gold, in grams)." };
 const ENTRY_FIELDS = {
   asset: ASSET,
-  direction: { type: "string", enum: ["in", "out"], description: '"in" = money / gold received or bought (giriş), "out" = spent, sold or given (çıkış).' },
+  direction: { type: "string", enum: ["in", "out"], description: '"in" = money / gold received or bought (giriş), "out" = spent, sold or given (çıkış). A lira outflow is spending: it is saved as a cash purchase.' },
   amount: S.num("Positive amount in the asset's own unit (lira, dollars, euros or grams of gold)."),
   description: S.str("What it is, e.g. Maaş, altın alımı."),
   date: S.date("Date, YYYY-MM-DD. For a repeating entry, the date of the first time."),
   person: S.str("Person id or name."),
-  repeat: S.int("Monthly repetition on the same day of month as date: 1 = once (default), N = N months in a row, 0 = every month with no end (e.g. salary, rent).", 0, 600),
+  repeat: S.int("Monthly repetition on the same day of month as date: 1 = once (default), N = N months in a row, 0 = every month with no end (e.g. salary).", 0, 600),
 };
 
 const READ = { readOnlyHint: true, openWorldHint: false };
@@ -486,7 +510,7 @@ export const TOOLS = [
   {
     name: "get_overview",
     title: "Overview (Özet)",
-    description: "Dashboard summary like the app's Özet tab: amount due in the month, next month's total, remaining total, the next upcoming payments, per-person and per-card figures.",
+    description: "Dashboard summary like the app's Özet tab: amount due in the month (regular expenses like rent included), next month's total, remaining debt (installments and one-off purchases still to be paid; regular expenses not included), the next upcoming payments, per-person and per-card figures.",
     inputSchema: obj({ month: S.month("Month to summarize, YYYY-MM. Default: current month.") }),
     annotations: READ,
     async run(args, ctx) {
@@ -494,16 +518,17 @@ export const TOOLS = [
       const today = ctx.today;
       const start = monthArg(args.month, "month", today);
       const last = lastPaymentIndex(state);
-      const end = Math.min(last, start + MAX_MONTHS - 1);
-      const months = end >= start ? T.buildCashflow(state.people, state.cards, state.installments, start, end) : [];
+      const months = T.buildCashflow(state.people, state.cards, state.installments, start, start + 1);
       const at = idx => months.find(m => m.idx === idx);
       const thisMonth = at(start);
+      // Kalan borç ve son taksit tekrarlayan harcamalarsız
+      const debts = debtPurchases(state);
+      const owedLast = Math.min(lastPaymentIndex(state, debts), start + MAX_MONTHS - 1);
+      const owed = owedLast >= start ? T.buildCashflow(state.people, state.cards, debts, start, owedLast) : [];
 
       const from = T.parseDate(today).idx;
-      const upcoming = last >= from
-        ? T.buildCashflow(state.people, state.cards, state.installments, from, Math.min(last, from + 24))
-          .flatMap(m => m.events).filter(e => e.date >= today).slice(0, UPCOMING)
-        : [];
+      const upcoming = T.buildCashflow(state.people, state.cards, state.installments, from, Math.min(Math.max(last, from + 1), from + 24))
+        .flatMap(m => m.events).filter(e => e.date >= today).slice(0, UPCOMING);
       return {
         today,
         month: T.monthKey(start),
@@ -511,13 +536,13 @@ export const TOOLS = [
         dueThisMonthByPerson: byName(state, thisMonth?.byPerson ?? {}, personName),
         dueThisMonthByCard: byName(state, thisMonth?.byCard ?? {}, cardKeyName),
         nextMonth: { month: T.monthKey(start + 1), total: round(at(start + 1)?.total) },
-        remainingTotal: round(months.reduce((s, m) => s + m.total, 0)),
-        lastPaymentMonth: months.length ? T.monthKey(months[months.length - 1].idx) : null,
+        remainingTotal: round(owed.reduce((s, m) => s + m.total, 0)),
+        lastPaymentMonth: owed.length ? T.monthKey(owedLast) : null,
         upcomingPayments: upcoming.map(ev => eventView(state, ev, { items: false })),
         people: state.people.map(p => ({
           name: p.name,
           dueThisMonth: round(thisMonth?.byPerson[p.id]),
-          remaining: round(months.reduce((s, m) => s + (m.byPerson[p.id] || 0), 0)),
+          remaining: round(owed.reduce((s, m) => s + (m.byPerson[p.id] || 0), 0)),
         })),
         cards: state.cards.map(c => {
           const v = cardView(state, c, today);
@@ -745,15 +770,17 @@ export const TOOLS = [
     async run(args, ctx) {
       const state = await ctx.load();
       const start = T.parseDate(ctx.today).idx;
-      const end = Math.min(lastPaymentIndex(state), start + MAX_MONTHS - 1);
-      const months = end >= start ? T.buildCashflow(state.people, state.cards, state.installments, start, end) : [];
+      const [month] = T.buildCashflow(state.people, state.cards, state.installments, start, start);
+      const debts = debtPurchases(state);
+      const end = Math.min(lastPaymentIndex(state, debts), start + MAX_MONTHS - 1);
+      const owed = end >= start ? T.buildCashflow(state.people, state.cards, debts, start, end) : [];
       return {
         people: state.people.map(p => ({
           id: p.id,
           name: p.name,
           purchaseCount: state.installments.filter(i => i.personId === p.id).length,
-          dueThisMonth: round(months[0]?.idx === start ? months[0].byPerson[p.id] : 0),
-          remaining: round(months.reduce((s, m) => s + (m.byPerson[p.id] || 0), 0)),
+          dueThisMonth: round(month.byPerson[p.id]),
+          remaining: round(owed.reduce((s, m) => s + (m.byPerson[p.id] || 0), 0)),
         })),
         currency: "TRY",
       };
@@ -811,14 +838,14 @@ export const TOOLS = [
   {
     name: "get_assets",
     title: "Assets (Varlıklar)",
-    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries; repeating entries only up to today), each with its value in TRY at the current market rate, and the total in TRY.",
+    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries; repeating entries only up to today), each with its value in TRY at the current market rate, and the total in TRY. Spending is paid from lira: purchase payments (cash on the purchase day, card on the statement due day) made from the first lira entry up to today are deducted from the TRY balance.",
     inputSchema: obj({ person: S.str("Only this person's assets (id or name).") }),
     annotations: READ,
     async run(args, ctx) {
       const state = await ctx.load();
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
       const rates = await ratesOrNull(ctx);
-      const bals = V.balances(knownEntries(state).filter(e => !person || e.personId === person.id), ctx.today);
+      const bals = V.balances(knownEntries(state).filter(e => !person || e.personId === person.id), ctx.today, spentOf(state, person?.id));
       const { total, missing } = V.totalTry(bals, rates?.rates);
       return {
         person: person?.name ?? "all",
@@ -866,7 +893,7 @@ export const TOOLS = [
   {
     name: "add_entry",
     title: "Add asset entry",
-    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency) or going out (spending, selling, rent), once or repeating monthly. Credit card purchases go to add_purchase instead.",
+    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency) or going out (selling, giving), once or repeating monthly. A lira outflow is spending (rent, bills): it is saved as a cash purchase (same as add_purchase with card nakit and repeat) and the result has purchase instead of entry.",
     inputSchema: obj({
       ...ENTRY_FIELDS,
       date: S.date("Date, YYYY-MM-DD. Default: today."),
@@ -877,9 +904,14 @@ export const TOOLS = [
       const rates = await ratesOrNull(ctx);
       return ctx.mutate(state => {
         const e = { id: uid(), ...buildEntry(state, args, ctx.today) };
+        const balanceOf = () => V.balances(knownEntries(state).filter(x => x.personId === e.personId), ctx.today, spentOf(state, e.personId))[e.asset] ?? 0;
+        if (T.isSpend(e)) {
+          const p = withRemembered(state, T.spendOf(e));
+          state.installments.push(p);
+          return { saved: true, savedAs: "purchase", purchase: purchaseView(state, p, ctx.today), balance: balanceOf() };
+        }
         state.entries.push(e);
-        const balance = V.balances(knownEntries(state).filter(x => x.personId === e.personId), ctx.today)[e.asset] ?? 0;
-        return { saved: true, entry: entryView(state, e, rates, ctx.today), balance };
+        return { saved: true, entry: entryView(state, e, rates, ctx.today), balance: balanceOf() };
       });
     },
   },
@@ -894,6 +926,12 @@ export const TOOLS = [
       return ctx.mutate(state => {
         const cur = findEntry(state, args.id);
         const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur) };
+        if (T.isSpend(next)) {
+          const p = withRemembered(state, T.spendOf(next));
+          state.entries = state.entries.filter(x => x.id !== cur.id);
+          state.installments.push(p);
+          return { saved: true, savedAs: "purchase", purchase: purchaseView(state, p, ctx.today) };
+        }
         state.entries = state.entries.map(x => (x.id === cur.id ? next : x));
         return { saved: true, entry: entryView(state, next, rates, ctx.today) };
       });
@@ -1045,7 +1083,7 @@ export const TOOLS = [
   {
     name: "get_insights",
     title: "Insights (İçgörüler)",
-    description: "The app's insight cards, most important first: free cash this month (income from asset entries minus card payments and outflows) or the first month that runs short, installment-to-income ratio for the next months, cards close to their limit, an upcoming jump in payments, a category spending more than usual, which card gives the latest first payment for a purchase made today, recurring payments (subscriptions, rent), other people's share this month, the month installments end. Texts are Turkish; data has the numbers.",
+    description: "The app's insight cards, most important first: free cash this month (income from asset entries minus purchase payments, regular expenses included, and outflows) or the first month that runs short, installment-to-income ratio for the next months, cards close to their limit, an upcoming jump in payments, a category spending more than usual, which card gives the latest first payment for a purchase made today, recurring payments (subscriptions, rent), other people's share this month, the month installments end. Texts are Turkish; data has the numbers.",
     inputSchema: obj(),
     annotations: READ,
     async run(args, ctx) {
@@ -1057,7 +1095,7 @@ export const TOOLS = [
   {
     name: "spending_by_category",
     title: "Spending by category",
-    description: "What was bought each month by category (by purchase date; an installment purchase counts fully in the month it was bought), with each category's share and its average over the previous 3 months. Purchases without a category are listed as category null.",
+    description: "What was bought each month by category (by purchase date; an installment purchase counts fully in the month it was bought, a repeating purchase in each month it repeats), with each category's share and its average over the previous 3 months. Purchases without a category are listed as category null.",
     inputSchema: obj({
       month: S.month("Last month, YYYY-MM. Default: current month."),
       months: S.int("How many months back to include (default 1).", 1, 24),
@@ -1167,7 +1205,8 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - When a card's cutoff / due day changes, statements already cut keep their dates; update_card asks (transition) what happens to the purchases in between — ask the user, don't pick yourself.
 - A card's used limit is the sum of installments still to be paid.
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
-- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums (repeating entries count only the times up to today). get_assets values them in TRY at the current Turkish market rate.
+- A single-payment purchase can repeat monthly (repeat): regular expenses like rent, dues and subscriptions are purchases (usually cash). Remaining debt counts installments and one-off purchases, not regular expenses.
+- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums (repeating entries count only the times up to today). A lira outflow is spending, so it is saved as a cash purchase; purchase payments made since the first lira entry are deducted from the TRY balance. get_assets values them in TRY at the current Turkish market rate.
 - Deleting a card or a person also deletes their purchases (a person also their asset entries); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.

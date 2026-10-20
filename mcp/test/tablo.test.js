@@ -57,7 +57,7 @@ test("yeni, değişen ve silinen kayıtlar bulunur", () => {
   assert.deepEqual(plan.cards.upsert.map(x => x.id), ["k2"]);
   assert.deepEqual(plan.purchases.upsert.map(x => x.row), [{
     id: "p3", person_id: "ali", card_id: "k2", description: "Yeni", total: 100, count: 1, date: "2026-10-19",
-    first_due: null, plan_count: null, category: null, category_by: null,
+    first_due: null, plan_count: null, category: null, category_by: null, repeat_count: null,
   }]);
   assert.deepEqual(plan.purchases.delete, ["p1"]);
   assert.deepEqual(plan.people.delete, []);
@@ -293,4 +293,31 @@ test("2.x tabanı (kategori sütunsuz) rekey ile çevrilir: yükseltmede harcama
   for (const t of Tablo.TABLES) assert.deepEqual(changes(state, base)[t], { upsert: [], delete: [] }, t);
   const out = merge(state, base, "purchases", [{ ...rows.purchases[0], category: "ev", category_by: "user", updated_at: at() }]);
   assert.equal(out.state.installments[0].category, "ev");
+});
+
+test("tekrarlayan harcama: repeat_count yalnızca peşin ve tarihli harcamada yazılır, geri okunur", () => {
+  const rows = server();
+  const base = baseOf(rows);
+  const state = toState(rows);
+  state.installments.push(
+    { id: "kira", personId: "ben", cardId: null, desc: "Kira", total: 20000, count: 1, date: "2026-10-05", repeat: 0 },
+    { id: "taksitli", personId: "ben", cardId: null, desc: "x", total: 600, count: 6, date: "2026-10-05", repeat: 3 },
+    { id: "bozuk", personId: "ben", cardId: null, desc: "y", total: 5, count: 1, date: "2026-10-05", repeat: 1 },
+  );
+  const out = changes(state, base).purchases.upsert.map(x => [x.id, x.row.repeat_count]);
+  assert.deepEqual(out, [["kira", 0], ["taksitli", null], ["bozuk", null]]);
+  const back = toState({ ...rows, purchases: [purchase("p4", { repeat_count: 12 })] });
+  assert.equal(back.installments[0].repeat, 12);
+});
+
+test("3.x tabanı (repeat_count sütunsuz) rekey ile çevrilir", () => {
+  const rows = server();
+  const state = toState(rows);
+  const old = baseOf(rows);
+  for (const id of Object.keys(old.purchases)) {
+    const { repeat_count, ...row } = JSON.parse(old.purchases[id]);
+    old.purchases[id] = JSON.stringify(row);
+  }
+  assert.ok(changes(state, old).purchases.upsert.length);
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(state, rekey(old))[t], { upsert: [], delete: [] }, t);
 });

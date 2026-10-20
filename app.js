@@ -237,13 +237,23 @@ function knownPurchases() {
   return state.installments.filter(p => known.has(p.personId));
 }
 
-function lastPaymentIndex() {
+// Son ödemenin ayı; süresiz tekrarlayan harcamanın (kira) sonu yoktur, sayılmaz
+function lastPaymentIndex(list = knownPurchases()) {
   let last = -Infinity;
-  for (const p of knownPurchases()) {
-    const list = paymentsOf(p);
-    if (list.length) last = Math.max(last, list[list.length - 1].idx);
+  for (const p of list) {
+    if (T.repeatOf(p) === 0) continue;
+    const pays = paymentsOf(p);
+    if (pays.length) last = Math.max(last, pays[pays.length - 1].idx);
   }
   return last;
+}
+
+// Borç: taksitler ve tek seferlik harcamalar (tekrarlayan harcama borç değildir)
+function debtPurchases() { return knownPurchases().filter(p => T.repeatOf(p) == null); }
+
+// Harcama ödemeleri: TL bakiyesinden düşer (varlik.js balances)
+function spentOf(personId = null) {
+  return knownPurchases().filter(p => !personId || p.personId === personId).flatMap(paymentsOf);
 }
 
 let toastTimer = 0;
@@ -285,7 +295,7 @@ const els = {
   countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"), personField: $("personField"),
   purchaseSum: $("purchaseSum"), purchaseStatus: $("purchaseStatus"), purchaseCopy: $("purchaseCopy"),
   dateChips: $("dateChips"), descList: $("descList"), countOther: $("countOther"), perRow: $("perRow"), cardTip: $("cardTip"),
-  dateRow: $("dateRow"), dateVal: $("dateVal"), categoryRow: $("categoryRow"), categoryVal: $("categoryVal"), personVal: $("personVal"),
+  dateRow: $("dateRow"), dateVal: $("dateVal"), repeatRow: $("repeatRow"), repeatVal: $("repeatVal"), purchaseRepeatChips: $("purchaseRepeatChips"), categoryRow: $("categoryRow"), categoryVal: $("categoryVal"), personVal: $("personVal"),
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
   termField: $("termField"), termNote: $("termNote"), termChoices: $("termChoices"),
@@ -312,7 +322,9 @@ const els = {
 function render() {
   const start = T.monthIndex(currentMonth);
   const last = lastPaymentIndex();
-  const end = Math.min(last, start + MAX_MONTHS - 1);
+  // Süresiz tekrarlayan harcama varsa en az grafiğin ayları kadar gösterilir
+  const endless = knownPurchases().some(p => T.repeatOf(p) === 0);
+  const end = Math.min(Math.max(last, endless ? start + CHART_MONTHS - 1 : -Infinity), start + MAX_MONTHS - 1);
   const months = end >= start ? T.buildCashflow(state.people, state.cards, state.installments, start, end) : [];
 
   for (const n of document.querySelectorAll(".js-month-label")) n.textContent = monthLong(start);
@@ -346,13 +358,16 @@ function renderOverview(months, start, last) {
   setMoney(els.heroAmount, at(start)?.total || 0);
   els.nextLabel.textContent = T.monthName(start + 1);
   els.nextTotal.textContent = fmt(at(start + 1)?.total || 0);
-  els.remaining.textContent = fmt(months.reduce((s, m) => s + m.total, 0));
-  els.endLabel.textContent = months.length ? `${T.monthShort(months[months.length - 1].idx)} ${T.yearOf(months[months.length - 1].idx)}` : "—";
+  // Kalan borç ve son taksit tekrarlayan harcamalarsız
+  const debts = debtPurchases(), owedLast = Math.min(lastPaymentIndex(debts), start + MAX_MONTHS - 1);
+  const owed = owedLast >= start ? T.buildCashflow(state.people, state.cards, debts, start, owedLast) : [];
+  els.remaining.textContent = fmt(owed.reduce((s, m) => s + m.total, 0));
+  els.endLabel.textContent = owed.length ? `${T.monthShort(owedLast)} ${T.yearOf(owedLast)}` : "—";
 
   renderInsights();
   renderCash();
   renderUpcoming(last);
-  renderPeopleSummary(months, start);
+  renderPeopleSummary(months, start, owed);
   renderTimeline(start);
   renderCategories(start);
 
@@ -422,17 +437,15 @@ function renderCategories(idx) {
     return li;
   }));
   const loose = b.rows.some(r => !r.id);
-  els.catNote.textContent = "Taksitli alışveriş tamamıyla alındığı aya yazılır."
+  els.catNote.textContent = "Taksitli alışveriş tamamıyla alındığı aya, düzenli giderler her tekrarının ayına yazılır."
     + (loose && !YZ.enabled ? " Kategorisizleri yapay zekâ ayırabilir: Ayarlar → Yapay zekâ." : "");
 }
 
 function renderUpcoming(last) {
   const today = T.todayKey();
   const from = todayIndex();
-  const events = last >= from
-    ? T.buildCashflow(state.people, state.cards, state.installments, from, Math.min(last, from + 24))
-      .flatMap(m => m.events).filter(e => e.date >= today).slice(0, 4)
-    : [];
+  const events = T.buildCashflow(state.people, state.cards, state.installments, from, Math.min(Math.max(last, from + 1), from + 24))
+    .flatMap(m => m.events).filter(e => e.date >= today).slice(0, 4);
   els.upcoming.replaceChildren();
   if (!events.length) {
     els.upcoming.append(el("li", "empty", state.installments.length ? "Yaklaşan ödeme yok" : "Henüz harcama yok"));
@@ -744,6 +757,12 @@ function eventSplit(parts, total) {
   return [box, legend];
 }
 
+// Ödemenin planı: "3/6. taksit", "her ay" ya da "peşin"
+function paymentLabel(purchase, no, suffix = "") {
+  const plan = T.planLength(purchase);
+  return plan > 1 ? `${no}/${plan}${suffix}` : T.repeatOf(purchase) != null ? "her ay" : "peşin";
+}
+
 // Ödenen taksitler: kişi sırasıyla, kişinin içinde büyükten küçüğe
 function eventItemRows(ev) {
   const order = new Map(state.people.map((p, i) => [p.id, i]));
@@ -751,23 +770,21 @@ function eventItemRows(ev) {
     order.get(a.purchase.personId) - order.get(b.purchase.personId) || b.amount - a.amount);
   return items.map(({ purchase, no, amount }) => {
     const p = personById(purchase.personId);
-    const plan = T.planLength(purchase);
     const li = el("li");
     li.style.setProperty("--c", seriesVar(p));
     const main = el("div", "ev-item-main");
-    main.append(el("span", "desc", purchase.desc),
-      el("span", "meta", `${p.name} · ${plan > 1 ? `${no}/${plan}. taksit` : "peşin"}`));
+    main.append(el("span", "desc", purchase.desc), el("span", "meta", `${p.name} · ${paymentLabel(purchase, no, ". taksit")}`));
     li.append(main, el("span", "amount", fmt(amount)));
     return li;
   });
 }
 
 // İlk kişi uygulamayı kullanan; diğerlerine (aile üyesi ya da kartını kullanan) ayın ödeme özeti gönderilebilir
-function renderPeopleSummary(months, start) {
+function renderPeopleSummary(months, start, owed) {
   const thisMonth = months.find(m => m.idx === start);
   els.peopleSummary.replaceChildren();
   state.people.forEach((p, i) => {
-    const remaining = months.reduce((s, m) => s + (m.byPerson[p.id] || 0), 0);
+    const remaining = owed.reduce((s, m) => s + (m.byPerson[p.id] || 0), 0);
     const due = thisMonth?.byPerson[p.id] || 0;
     const li = el("li");
     const info = el("div");
@@ -788,8 +805,9 @@ function renderPeopleSummary(months, start) {
 
 // "Merhaba Ali, Ekim 2026 ödemelerin: …" — taksit taksit, kart ve tarihle; kalan toplam
 function shareText(person, idx) {
-  const last = lastPaymentIndex();
-  const months = T.buildCashflow(state.people, state.cards, state.installments, idx, Math.max(idx, last));
+  const debts = debtPurchases();
+  const months = T.buildCashflow(state.people, state.cards, state.installments, idx, idx);
+  const owed = T.buildCashflow(state.people, state.cards, debts, idx, Math.max(idx, lastPaymentIndex(debts)));
   const lines = [];
   for (const ev of months[0].events) {
     for (const it of ev.items) {
@@ -798,7 +816,7 @@ function shareText(person, idx) {
       lines.push(`• ${it.purchase.desc}${plan > 1 ? ` (${it.no}/${plan}. taksit)` : ""}: ${fmt(it.amount)} — ${cardName(ev.cardId)}, ${fmtDayShort(ev.date)}`);
     }
   }
-  const rest = months.slice(1).reduce((s, m) => s + (m.byPerson[person.id] || 0), 0);
+  const rest = owed.slice(1).reduce((s, m) => s + (m.byPerson[person.id] || 0), 0);
   return [`Merhaba ${person.name}, ${monthLong(idx)} ödemelerin:`, ...lines, `Toplam: ${fmt(months[0].byPerson[person.id] || 0)}`,
     rest ? `Sonraki aylarda kalan: ${fmt(rest)}` : null].filter(Boolean).join("\n");
 }
@@ -1005,9 +1023,9 @@ function hideTooltip() { els.tooltip.hidden = true; }
 // ---------- Nakit (dönem dönem) ----------
 // Dönem başlangıç gününden (bugün ya da ayın seçilen günü, ör. maaş günü) bir ay sonrasının bir gün öncesine kadar sürer.
 // Hareketler: TL hareketleri (tekrarlayanın her tekrarı kendi gününde) ile kart / nakit ödemeleri; döviz ve altın nakit
-// sayılmaz. Bakiye bugüne bağlanır: bugünün sonu = bugüne kadarki TL bakiyesi − bugün ödenecekler (henüz ödenmedi
-// sayılır). Sonraki günler hareketlerle ileri, önceki günler geri taşınır; tarihi gelmemiş tek seferlik hareket de kendi
-// gününde girer. Dönem net'i dönem başından o güne hareketlerin toplamıdır.
+// sayılmaz. Bakiye bugüne bağlanır: bugünün sonu = Varlıklar'daki TL bakiyesi (bugüne kadarki harcama ödemeleri
+// düşülmüş). Sonraki günler hareketlerle ileri, önceki günler geri taşınır; tarihi gelmemiş tek seferlik hareket de
+// kendi gününde girer. Dönem net'i dönem başından o güne hareketlerin toplamıdır.
 
 // Seçili başlangıçla bugünün dönemi; shift dönem kaydırır
 function cashPeriod(today, start, shift) {
@@ -1030,16 +1048,14 @@ function cashSeries(from, to, today) {
     moves.get(date).push(m);
   };
 
-  let anchor = 0, any = false;   // anchor: bugüne kadarki TL bakiyesi (bugünkü hareketler dahil)
-  for (const e of knownEntries()) {
-    if (e.asset !== "TRY" || !Number.isFinite(e.amount)) continue;
-    any = true;
+  const entries = knownEntries().filter(e => e.asset === "TRY" && Number.isFinite(e.amount));
+  const anchor = V.balances(entries, today, spentOf()).TRY ?? 0;   // bugünün sonundaki TL bakiyesi
+  const any = entries.length > 0;
+  for (const e of entries) {
     if (V.repeatOf(e) == null) {
-      if (e.date <= today) anchor += e.amount;
       if (e.date >= lo && e.date <= hi) add(e.date, { desc: e.desc, value: e.amount });
       continue;
     }
-    anchor += e.amount * V.processedCount(e, today);
     for (let idx = loIdx; idx <= hiIdx; idx++) {
       const date = V.occurrenceIn(e, idx);
       if (date && date >= lo && date <= hi) add(date, { desc: e.desc, value: e.amount });
@@ -1048,7 +1064,6 @@ function cashSeries(from, to, today) {
   for (const m of T.buildCashflow(state.people, state.cards, state.installments, loIdx, hiIdx)) {
     for (const ev of m.events) {
       if (ev.date < lo || ev.date > hi) continue;
-      if (ev.date === today) anchor -= ev.total;
       add(ev.date, { desc: ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit ödemeler", value: -ev.total });
     }
   }
@@ -1360,9 +1375,7 @@ function eventItems(ev) {
     const li = el("li");
     const who = el("span", "who");
     who.append(dot(seriesVar(p)), document.createTextNode(p.name));
-    const plan = T.planLength(purchase);
-    li.append(who, el("span", "", purchase.desc),
-      el("span", "no", plan > 1 ? `${no}/${plan}` : "peşin"), el("span", "amount", fmt(amount)));
+    li.append(who, el("span", "", purchase.desc), el("span", "no", paymentLabel(purchase, no)), el("span", "amount", fmt(amount)));
     ul.append(li);
   }
   return ul;
@@ -1438,27 +1451,27 @@ function renderPurchases() {
     const pays = paymentsOf(p);
     const plan = T.planLength(p);
     const left = pays.filter(x => x.key >= today);
-    return { p, pays, plan, left: left.length, paid: plan - left.length, next: left[0]?.key ?? null };
+    const paid = T.repeatOf(p) != null ? pays.length - left.length : plan - left.length;
+    return { p, pays, plan, left: left.length, paid, next: left[0]?.key ?? null };
   });
 
-  // Düzenli giderler: tekrarlayan varlık çıkışları (kira, aidat); sürenler sonda
-  const regular = knownEntries().filter(e => e.amount < 0 && V.repeatOf(e) != null)
-    .map(e => ({ e, next: V.nextDate(e, today) }));
-
   renderPersonFilter(els.personFilter, personFilter,
-    id => all.filter(x => x.left && (id === "all" || x.p.personId === id)).length
-      + regular.filter(x => x.next && (id === "all" || x.e.personId === id)).length,
+    id => all.filter(x => x.left && (id === "all" || x.p.personId === id)).length,
     id => { personFilter = id; });
 
+  // Düzenli giderler (kira, aidat: tekrarlayan harcamalar) ayrı bölümde; bitenler sonda
+  const byNext = (a, b) => a.next.localeCompare(b.next) || a.p.desc.localeCompare(b.p.desc, "tr");
+  const byLast = (a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key);
   const mine = all.filter(x => personFilter === "all" || x.p.personId === personFilter);
-  const myRegular = regular.filter(x => personFilter === "all" || x.e.personId === personFilter)
-    .sort((a, b) => (!a.next - !b.next) || (a.next ?? "").localeCompare(b.next ?? "") || a.e.desc.localeCompare(b.e.desc, "tr"));
-  const active = mine.filter(x => x.left).sort((a, b) => a.next.localeCompare(b.next) || a.p.desc.localeCompare(b.p.desc, "tr"));
-  const done = mine.filter(x => !x.left).sort((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key));
+  const regular = mine.filter(x => T.repeatOf(x.p) != null);
+  const myRegular = [...regular.filter(x => x.left).sort(byNext), ...regular.filter(x => !x.left).sort(byLast)];
+  const once = mine.filter(x => T.repeatOf(x.p) == null);
+  const active = once.filter(x => x.left).sort(byNext);
+  const done = once.filter(x => !x.left).sort(byLast);
 
   els.purchaseWrap.replaceChildren();
   if (inbox.length) els.purchaseWrap.append(inboxPanel());
-  if (!mine.length && !myRegular.length) {
+  if (!mine.length) {
     const btn = el("button", "btn btn-primary");
     btn.type = "button";
     btn.append(icon("plus"), document.createTextNode("Harcama ekle"));
@@ -1471,7 +1484,7 @@ function renderPurchases() {
 
   const groups = el("div", "purchase-groups");
   if (active.length) groups.append(purchaseList(active, today));
-  else if (mine.length) groups.append(el("p", "empty", "Devam eden harcama yok"));
+  else if (once.length) groups.append(el("p", "empty", "Devam eden harcama yok"));
 
   if (done.length) {
     const toggle = el("button", "section-toggle" + (showDone ? " open" : ""));
@@ -1484,25 +1497,18 @@ function renderPurchases() {
   }
 
   groups.append(regularHead());
-  if (myRegular.length) {
-    const panel = el("div", "panel list-panel");
-    for (const { e } of myRegular) panel.append(entryRow(e, rates?.rates, today));
-    groups.append(panel);
-  } else {
-    groups.append(el("p", "empty", "Kira, aidat gibi her ay ödediklerini ekle; nakit akışına ve varlıklarına da yansır."));
-  }
+  if (myRegular.length) groups.append(purchaseList(myRegular, today));
+  else groups.append(el("p", "empty", "Kira, aidat gibi her ay ödediklerini ekle; ödemeleri akışa ve TL bakiyene yansır."));
   els.purchaseWrap.append(groups);
 }
 
-// Düzenli giderler başlığı ve ekleme düğmesi (kayıt varlık hareketi olarak tutulur: TL çıkışı, her ay)
+// Düzenli giderler başlığı ve ekleme düğmesi (nakit, her ay tekrarlayan harcama)
 function regularHead() {
   const head = el("header", "panel-head");
   const add = el("button", "btn btn-ghost sm");
   add.type = "button";
   add.append(icon("plus"), el("span", "", "Ekle"));
-  add.addEventListener("click", () => openEntrySheet(null, "TRY", {
-    dir: "out", repeat: 0, personId: personFilter !== "all" ? personFilter : null,
-  }));
+  add.addEventListener("click", () => openPurchaseSheet(null, { repeat: 0 }));
   head.append(el("h2", "", "Düzenli giderler"), add);
   return head;
 }
@@ -1516,6 +1522,7 @@ function purchaseList(items, today) {
 function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   const person = personById(p.personId);
   const per = T.perInstallment(p);
+  const n = T.repeatOf(p);
   const row = el("div", "purchase" + (left ? "" : " done"));
   row.tabIndex = 0;
   row.setAttribute("role", "button");
@@ -1527,21 +1534,26 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   tag.append(dot(cardColor(p.cardId)), document.createTextNode(cardName(p.cardId)));
   meta.append(tag);
   if (p.date) meta.append(el("span", "", fmtDayShort(p.date) + " " + T.yearOf(T.parseDate(p.date).idx)));
-  meta.append(el("span", "", plan > 1 ? `${plan} taksit` : "Peşin"));
+  meta.append(el("span", "", plan > 1 ? `${plan} taksit` : n != null ? (n ? `Her ay · ${n} kez` : "Her ay") : "Peşin"));
   if (K.valid(p.category)) meta.append(el("span", "cat-tag" + (p.categoryBy === "user" ? "" : " ai"), K.category(p.category).name));
   main.append(meta);
-  if (plan > 1) {
+  const steps = plan > 1 ? plan : n || 0;
+  if (steps) {
     const prog = el("div", "progress");
     const bar = el("div", "bar");
     const fill = el("span");
-    fill.style.width = `${(paid / plan) * 100}%`;
+    fill.style.width = `${(paid / steps) * 100}%`;
     bar.append(fill);
-    prog.append(bar, el("span", "", `${paid}/${plan} ödendi`));
+    prog.append(bar, el("span", "", `${paid}/${steps} ödendi`));
     main.append(prog);
   }
 
   const side = el("div", "p-side");
-  if (plan > 1) {
+  if (n != null) {
+    const amount = el("span", "amount", fmt(p.total));
+    amount.append(el("small", "", "/ay"));
+    side.append(amount, el("span", "sub", next ? `sonraki ${fmtDayShort(next)}` : "bitti"));
+  } else if (plan > 1) {
     const amount = el("span", "amount", fmt(per));
     amount.append(el("small", "", "/ay"));
     side.append(amount, el("span", "sub", left ? `kalan ${fmt(left * per)}` : "bitti"));
@@ -1683,7 +1695,9 @@ function renderAssets() {
   const all = knownEntries();
   const mine = all.filter(e => entryFilter === "all" || e.personId === entryFilter);
   const today = T.todayKey();
-  const bals = V.balances(mine, today);
+  const spent = spentOf(entryFilter === "all" ? null : entryFilter);
+  const bals = V.balances(mine, today, spent);
+  const paidOut = (V.balances(mine, today).TRY ?? 0) - (bals.TRY ?? 0);   // TL bakiyesinden düşen harcamalar
   const r = rates?.rates;
   const { total, missing } = V.totalTry(bals, r);
 
@@ -1711,7 +1725,8 @@ function renderAssets() {
     name.append(el("span", "asset-sym", a.symbol), document.createTextNode(a.name));
     const value = V.toTry(bal, a.code, r);
     tile.append(name, el("div", "asset-bal" + (bal < 0 ? " neg" : ""), fmtAsset(bal, a.code)),
-      el("div", "asset-try", a.code === "TRY" ? "\u00a0" : value == null ? "kur yok" : `≈ ${fmt(value)}`));
+      el("div", "asset-try", a.code !== "TRY" ? (value == null ? "kur yok" : `≈ ${fmt(value)}`)
+        : paidOut > 0.005 ? `harcamalar −₺${fmtShort(paidOut)}` : "\u00a0"));
     tile.addEventListener("click", () => openEntrySheet(null, a.code));
     return tile;
   }));
@@ -1863,11 +1878,14 @@ function openPurchaseSheet(p, draft) {
   els.personChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
   els.personField.hidden = state.people.length < 2;
-  for (const d of [els.dateRow, els.categoryRow, els.personField]) d.open = false;
+  for (const d of [els.dateRow, els.repeatRow, els.categoryRow, els.personField]) d.open = false;
 
   f.elements.desc.value = src?.desc ?? "";
   f.elements.amount.value = src?.total ? amountText(src.total) : "";
   f.elements.date.value = p ? p.date || "" : draft?.date || T.todayKey();
+  const repeat = (p ? T.repeatOf(p) : draft?.repeat) ?? 1;
+  els.purchaseRepeatChips.replaceChildren(...REPEAT_PRESETS.map(([n, label]) => radioChip("repeatPreset", String(n), label, n === repeat)));
+  f.elements.repeat.value = repeat >= 2 ? repeat : "";
   renderCardChips(cardId);
   renderDescList();
 
@@ -1920,6 +1938,8 @@ function renderRowValues() {
   const date = f.date.value;
   els.dateVal.textContent = !T.parseDate(date) ? "Tarih yok"
     : date === today ? "Bugün" : date === T.addDays(today, -1) ? "Dün" : fmtDay(date);
+  const repeat = readRepeat(f);
+  els.repeatVal.textContent = repeat === 1 ? "Bir kez" : repeat === 0 ? "Her ay" : `Her ay · ${repeat} kez`;
   els.categoryVal.textContent = K.category(f.category.value)?.name ?? "Seçilmedi";
   els.personVal.textContent = personById(f.person.value)?.name ?? "";
 }
@@ -1944,7 +1964,9 @@ function renderPurchaseStatus(p) {
   const today = T.todayKey();
   const pays = paymentsOf(p), plan = T.planLength(p);
   const left = pays.filter(x => x.key >= today);
-  const parts = plan > 1
+  const parts = T.repeatOf(p) != null
+    ? [`${pays.length - left.length} kez ödendi`, left.length ? null : "bitti"].filter(Boolean)
+    : plan > 1
     ? [`${plan - left.length}/${plan} taksit ödendi`, left.length ? `kalan ${fmt(left.reduce((s, x) => s + x.amount, 0))}` : "bitti"]
     : [left.length ? "Ödenmedi" : "Ödendi"];
   if (left[0]) parts.push(`sonraki ${fmtDay(left[0].key)}`);
@@ -2045,6 +2067,11 @@ async function classifyAfterSave(id) {
   toast(`${cur.desc} · ${K.category(r.category).name}`);
 }
 
+// Tekrar: "Diğer"e yazılan ay sayısı çiplerden önce gelir; 1 = bir kez, 0 = süresiz (varlık formundaki gibi)
+function readRepeat(f) {
+  return f.repeat.value !== "" ? Number(f.repeat.value) : Number(f.repeatPreset.value || 1);
+}
+
 function collectPurchase() {
   const f = els.purchaseForm.elements;
   const editing = editingId ? state.installments.find(x => x.id === editingId) : null;
@@ -2062,6 +2089,11 @@ function collectPurchase() {
   const total = f.per.checked && count > 1 ? Math.round(amount * count * 100) / 100 : amount;
   const p = { desc, cardId: f.card.value || null, count, total };
   if (K.valid(f.category.value)) Object.assign(p, { category: f.category.value, categoryBy: categorySource === "user" ? "user" : "ai" });
+  // Tekrar yalnızca peşin ve tarihli harcamada
+  const repeat = readRepeat(f);
+  if (count === 1 && date && repeat !== 1) {
+    if (T.repeatOf({ ...p, date, repeat }) == null) errors.push("repeat"); else p.repeat = repeat;
+  }
   if (date) {
     p.date = date;
   } else if (editing?.firstDue) {
@@ -2082,15 +2114,18 @@ function updatePurchasePreview() {
     b.classList.toggle("on", els.purchaseForm.elements.date.value === T.addDays(today, Number(b.dataset.day)));
   }
   els.perRow.hidden = !(p.count > 1);
+  els.repeatRow.hidden = p.count > 1 || !p.date;
   renderRowValues();
   renderCardTip(p.cardId, p.date);
-  if (errors.some(e => e === "amount" || e === "count" || e === "date")) return;
+  if (errors.some(e => e === "amount" || e === "count" || e === "date" || e === "repeat")) return;
 
   const card = cardById(p.cardId);
   const pays = T.payments(p, card);
   const first = pays[0].key;
-  els.purchaseSum.append(el("strong", "", p.count > 1 ? `${p.count} × ${fmt(T.perInstallment(p))}` : fmt(p.total)),
-    el("span", "", `${p.count > 1 ? `toplam ${fmt(p.total)} · ilk ödeme` : "ödeme"} ${fmtDayShort(first)}`));
+  const n = T.repeatOf(p);
+  els.purchaseSum.append(el("strong", "", p.count > 1 ? `${p.count} × ${fmt(T.perInstallment(p))}` : n != null ? `${fmt(p.total)} / ay` : fmt(p.total)),
+    el("span", "", `${p.count > 1 ? `toplam ${fmt(p.total)} · ilk ödeme` : n != null ? "ilk ödeme" : "ödeme"} ${fmtDayShort(first)}`));
+  if (n != null) box.append(el("div", "", n ? `Her ay ${n} kez · son ödeme ${fmtDay(pays[pays.length - 1].key)}` : "Her ay, bitiş tarihi yok"));
 
   // Uyarı: kart limiti aşılıyor
   const t = card && p.date ? I.cardTiming(state, p.date).find(x => x.card.id === card.id) : null;
@@ -2102,11 +2137,11 @@ function updatePurchasePreview() {
   }
   if (!card && !p.date) box.append(el("div", "", "Excel'den aktarılan kayıt — tarih girmezsen ödeme ayı korunur"));
   // Düzenlemede ödeme planı
-  if (editingId && pays.length > 1) {
+  if (editingId && pays.length > 1 && n !== 0) {
     const details = el("details", "plan");
     details.open = planOpen;
     details.addEventListener("toggle", () => { planOpen = details.open; });
-    details.append(el("summary", "", `Ödeme planı (${pays.length} taksit)`));
+    details.append(el("summary", "", `Ödeme planı (${pays.length} ${n ? "ay" : "taksit"})`));
     const ol = el("ol", "plan-list");
     for (const x of pays) {
       const li = el("li", x.key < today ? "paid" : "");
@@ -2134,6 +2169,15 @@ els.purchaseForm.addEventListener("input", e => {
     els.categoryRow.open = false;
   }
   if (e.target.name === "person") els.personField.open = false;
+  if (e.target.name === "repeatPreset") {
+    f.repeat.value = Number(e.target.value) >= 2 ? e.target.value : "";
+    f.repeat.classList.remove("invalid");
+    els.repeatRow.open = false;
+  }
+  if (e.target.name === "repeat") {
+    const v = String(Math.round(Number(f.repeat.value)));
+    for (const r of els.purchaseRepeatChips.querySelectorAll("input")) r.checked = f.repeat.value !== "" && r.value === v;
+  }
   if (e.target.name === "desc") {
     clearTimeout(suggestTimer);
     suggestTimer = setTimeout(suggestCategory, SUGGEST_DELAY);
@@ -2155,9 +2199,11 @@ els.purchaseForm.addEventListener("submit", e => {
   e.preventDefault();
   const { p, personId, errors } = collectPurchase();
   const f = els.purchaseForm.elements;
-  for (const name of ["desc", "amount", "count", "date"]) f[name].classList.toggle("invalid", errors.includes(name));
+  for (const name of ["desc", "amount", "count", "date", "repeat"]) f[name].classList.toggle("invalid", errors.includes(name));
   if (errors.length) {
-    const msg = { desc: "Ne aldığını yaz.", amount: "Tutarı gir.", count: "Taksit sayısı 1–60 arası olmalı.", date: "Harcama tarihini gir.", person: "Kişi seç." }[errors[0]];
+    const msg = { desc: "Ne aldığını yaz.", amount: "Tutarı gir.", count: "Taksit sayısı 1–60 arası olmalı.", date: "Harcama tarihini gir.",
+      repeat: `Tekrar 2–${T.MAX_REPEAT} ay arası olmalı.`, person: "Kişi seç." }[errors[0]];
+    if (errors[0] === "repeat") els.repeatRow.open = true;
     els.purchasePreview.replaceChildren(el("div", "warn", msg));
     f[errors[0]]?.focus?.();
     return;
@@ -2398,13 +2444,12 @@ function openEntrySheet(e, asset, draft) {
   const code = e?.asset ?? asset ?? lastAsset;
   els.assetChips.replaceChildren(...V.ASSETS.map(a => radioChip("asset", a.code, a.name, a.code === code)));
   const personId = e ? e.personId
-    : personById(draft?.personId) ? draft.personId
     : entryFilter !== "all" ? entryFilter
     : personById(lastPersonId) ? lastPersonId : state.people[0].id;
   els.entryPersonChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
 
-  f.elements.dir.value = e ? (e.amount < 0 ? "out" : "in") : draft?.dir ?? "in";
+  f.elements.dir.value = e && e.amount < 0 ? "out" : "in";
   f.elements.amount.value = e ? Math.abs(e.amount) : "";
   f.elements.desc.value = e?.desc ?? draft?.desc ?? "";
   f.elements.date.value = e?.date ?? T.todayKey();
@@ -2462,9 +2507,10 @@ function updateEntryForm() {
     box.append(el("div", "", [done && `Bugüne kadar ${done} kez işlendi`, next && `${done ? "sonraki" : "İlki"} ${fmtDay(next)}`]
       .filter(Boolean).join(" · ")));
   }
+  if (T.isSpend(e)) box.append(el("div", "", "TL çıkışı nakit harcama olarak kaydedilir; Harcamalar'da görünür."));
   const person = personById(e.personId);
   if (person && !errors.includes("repeat")) {
-    const before = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId), today)[e.asset] ?? 0;
+    const before = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId), today, spentOf(person.id))[e.asset] ?? 0;
     const after = V.round(before + e.amount * (e.date ? V.processedCount(e, today) : 1), e.asset);
     box.append(el("div", after < 0 ? "warn" : "", `${person.name} · ${a.name.toLocaleLowerCase("tr-TR")} bakiyesi ${fmtAsset(before, e.asset)} → ${fmtAsset(after, e.asset)}`));
   }
@@ -2496,13 +2542,26 @@ els.entryForm.addEventListener("submit", ev => {
     f[errors[0]]?.focus?.();
     return;
   }
+  lastAsset = e.asset;
+  lastPersonId = e.personId;
+  // TL çıkışı harcamadır: varlık formundan girilse de nakit harcama olarak kaydedilir
+  if (T.isSpend(e)) {
+    const id = editingEntryId ?? uid();
+    state.entries = state.entries.filter(x => x.id !== editingEntryId);
+    state.installments.push({ ...T.spendOf(e), id });
+    saveState();
+    els.entrySheet.close();
+    toast("Harcama eklendi · Harcamalar'da");
+    editingEntryId = null;
+    render();
+    classifyAfterSave(id);
+    return;
+  }
   if (editingEntryId) {
     state.entries = state.entries.map(x => (x.id === editingEntryId ? { id: x.id, ...e } : x));
   } else {
     state.entries.push({ id: uid(), ...e });
   }
-  lastAsset = e.asset;
-  lastPersonId = e.personId;
   saveState();
   els.entrySheet.close();
   toast(editingEntryId ? "Hareket güncellendi" : "Hareket eklendi");
@@ -3228,7 +3287,9 @@ if (typeof window.syncInit === 'function') {
     getState: userId => (stateOwner === userId ? state : null),
     onRemoteData(next) {
       state = hydrate(next);
-      localStorage.setItem(getStorageKey(), JSON.stringify(state));
+      // Eski sürümden gelen TL çıkışı harcamaya taşındıysa taşınmış hali buluta da yazılır
+      if (state.entries.length !== (next.entries?.length ?? 0)) saveState();
+      else localStorage.setItem(getStorageKey(), JSON.stringify(state));
       render();
     },
     onSynced() { checkInbox(); backfillCategories(); },

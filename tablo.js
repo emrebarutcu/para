@@ -17,6 +17,8 @@
   const validId = id => typeof id === "string" && id.length > 0 && id.length <= 100;
   // Harcama kategorisi (kategori.js) ve kimin verdiği: "user" kullanıcı seçti / onayladı, "ai" cihazdaki model önerdi
   const validCategory = c => typeof c === "string" && /^[a-z]{1,20}$/.test(c);
+  // Aylık tekrar (taksit.js / varlik.js repeatOf ile aynı): 0 ya da 2…600 tamsayı, başka her şey tek seferlik
+  const validRepeat = n => Number.isInteger(n) && (n === 0 || (n >= 2 && n <= 600));
   const CATEGORY_BY = ["user", "ai"];
 
   // "YYYY-MM-DD"; ayı aşan gün ayın son gününe çekilir (taksit.js'teki gibi), geçersizse null
@@ -65,15 +67,16 @@
         plan_count: int(p.planCount, 1, 100000),
         category: validCategory(p.category) ? p.category : null,
         category_by: validCategory(p.category) && CATEGORY_BY.includes(p.categoryBy) ? p.categoryBy : null,
+        // Tekrar yalnızca peşin ve tarihli harcamada (taksit.js)
+        repeat_count: validRepeat(p.repeat) && count === 1 && !(int(p.planCount, 2, 100000)) && date ? p.repeat : null,
       };
     },
     entries: e => {
       const amount = num(e.amount), date = dateKey(e.date);
       if (!validId(e.personId) || !ASSETS.includes(e.asset) || !Number.isFinite(amount) || amount === 0 || !date) return null;
-      const repeat = e.repeat;   // varlik.js repeatOf ile aynı: 0 ya da 2…600 tamsayı, başka her şey tek seferlik
       return {
         id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date,
-        repeat_count: Number.isInteger(repeat) && (repeat === 0 || (repeat >= 2 && repeat <= 600)) ? repeat : null,
+        repeat_count: validRepeat(e.repeat) ? e.repeat : null,
       };
     },
   };
@@ -97,6 +100,7 @@
         p.category = r.category;
         if (CATEGORY_BY.includes(r.category_by)) p.categoryBy = r.category_by;
       }
+      if (r.repeat_count != null) p.repeat = r.repeat_count;
       return p;
     },
     entries: r => {
@@ -113,7 +117,7 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 3;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by
+  const SCHEMA = 4;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by; 4: purchases.repeat_count
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base) {

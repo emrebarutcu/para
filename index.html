@@ -247,7 +247,8 @@
       <div class="chips scroll-x" id="entryFilter" role="group" aria-label="Kişiye göre süz"></div>
       <div class="asset-grid" id="assetGrid"></div>
       <div id="entryWrap"></div>
-      <p class="footnote">TL karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Kurlar internet varken
+      <p class="footnote">TL çıkışları harcamadır: nakit harcamalar harcama günü, kart harcamaları ekstrenin son ödeme günü,
+        ilk TL hareketinden itibaren TL bakiyesinden düşer. TL karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Kurlar internet varken
         birkaç dakikada bir yenilenir; çevrimdışıyken son alınan kur kullanılır.</p>
     </section>
   </main>
@@ -299,6 +300,16 @@
                 <button type="button" class="chip" data-day="-1">Dün</button>
               </div>
               <input name="date" type="date" aria-label="Harcama tarihi" />
+            </div>
+          </details>
+          <details class="row" id="repeatRow">
+            <summary><span>Tekrar</span><span class="val" id="repeatVal"></span></summary>
+            <div class="row-body">
+              <div class="chips" id="purchaseRepeatChips" role="radiogroup" aria-label="Tekrar"></div>
+              <label class="inline-input">
+                <span>Diğer</span>
+                <input name="repeat" type="number" min="2" max="600" step="1" inputmode="numeric" placeholder="ay" aria-label="Kaç ay" />
+              </label>
             </div>
           </details>
           <details class="row" id="categoryRow">

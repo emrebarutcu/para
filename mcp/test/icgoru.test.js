@@ -102,3 +102,19 @@ test("kategori: öğrenilen kategori aynı işyerinin farklı yazılışına da 
   assert.equal(r.category, "eglence");
   assert.ok(r.confidence > 0.5 && r.confidence <= 1);
 });
+
+test("kira tekrarlayan harcama: serbest nakitten düşer, taksit yüküne ve borcun bitişine girmez", () => {
+  const s = base();
+  s.entries.push({ id: "maas", personId: "ben", asset: "TRY", amount: 30000, desc: "Maaş", date: "2026-01-15", repeat: 0 });
+  s.installments.push({ id: "kira", personId: "ben", cardId: null, desc: "Kira", total: 12000, count: 1, date: "2026-01-01", repeat: 0, category: "ev", categoryBy: "user" });
+  s.installments.push({ id: "tel", personId: "ben", cardId: "world", desc: "Telefon", total: 60000, count: 6, date: "2026-10-26" });
+  const out = I.insights(s, { today: TODAY });
+  assert.equal(out.find(x => x.id === "serbest").data.net, 18000);   // 30.000 − 12.000 kira
+  assert.equal(out.find(x => x.id === "yuk").data.payments, 40000);   // kira taksit değil
+  assert.equal(out.find(x => x.id === "bitis").data.lastMonth, "2027-05");
+  assert.deepEqual(out.find(x => x.id === "duzenli").data, [{ name: "Kira", monthly: 12000, kind: "purchase" }]);
+  // Kategoride her tekrar kendi ayına yazılır
+  const cats = I.categoryBreakdown(s, 2026 * 12 + 9);   // Ekim 2026
+  assert.deepEqual(cats.rows.map(r => [r.id, r.value]), [["", 60000], ["ev", 12000]]);
+  assert.equal(cats.rows[1].average, 12000);
+});

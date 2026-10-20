@@ -109,6 +109,16 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
 
 ### Yükseltme notları
 
+- **4.0.0** — TL çıkışı harcamadır. Harcama her ay tekrarlayabilir (`purchases.repeat_count`: kira, aidat, abonelik).
+  Yayından **önce** `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh supabase/tablolar.sql`; yalnızca
+  eksik sütunu ekler); sütun yoksa yeni sürüm eşitleyemez. Uygulama (ve MCP) veriyi açınca eski TL çıkış hareketlerini
+  aynı id ve tekrarla nakit harcamaya taşır (hareket silinir, harcama yazılır). Harcama ödemeleri ilk TL hareketinden
+  bugüne kadar Varlıklar'daki TL bakiyesinden düşer (nakit harcama günü, kart ekstrenin son ödeme günü). Kalan borç,
+  son taksit ve taksit / gelir oranı tekrarlayan harcamaları saymaz. Önbellekteki 3.x sürümleri `repeat_count`'u
+  yazmaz, olduğu gibi bırakır (tekrarlayan harcamayı tek seferlik gösterir); 3.x'in girdiği TL çıkışını yeni sürüm
+  açınca taşır. MCP: harcama araçlarına isteğe bağlı `repeat`, cevaplara `repeat`; `add_entry` / `update_entry` TL
+  çıkışını harcama olarak kaydeder (`savedAs: "purchase"`); `get_assets` TL bakiyesinden harcamaları düşer;
+  `get_overview` ve `list_people` `remainingTotal` / `remaining` tekrarlayan harcamasız.
 - **3.0.0** — Harcama kategorisi (`purchases.category`, `purchases.category_by`). Yayından **önce**
   `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh supabase/tablolar.sql`; yalnızca eksik sütunları
   ekler); sütunlar yoksa yeni sürüm eşitleyemez. Önbellekteki 2.x sürümleri kategoriyi yazmaz, olduğu gibi bırakır

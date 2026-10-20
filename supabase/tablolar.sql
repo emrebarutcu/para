@@ -88,6 +88,12 @@ alter table entries add column if not exists repeat_count integer
 alter table purchases add column if not exists category text check (category ~ '^[a-z]{1,20}$');
 alter table purchases add column if not exists category_by text check (category_by in ('user', 'ai'));
 
+-- Tekrarlayan harcama (3.x'te yoktu; var olan tabloya eklenir): kira, aidat gibi peşin ve tarihli harcama date'ten
+-- başlayıp her ay aynı gün yinelenir. N: N kez, 0: süresiz, boş: tek seferlik (taksit.js). TL çıkışları artık harcamadır;
+-- eski sürümlerin TL çıkış hareketlerini uygulama harcamaya taşır.
+alter table purchases add column if not exists repeat_count integer
+  check (repeat_count = 0 or repeat_count between 2 and 600);
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);

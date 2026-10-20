@@ -3,6 +3,7 @@
 // artı, çıkışta eksidir; bakiye hareketlerin toplamıdır. TL karşılığı güncel kurla hesaplanır (kurlar: /api/kur).
 // repeat: hareket date'ten başlayıp her ay aynı gün yinelenir (ay kısaysa son güne çekilir). N ≥ 2: N kez, 0: süresiz.
 // Yoksa (ya da 1) tek seferliktir. Tekrarlayan hareketin yalnızca tarihi gelmiş tekrarları bakiyeye girer.
+// TL çıkışı harcamadır (taksit.js): harcamaların ödemeleri TL bakiyesinden düşer, TL hareketi yalnızca giriş olur.
 (function (root) {
   const ASSETS = [
     { code: "TRY", name: "Türk lirası", short: "TL", symbol: "₺", digits: 2 },
@@ -78,15 +79,25 @@
   }
 
   // Varlık → bakiye (yalnızca hareketi olan varlıklar). today verilmezse tekrarlayan hareketlerin yalnızca ilki sayılır.
-  function balances(entries, today) {
+  // spent: harcama ödemeleri [{ key: "YYYY-MM-DD", amount }]; ilk TL hareketinden bugüne kadar (ikisi dahil) ödenenler
+  // TL bakiyesinden düşer. TL hareketi yoksa bakiye takibi başlamamıştır, düşülmez.
+  function balances(entries, today, spent = []) {
     const out = {};
+    let first = null;
     for (const e of entries) {
       if (!asset(e.asset) || !Number.isFinite(e.amount)) continue;
+      if (e.asset === "TRY" && parse(e.date) && !(first <= e.date)) first = e.date;
       const k = today ? processedCount(e, today) : 1;
       if (!k) { if (!(e.asset in out)) out[e.asset] = 0; continue; }
       out[e.asset] = round((out[e.asset] || 0) + e.amount * k, e.asset);
     }
+    if (today && first) out.TRY = round(out.TRY - spentBetween(spent, first, today), "TRY");
     return out;
+  }
+
+  // from ile to arasında (ikisi dahil) ödenen harcamaların toplamı
+  function spentBetween(spent, from, to) {
+    return spent.reduce((s, x) => (x.key >= from && x.key <= to ? s + x.amount : s), 0);
   }
 
   // Varlığın TL karşılığı; kuru bilinmiyorsa null
@@ -106,7 +117,7 @@
     return { total, missing };
   }
 
-  const api = { ASSETS, MAX_REPEAT, asset, round, repeatOf, occurrenceDate, occurrenceIn, lastDate, processedCount, nextDate, balances, toTry, totalTry };
+  const api = { ASSETS, MAX_REPEAT, asset, round, repeatOf, occurrenceDate, occurrenceIn, lastDate, processedCount, nextDate, balances, spentBetween, toTry, totalTry };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Varlik = api;
 })(this);

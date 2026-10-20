@@ -476,8 +476,11 @@ test("tekrarlayan varlık hareketleri: bakiyeye yalnızca tarihi gelen tekrarlar
   const maas = await c.call("add_entry", { asset: "TRY", direction: "in", amount: 50000, description: "Maaş", date: "2026-08-15", repeat: 0 });
   assert.deepEqual(maas.entry.repeat, { every: "month", times: null, lastDate: null, processed: 3, nextDate: "2026-11-15" });
   assert.equal(maas.balance, 150000);
+  // TL çıkışı harcamadır: tekrarıyla nakit harcama olarak kaydedilir
   const kira = await c.call("add_entry", { asset: "TRY", direction: "out", amount: 20000, description: "Kira", date: "2026-10-20", repeat: 3 });
-  assert.deepEqual(kira.entry.repeat, { every: "month", times: 3, lastDate: "2026-12-20", processed: 0, nextDate: "2026-10-20" });
+  assert.equal(kira.savedAs, "purchase");
+  assert.equal(kira.purchase.card, "Nakit");
+  assert.deepEqual(kira.purchase.repeat, { every: "month", times: 3, lastDate: "2026-12-20", nextDate: "2026-10-20" });
   assert.equal(kira.balance, 150000);
   const tek = await c.call("add_entry", { asset: "USD", direction: "in", amount: 10, description: "Tek", repeat: 1 });
   assert.equal(tek.entry.repeat, undefined);
@@ -485,7 +488,8 @@ test("tekrarlayan varlık hareketleri: bakiyeye yalnızca tarihi gelen tekrarlar
   for (const repeat of ["", " ", true]) assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", repeat })).error, /repeat/);
 
   assert.equal(sb.db.entries.find(r => r.id === maas.entry.id).repeat_count, 0);
-  assert.equal(sb.db.entries.find(r => r.id === kira.entry.id).repeat_count, 3);
+  assert.equal(sb.db.purchases.find(r => r.id === kira.purchase.id).repeat_count, 3);
+  assert.equal(sb.db.entries.find(r => r.id === kira.purchase.id), undefined);
   assert.equal(sb.db.entries.find(r => r.id === tek.entry.id).repeat_count, null);
 
   // Aralık süzgeci: tekrarlayan hareket aralıkta yinelenmeye devam ediyorsa listelenir
@@ -497,8 +501,8 @@ test("tekrarlayan varlık hareketleri: bakiyeye yalnızca tarihi gelen tekrarlar
   const stop = await c.call("update_entry", { id: maas.entry.id, repeat: 3 });
   assert.equal(stop.entry.repeat.nextDate, null);
   assert.equal(stop.entry.amount, 50000);
-  const once = await c.call("update_entry", { id: kira.entry.id, amount: 25000 });
-  assert.equal(once.entry.repeat.times, 3);
+  const once = await c.call("update_purchase", { id: kira.purchase.id, amount: 25000 });
+  assert.equal(once.purchase.repeat.times, 3);
   assert.equal((await c.call("get_assets")).assets[0].balance, 150000);
 });
 
@@ -583,4 +587,30 @@ test("kategoriler, içgörüler, kategori dağılımı ve alışveriş simülasy
   assert.deepEqual([sim.months[0].freeCashBefore, sim.months[0].freeCashAfter], [29200, 25200]);
   assert.equal(sim.card.availableAfter, 20000 - 2100 - 12000);
   assert.equal(stored(sb).installments.length, 2);   // kaydedilmedi
+});
+
+test("düzenli gider (tekrarlayan harcama): bu ayın ödemesinde, kalan borçta değil; TL bakiyesinden düşer", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  // Bugün 2026-10-18
+  await c.call("add_entry", { asset: "TRY", direction: "in", amount: 50000, description: "Maaş", date: "2026-08-15", repeat: 0 });
+  const kira = await c.call("add_purchase", { description: "Kira", amount: 20000, date: "2026-09-01", card: "nakit", repeat: 0 });
+  assert.deepEqual(kira.purchase.repeat, { every: "month", times: null, lastDate: null, nextDate: "2026-11-01" });
+  assert.equal(kira.purchase.paidInstallments, 2);
+  assert.equal(sb.db.purchases[0].repeat_count, 0);
+  await c.call("add_purchase", { description: "Market", amount: 1000, date: "2026-10-10", card: "nakit" });
+  await c.call("add_purchase", { description: "Fırın", amount: 600, date: "2026-10-25", card: "nakit", installments: 3 });
+
+  const o = await c.call("get_overview");
+  assert.equal(o.dueThisMonth, 20000 + 1000 + 200);
+  assert.equal(o.nextMonth.total, 20000 + 200);
+  assert.equal(o.remainingTotal, 1000 + 600);   // kira borç değil
+  assert.equal(o.lastPaymentMonth, "2026-12");
+
+  // 150.000 maaş − 2 × 20.000 kira − 1.000 market (25 Eki taksiti henüz ödenmedi)
+  assert.equal((await c.call("get_assets")).assets[0].balance, 109000);
+
+  assert.match((await c.call("add_purchase", { description: "x", amount: 10, installments: 2, repeat: 0 })).error, /single-payment/);
+  const stop = await c.call("update_purchase", { id: kira.purchase.id, repeat: 2 });
+  assert.equal(stop.purchase.status, "done");
 });

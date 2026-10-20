@@ -2,7 +2,7 @@
 // Kayıtlı veriden kurallarla hesaplanır (model gerekmez): ayın serbest nakdi, taksit yükünün gelire oranı, borcun
 // biteceği ay, dolmak üzere olan limitler, yaklaşan ödeme sıçraması, bugün hangi kartla alışveriş yapılırsa ilk
 // ödemenin en geç geleceği, düzenli ödemeler (abonelik), kategoride olağandışı artış, diğer kişilerin payı.
-// Gelir ve sabit giderler varlık hareketlerinden gelir (tekrarlayan giriş / çıkış); döviz ve altın güncel kurla TL'dir.
+// Gelir varlık girişlerinden, giderler harcamalardan (tekrarlayanlar dahil: kira, aidat) gelir; döviz ve altın güncel kurla TL'dir.
 // app.js (Özet) ve MCP (get_insights) kullanır.
 (function (root) {
   const node = typeof module === "object" && module.exports;
@@ -36,7 +36,7 @@
     };
   }
 
-  // Ayın girdi / çıktıları (TL): varlık girişleri gelir, çıkışları gider; kart / nakit ödemeleri ayrı.
+  // Ayın girdi / çıktıları (TL): varlık girişleri gelir, döviz / altın çıkışları gider; harcama ödemeleri ayrı.
   // Kuru bilinmeyen hareket sayılmaz (missing).
   function monthFlows(state, idx, rates, months) {
     const { entries } = known(state);
@@ -56,12 +56,18 @@
   function spendingByMonth(state, fromIdx, toIdx) {
     const out = new Map();
     for (let i = fromIdx; i <= toIdx; i++) out.set(i, {});
+    const add = (idx, p) => {
+      const key = K.valid(p.category) ? p.category : "";
+      const m = out.get(idx);
+      m[key] = (m[key] || 0) + T.originalTotal(p);
+    };
     for (const p of known(state).purchases) {
       const d = T.parseDate(p.date);
-      if (!d || !out.has(d.idx)) continue;
-      const key = K.valid(p.category) ? p.category : "";
-      const m = out.get(d.idx);
-      m[key] = (m[key] || 0) + T.originalTotal(p);
+      if (!d) continue;
+      const n = T.repeatOf(p);
+      if (n == null) { if (out.has(d.idx)) add(d.idx, p); continue; }
+      // Tekrarlayan harcama her tekrarının ayına yazılır
+      for (let i = Math.max(fromIdx, d.idx); i <= toIdx && (n === 0 || i < d.idx + n); i++) add(i, p);
     }
     return out;
   }
@@ -80,11 +86,17 @@
     return { idx, total, rows, compared: prev.length };
   }
 
-  // Aynı işyerine her ay peşin ödenen (abonelik gibi) harcamalar ve tekrarlayan varlık çıkışları (kira, aidat)
+  // Tekrarlayan harcamalar (kira, aidat), aynı işyerine her ay peşin ödenen (abonelik gibi) harcamalar ve tekrarlayan
+  // döviz / altın çıkışları
   function recurring(state, today, rates) {
     const t = T.parseDate(today).idx;
     const groups = new Map();
+    const out = [];
     for (const p of known(state).purchases) {
+      if (T.repeatOf(p) != null) {
+        if (T.nextOccurrence(p, today)) out.push({ name: p.desc, monthly: p.total, kind: "purchase", category: p.category ?? null });
+        continue;
+      }
       const d = T.parseDate(p.date);
       if (!d || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
       const key = K.keyOf(p.desc);
@@ -92,7 +104,6 @@
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(p);
     }
-    const out = [];
     for (const list of groups.values()) {
       const months = new Set(list.map(p => T.parseDate(p.date).idx));
       const amounts = list.map(p => p.total);
@@ -123,7 +134,11 @@
   function insights(state, { today, rates = null } = {}) {
     const t = T.parseDate(today).idx;
     const { purchases, entries } = known(state);
+    const ids = new Set(state.people.map(p => p.id));
     const cashflow = T.buildCashflow(state.people, state.cards, state.installments, t, t + Math.max(HORIZON, PEAK_MONTHS));
+    // Taksit yükü ve borcun bitişi tekrarlayan harcamalarsız (kira borç değildir)
+    const debts = state.installments.filter(p => T.repeatOf(p) == null);
+    const debtflow = T.buildCashflow(state.people, state.cards, debts, t, t + HORIZON - 1);
     const out = [];
     const add = x => out.push(x);
 
@@ -147,7 +162,7 @@
           data: { month: T.monthKey(t), income: round(f.income), payments: round(f.payments), outflow: round(f.outflow), net: round(f.net) },
         });
       }
-      const income = flows.reduce((s, f) => s + f.income, 0), paying = flows.reduce((s, f) => s + f.payments, 0);
+      const income = flows.reduce((s, f) => s + f.income, 0), paying = debtflow.reduce((s, m) => s + m.total, 0);
       if (income > 0 && paying > 0) {
         const r = paying / income;
         add({
@@ -244,12 +259,12 @@
     }
 
     // Borcun biteceği ay
-    const lastIdx = purchases.reduce((m, p) => {
+    const lastIdx = debts.filter(p => ids.has(p.personId)).reduce((m, p) => {
       const pays = T.payments(p, state.cards.find(c => c.id === p.cardId));
       return pays.length ? Math.max(m, pays[pays.length - 1].idx) : m;
     }, -Infinity);
     if (lastIdx >= t) {
-      const rest = T.buildCashflow(state.people, state.cards, state.installments, t, lastIdx).reduce((s, m) => s + m.total, 0);
+      const rest = T.buildCashflow(state.people, state.cards, debts, t, lastIdx).reduce((s, m) => s + m.total, 0);
       add({
         id: "bitis", tone: "good", title: `Son taksit: ${monthLong(lastIdx)}`,
         text: `Yeni taksit eklemezsen bu ay dahil ödenecek ${fmt(rest)} kaldı, sonra kart borcun biter.`,

@@ -2,6 +2,7 @@
 // Kartlı harcama: harcama tarihi kartın kesim gününe göre bir ekstreye girer, ekstre
 // kartın son ödeme gününde ödenir; taksitler sonraki ekstrelere birer ay kayarak düşer.
 // Nakit harcama: harcama gününde ödenir (taksitliyse sonraki aylarda aynı gün).
+// Tekrarlayan harcama (kira, aidat, abonelik): her ay aynı gün yeniden yapılmış peşin harcama gibi ödenir.
 (function (root) {
   const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
   const MONTHS_SHORT = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
@@ -159,15 +160,54 @@
   }
 
   // ---------- Harcama ----------
-  // { id, personId, cardId, desc, total, count, date?: "YYYY-MM-DD", firstDue?: "YYYY-MM", planCount? }
+  // { id, personId, cardId, desc, total, count, date?: "YYYY-MM-DD", firstDue?: "YYYY-MM", planCount?, repeat? }
   // date: harcama tarihi. Tarihi bilinmeyen (Excel'den gelen) kayıtlarda firstDue kalan ilk taksitin
   // ödendiği ay, count/total kalan taksitler, planCount alışverişin asıl taksit sayısıdır.
+  // repeat: peşin ve tarihli harcama date'ten başlayıp her ay aynı gün yinelenir (ay kısaysa son güne çekilir).
+  // N ≥ 2: N kez, 0: süresiz; yoksa tek seferliktir. Süresizin tekrarları bugünden REPEAT_AHEAD ay sonrasına kadar üretilir.
+  const MAX_REPEAT = 600;   // en fazla tekrar (50 yıl)
+  const REPEAT_AHEAD = 60;
+
   function perInstallment(p) { return p.total / p.count; }
   function planLength(p)     { return Math.max(p.planCount || 0, p.count); }
   function originalTotal(p)  { return perInstallment(p) * planLength(p); }
 
-  // Ödemeler: [{ idx (ödeme ayı), key ("YYYY-MM-DD"), no (1 tabanlı), amount }]
-  function payments(p, card) {
+  // Geçerli repeat değeri: 0 (süresiz) ya da 2…MAX_REPEAT; tek seferlik (ya da taksitli / tarihsiz) harcama için null
+  function repeatOf(p) {
+    const n = p?.repeat;
+    return Number.isInteger(n) && (n === 0 || (n >= 2 && n <= MAX_REPEAT)) && planLength(p) === 1 && parseDate(p.date) ? n : null;
+  }
+
+  // Tekrarlayan harcamanın k. tekrarının tarihi (0 tabanlı)
+  function occurrenceDate(p, k) {
+    const d = parseDate(p.date);
+    return dateKey(d.idx + k, d.day);
+  }
+
+  // today ve sonrasındaki ilk tekrarın tarihi; kalmadıysa (ya da tekrarlamıyorsa) null
+  function nextOccurrence(p, today) {
+    const n = repeatOf(p);
+    if (n == null) return null;
+    const d = parseDate(p.date), t = parseDate(today);
+    const k = Math.max(t.idx - d.idx + (today > dateKey(t.idx, d.day) ? 1 : 0), 0);
+    return n === 0 || k < n ? occurrenceDate(p, k) : null;
+  }
+
+  // Ödemeler: [{ idx (ödeme ayı), key ("YYYY-MM-DD"), no (1 tabanlı), amount, at? }]. Tekrarlayan harcamada no
+  // tekrarın sırası, at tekrarın harcama tarihidir.
+  function payments(p, card, today = todayKey()) {
+    const n = repeatOf(p);
+    if (n != null) {
+      const d = parseDate(p.date);
+      const last = n ? d.idx + n - 1 : Math.max(d.idx, parseDate(today).idx) + REPEAT_AHEAD;
+      const { repeat, ...once } = p;
+      const out = [];
+      for (let idx = d.idx; idx <= last; idx++) {
+        const at = dateKey(idx, d.day);
+        out.push({ ...payments({ ...once, date: at }, card)[0], no: idx - d.idx + 1, at });
+      }
+      return out;
+    }
     const amount = perInstallment(p);
     const d = parseDate(p.date);
     const paid = planLength(p) - p.count;
@@ -199,9 +239,10 @@
     return list.filter(x => x.idx >= fromIdx).length;
   }
 
-  // Bugün ve sonrasında ödenecek tutar — kart limitinden düşen kısım
+  // Bugün ve sonrasında ödenecek tutar — kart limitinden düşen kısım (tekrarlayan harcamanın henüz yapılmamış
+  // tekrarları sayılmaz)
   function outstanding(list, today) {
-    return list.filter(x => x.key >= today).reduce((s, x) => s + x.amount, 0);
+    return list.filter(x => x.key >= today && !(x.at > today)).reduce((s, x) => s + x.amount, 0);
   }
 
   // Ay ay nakit akışı: her ay kişi / kart toplamları ve tarih + kart bazında ödemeler
@@ -241,6 +282,14 @@
       ...m,
       events: [...m.events.values()].sort((a, b) => a.date.localeCompare(b.date) || rank(a.cardId) - rank(b.cardId)),
     }));
+  }
+
+  // TL çıkışı nakit harcamadır: varlık hareketi (varlik.js) olarak girilen TL çıkışı aynı id ve tekrarla harcama olur
+  function isSpend(e) { return e?.asset === "TRY" && Number(e.amount) < 0 && !!parseDate(e.date); }
+  function spendOf(e) {
+    const p = { id: e.id, personId: e.personId, cardId: null, desc: e.desc, total: Math.round(-Number(e.amount) * 100) / 100, count: 1, date: e.date };
+    if (repeatOf({ ...p, repeat: e.repeat }) != null) p.repeat = e.repeat;
+    return p;
   }
 
   // ---------- Kayıtlı veri ----------
@@ -314,6 +363,15 @@
       });
     }
     delete s.dueDay;
+
+    // Eski sürümlerde varlık hareketi olarak girilen TL çıkışları harcamaya taşınır. Aynı id korunur; iki cihaz aynı
+    // kaydı taşırsa aynı harcama olur.
+    if (s.entries.some(isSpend)) {
+      const ids = new Set(s.installments.map(p => p?.id));
+      const moved = s.entries.filter(isSpend).map(e => ({ ...spendOf(e), ...(ids.has(e.id) && { id: `${e.id}-h` }) }));
+      s.installments = [...s.installments, ...moved];
+      s.entries = s.entries.filter(e => !isSpend(e));
+    }
     return s;
   }
 
@@ -414,7 +472,7 @@
     MONTHS, MONTHS_SHORT, CASH, SERIES_COUNT,
     monthIndex, monthKey, monthName, monthShort, yearOf, daysInMonth, dayOf, dateKey, parseDate, toDate, todayKey,
     addDays, statementIndex, dueIndex, periods, statementOf, nextStatement, retermCard, termChoices,
-    perInstallment, planLength, originalTotal, payments, remainingFrom, outstanding, buildCashflow,
+    MAX_REPEAT, perInstallment, planLength, originalTotal, repeatOf, occurrenceDate, nextOccurrence, payments, remainingFrom, outstanding, buildCashflow, isSpend, spendOf,
     defaultState, validDay, validHistory, defaultCard, nextColor, hydrate,
     normalize, titleCase, parseStatement, fromStatement, parseSheetRows, parseWorkbook,
   };
