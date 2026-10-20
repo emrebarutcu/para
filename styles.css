@@ -1424,9 +1424,6 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 
 /* ── Harcama formu ── */
 .p-status { font-size: 13px; font-weight: 500; color: var(--text-2); padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-2); }
-.chip .chip-sub { font-size: 12px; font-weight: 500; opacity: .65; font-variant-numeric: tabular-nums; }
-.chip .chip-tag { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); }
-.chip.on .chip-tag { background: color-mix(in srgb, var(--on-primary) 22%, transparent); color: var(--on-primary); }
 .date-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .date-row .chips { flex-wrap: nowrap; }
 .date-row input[type="date"] { flex: 1; min-width: 150px; }
@@ -1439,3 +1436,36 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .sheet-sum { flex-basis: 100%; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
 .sheet-sum:empty { display: none; }
 .sheet-sum strong { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+
+/* Sade harcama formu: açıklama, onay kutusu, kart ipucu, açılır satırlar */
+.desc-input {
+  height: 52px; padding: 0 16px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface-2);
+  font: inherit; font-size: 17px; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.desc-input:focus { border-color: var(--text-3); background: var(--surface); box-shadow: 0 0 0 4px var(--focus); }
+.desc-input.invalid { border-color: var(--danger); }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-2); cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--primary); }
+.card-tip {
+  align-self: flex-start; border: none; background: none; padding: 0; cursor: pointer; text-align: left;
+  font: inherit; font-size: 13px; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px;
+}
+.rows { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.row + .row { border-top: 1px solid var(--line); }
+.row[hidden] { display: none; }
+.row summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px;
+  list-style: none; cursor: pointer; font-size: 15px; font-weight: 500;
+}
+.row summary::-webkit-details-marker { display: none; }
+.row summary::after { content: "›"; color: var(--text-3); font-size: 18px; transition: transform .15s; }
+.row[open] summary::after { transform: rotate(90deg); }
+.row .val { margin-left: auto; display: inline-flex; align-items: baseline; gap: 6px; color: var(--text-2); font-weight: 500; text-align: right; }
+.row .val b { font-weight: 600; color: var(--text); }
+.row .val .cat-hint { margin: 0; }
+.row-body { padding: 0 14px 14px; }
+.row-body input[type="date"] {
+  flex: 1; min-width: 150px; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line-2);
+  background: var(--surface-2); font: inherit; font-size: 15px; color: var(--text); outline: none;
+}
+.row-body input[type="date"]:focus { border-color: var(--text-3); background: var(--surface); box-shadow: 0 0 0 4px var(--focus); }

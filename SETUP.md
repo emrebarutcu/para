@@ -170,14 +170,15 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
 
 Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
 
-Harcama formu: tutar en üstte (Türkçe yazım: `1.250,50`), açıklamada önceki harcamalardan öneri, kategori (kategorisiz
-harcama düzenlenmek üzere açılınca öneri hemen gelir; model emin değilse "… olabilir" önerisine dokunup seçilir), taksit, kart
-(her kartta bu tarihli harcamanın ilk ödemesi; ilk ödemesi belirgin biçimde en geç olan "en geç", limiti dolan
-"limit dolu"), Bugün / Dün kısayollu tarih, kişi (tek kişide gizli). Altta sabit özet (taksit × tutar, ilk
-ödeme), önizlemede ekstre, karttaki kullanılabilir limit ve açılır ödeme planı. Düzenlemede ödenen / kalan taksit;
-**Kopyala** aynı harcamayı bugünün tarihiyle yeni harcama olarak açar. Kategori elle seçilmediyse kaydedince verilir:
-kullanıcının aynı işyerine önceki seçimi hemen, cihazdaki modelin önerisi kayıttan sonra (açıklama değiştiyse önceki
-otomatik kategori yenilenir; elle seçilen kategoriye dokunulmaz).
+Harcama formu sade tutulur: görünen yalnızca tutar (Türkçe yazım: `1.250,50`), ne alındığı (önceki harcamalardan öneri),
+taksit ("Diğer" ile istenen sayı; taksitliyse "Yazdığım tutar taksit başına" kutusu) ve kart; altta tek satır özet
+(taksit × tutar, toplam, ilk ödeme). Tarih (varsayılan bugün; Bugün / Dün kısayolu), kategori (kendiliğinden önerilir;
+emin olunamazsa "… olabilir" önerisine dokunulur) ve kişi (tek kişide gizli) tek satırdır, dokununca açılır. Başka bir
+kartla ilk ödeme en az 10 gün daha geç geliyorsa tek satır ipucu çıkar, dokununca o kart seçilir. Uyarı yalnızca kart
+limiti aşılıyorsa. Düzenlemede ödenen / kalan taksit ve açılır ödeme planı; **Kopyala** aynı harcamayı bugünün
+tarihiyle yeni harcama olarak açar. Kategori elle seçilmediyse kaydedince verilir: kullanıcının aynı işyerine önceki
+seçimi hemen, modelin önerisi kayıttan sonra (açıklama değiştiyse önceki otomatik kategori yenilenir; elle seçilen
+kategoriye dokunulmaz).
 
 ### Varlıklar: TL, dolar, euro, gram altın
 

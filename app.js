@@ -284,7 +284,8 @@ const els = {
   purchaseDelete: $("purchaseDelete"), purchasePreview: $("purchasePreview"),
   countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"), personField: $("personField"),
   purchaseSum: $("purchaseSum"), purchaseStatus: $("purchaseStatus"), purchaseCopy: $("purchaseCopy"),
-  dateChips: $("dateChips"), descList: $("descList"),
+  dateChips: $("dateChips"), descList: $("descList"), countOther: $("countOther"), perRow: $("perRow"), cardTip: $("cardTip"),
+  dateRow: $("dateRow"), dateVal: $("dateVal"), categoryRow: $("categoryRow"), categoryVal: $("categoryVal"), personVal: $("personVal"),
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
   termField: $("termField"), termNote: $("termNote"), termChoices: $("termChoices"),
@@ -1781,8 +1782,10 @@ function radioChip(name, value, label, checked, color) {
 }
 
 // ---------- Harcama formu ----------
-// Sıra: tutar (odakta), ne alındığı (önceki açıklamalardan öneri), kategori, taksit, kart (her kartta ilk ödeme tarihi),
-// tarih, kişi. Altta sabit özet. Düzenlemede ödeme durumu ve planı; "Kopyala" aynısından yeni harcama açar.
+// Görünen yalnızca temel alanlar: tutar (odakta), ne alındığı (önceki açıklamalardan öneri), taksit, kart; altta tek
+// satır özet. Tarih (varsayılan bugün), kategori (kendiliğinden önerilir) ve kişi tek satır; dokununca açılır.
+// Başka kartla ilk ödeme belirgin biçimde daha geç geliyorsa tek satır ipucu. Düzenlemede ödeme durumu ve planı;
+// "Kopyala" aynısından yeni harcama açar.
 // draft: kayıtlı olmayan, önceden doldurulmuş harcama (e-postadan gelen ya da kopyalanan)
 let planOpen = false;         // önizlemedeki ödeme planı açık
 let categoryFor = null;       // kullanıcı seçmediyse formdaki kategorinin hangi açıklamaya göre verildiği
@@ -1812,9 +1815,12 @@ function openPurchaseSheet(p, draft) {
   planOpen = false;
 
   const count = src?.count ?? 1;
-  els.countChips.replaceChildren(...COUNT_PRESETS.map(n =>
-    radioChip("countPreset", String(n), n === 1 ? "Peşin" : `${n} taksit`, n === count)));
+  const other = !COUNT_PRESETS.includes(count);
+  els.countChips.replaceChildren(
+    ...COUNT_PRESETS.map(n => radioChip("countPreset", String(n), n === 1 ? "Peşin" : `${n} taksit`, n === count)),
+    radioChip("countPreset", "other", "Diğer", other));
   f.elements.count.value = count;
+  els.countOther.hidden = !other;
 
   const cardId = p ? (p.cardId && cardById(p.cardId) ? p.cardId : "")
     : draft?.cardId && cardById(draft.cardId) ? draft.cardId
@@ -1827,6 +1833,7 @@ function openPurchaseSheet(p, draft) {
   els.personChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
   els.personField.hidden = state.people.length < 2;
+  for (const d of [els.dateRow, els.categoryRow, els.personField]) d.open = false;
 
   f.elements.desc.value = src?.desc ?? "";
   f.elements.amount.value = src?.total ? amountText(src.total) : "";
@@ -1845,30 +1852,46 @@ function openPurchaseSheet(p, draft) {
   updatePurchasePreview();
   openSheet(els.purchaseSheet);
   showPicked(els.countChips);
-  showPickedCategory();
   if (!p) f.elements.amount.focus();
   if (src?.desc && !categorySource) suggestCategory();   // düzenlenen ya da e-postadan gelen kategorisiz harcama
 }
 
-// Kart çipleri: her kartta bu tarihli harcamanın ilk ödemesi; ilk ödemesi belirgin biçimde en geç olan işaretli
 function renderCardChips(selected) {
-  const date = T.parseDate(els.purchaseForm.elements.date.value) ? els.purchaseForm.elements.date.value : null;
-  const timing = date ? I.cardTiming(state, date) : [];
-  const usable = timing.filter(x => !x.full);
-  const best = usable.length > 1 && usable[0].days - usable[usable.length - 1].days >= 10 ? usable[0].card.id : null;
-  const chip = (id, name, color, sub, tag) => {
-    const c = radioChip("card", id, name, id === selected, color);
-    if (sub) c.append(el("small", "chip-sub", sub));
-    if (tag) c.append(el("span", "chip-tag", tag));
-    return c;
-  };
   els.cardChips.replaceChildren(
-    ...state.cards.map(c => {
-      const t = timing.find(x => x.card.id === c.id);
-      return chip(c.id, c.name, seriesVar(c), t && fmtDayShort(t.due), t?.full ? "limit dolu" : c.id === best ? "en geç" : null);
-    }),
-    chip("", "Nakit / banka kartı", CASH_COLOR, date && "aynı gün"));
+    ...state.cards.map(c => radioChip("card", c.id, c.name, c.id === selected, seriesVar(c))),
+    radioChip("card", "", "Nakit / banka kartı", selected === "", CASH_COLOR));
   syncChecked(els.cardChips);
+}
+
+// Seçili kartla değil de başka kartla ilk ödeme en az 10 gün daha geç geliyorsa tek satır ipucu; dokununca o kart seçilir
+function renderCardTip(cardId, date) {
+  const tip = els.cardTip;
+  tip.hidden = true;
+  const card = cardById(cardId);
+  if (!card || !date || editingId) return;
+  const timing = I.cardTiming(state, date).filter(x => !x.full);
+  const mine = timing.find(x => x.card.id === card.id), best = timing[0];
+  if (!mine || !best || best.card.id === card.id || best.days - mine.days < 10) return;
+  tip.textContent = `${best.card.name} ile ilk ödeme ${best.days - mine.days} gün daha geç (${fmtDayShort(best.due)}) · seç`;
+  tip.dataset.card = best.card.id;
+  tip.hidden = false;
+}
+
+els.cardTip.addEventListener("click", () => {
+  const input = els.cardChips.querySelector(`input[value="${CSS.escape(els.cardTip.dataset.card)}"]`);
+  if (!input) return;
+  input.checked = true;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+// Açılır satırların değeri: tarih, kategori, kişi
+function renderRowValues() {
+  const f = els.purchaseForm.elements, today = T.todayKey();
+  const date = f.date.value;
+  els.dateVal.textContent = !T.parseDate(date) ? "Tarih yok"
+    : date === today ? "Bugün" : date === T.addDays(today, -1) ? "Dün" : fmtDay(date);
+  els.categoryVal.textContent = K.category(f.category.value)?.name ?? "Seçilmedi";
+  els.personVal.textContent = personById(f.person.value)?.name ?? "";
 }
 
 // Önceki harcamaların açıklamaları (en yeniler önce): yazarken öneri
@@ -1903,7 +1926,6 @@ function showPicked(row) {
   const chip = row.querySelector(".on");
   if (chip) row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
 }
-const showPickedCategory = () => showPicked(els.categoryChips);
 
 // ---------- Kategori önerisi ----------
 // Önce kullanıcının aynı işyerine verdiği kategori (kategori.js), yoksa cihazdaki model (yz.js). Kullanıcı bir
@@ -1915,7 +1937,7 @@ function setCategoryHint(text, action) {
   if (action) {
     const b = el("button", "link", action.label);
     b.type = "button";
-    b.addEventListener("click", action.run);
+    b.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); action.run(); });
     h.append(b);
   }
 }
@@ -1925,7 +1947,7 @@ function pickCategory(id, source, desc = null) {
   categorySource = source;
   categoryFor = id ? desc : null;
   syncChecked(els.categoryChips);
-  showPickedCategory();
+  renderRowValues();
 }
 
 // Önerilen kategoriyi kullanıcı seçti (öneriye dokundu): kendi seçimi sayılır, öğrenilir
@@ -2007,7 +2029,7 @@ function collectPurchase() {
   if (!date && !editing?.firstDue) errors.push("date");
   if (!personById(f.person.value)) errors.push("person");
 
-  const total = f.mode.value === "per" ? Math.round(amount * count * 100) / 100 : amount;
+  const total = f.per.checked && count > 1 ? Math.round(amount * count * 100) / 100 : amount;
   const p = { desc, cardId: f.card.value || null, count, total };
   if (K.valid(f.category.value)) Object.assign(p, { category: f.category.value, categoryBy: categorySource === "user" ? "user" : "ai" });
   if (date) {
@@ -2029,30 +2051,28 @@ function updatePurchasePreview() {
   for (const b of els.dateChips.querySelectorAll("[data-day]")) {
     b.classList.toggle("on", els.purchaseForm.elements.date.value === T.addDays(today, Number(b.dataset.day)));
   }
+  els.perRow.hidden = !(p.count > 1);
+  renderRowValues();
+  renderCardTip(p.cardId, p.date);
   if (errors.some(e => e === "amount" || e === "count" || e === "date")) return;
 
   const card = cardById(p.cardId);
   const pays = T.payments(p, card);
-  const first = pays[0].key, last = pays[pays.length - 1].key;
+  const first = pays[0].key;
   els.purchaseSum.append(el("strong", "", p.count > 1 ? `${p.count} × ${fmt(T.perInstallment(p))}` : fmt(p.total)),
-    el("span", "", `${p.count > 1 ? "ilk ödeme" : "ödeme"} ${fmtDayShort(first)} · ${relDays(first, today).toLocaleLowerCase("tr-TR")}`));
+    el("span", "", `${p.count > 1 ? `toplam ${fmt(p.total)} · ilk ödeme` : "ödeme"} ${fmtDayShort(first)}`));
 
-  if (p.count > 1) box.append(el("div", "", `Toplam ${fmt(p.total)} · son taksit ${fmtDay(last)}`));
-  if (card && p.date) {
-    box.append(el("div", "", `${card.name} · ${fmtDay(T.statementOf(card, p.date).cut)} kesimli ekstreye girer, ${fmtDay(first)} ödenir`));
-  } else if (!card) {
-    box.append(el("div", "", p.count > 1 ? "Nakit — her ay harcama gününde ödenir" : "Nakit — harcama gününde ödenir"));
-  } else {
-    box.append(el("div", "", "Excel'den aktarılan kayıt — tarih girmezsen ödeme ayı korunur"));
-  }
+  // Uyarı: kart limiti aşılıyor
   const t = card && p.date ? I.cardTiming(state, p.date).find(x => x.card.id === card.id) : null;
   if (t?.available != null) {
     const own = editingId ? state.installments.find(x => x.id === editingId) : null;
     const before = own && own.cardId === card.id ? T.outstanding(paymentsOf(own), today) : 0;
     const after = t.available + before - T.outstanding(pays, today);
-    box.append(el("div", after < 0 ? "warn" : "", after < 0 ? `${card.name} limiti ${fmt(-after)} aşılır` : `${card.name} kullanılabilir limit sonra ${fmt(after)}`));
+    if (after < 0) box.append(el("div", "warn", `${card.name} limiti ${fmt(-after)} aşılır`));
   }
-  if (pays.length > 1) {
+  if (!card && !p.date) box.append(el("div", "", "Excel'den aktarılan kayıt — tarih girmezsen ödeme ayı korunur"));
+  // Düzenlemede ödeme planı
+  if (editingId && pays.length > 1) {
     const details = el("details", "plan");
     details.open = planOpen;
     details.addEventListener("toggle", () => { planOpen = details.open; });
@@ -2071,17 +2091,19 @@ function updatePurchasePreview() {
 els.purchaseForm.addEventListener("input", e => {
   e.target.classList?.remove("invalid");
   const f = els.purchaseForm.elements;
-  if (e.target.name === "countPreset") f.count.value = e.target.value;
-  if (e.target.name === "count") {
-    for (const r of els.countChips.querySelectorAll("input")) r.checked = r.value === String(Math.round(Number(f.count.value)));
+  if (e.target.name === "countPreset") {
+    const other = e.target.value === "other";
+    els.countOther.hidden = !other;
+    if (other) { f.count.value = ""; f.count.focus(); } else f.count.value = e.target.value;
   }
-  if (e.target.name === "date") renderCardChips(f.card.value);
   if (e.target.name === "category") {
     categoryTouched = true;
     categorySource = "user";
     suggestSeq++;
     setCategoryHint("");
+    els.categoryRow.open = false;
   }
+  if (e.target.name === "person") els.personField.open = false;
   if (e.target.name === "desc") {
     clearTimeout(suggestTimer);
     suggestTimer = setTimeout(suggestCategory, SUGGEST_DELAY);
@@ -2096,6 +2118,7 @@ els.dateChips.addEventListener("click", e => {
   const input = els.purchaseForm.elements.date;
   input.value = T.addDays(T.todayKey(), Number(b.dataset.day));
   input.dispatchEvent(new Event("input", { bubbles: true }));
+  els.dateRow.open = false;
 });
 
 els.purchaseForm.addEventListener("submit", e => {
