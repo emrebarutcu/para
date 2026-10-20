@@ -557,14 +557,21 @@
         </div>
         <span class="group-label">Asistanlar (MCP)</span>
         <p class="hint">CashFollow'u MCP destekleyen bir asistana bağla; "Telefonu 6 taksitle Bonus'a ekle", "Bu ay ne kadar ödeyeceğim?" gibi isteklerle harcama, kart ve kişileri yönetsin.</p>
-        <div class="copy-row copy-row-lg">
-          <code id="mcpUrl">…</code>
-          <button type="button" class="btn btn-primary sm" data-copy="mcpUrl">Kopyala</button>
+        <span class="field-label">Tek tıkla ekle</span>
+        <div class="ai-add" role="group" aria-label="Tek tıkla ekle">
+          <button type="button" class="btn btn-ghost" data-ai-add="claude" aria-label="Claude'a ekle">Claude</button>
+          <button type="button" class="btn btn-ghost" data-ai-add="chatgpt" aria-label="ChatGPT'ye ekle">ChatGPT</button>
+          <button type="button" class="btn btn-ghost" data-ai-add="gemini" aria-label="Gemini'ye ekle">Gemini</button>
         </div>
-        <ol class="steps">
-          <li><strong>Claude</strong>: Ayarlar → Bağlayıcılar → Özel bağlayıcı ekle, adresi yapıştır. <strong>ChatGPT</strong>: Ayarlar → Uygulamalar'da geliştirici modunu açıp yeni uygulama olarak ekle. Claude Code: <code>claude mcp add --transport http cashfollow &lt;adres&gt;</code></li>
-          <li>Açılan CashFollow sayfasında giriş yap ve <strong>İzin ver</strong>'e dokun.</li>
-        </ol>
+        <p class="hint ai-add-note" id="aiAddNote" aria-live="polite" hidden></p>
+        <details class="ai-other" id="aiOther">
+          <summary>Başka bir asistan ya da Claude Code</summary>
+          <div class="copy-row copy-row-lg">
+            <code id="mcpUrl">…</code>
+            <button type="button" class="btn btn-primary sm" data-copy="mcpUrl">Kopyala</button>
+          </div>
+          <p class="hint">MCP destekleyen asistana bu adresi özel bağlayıcı / sunucu olarak ekle, açılan CashFollow sayfasında giriş yapıp <strong>İzin ver</strong>'e dokun. Claude Code: <code>claude mcp add --transport http cashfollow &lt;adres&gt;</code></p>
+        </details>
         <p class="hint">Asistan, izin verdiğin hesabın verisini okuyup değiştirebilir; yaptığı değişiklikler burada anında görünür.</p>
         <p class="hint warn-text" id="aiLoginNote" hidden>Bu özellik bulut hesabıyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.</p>
         <div class="settings-group" id="aiAppsGroup" hidden>

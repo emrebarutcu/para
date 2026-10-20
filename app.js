@@ -290,7 +290,7 @@ const els = {
   aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"),
   aiAppsGroup: $("aiAppsGroup"), aiApps: $("aiApps"),
   aiLocalTitle: $("aiLocalTitle"), aiLocalSub: $("aiLocalSub"), aiLocalBtn: $("aiLocalBtn"), aiProgress: $("aiProgress"),
-  aiBackfill: $("aiBackfill"),
+  aiBackfill: $("aiBackfill"), aiAddNote: $("aiAddNote"), aiOther: $("aiOther"),
   insightPanel: $("insightPanel"), insightList: $("insightList"), insightMore: $("insightMore"),
   catPanel: $("catPanel"), catList: $("catList"), catTotal: $("catTotal"), catNote: $("catNote"),
   categoryChips: $("categoryChips"), categoryHint: $("categoryHint"),
@@ -2371,9 +2371,48 @@ els.aiLocalBtn.addEventListener("click", async () => {
 
 els.aiBackfill.addEventListener("click", () => { backfillCategories({ manual: true }); renderAiStatus(); });
 
+// Asistana tek tıkla ekleme. Claude'un resmi kurulum bağlantısı "Özel bağlayıcı ekle" penceresini adı ve adresi dolu
+// açar, kullanıcı onaylar. ChatGPT ve Gemini'de adresi dolduran bir bağlantı yok: adres panoya kopyalanır, eklendiği
+// sayfa açılır. Bağlanınca asistan CashFollow izin sayfasını açar (oauth/consent.html).
+const mcpAddress = () => `${location.origin}/mcp`;
+const AI_CLIENTS = {
+  claude: {
+    url: mcp => `https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=CashFollow&connectorUrl=${encodeURIComponent(mcp)}`,
+    note: "Claude'da açılan pencerede adres hazır: Ekle'ye dokun, sonra CashFollow sayfasında giriş yapıp İzin ver'e dokun.",
+  },
+  chatgpt: {
+    url: () => "https://chatgpt.com/plugins",
+    copy: true,
+    note: "Adres kopyalandı. ChatGPT'de + → Add custom MCP server: ad olarak CashFollow yaz, adresi yapıştır, kimlik doğrulamada OAuth seç ve Create as a plugin'e dokun. Sonra CashFollow sayfasında İzin ver.",
+  },
+  gemini: {
+    url: () => "https://gemini.google.com/apps",
+    copy: true,
+    note: "Adres kopyalandı. Gemini'de Custom apps → Add a custom app: adresi yapıştır, Next'e dokun, sonra CashFollow sayfasında İzin ver. Gemini'de özel uygulamalar şimdilik ABD'de, kişisel Google hesabıyla ve İngilizce arayüzde açık.",
+  },
+};
+
+els.aiSheet.addEventListener("click", e => {
+  const b = e.target.closest("[data-ai-add]");
+  if (!b) return;
+  const client = AI_CLIENTS[b.dataset.aiAdd], mcp = mcpAddress();
+  let note = client.note;
+  // Pano, yeni sekme açılmadan (sayfa odaktayken) yazılır; sekme dokunuşun içinde açılır ki engellenmesin
+  if (client.copy) {
+    navigator.clipboard?.writeText(mcp).catch(() => {
+      els.aiAddNote.textContent = note.replace("Adres kopyalandı.", `Adres kopyalanamadı, elle kopyala: ${mcp}`);
+      els.aiOther.open = true;
+    });
+  }
+  window.open(client.url(mcp), "_blank", "noopener");
+  els.aiAddNote.textContent = note;
+  els.aiAddNote.hidden = false;
+});
+
 async function openAiSheet() {
   renderAiStatus();
-  els.mcpUrl.textContent = `${location.origin}/mcp`;
+  els.aiAddNote.hidden = true;
+  els.mcpUrl.textContent = mcpAddress();
   const loggedIn = !!window.syncGetUser?.();
   els.aiLoginNote.hidden = loggedIn;
   els.aiAppsGroup.hidden = true;
