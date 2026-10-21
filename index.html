@@ -267,10 +267,10 @@
       <div class="sheet-body">
         <p class="p-status" id="purchaseStatus" hidden></p>
 
-        <div class="amount-input">
+        <label class="amount-input">
           <span class="cur">₺</span>
-          <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Tutar" />
-        </div>
+          <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Tutar" data-amount />
+        </label>
 
         <input class="desc-input" name="desc" type="text" placeholder="Ne aldın? örn. IKEA" autocomplete="off" list="descList" enterkeyhint="done" required aria-label="Ne aldın?" />
         <datalist id="descList"></datalist>
@@ -349,10 +349,10 @@
 
         <div class="field">
           <span class="field-label">Miktar</span>
-          <div class="amount-input">
+          <label class="amount-input">
             <span class="cur" id="entryUnit">₺</span>
-            <input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0,00" required aria-label="Miktar" />
-          </div>
+            <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Miktar" data-amount />
+          </label>
         </div>
 
         <label class="field">
@@ -405,10 +405,10 @@
         </label>
         <div class="field">
           <span class="field-label">Limit</span>
-          <div class="amount-input sm">
+          <label class="amount-input sm">
             <span class="cur">₺</span>
-            <input name="limit" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0,00" aria-label="Limit" />
-          </div>
+            <input name="limit" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Limit" data-amount />
+          </label>
         </div>
         <label class="field">
           <span class="field-label">Kartın son 4 hanesi <small>(isteğe bağlı)</small></span>

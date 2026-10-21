@@ -1846,7 +1846,16 @@ function parseAmount(v) {
   if (/^\d{1,3}(\.\d{3})+$/.test(t)) return Number(t.replace(/\./g, ""));
   return Number(t);
 }
-const amountText = n => String(Math.round(n * 100) / 100).replace(".", ",");
+// Sayı → alana yazılan tutar, binlik ayraçla: 1250.5 → "1.250,5"
+const amountText = (n, digits = 2) => n.toLocaleString("tr-TR", { maximumFractionDigits: digits });
+
+// Tutar alanından çıkınca yazılan tutar binlik ayraçla yeniden yazılır (data-amount: ondalık basamak, varsayılan 2)
+document.addEventListener("focusout", e => {
+  const t = e.target;
+  if (!t.matches?.("input[data-amount]")) return;
+  const n = parseAmount(t.value);
+  if (n > 0) t.value = amountText(n, Number(t.dataset.amount) || 2);
+});
 
 function openPurchaseSheet(p, draft) {
   if (!state.people.length) { openPeopleSheet(); toast("Önce bir kişi ekle"); return; }
@@ -2244,7 +2253,7 @@ function readCardForm() {
   const f = els.cardForm.elements;
   return {
     name: f.name.value.trim(),
-    limit: Number(f.limit.value) || 0,
+    limit: parseAmount(f.limit.value) || 0,
     cutoffDay: validDay(f.cutoffDay.value),
     dueDay: validDay(f.dueDay.value),
     last4: f.last4.value.replace(/\D/g, ""),
@@ -2260,7 +2269,7 @@ function openCardSheet(c) {
   els.cardDelete.hidden = !c;
   if (c) {
     f.elements.name.value = c.name;
-    f.elements.limit.value = c.limit || "";
+    f.elements.limit.value = c.limit ? amountText(c.limit) : "";
     f.elements.cutoffDay.value = c.cutoffDay;
     f.elements.dueDay.value = c.dueDay;
     f.elements.last4.value = c.last4 || "";
@@ -2421,7 +2430,7 @@ function openEntrySheet(e, asset, draft) {
     radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
 
   f.elements.dir.value = e && e.amount < 0 ? "out" : "in";
-  f.elements.amount.value = e ? Math.abs(e.amount) : "";
+  f.elements.amount.value = e ? amountText(Math.abs(e.amount), V.asset(e.asset)?.digits) : "";
   f.elements.desc.value = e?.desc ?? draft?.desc ?? "";
   f.elements.date.value = e?.date ?? T.todayKey();
   const repeat = V.repeatOf(e ?? draft) ?? 1;
@@ -2436,7 +2445,7 @@ function openEntrySheet(e, asset, draft) {
 function collectEntry() {
   const f = els.entryForm.elements;
   const asset = f.asset.value;
-  const amount = V.round(Number(f.amount.value), asset);
+  const amount = V.round(parseAmount(f.amount.value), asset);
   const desc = f.desc.value.trim();
   const date = T.parseDate(f.date.value) ? f.date.value : "";
   // "Diğer"e yazılan ay sayısı çiplerden önce gelir; 1 = tek seferlik, 0 = süresiz
@@ -2456,7 +2465,7 @@ function updateEntryForm() {
   const { e, errors } = collectEntry();
   const a = V.asset(e.asset);
   els.entryUnit.textContent = a.symbol;
-  els.entryForm.elements.amount.step = e.asset === "GAU" ? "0.001" : "0.01";
+  els.entryForm.elements.amount.dataset.amount = a.digits ?? 2;
 
   const n = V.repeatOf(e);
   els.entryDateLabel.textContent = n != null ? "İlk tarih" : "Tarih";
