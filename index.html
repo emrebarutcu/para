@@ -23,6 +23,7 @@
     <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></symbol>
     <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9" cy="7" rx="5.5" ry="2.5"/><path d="M3.5 7v4c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V7M3.5 11v4c0 1.4 2.5 2.5 5.5 2.5 1 0 2-.1 2.8-.4"/><ellipse cx="16" cy="14" rx="4.5" ry="2"/><path d="M11.5 14v3.5c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V14"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
     <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
     <symbol id="i-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
     <symbol id="i-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
@@ -37,6 +38,7 @@
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4zM12 10v4.5M12 17.2v.3"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.2 12.3 2.6 2.6 5-5.2"/></symbol>
     <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 17.5h6M10 20.5h4M12 3.5a5.5 5.5 0 0 0-3.3 9.9c.7.6 1.3 1.4 1.3 2.3v.3h4v-.3c0-.9.6-1.7 1.3-2.3A5.5 5.5 0 0 0 12 3.5z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12M10 11v5.5M14 11v5.5"/></symbol>
     <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 20a6.5 6.5 0 0 0-2.6-5.2"/></symbol>
   </svg>
 
@@ -266,22 +268,26 @@
       <div class="sheet-body">
         <p class="p-status" id="purchaseStatus" hidden></p>
 
-        <div class="amount-input">
+        <label class="amount-input">
           <span class="cur">₺</span>
-          <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Tutar" />
-        </div>
+          <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Tutar" data-amount />
+        </label>
 
         <input class="desc-input" name="desc" type="text" placeholder="Ne aldın? örn. IKEA" autocomplete="off" list="descList" enterkeyhint="done" required aria-label="Ne aldın?" />
         <datalist id="descList"></datalist>
 
         <div class="field">
           <span class="field-label">Taksit</span>
-          <div class="chips scroll-x" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
-          <label class="inline-input" id="countOther" hidden>
-            <input name="count" type="number" min="1" max="60" step="1" inputmode="numeric" aria-label="Taksit sayısı" />
-            <span>taksit</span>
-          </label>
-          <label class="check" id="perRow" hidden><input type="checkbox" name="per" /> Yazdığım tutar taksit başına</label>
+          <div class="count-grid" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
+          <div class="stepper" id="countOther" hidden>
+            <button type="button" data-step="-1" aria-label="Bir taksit az"><svg class="ic"><use href="#i-minus"/></svg></button>
+            <label><input name="count" type="number" min="1" max="60" step="1" inputmode="numeric" aria-label="Taksit sayısı" /><span>taksit</span></label>
+            <button type="button" data-step="1" aria-label="Bir taksit fazla"><svg class="ic"><use href="#i-plus"/></svg></button>
+          </div>
+          <div class="seg seg-full" id="perRow" role="radiogroup" aria-label="Yazdığım tutar" hidden>
+            <label><input type="radio" name="per" value="" checked /><span>Toplam tutar</span></label>
+            <label><input type="radio" name="per" value="1" /><span>Taksit başına</span></label>
+          </div>
         </div>
 
         <div class="field">
@@ -319,7 +325,7 @@
       </div>
       <footer class="sheet-foot wrap">
         <div class="sheet-sum" id="purchaseSum" aria-live="polite"></div>
-        <button type="button" class="btn btn-danger" id="purchaseDelete" hidden>Sil</button>
+        <button type="button" class="btn btn-danger" id="purchaseDelete" hidden><svg class="ic"><use href="#i-trash"/></svg><span>Sil</span></button>
         <button type="button" class="btn btn-ghost" id="purchaseCopy" hidden>Kopyala</button>
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Vazgeç</button>
@@ -348,10 +354,10 @@
 
         <div class="field">
           <span class="field-label">Miktar</span>
-          <div class="amount-input">
+          <label class="amount-input">
             <span class="cur" id="entryUnit">₺</span>
-            <input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0,00" required aria-label="Miktar" />
-          </div>
+            <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Miktar" data-amount />
+          </label>
         </div>
 
         <label class="field">
@@ -381,7 +387,7 @@
         <div class="preview" id="entryPreview" aria-live="polite"></div>
       </div>
       <footer class="sheet-foot">
-        <button type="button" class="btn btn-danger" id="entryDelete" hidden>Sil</button>
+        <button type="button" class="btn btn-danger" id="entryDelete" hidden><svg class="ic"><use href="#i-trash"/></svg><span>Sil</span></button>
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Vazgeç</button>
         <button type="submit" class="btn btn-primary">Kaydet</button>
@@ -404,10 +410,10 @@
         </label>
         <div class="field">
           <span class="field-label">Limit</span>
-          <div class="amount-input sm">
+          <label class="amount-input sm">
             <span class="cur">₺</span>
-            <input name="limit" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0,00" aria-label="Limit" />
-          </div>
+            <input name="limit" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Limit" data-amount />
+          </label>
         </div>
         <label class="field">
           <span class="field-label">Kartın son 4 hanesi <small>(isteğe bağlı)</small></span>
@@ -431,7 +437,7 @@
         </div>
       </div>
       <footer class="sheet-foot">
-        <button type="button" class="btn btn-danger" id="cardDelete" hidden>Sil</button>
+        <button type="button" class="btn btn-danger" id="cardDelete" hidden><svg class="ic"><use href="#i-trash"/></svg><span>Sil</span></button>
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Vazgeç</button>
         <button type="submit" class="btn btn-primary">Kaydet</button>

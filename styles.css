@@ -19,7 +19,7 @@
   --danger:    #d43c4b;
   --warn:      #b7791f;
   --ok:        #13915c;
-  --focus:     rgba(16, 19, 26, .16);
+  --focus:     rgba(16, 19, 26, .1);
   --overlay:   rgba(12, 14, 20, .32);
   --shadow:    0 1px 2px rgba(16, 19, 26, .04), 0 10px 30px rgba(16, 19, 26, .06);
   --shadow-lg: 0 24px 60px rgba(16, 19, 26, .18);
@@ -143,8 +143,10 @@ a { color: inherit; }
 .btn-primary:hover { opacity: .88; }
 .btn-ghost { background: var(--surface); color: var(--text); border-color: var(--line-2); }
 .btn-ghost:hover { background: var(--surface-2); }
-.btn-danger { background: transparent; color: var(--danger); padding: 0 10px; }
+.btn-danger { background: transparent; color: var(--danger); padding: 0 12px; border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
 .btn-danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.btn-danger.armed { background: var(--danger); border-color: var(--danger); color: #fff; }
+.sheet-foot:has(.btn-danger.armed) #purchaseCopy { display: none; }   /* onay sırasında yalnızca sil / kaydet */
 
 .icon-btn {
   display: inline-grid;
@@ -642,6 +644,11 @@ a { color: inherit; }
 .items .who { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
 .items .no { color: var(--text-3); font-size: 12px; }
 .items .amount { font-weight: 600; text-align: right; }
+.items li.editable, .ev-items li.editable { cursor: pointer; border-radius: 10px; outline: none; transition: background .15s; }
+.items li.editable:hover, .items li.editable:focus-visible { background: var(--surface); }
+.ev-items li.editable { grid-template-columns: 1fr auto 16px; gap: 8px; padding-right: 4px; }
+.ev-items li.editable .ic { width: 16px; height: 16px; color: var(--text-3); }
+.ev-items li.editable:hover, .ev-items li.editable:focus-visible { background: var(--surface-2); }
 
 /* ── Ödeme ayrıntısı (halka grafik) ── */
 .ev-head { min-width: 0; }
@@ -992,6 +999,7 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   overflow-y: auto;
   min-height: 0;
 }
+.sheet-body > * { flex-shrink: 0; }   /* içerik sığmayınca alanlar ezilmesin, gövde kaysın */
 .sheet-foot {
   display: flex;
   align-items: center;
@@ -1018,9 +1026,9 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   transition: border-color .15s, box-shadow .15s, background .15s;
 }
 .field input:focus, .inline-add input:focus, .people-edit input:focus, .modal-box input:focus {
-  border-color: var(--text-3);
+  border-color: var(--text-2);
   background: var(--surface);
-  box-shadow: 0 0 0 4px var(--focus);
+  box-shadow: 0 0 0 3px var(--focus);
 }
 .field input::placeholder, .inline-add input::placeholder, .modal-box input::placeholder { color: var(--text-3); }
 .field input.invalid { border-color: var(--danger); }
@@ -1033,12 +1041,12 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   border: 1px solid var(--line-2);
   background: var(--surface-2);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.45;
   resize: vertical;
   outline: none;
 }
-.field textarea:focus { border-color: var(--text-3); background: var(--surface); box-shadow: 0 0 0 4px var(--focus); }
+.field textarea:focus { border-color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 3px var(--focus); }
 
 .amount-input {
   display: flex;
@@ -1051,8 +1059,10 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   background: var(--surface-2);
   transition: border-color .15s, box-shadow .15s, background .15s;
 }
-.amount-input:focus-within { border-color: var(--text-3); background: var(--surface); box-shadow: 0 0 0 4px var(--focus); }
-.amount-input .cur { font-size: 22px; font-weight: 600; color: var(--text-3); }
+.amount-input:focus-within { border-color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 3px var(--focus); }
+.amount-input { cursor: text; }
+.amount-input .cur { font-size: 22px; font-weight: 600; color: var(--text-3); transition: color .15s; }
+.amount-input:focus-within .cur { color: var(--text-2); }
 .amount-input input {
   flex: 1;
   min-width: 0;
@@ -1077,7 +1087,7 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   height: 36px !important;
   padding: 0 12px !important;
   border-radius: 10px !important;
-  font-size: 15px !important;
+  font-size: 16px !important;
 }
 
 .preview {
@@ -1291,6 +1301,9 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
     transform: translateX(-50%);
   }
   .sheet-head { position: relative; padding-top: 22px; }
+  /* Altta tek satır: Vazgeç yerine üstteki kapatma; Kaydet kalan genişliği alır */
+  .sheet-foot .btn-ghost[data-close], .sheet-foot .spacer { display: none; }
+  .sheet-foot .btn-primary { flex: 1; }
   .plan-table th, .plan-table td { padding: 10px 10px; font-size: 13px; }
   .plan-table .d-long { display: none; }
   .plan-table .d-short { display: inline; }
@@ -1442,7 +1455,7 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   height: 52px; padding: 0 16px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface-2);
   font: inherit; font-size: 17px; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s, background .15s;
 }
-.desc-input:focus { border-color: var(--text-3); background: var(--surface); box-shadow: 0 0 0 4px var(--focus); }
+.desc-input:focus { border-color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 3px var(--focus); }
 .desc-input.invalid { border-color: var(--danger); }
 .check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-2); cursor: pointer; }
 .check input { width: 18px; height: 18px; accent-color: var(--primary); }
@@ -1466,6 +1479,65 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .row-body { padding: 0 14px 14px; }
 .row-body input[type="date"] {
   flex: 1; min-width: 150px; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line-2);
-  background: var(--surface-2); font: inherit; font-size: 15px; color: var(--text); outline: none;
+  background: var(--surface-2); font: inherit; font-size: 16px; color: var(--text); outline: none;
+  transition: border-color .15s, box-shadow .15s, background .15s;
 }
-.row-body input[type="date"]:focus { border-color: var(--text-3); background: var(--surface); box-shadow: 0 0 0 4px var(--focus); }
+.row-body input[type="date"]:focus { border-color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 3px var(--focus); }
+
+/* ── Metin alanları: üzerine gelme, hata, sayı okları ── */
+@media (hover: hover) {
+  :is(.field input, .field textarea, .inline-add input, .people-edit input, .modal-box input, .desc-input,
+      .row-body input[type="date"]):hover:not(:focus),
+  .amount-input:hover:not(:focus-within) { border-color: var(--text-3); }
+}
+.amount-input:has(input.invalid) { border-color: var(--danger); }
+:is(.field input, .desc-input).invalid:focus, .amount-input:has(input.invalid):focus-within {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
+}
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.desc-input::-webkit-calendar-picker-indicator { display: none !important; }   /* öneri listesinin oku */
+
+/* ── Taksit seçimi: hepsi görünen kutular (sayı + aylık tutar), Diğer için − / + ── */
+.count-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.count-tile {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-height: 58px; padding: 8px 4px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface);
+  color: var(--text); text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background .15s, border-color .15s, color .15s, transform .1s;
+}
+.count-tile input { position: absolute; opacity: 0; pointer-events: none; }
+.count-tile .n { font-size: 19px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.count-tile .n.word { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.count-tile .per {
+  max-width: 100%; min-height: 15px; font-size: 11.5px; font-weight: 500; line-height: 15px; color: var(--text-3);
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.count-tile:active { transform: scale(.97); }
+.count-tile.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.count-tile.on .per { color: inherit; opacity: .72; }
+.count-tile:has(input:focus-visible) { outline: 2px solid var(--text-2); outline-offset: 2px; }
+@media (hover: hover) { .count-tile:hover:not(.on) { background: var(--surface-2); } }
+
+.stepper { display: flex; align-items: center; gap: 8px; }
+.stepper button {
+  flex: none; display: grid; place-items: center; width: 48px; height: 46px; border-radius: 12px;
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--text); cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+.stepper button:active { transform: scale(.95); background: var(--surface-2); }
+.stepper button .ic { width: 18px; height: 18px; }
+.stepper label {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 46px; border-radius: 12px;
+  border: 1px solid var(--line-2); background: var(--surface-2); color: var(--text-2); font-size: 15px; cursor: text;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.stepper label:focus-within { border-color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 3px var(--focus); }
+.stepper label:has(input.invalid) { border-color: var(--danger); }
+.field .stepper input, .field .stepper input:focus {
+  width: 3ch; height: auto; padding: 0; border: none; background: transparent; box-shadow: none; outline: none;
+  text-align: right; font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;
+}
+#perRow { margin-top: 2px; }
+#perRow label { padding: 8px 12px; font-size: 13.5px; }
