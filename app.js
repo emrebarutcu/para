@@ -1872,9 +1872,7 @@ function openPurchaseSheet(p, draft) {
 
   const count = src?.count ?? 1;
   const other = !COUNT_PRESETS.includes(count);
-  els.countChips.replaceChildren(
-    ...COUNT_PRESETS.map(n => radioChip("countPreset", String(n), n === 1 ? "Peşin" : `${n} taksit`, n === count)),
-    radioChip("countPreset", "other", "Diğer", other));
+  els.countChips.replaceChildren(...[...COUNT_PRESETS, "other"].map(n => countTile(n, n === "other" ? other : n === count)));
   f.elements.count.value = count;
   els.countOther.hidden = !other;
 
@@ -1907,7 +1905,6 @@ function openPurchaseSheet(p, draft) {
   syncChecked(f);
   updatePurchasePreview();
   openSheet(els.purchaseSheet);
-  showPicked(els.countChips);
   if (!p) f.elements.amount.focus();
   if (src?.desc && !categorySource) suggestCategory();   // düzenlenen ya da e-postadan gelen kategorisiz harcama
 }
@@ -1977,10 +1974,38 @@ function renderPurchaseStatus(p) {
   els.purchaseStatus.textContent = parts.join(" · ");
 }
 
-// Kayan çip satırlarında seçili çip görünsün (dikey kaydırmadan)
-function showPicked(row) {
-  const chip = row.querySelector(".on");
-  if (chip) row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
+// Taksit kutusu: taksit sayısı (Peşin / Diğer) ve altında tutarın o seçenekle aylık karşılığı (renderCountTiles)
+function countTile(value, checked) {
+  const tile = el("label", "count-tile");
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.name = "countPreset";
+  input.value = String(value);
+  input.checked = checked;
+  const word = value === 1 || value === "other";
+  tile.append(input, el("span", "n" + (word ? " word" : ""), value === 1 ? "Peşin" : word ? "Diğer" : String(value)), el("span", "per"));
+  return tile;
+}
+
+const tileMoney = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
+
+// Kutulardaki tutar: yazılan toplamsa taksit başına düşen, "Taksit başına"ysa toplam. Diğer seçiliyken yazılan sayı.
+function renderCountTiles() {
+  const f = els.purchaseForm.elements;
+  const amount = parseAmount(f.amount.value);
+  const per = f.per.value === "1";
+  const custom = Math.round(Number(f.count.value));
+  for (const tile of els.countChips.children) {
+    const v = tile.querySelector("input").value;
+    const other = v === "other";
+    const n = other ? (tile.classList.contains("on") && custom >= 1 && custom <= 60 ? custom : null) : Number(v);
+    if (other) {
+      tile.querySelector(".n").textContent = n ? String(n) : "Diğer";
+      tile.querySelector(".n").classList.toggle("word", !n);
+    }
+    const value = amount > 0 && n ? (per ? amount * n : amount / n) : null;
+    tile.querySelector(".per").textContent = value == null ? "" : value >= 1e5 ? "₺" + fmtShort(value) : tileMoney.format(value);
+  }
 }
 
 // ---------- Kategori önerisi ----------
@@ -2085,7 +2110,7 @@ function collectPurchase() {
   if (!date && !editing?.firstDue) errors.push("date");
   if (!personById(f.person.value)) errors.push("person");
 
-  const total = f.per.checked && count > 1 ? Math.round(amount * count * 100) / 100 : amount;
+  const total = f.per.value === "1" && count > 1 ? Math.round(amount * count * 100) / 100 : amount;
   const p = { desc, cardId: f.card.value || null, count, total };
   if (K.valid(f.category.value)) Object.assign(p, { category: f.category.value, categoryBy: categorySource === "user" ? "user" : "ai" });
   if (date) {
@@ -2108,6 +2133,7 @@ function updatePurchasePreview() {
     b.classList.toggle("on", els.purchaseForm.elements.date.value === T.addDays(today, Number(b.dataset.day)));
   }
   els.perRow.hidden = !(p.count > 1);
+  renderCountTiles();
   renderRowValues();
   renderCardTip(p.cardId, p.date);
   if (errors.some(e => e === "amount" || e === "count" || e === "date")) return;
@@ -2150,7 +2176,19 @@ els.purchaseForm.addEventListener("input", e => {
   if (e.target.name === "countPreset") {
     const other = e.target.value === "other";
     els.countOther.hidden = !other;
-    if (other) { f.count.value = ""; f.count.focus(); } else f.count.value = e.target.value;
+    if (other) {
+      // Hazır kutularda olmayan ilk sayıdan başlar (1 → 5, 6 → 7)
+      let n = Math.round(Number(f.count.value)) || 1;
+      do n++; while (COUNT_PRESETS.includes(n));
+      f.count.value = Math.min(n, 60);
+      f.count.focus();
+      f.count.select();
+    } else f.count.value = e.target.value;
+  }
+  // Yazılan / − + ile gelinen sayı hazır kutulardan biriyse o kutu seçilir (− + açık kalır)
+  if (e.target.name === "count") {
+    const n = Math.round(Number(e.target.value));
+    els.countChips.querySelector(`input[value="${COUNT_PRESETS.includes(n) ? n : "other"}"]`).checked = true;
   }
   if (e.target.name === "category") {
     categoryTouched = true;
@@ -2166,6 +2204,15 @@ els.purchaseForm.addEventListener("input", e => {
   }
   syncChecked(els.purchaseForm);
   updatePurchasePreview();
+});
+
+// Diğer: − / + ile taksit sayısı (1–60)
+els.countOther.addEventListener("click", e => {
+  const b = e.target.closest("[data-step]");
+  if (!b) return;
+  const input = els.purchaseForm.elements.count;
+  input.value = Math.min(60, Math.max(1, (Math.round(Number(input.value)) || 1) + Number(b.dataset.step)));
+  input.dispatchEvent(new Event("input", { bubbles: true }));
 });
 
 els.dateChips.addEventListener("click", e => {

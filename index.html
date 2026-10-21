@@ -23,6 +23,7 @@
     <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></symbol>
     <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9" cy="7" rx="5.5" ry="2.5"/><path d="M3.5 7v4c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V7M3.5 11v4c0 1.4 2.5 2.5 5.5 2.5 1 0 2-.1 2.8-.4"/><ellipse cx="16" cy="14" rx="4.5" ry="2"/><path d="M11.5 14v3.5c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V14"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
     <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
     <symbol id="i-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
     <symbol id="i-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
@@ -277,12 +278,16 @@
 
         <div class="field">
           <span class="field-label">Taksit</span>
-          <div class="chips scroll-x" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
-          <label class="inline-input" id="countOther" hidden>
-            <input name="count" type="number" min="1" max="60" step="1" inputmode="numeric" aria-label="Taksit sayısı" />
-            <span>taksit</span>
-          </label>
-          <label class="check" id="perRow" hidden><input type="checkbox" name="per" /> Yazdığım tutar taksit başına</label>
+          <div class="count-grid" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
+          <div class="stepper" id="countOther" hidden>
+            <button type="button" data-step="-1" aria-label="Bir taksit az"><svg class="ic"><use href="#i-minus"/></svg></button>
+            <label><input name="count" type="number" min="1" max="60" step="1" inputmode="numeric" aria-label="Taksit sayısı" /><span>taksit</span></label>
+            <button type="button" data-step="1" aria-label="Bir taksit fazla"><svg class="ic"><use href="#i-plus"/></svg></button>
+          </div>
+          <div class="seg seg-full" id="perRow" role="radiogroup" aria-label="Yazdığım tutar" hidden>
+            <label><input type="radio" name="per" value="" checked /><span>Toplam tutar</span></label>
+            <label><input type="radio" name="per" value="1" /><span>Taksit başına</span></label>
+          </div>
         </div>
 
         <div class="field">
