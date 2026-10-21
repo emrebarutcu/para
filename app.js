@@ -757,7 +757,8 @@ function eventItemRows(ev) {
     const main = el("div", "ev-item-main");
     main.append(el("span", "desc", purchase.desc),
       el("span", "meta", `${p.name} · ${plan > 1 ? `${no}/${plan}. taksit` : "peşin"}`));
-    li.append(main, el("span", "amount", fmt(amount)));
+    li.append(main, el("span", "amount", fmt(amount)), icon("right"));
+    editsPurchase(li, purchase, () => els.eventSheet.close());
     return li;
   });
 }
@@ -1363,9 +1364,31 @@ function eventItems(ev) {
     const plan = T.planLength(purchase);
     li.append(who, el("span", "", purchase.desc),
       el("span", "no", plan > 1 ? `${no}/${plan}` : "peşin"), el("span", "amount", fmt(amount)));
+    editsPurchase(li, purchase);
     ul.append(li);
   }
   return ul;
+}
+
+// Harcamayı gösteren satır: dokununca ya da Enter'la harcama düzenlenir; dokunuş üstteki ödeme satırına geçmez.
+// before: düzenleme açılmadan önce (ör. içinde bulunulan pencereyi kapatmak için)
+function editsPurchase(li, purchase, before) {
+  li.classList.add("editable");
+  li.tabIndex = 0;
+  li.setAttribute("role", "button");
+  li.setAttribute("aria-haspopup", "dialog");
+  li.title = "Harcamayı düzenle";
+  const open = e => {
+    e.stopPropagation();
+    const p = state.installments.find(x => x.id === purchase.id);
+    if (!p) return;
+    before?.();
+    openPurchaseSheet(p);
+  };
+  li.addEventListener("click", open);
+  li.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(e); }
+  });
 }
 
 // Excel'deki özet sayfası: ay × kişi
@@ -1759,6 +1782,30 @@ document.addEventListener("click", e => {
 });
 for (const d of document.querySelectorAll("dialog.sheet")) {
   d.addEventListener("click", e => { if (e.target === d) d.close(); });   // arka plana tıklama
+}
+
+// Silme iki dokunuşla, pencerenin içinde: ilki düğmeyi "Evet, sil"e çevirir, ikincisi siler. Birkaç saniye içinde
+// ikinci dokunuş gelmezse ya da pencere kapanırsa düğme eski haline döner.
+function confirmTap(btn, run) {
+  const label = btn.querySelector("span");
+  const text = label.textContent;
+  let timer;
+  const reset = () => {
+    clearTimeout(timer);
+    btn.classList.remove("armed");
+    label.textContent = text;
+  };
+  btn.addEventListener("click", () => {
+    if (!btn.classList.contains("armed")) {
+      btn.classList.add("armed");
+      label.textContent = "Evet, sil";
+      timer = setTimeout(reset, 4000);
+      return;
+    }
+    reset();
+    run();
+  });
+  btn.closest("dialog").addEventListener("close", reset);
 }
 
 // Seçili radyo etiketleri sınıfla işaretlenir (:has(:checked) her tarayıcıda güncellenmiyor)
@@ -2177,9 +2224,9 @@ els.purchaseCopy.addEventListener("click", () => {
   openPurchaseSheet(null, { ...rest, count: T.planLength(p), total: T.originalTotal(p), date: T.todayKey() });
 });
 
-els.purchaseDelete.addEventListener("click", () => {
+confirmTap(els.purchaseDelete, () => {
   const p = state.installments.find(x => x.id === editingId);
-  if (!p || !confirm(`“${p.desc}” silinsin mi?`)) return;
+  if (!p) return;
   state.installments = state.installments.filter(x => x.id !== p.id);
   editingId = null;
   saveState();
@@ -2479,9 +2526,9 @@ els.entryForm.addEventListener("submit", ev => {
   render();
 });
 
-els.entryDelete.addEventListener("click", () => {
+confirmTap(els.entryDelete, () => {
   const e = state.entries.find(x => x.id === editingEntryId);
-  if (!e || !confirm(`“${e.desc}” silinsin mi?`)) return;
+  if (!e) return;
   state.entries = state.entries.filter(x => x.id !== e.id);
   editingEntryId = null;
   saveState();

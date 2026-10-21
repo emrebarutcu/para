@@ -143,8 +143,10 @@ a { color: inherit; }
 .btn-primary:hover { opacity: .88; }
 .btn-ghost { background: var(--surface); color: var(--text); border-color: var(--line-2); }
 .btn-ghost:hover { background: var(--surface-2); }
-.btn-danger { background: transparent; color: var(--danger); padding: 0 10px; }
+.btn-danger { background: transparent; color: var(--danger); padding: 0 12px; border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
 .btn-danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.btn-danger.armed { background: var(--danger); border-color: var(--danger); color: #fff; }
+.sheet-foot:has(.btn-danger.armed) #purchaseCopy { display: none; }   /* onay sırasında yalnızca sil / kaydet */
 
 .icon-btn {
   display: inline-grid;
@@ -642,6 +644,11 @@ a { color: inherit; }
 .items .who { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
 .items .no { color: var(--text-3); font-size: 12px; }
 .items .amount { font-weight: 600; text-align: right; }
+.items li.editable, .ev-items li.editable { cursor: pointer; border-radius: 10px; outline: none; transition: background .15s; }
+.items li.editable:hover, .items li.editable:focus-visible { background: var(--surface); }
+.ev-items li.editable { grid-template-columns: 1fr auto 16px; gap: 8px; padding-right: 4px; }
+.ev-items li.editable .ic { width: 16px; height: 16px; color: var(--text-3); }
+.ev-items li.editable:hover, .ev-items li.editable:focus-visible { background: var(--surface-2); }
 
 /* ── Ödeme ayrıntısı (halka grafik) ── */
 .ev-head { min-width: 0; }
@@ -1291,6 +1298,9 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
     transform: translateX(-50%);
   }
   .sheet-head { position: relative; padding-top: 22px; }
+  /* Altta tek satır: Vazgeç yerine üstteki kapatma; Kaydet kalan genişliği alır */
+  .sheet-foot .btn-ghost[data-close], .sheet-foot .spacer { display: none; }
+  .sheet-foot .btn-primary { flex: 1; }
   .plan-table th, .plan-table td { padding: 10px 10px; font-size: 13px; }
   .plan-table .d-long { display: none; }
   .plan-table .d-short { display: inline; }
