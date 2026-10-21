@@ -278,7 +278,7 @@ const els = {
   remaining: $("remainingTotal"), endLabel: $("endLabel"),
   upcoming: $("upcomingList"), peopleSummary: $("peopleSummary"),
   timelineKind: $("timelineKind"), timelineMode: $("timelineMode"), timelineSum: $("timelineSum"),
-  timelineRange: $("timelineRange"), timelineStart: $("timelineStart"), timelineStartWrap: $("timelineStartWrap"),
+  timelineRange: $("timelineRange"), timelineStart: $("timelineStart"),
   timelineCal: $("timelineCal"), timeline: $("timeline"),
   chartBy: $("chartBy"), legend: $("chartLegend"), chart: $("planChart"), chartEmpty: $("chartEmpty"),
   tooltip: $("chartTooltip"),
@@ -475,10 +475,10 @@ function openEvent(ev) {
   location.hash = "#akis";
 }
 
-// Takvimin dönemi: listede ayın tamamı; takvimde seçilen günden (ör. maaş günü) bir ay sonrasının bir gün öncesine.
-// Bu ay seçiliyken bugünü içeren dönem, diğer aylarda ondan o kadar ay uzaktaki dönem.
+// Girdi ve çıktıların dönemi (liste ve takvim): seçilen günden bir ay sonrasının bir gün öncesine; 1'i seçiliyse ayın
+// tamamı. Bu ay seçiliyken bugünü içeren dönem, diğer aylarda ondan o kadar ay uzaktaki dönem.
 function timelinePeriod(start, today) {
-  const day = timelineMode === "calendar" ? Number(timelineStart) : 1;
+  const day = Number(timelineStart);
   if (day === 1) return { from: T.dateKey(start, 1), to: T.dateKey(start, 31), whole: true };
   const t = T.parseDate(today);
   const idx = start - (t.day < T.dayOf(t.idx, day) ? 1 : 0);
@@ -501,8 +501,7 @@ function renderTimeline(start) {
   const r = rates?.rates;
   const { from, to, whole } = timelinePeriod(start, today);
   const inPeriod = date => date >= from && date <= to;
-  els.timelineStartWrap.hidden = timelineMode !== "calendar";
-  if (timelineMode === "calendar") renderStartOptions(els.timelineStart, timelineStart, today, false);
+  renderDayOptions(els.timelineStart, timelineStart);
   els.timelineRange.textContent = whole ? monthLong(start) : `${fmtDayShort(from)} – ${fmtDayShort(to)}`;
   // Tekrarlayan hareket döneme düşen tekrarlarının tarihiyle gelir; varlığı bilinmeyen hareket (içe aktarma) atlanır
   const entries = [];
@@ -553,12 +552,13 @@ function renderTimeline(start) {
   const shown = items.filter(it => timelineKind === "all" || it.kind === timelineKind);
   if (timelineMode === "calendar") { renderCalendar(from, to, whole, shown, today, r); return; }
   if (!shown.length) {
-    const text = timelineKind === "in" ? "Bu ay girdi yok" : timelineKind === "out" ? "Bu ay çıktı yok" : "Bu ay hareket yok";
+    const when = whole ? "Bu ay" : "Bu dönemde";
+    const text = `${when} ${timelineKind === "in" ? "girdi" : timelineKind === "out" ? "çıktı" : "hareket"} yok`;
     els.timeline.append(el("li", "empty", text));
     return;
   }
 
-  // Bugün bu ayın içindeyse bugünden sonraki ilk günün önüne "Bugün" çizgisi
+  // Bugün bu dönemin içindeyse bugünden sonraki ilk günün önüne "Bugün" çizgisi
   let nowPlaced = !inPeriod(today);
   const days = new Map();
   for (const it of shown) {
@@ -581,6 +581,18 @@ function renderTimeline(start) {
     els.timeline.append(day);
   }
   if (!nowPlaced) els.timeline.append(timelineNow(today));
+}
+
+// Başlangıç günü seçenekleri: ayın her günü
+function renderDayOptions(select, value) {
+  if (select.options.length !== 31) {
+    select.replaceChildren(...Array.from({ length: 31 }, (_, i) => {
+      const o = el("option", "", `Ayın ${dayWithSuffix(i + 1)}`);
+      o.value = String(i + 1);
+      return o;
+    }));
+  }
+  select.value = value;
 }
 
 // Takvim: günlerde o günün girdi/çıktı toplamı; seçili günün hareketleri altta. Dönem iki aya yayılıyorsa yeni ayın
@@ -1133,8 +1145,8 @@ function dayWithSuffix(n) {
   return `${n}'${suffix}`;
 }
 
-// Başlangıç seçenekleri: (withToday ise) bugün, süren aylık TL girişlerinin günleri (en büyük 3), ayın her günü
-function renderStartOptions(select, value, today, withToday) {
+// Başlangıç seçenekleri: bugün, süren tekrarlayan TL girişlerinin günleri (en büyük 3), ayın her günü
+function renderCashStart(today) {
   const incomes = knownEntries()
     .filter(e => e.asset === "TRY" && e.amount > 0 && V.repeatOf(e) != null && R.unit(e) === "month" && V.nextDate(e, today))
     .sort((a, b) => b.amount - a.amount);
@@ -1158,9 +1170,8 @@ function renderStartOptions(select, value, today, withToday) {
     return g;
   };
   const days = Array.from({ length: 31 }, (_, i) => [String(i + 1), `Ayın ${dayWithSuffix(i + 1)}`]);
-  select.replaceChildren(...(withToday ? [option(["today", "Bugün"])] : []), ...(opts.length ? [group("Gelir günü", opts)] : []),
-    group("Ayın günü", days));
-  select.value = value;
+  els.cashStart.replaceChildren(option(["today", "Bugün"]), ...(opts.length ? [group("Gelir günü", opts)] : []), group("Ayın günü", days));
+  els.cashStart.value = cashStart;
 }
 
 let cashHover = null;   // klavyeyle / işaretçiyle seçili gün
@@ -1171,7 +1182,7 @@ function renderCash() {
     b.setAttribute("aria-pressed", String(b.dataset.mode === cashMode));
   }
   const today = T.todayKey();
-  renderStartOptions(els.cashStart, cashStart, today, true);
+  renderCashStart(today);
   const { from, to } = cashPeriod(today, cashStart, cashShift);
   const data = cashSeries(from, to, today);
   const { days } = data;

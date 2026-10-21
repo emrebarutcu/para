@@ -230,9 +230,9 @@ bakiyesinden bugün ödenecekler düşülerek bulunur; sonraki günler hareketle
 üzerine gelince (ya da odaklanıp ok tuşlarıyla) o günün hareketleri görünür. Seçimler cihazda saklanır
 (`para.cashStart`, `para.cashMode`).
 
-Özet'teki **Girdi ve çıktılar** ayın hareketlerini liste ya da takvim olarak gösterir. Takvimde **Başlangıç** ile dönem
-ayın 1'i yerine başka bir günden (ör. maaş günü) başlatılabilir: dönem o günden bir ay sonrasının bir gün öncesine kadar
-sürer (bu ayda bugünü içeren dönem), girdi / çıktı / net toplamları da bu döneme göredir. Seçim cihazda saklanır
+Özet'teki **Girdi ve çıktılar** bir dönemin hareketlerini liste ya da takvim olarak gösterir. **Başlangıç** ile dönem
+ayın 1'i yerine başka bir günden başlatılabilir: dönem o günden bir ay sonrasının bir gün öncesine kadar sürer (bu ayda
+bugünü içeren dönem); liste, takvim ve girdi / çıktı / net toplamları bu döneme göredir. Seçim cihazda saklanır
 (`para.timelineStart`).
 
 Özet'te **İçgörüler** (`icgoru.js`, model gerekmez; MCP `get_insights` aynısını döndürür): bu ayın serbest nakdi ya da
