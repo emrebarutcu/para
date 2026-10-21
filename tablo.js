@@ -19,6 +19,22 @@
   const validCategory = c => typeof c === "string" && /^[a-z]{1,20}$/.test(c);
   const CATEGORY_BY = ["user", "ai"];
 
+  // Tekrar (tekrar.js): repeat_count 0 (süresiz) ya da 2…600, repeat_every 1…99, repeat_unit day | week | month.
+  // Tek seferlikte üçü de boş; varsayılanlar (her 1, ay) boş yazılır.
+  const UNITS = ["day", "week", "month"];
+  function repeatCols(x) {
+    const n = x.repeat;
+    if (!(Number.isInteger(n) && (n === 0 || (n >= 2 && n <= 600)))) return { repeat_count: null, repeat_every: null, repeat_unit: null };
+    const every = Number.isInteger(x.every) && x.every >= 2 && x.every <= 99 ? x.every : null;
+    return { repeat_count: n, repeat_every: every, repeat_unit: UNITS.includes(x.unit) && x.unit !== "month" ? x.unit : null };
+  }
+  function repeatFields(r, item) {
+    if (r.repeat_count == null) return;
+    item.repeat = r.repeat_count;
+    if (r.repeat_every > 1) item.every = r.repeat_every;
+    if (UNITS.includes(r.repeat_unit) && r.repeat_unit !== "month") item.unit = r.repeat_unit;
+  }
+
   // "YYYY-MM-DD"; ayı aşan gün ayın son gününe çekilir (taksit.js'teki gibi), geçersizse null
   function dateKey(s) {
     const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(s ?? ""));
@@ -65,16 +81,14 @@
         plan_count: int(p.planCount, 1, 100000),
         category: validCategory(p.category) ? p.category : null,
         category_by: validCategory(p.category) && CATEGORY_BY.includes(p.categoryBy) ? p.categoryBy : null,
+        asset: ASSETS.includes(p.asset) && p.asset !== "TRY" ? p.asset : null,
+        ...(date ? repeatCols(p) : repeatCols({})),
       };
     },
     entries: e => {
       const amount = num(e.amount), date = dateKey(e.date);
       if (!validId(e.personId) || !ASSETS.includes(e.asset) || !Number.isFinite(amount) || amount === 0 || !date) return null;
-      const repeat = e.repeat;   // varlik.js repeatOf ile aynı: 0 ya da 2…600 tamsayı, başka her şey tek seferlik
-      return {
-        id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date,
-        repeat_count: Number.isInteger(repeat) && (repeat === 0 || (repeat >= 2 && repeat <= 600)) ? repeat : null,
-      };
+      return { id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date, ...repeatCols(e) };
     },
   };
 
@@ -97,11 +111,13 @@
         p.category = r.category;
         if (CATEGORY_BY.includes(r.category_by)) p.categoryBy = r.category_by;
       }
+      if (ASSETS.includes(r.asset) && r.asset !== "TRY") p.asset = r.asset;
+      repeatFields(r, p);
       return p;
     },
     entries: r => {
       const e = { id: r.id, personId: r.person_id, asset: r.asset, amount: Number(r.amount), desc: r.description, date: r.date };
-      if (r.repeat_count != null) e.repeat = r.repeat_count;
+      repeatFields(r, e);
       return e;
     },
   };
@@ -113,7 +129,8 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 3;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by
+  const SCHEMA = 4;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
+                      // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base) {

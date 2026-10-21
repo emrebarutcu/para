@@ -2,13 +2,14 @@
 // Kayıtlı veriden kurallarla hesaplanır (model gerekmez): ayın serbest nakdi, taksit yükünün gelire oranı, borcun
 // biteceği ay, dolmak üzere olan limitler, yaklaşan ödeme sıçraması, bugün hangi kartla alışveriş yapılırsa ilk
 // ödemenin en geç geleceği, düzenli ödemeler (abonelik), kategoride olağandışı artış, diğer kişilerin payı.
-// Gelir ve sabit giderler varlık hareketlerinden gelir (tekrarlayan giriş / çıkış); döviz ve altın güncel kurla TL'dir.
+// Gelir varlık girişlerinden, sabit giderler tekrarlayan harcamalardan ve çıkışlardan gelir; döviz ve altın güncel kurla TL'dir.
 // app.js (Özet) ve MCP (get_insights) kullanır.
 (function (root) {
   const node = typeof module === "object" && module.exports;
   const T = node ? require("./taksit.js") : root.Taksit;
   const V = node ? require("./varlik.js") : root.Varlik;
   const K = node ? require("./kategori.js") : root.Kategori;
+  const R = node ? require("./tekrar.js") : root.Tekrar;
 
   const HORIZON = 6;          // serbest nakit ve taksit yükü için bakılan ay (bu ay dahil)
   const PEAK_MONTHS = 12;     // ödeme sıçraması için bakılan ay
@@ -36,40 +37,53 @@
     };
   }
 
-  // Ayın girdi / çıktıları (TL): varlık girişleri gelir, çıkışları gider; kart / nakit ödemeleri ayrı.
-  // Kuru bilinmeyen hareket sayılmaz (missing).
+  // Ayın girdi / çıktıları (TL): varlık girişleri gelir, çıkışları ve döviz / altın harcamaları gider; kart / nakit
+  // ödemeleri ayrı. Kuru bilinmeyen hareket sayılmaz (missing).
   function monthFlows(state, idx, rates, months) {
-    const { entries } = known(state);
+    const { entries, purchases } = known(state);
     let income = 0, outflow = 0, missing = false;
     for (const e of entries) {
-      if (!V.occurrenceIn(e, idx)) continue;
-      const v = V.toTry(e.amount, e.asset, rates);
+      const n = V.occurrencesIn(e, idx).length;
+      if (!n) continue;
+      const v = V.toTry(e.amount * n, e.asset, rates);
       if (v == null) { missing = true; continue; }
       if (v > 0) income += v; else outflow -= v;
+    }
+    for (const p of purchases) {
+      if (T.assetOf(p) === "TRY") continue;
+      const paid = T.payments(p, null, T.dateKey(idx, 31)).filter(x => x.idx === idx).reduce((s, x) => s + x.amount, 0);
+      if (!paid) continue;
+      const v = V.toTry(paid, p.asset, rates);
+      if (v == null) missing = true; else outflow += v;
     }
     const payments = months.find(m => m.idx === idx)?.total || 0;
     return { idx, income, outflow, payments, net: income - outflow - payments, missing };
   }
 
-  // Harcama tarihine göre ay ay kategori toplamları (taksitli alışveriş tamamıyla alındığı aya): idx → { kategori → TL }.
-  // Kategorisiz harcama "" altında.
-  function spendingByMonth(state, fromIdx, toIdx) {
+  // Harcama tarihine göre ay ay kategori toplamları (taksitli alışveriş tamamıyla alındığı aya, tekrarlayanın her
+  // tekrarı kendi ayına): idx → { kategori → TL }. Kategorisiz harcama "" altında. Döviz / altın harcaması güncel
+  // kurla TL'dir; kuru bilinmiyorsa sayılmaz.
+  function spendingByMonth(state, fromIdx, toIdx, rates = null) {
     const out = new Map();
     for (let i = fromIdx; i <= toIdx; i++) out.set(i, {});
+    const from = T.dateKey(fromIdx, 1), to = T.dateKey(toIdx, 31);
     for (const p of known(state).purchases) {
-      const d = T.parseDate(p.date);
-      if (!d || !out.has(d.idx)) continue;
+      if (!T.parseDate(p.date)) continue;
+      const value = V.toTry(T.originalTotal(p), T.assetOf(p), rates);
+      if (value == null) continue;
       const key = K.valid(p.category) ? p.category : "";
-      const m = out.get(d.idx);
-      m[key] = (m[key] || 0) + T.originalTotal(p);
+      for (const { date } of R.between(p, from, to)) {
+        const m = out.get(T.parseDate(date).idx);
+        m[key] = (m[key] || 0) + value;
+      }
     }
     return out;
   }
 
   // Bir ayın kategori dağılımı ve önceki 3 ayın ortalamasıyla karşılaştırma (yalnızca o aylarda harcaması olan
   // kategoriler ortalamaya girer; hiç harcama olmayan ay ortalamayı düşürmez)
-  function categoryBreakdown(state, idx) {
-    const months = spendingByMonth(state, idx - 3, idx);
+  function categoryBreakdown(state, idx, rates = null) {
+    const months = spendingByMonth(state, idx - 3, idx, rates);
     const cur = months.get(idx);
     const prev = [idx - 3, idx - 2, idx - 1].map(i => months.get(i)).filter(m => Object.keys(m).length);
     const total = Object.values(cur).reduce((s, v) => s + v, 0);
@@ -80,19 +94,24 @@
     return { idx, total, rows, compared: prev.length };
   }
 
-  // Aynı işyerine her ay peşin ödenen (abonelik gibi) harcamalar ve tekrarlayan varlık çıkışları (kira, aidat)
+  // Tekrarlayan harcamalar, aynı işyerine her ay peşin ödenen (abonelik gibi) harcamalar ve tekrarlayan varlık
+  // çıkışları (kira, aidat); monthly aylık karşılıktır (haftada bir ≈ 4,35 kez)
   function recurring(state, today, rates) {
     const t = T.parseDate(today).idx;
-    const groups = new Map();
+    const groups = new Map(), out = [];
+    for (const p of known(state).purchases) {
+      if (!T.repeats(p) || !R.nextDate(p, today)) continue;
+      const v = V.toTry(T.originalTotal(p) * R.perMonth(p), T.assetOf(p), rates);
+      if (v != null) out.push({ name: p.desc, monthly: v, kind: "purchase", category: p.category ?? null });
+    }
     for (const p of known(state).purchases) {
       const d = T.parseDate(p.date);
-      if (!d || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
+      if (!d || T.repeats(p) || T.assetOf(p) !== "TRY" || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
       const key = K.keyOf(p.desc);
       if (!key) continue;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(p);
     }
-    const out = [];
     for (const list of groups.values()) {
       const months = new Set(list.map(p => T.parseDate(p.date).idx));
       const amounts = list.map(p => p.total);
@@ -102,7 +121,7 @@
     }
     for (const e of known(state).entries) {
       if (e.amount >= 0 || V.repeatOf(e) == null || !V.nextDate(e, today)) continue;
-      const v = V.toTry(-e.amount, e.asset, rates);
+      const v = V.toTry(-e.amount * R.perMonth(e), e.asset, rates);
       if (v != null) out.push({ name: e.desc, monthly: v, kind: "entry", category: null });
     }
     return out.sort((a, b) => b.monthly - a.monthly);
@@ -191,7 +210,7 @@
     }
 
     // Kategoride olağandışı artış (bu ay şimdiye kadar, önceki 3 ayın ortalamasına göre)
-    const cats = categoryBreakdown(state, t);
+    const cats = categoryBreakdown(state, t, rates);
     if (cats.compared >= 2) {
       const jump = cats.rows
         .filter(r => r.id && r.average != null && r.value >= TREND_RATIO * r.average && r.value - r.average >= TREND_MIN)
@@ -243,8 +262,10 @@
       });
     }
 
-    // Borcun biteceği ay
-    const lastIdx = purchases.reduce((m, p) => {
+    // Borcun biteceği ay (süresiz tekrarlayan TL harcaması varsa borç bitmez)
+    const endless = purchases.some(p => T.assetOf(p) === "TRY" && T.endless(p));
+    const lastIdx = endless ? -Infinity : purchases.reduce((m, p) => {
+      if (T.assetOf(p) !== "TRY") return m;
       const pays = T.payments(p, state.cards.find(c => c.id === p.cardId));
       return pays.length ? Math.max(m, pays[pays.length - 1].idx) : m;
     }, -Infinity);

@@ -474,10 +474,10 @@ test("tekrarlayan varlık hareketleri: bakiyeye yalnızca tarihi gelen tekrarlar
   const c = client(sb);
   // Bugün 2026-10-18
   const maas = await c.call("add_entry", { asset: "TRY", direction: "in", amount: 50000, description: "Maaş", date: "2026-08-15", repeat: 0 });
-  assert.deepEqual(maas.entry.repeat, { every: "month", times: null, lastDate: null, processed: 3, nextDate: "2026-11-15" });
+  assert.deepEqual(maas.entry.repeat, { every: 1, unit: "month", label: "Ayda bir", times: null, lastDate: null, processed: 3, nextDate: "2026-11-15" });
   assert.equal(maas.balance, 150000);
   const kira = await c.call("add_entry", { asset: "TRY", direction: "out", amount: 20000, description: "Kira", date: "2026-10-20", repeat: 3 });
-  assert.deepEqual(kira.entry.repeat, { every: "month", times: 3, lastDate: "2026-12-20", processed: 0, nextDate: "2026-10-20" });
+  assert.deepEqual(kira.entry.repeat, { every: 1, unit: "month", label: "Ayda bir", times: 3, lastDate: "2026-12-20", processed: 0, nextDate: "2026-10-20" });
   assert.equal(kira.balance, 150000);
   const tek = await c.call("add_entry", { asset: "USD", direction: "in", amount: 10, description: "Tek", repeat: 1 });
   assert.equal(tek.entry.repeat, undefined);
@@ -500,6 +500,46 @@ test("tekrarlayan varlık hareketleri: bakiyeye yalnızca tarihi gelen tekrarlar
   const once = await c.call("update_entry", { id: kira.entry.id, amount: 25000 });
   assert.equal(once.entry.repeat.times, 3);
   assert.equal((await c.call("get_assets")).assets[0].balance, 150000);
+});
+
+test("harcama varlıktan: döviz / altın harcaması ve nakit harcama bakiyeden düşer; her N hafta / ayda bir tekrar", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  // Bugün 2026-10-18
+  await c.call("add_entry", { asset: "USD", direction: "in", amount: 100, description: "Dolar alımı", date: "2026-10-01" });
+  await c.call("add_entry", { asset: "TRY", direction: "in", amount: 10000, description: "Maaş", date: "2026-10-01" });
+  const usd = await c.call("add_purchase", { description: "Kitap", amount: 12.5, asset: "dolar", date: "2026-10-10" });
+  assert.equal(usd.purchase.asset, "USD");
+  assert.equal(usd.purchase.card, "Nakit");
+  assert.match(usd.preview.note, /USD asset balance/);
+  assert.match((await c.call("add_purchase", { description: "x", amount: 5, asset: "USD", installments: 3 })).error, /installments must be 1/);
+  await c.call("add_card", { name: "Bonus", cutoff_day: 10, due_day: 20 });
+  assert.match((await c.call("add_purchase", { description: "x", amount: 5, asset: "USD", card: "Bonus" })).error, /nakit/);
+
+  // Haftalık market (nakit): 4, 11, 18 Ekim geldi → 3 × 500; 25 Ekim henüz değil
+  const market = await c.call("add_purchase", { description: "Market", amount: 500, card: "nakit", date: "2026-10-04", repeat: 0, repeat_unit: "week" });
+  assert.deepEqual(market.purchase.repeat, { every: 1, unit: "week", label: "Haftada bir", times: null, lastDate: null, processed: 3, nextDate: "2026-10-25" });
+  assert.equal(market.purchase.nextPayment.date, "2026-10-18");   // bugünkü ödeme henüz ödenmedi sayılır (taksitlerdeki gibi)
+  const bals = Object.fromEntries((await c.call("get_assets")).assets.map(a => [a.asset, a.balance]));
+  assert.equal(bals.USD, 87.5);
+  assert.equal(bals.TRY, 10000 - 1500);
+
+  // İki ayda bir kartla abonelik, 3 kez: her tekrar kendi ekstresine
+  const sub = await c.call("add_purchase", { description: "Dergi", amount: 300, card: "Bonus", date: "2026-09-05", repeat: 3, repeat_every: 2 });
+  const full = await c.call("get_purchase", { id: sub.purchase.id });
+  assert.deepEqual(full.payments.map(x => x.date), ["2026-09-20", "2026-11-20", "2027-01-20"]);
+  assert.equal(full.repeat.label, "2 ayda bir");
+  // Kart limitine yalnızca tarihi gelmiş tekrarlar girer (5 Kasım'daki henüz çekilmedi)
+  assert.equal((await c.call("list_cards")).cards[0].used, 0);
+  const row = sb.db.purchases.find(r => r.id === sub.purchase.id);
+  assert.deepEqual([row.repeat_count, row.repeat_every, row.repeat_unit, row.asset], [3, 2, null, null]);
+  assert.equal(sb.db.purchases.find(r => r.id === usd.purchase.id).asset, "USD");
+
+  // Döviz harcaması TL akışına girmez
+  const flow = await c.call("get_cashflow", { from_month: "2026-10", months: 1 });
+  assert.equal(flow.months[0].total, 2000);   // 4 hafta market
+  assert.match((await c.call("add_purchase", { description: "x", amount: 5, repeat_every: 2 })).error, /need repeat/);
+  assert.match((await c.call("add_purchase", { description: "x", amount: 5, card: "nakit", repeat: 0, repeat_unit: "yıl" })).error, /repeat_unit/);
 });
 
 test("kur alınamazsa yalnızca TL sayılır", async () => {

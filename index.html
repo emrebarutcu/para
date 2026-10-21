@@ -145,9 +145,13 @@
         <header class="panel-head">
           <div class="panel-title">
             <h2>Girdi ve çıktılar</h2>
-            <span class="panel-note js-month-label"></span>
+            <span class="panel-note" id="timelineRange"></span>
           </div>
           <div class="panel-tools">
+            <label class="cash-start">
+              <span>Başlangıç</span>
+              <select id="timelineStart" aria-label="Dönemin başladığı gün"></select>
+            </label>
             <div class="seg" id="timelineKind" role="group" aria-label="Hareketleri süz">
               <button type="button" data-kind="all">Tümü</button>
               <button type="button" data-kind="in">Girdi</button>
@@ -276,7 +280,7 @@
         <input class="desc-input" name="desc" type="text" placeholder="Ne aldın? örn. IKEA" autocomplete="off" list="descList" enterkeyhint="done" required aria-label="Ne aldın?" />
         <datalist id="descList"></datalist>
 
-        <div class="field">
+        <div class="field" id="countField">
           <span class="field-label">Taksit</span>
           <div class="count-grid" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
           <div class="stepper" id="countOther" hidden>
@@ -290,7 +294,7 @@
           </div>
         </div>
 
-        <div class="field">
+        <div class="field" id="cardField">
           <span class="field-label">Kart</span>
           <div class="chips" id="cardChips" role="radiogroup" aria-label="Kart"></div>
           <button type="button" class="card-tip" id="cardTip" hidden></button>
@@ -307,6 +311,10 @@
               <input name="date" type="date" aria-label="Harcama tarihi" />
             </div>
           </details>
+          <details class="row" id="repeatRow">
+            <summary><span>Tekrar</span><span class="val" id="repeatVal"></span></summary>
+            <div class="row-body" id="purchaseRepeat"></div>
+          </details>
           <details class="row" id="categoryRow">
             <summary><span>Kategori</span><span class="val"><b id="categoryVal"></b><small id="categoryHint" class="cat-hint" aria-live="polite"></small></span></summary>
             <div class="row-body">
@@ -317,6 +325,12 @@
             <summary><span>Kimin için</span><span class="val" id="personVal"></span></summary>
             <div class="row-body">
               <div class="chips" id="personChips" role="radiogroup" aria-label="Kişi"></div>
+            </div>
+          </details>
+          <details class="row" id="assetRow">
+            <summary><span>Varlık</span><span class="val" id="assetVal"></span></summary>
+            <div class="row-body">
+              <div class="chips" id="purchaseAssetChips" role="radiogroup" aria-label="Varlık"></div>
             </div>
           </details>
         </div>
@@ -338,7 +352,7 @@
   <dialog class="sheet" id="entrySheet" aria-labelledby="entryTitle">
     <form id="entryForm" class="sheet-form" novalidate>
       <header class="sheet-head">
-        <h2 id="entryTitle">Yeni hareket</h2>
+        <h2 id="entryTitle">Yeni giriş</h2>
         <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
       <div class="sheet-body">
@@ -372,11 +386,7 @@
 
         <div class="field">
           <span class="field-label">Tekrar</span>
-          <div class="chips" id="repeatChips" role="radiogroup" aria-label="Tekrar"></div>
-          <label class="inline-input">
-            <span>Diğer</span>
-            <input name="repeat" type="number" min="2" max="600" step="1" inputmode="numeric" placeholder="ay" />
-          </label>
+          <div id="entryRepeat"></div>
         </div>
 
         <div class="field">
@@ -703,12 +713,13 @@
   <div id="chartTooltip" class="chart-tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <!-- Scripts: version → config → supabase SDK → sync → taksit → eposta → app -->
+  <!-- Scripts: version → config → supabase SDK → sync → tekrar → taksit → eposta → app -->
   <script src="version.js"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="tablo.js"></script>
   <script src="sync.js"></script>
+  <script src="tekrar.js"></script>
   <script src="taksit.js"></script>
   <script src="varlik.js"></script>
   <script src="eposta.js"></script>

@@ -58,6 +58,7 @@ test("yeni, değişen ve silinen kayıtlar bulunur", () => {
   assert.deepEqual(plan.purchases.upsert.map(x => x.row), [{
     id: "p3", person_id: "ali", card_id: "k2", description: "Yeni", total: 100, count: 1, date: "2026-10-19",
     first_due: null, plan_count: null, category: null, category_by: null,
+    asset: null, repeat_count: null, repeat_every: null, repeat_unit: null,
   }]);
   assert.deepEqual(plan.purchases.delete, ["p1"]);
   assert.deepEqual(plan.people.delete, []);
@@ -161,7 +162,8 @@ test("varlık hareketleri: satıra çevrilir, geçersizler ve kişisi olmayanlar
     { id: "yetim", personId: "yok", asset: "TRY", amount: 5, desc: "Kişisi yok", date: "2026-10-19" },
   );
   const plan = changes(state, base);
-  assert.deepEqual(plan.entries.upsert.map(x => x.row), [{ id: "e2", person_id: "ali", asset: "USD", amount: -30, description: "Tatil", date: "2026-10-19", repeat_count: null }]);
+  assert.deepEqual(plan.entries.upsert.map(x => x.row), [{ id: "e2", person_id: "ali", asset: "USD", amount: -30, description: "Tatil", date: "2026-10-19",
+    repeat_count: null, repeat_every: null, repeat_unit: null }]);
   assert.deepEqual(toState({}).entries, []);
 });
 
@@ -293,4 +295,37 @@ test("2.x tabanı (kategori sütunsuz) rekey ile çevrilir: yükseltmede harcama
   for (const t of Tablo.TABLES) assert.deepEqual(changes(state, base)[t], { upsert: [], delete: [] }, t);
   const out = merge(state, base, "purchases", [{ ...rows.purchases[0], category: "ev", category_by: "user", updated_at: at() }]);
   assert.equal(out.state.installments[0].category, "ev");
+});
+
+test("her N gün / hafta / ayda bir: repeat_every ve repeat_unit; varsayılanlar (1, ay) boş yazılır", () => {
+  const state = { people: [{ id: "ben", name: "Ben", color: 0 }], entries: [
+    { id: "a", personId: "ben", asset: "TRY", amount: 100, desc: "x", date: "2026-10-01", repeat: 0, every: 2, unit: "week" },
+    { id: "b", personId: "ben", asset: "TRY", amount: 100, desc: "x", date: "2026-10-01", repeat: 5, every: 1, unit: "month" },
+    { id: "c", personId: "ben", asset: "TRY", amount: 100, desc: "x", date: "2026-10-01", every: 3, unit: "day" },
+    { id: "d", personId: "ben", asset: "TRY", amount: 100, desc: "x", date: "2026-10-01", repeat: 0, every: 500, unit: "yıl" },
+  ] };
+  const cols = changes(state, {}).entries.upsert.map(({ row }) => [row.repeat_count, row.repeat_every, row.repeat_unit]);
+  assert.deepEqual(cols, [[0, 2, "week"], [5, null, null], [null, null, null], [0, null, null]]);
+  const back = toState({ entries: changes(state, {}).entries.upsert.map(({ row }) => ({ ...row, created_at: at() })) }).entries;
+  assert.deepEqual(back.map(({ repeat, every, unit }) => ({ repeat, every, unit })), [
+    { repeat: 0, every: 2, unit: "week" }, { repeat: 5, every: undefined, unit: undefined },
+    { repeat: undefined, every: undefined, unit: undefined }, { repeat: 0, every: undefined, unit: undefined }]);
+});
+
+test("harcama: döviz / altın varlığı ve tekrar sütunları; tarihsiz harcama tekrarlamaz", () => {
+  const people = [{ id: "ben", name: "Ben", color: 0 }];
+  const state = { people, installments: [
+    { id: "a", personId: "ben", cardId: null, desc: "Netflix", total: 10, count: 1, date: "2026-10-01", asset: "USD", repeat: 0 },
+    { id: "b", personId: "ben", cardId: null, desc: "Market", total: 500, count: 1, date: "2026-10-01", asset: "TRY", repeat: 4, every: 1, unit: "week" },
+    { id: "c", personId: "ben", cardId: null, desc: "Excel", total: 500, count: 2, firstDue: "2026-11", repeat: 0 },
+  ] };
+  const rows = changes(state, {}).purchases.upsert.map(x => x.row);
+  assert.deepEqual(rows.map(r => [r.asset, r.repeat_count, r.repeat_every, r.repeat_unit]),
+    [["USD", 0, null, null], [null, 4, null, "week"], [null, null, null, null]]);
+  const back = toState({ people: [], purchases: rows.map(r => ({ ...r, created_at: at() })) }).installments;
+  assert.equal(back[0].asset, "USD");
+  assert.equal(back[0].repeat, 0);
+  assert.equal(back[1].asset, undefined);
+  assert.equal(back[1].unit, "week");
+  assert.equal(back[2].repeat, undefined);
 });

@@ -10,6 +10,7 @@
 import T from "../taksit.js";
 import E from "../eposta.js";
 import V from "../varlik.js";
+import R from "../tekrar.js";
 import K from "../kategori.js";
 import I from "../icgoru.js";
 
@@ -111,6 +112,29 @@ function categoryArg(v) {
   return c ? c.id : fail(`category must be one of ${K.CATEGORIES.map(x => `"${x.id}" (${x.name})`).join(", ")}, or null.`);
 }
 
+// Tekrar: repeat (1 tek seferlik, N kez, 0 süresiz), repeat_every (her N…), repeat_unit (day / week / month); verilmeyen
+// base'den gelir. → kayda yazılacak alanlar (tekrar.js fields)
+function repeatArgs(args, base) {
+  const n = args.repeat !== undefined ? intArg(args.repeat, "repeat", 0, R.MAX_REPEAT) : R.count(base) ?? 1;
+  if (n === 1) {
+    if (args.repeat_every !== undefined || args.repeat_unit !== undefined) fail("repeat_every / repeat_unit need repeat (0 = no end, N = N times).");
+    return {};
+  }
+  const every = args.repeat_every !== undefined ? intArg(args.repeat_every, "repeat_every", 1, R.MAX_EVERY) : R.every(base);
+  const unit = args.repeat_unit === undefined ? R.unit(base)
+    : R.UNITS.includes(args.repeat_unit) ? args.repeat_unit : fail('repeat_unit must be "day", "week" or "month".');
+  return R.fields({ repeat: n, every, unit });
+}
+
+// Tekrarın görünümü (cevaplarda)
+function repeatView(x, today) {
+  const r = R.rule(x);
+  return r && {
+    every: r.every, unit: r.unit, label: R.label(x), times: r.n || null,
+    lastDate: R.lastDate(x), processed: R.countUntil(x, today), nextDate: R.nextDate(x, today),
+  };
+}
+
 // Kart belirtilmezse: tek kart varsa o, hiç yoksa nakit; birden çok kartta LLM sormalı
 function defaultCardFor(state) {
   if (state.cards.length <= 1) return state.cards[0] ?? null;
@@ -123,15 +147,23 @@ function knownPurchases(state) {
   return state.installments.filter(p => known.has(p.personId));
 }
 
-function paymentsOf(state, p) { return T.payments(p, cardById(state, p.cardId)); }
+function paymentsOf(state, p, until) { return T.payments(p, cardById(state, p.cardId), until); }
 
-function lastPaymentIndex(state) {
+// Son ödemenin ayı; süresiz tekrarlayan TL harcaması varsa en az bir yıl ileri (app.js ile aynı)
+function lastPaymentIndex(state, today) {
   let last = -Infinity;
   for (const p of knownPurchases(state)) {
-    const pays = paymentsOf(state, p);
+    if (T.assetOf(p) !== "TRY") continue;
+    const pays = paymentsOf(state, p, today);
     if (pays.length) last = Math.max(last, pays[pays.length - 1].idx);
+    if (T.endless(p)) last = Math.max(last, T.parseDate(today).idx + 11);
   }
   return last;
+}
+
+// Kartsız harcamaların today'e kadar ödenen kısmı varlık başına (varlık bakiyesinden düşer)
+function cashSpent(state, today, personId = null) {
+  return T.cashSpent(knownPurchases(state).filter(p => !personId || p.personId === personId), state.cards, today);
 }
 
 const byName = (state, map, nameOf) =>
@@ -140,7 +172,8 @@ const cardKeyName = (state, key) => (key === T.CASH ? "Nakit" : cardName(state, 
 
 function purchaseView(state, p, today, { schedule = false } = {}) {
   const card = cardById(state, p.cardId);
-  const pays = T.payments(p, card);
+  // Tekrarlayanda sıradaki tekrarın ödemeleri de kalan sayılır
+  const pays = T.payments(p, card, T.repeats(p) ? R.nextDate(p, today) ?? today : today);
   const plan = T.planLength(p);
   const per = T.perInstallment(p);
   const left = pays.filter(x => x.key >= today);
@@ -163,7 +196,9 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     status: left.length ? "active" : "done",
     category: K.valid(p.category) ? p.category : null,
     categoryName: K.category(p.category)?.name ?? null,
+    asset: T.assetOf(p),
   };
+  if (T.repeats(p)) v.repeat = repeatView(p, today);
   if (!p.date) {
     // Excel'den gelen tarihsiz kayıt: total/count kalan taksitlerdir
     v.firstDueMonth = p.firstDue;
@@ -178,7 +213,7 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
 function cardView(state, c, today) {
   const known = new Set(state.people.map(p => p.id));
   const mine = state.installments.filter(p => p.cardId === c.id && known.has(p.personId));
-  const pays = mine.flatMap(p => T.payments(p, c));
+  const pays = mine.flatMap(p => T.payments(p, c, today));
   const upcoming = pays.filter(x => x.key >= today);
   const next = upcoming.reduce((min, x) => (!min || x.key < min ? x.key : min), null);
   const used = T.outstanding(pays, today);
@@ -227,7 +262,11 @@ function preview(state, p) {
     lastPayment: pays.length ? pays[pays.length - 1].key : null,
   };
   if (card && p.date) out.statementCutoff = T.statementOf(card, p.date).cut;
-  if (!card) out.note = p.count > 1 ? "Cash — paid each month on the purchase day" : "Cash — paid on the purchase day";
+  if (!card) {
+    out.note = (p.count > 1 ? "Cash — paid each month on the purchase day" : "Cash — paid on the purchase day")
+      + `, deducted from the ${T.assetOf(p)} asset balance`;
+  }
+  if (T.repeats(p)) out.repeat = R.label(p) + (R.rule(p).n ? ` · ${R.rule(p).n} times` : " · no end");
   return out;
 }
 
@@ -238,6 +277,10 @@ function buildPurchase(state, args, today, base = null) {
   if (!desc) fail("description is required (what was bought).");
 
   const count = intArg(args.installments, "installments", 1, MAX_COUNT, base?.count ?? 1);
+  // Döviz / altın harcaması o varlıktan ödenir: kartsız ve peşin
+  const asset = args.asset !== undefined ? assetArg(args.asset) : T.assetOf(base);
+  const foreign = asset !== "TRY";
+  if (foreign && count !== 1) fail("A USD / EUR / gold purchase is paid at once from that asset: installments must be 1.");
 
   let total = base?.total;
   if (args.amount !== undefined) {
@@ -246,7 +289,7 @@ function buildPurchase(state, args, today, base = null) {
     if (args.amount_type !== undefined && !["total", "per_installment"].includes(args.amount_type)) {
       fail('amount_type must be "total" or "per_installment".');
     }
-    total = args.amount_type === "per_installment" ? round(amount * count) : round(amount);
+    total = V.round(args.amount_type === "per_installment" ? amount * count : amount, asset);
   }
   if (!(total > 0)) fail("amount is required.");
 
@@ -260,10 +303,14 @@ function buildPurchase(state, args, today, base = null) {
   if (!person) fail("Add a person first (add_person).");
 
   const card = args.card !== undefined ? findCard(state, args.card)
+    : foreign ? null
     : base ? cardById(state, base.cardId) ?? null
     : defaultCardFor(state);
+  if (foreign && card) fail(`Only TRY purchases can go on a card; use card "nakit" for ${asset}.`);
 
-  const p = { desc, cardId: card ? card.id : null, count, total };
+  const rep = repeatArgs(args, base);
+  if (rep.repeat != null && !date) fail("A repeating purchase needs a date.");
+  const p = { desc, cardId: card ? card.id : null, count, total, ...(foreign && { asset }), ...rep };
   // Kategori: verilirse kullanıcının seçimi sayılır (uygulama bundan öğrenir); verilmezse düzenlenen kayıttaki kalır,
   // yeni kayıtta kullanıcının aynı işyerine daha önce verdiği kategori önerilir
   // Açıklama değişince kullanıcının seçmediği (önerilmiş) kategori yeniden önerilir (app.js'teki gibi)
@@ -388,15 +435,7 @@ function entryView(state, e, rates, today) {
     person: personName(state, e.personId),
     personId: e.personId,
   };
-  if (n != null) {
-    v.repeat = {
-      every: "month",
-      times: n || null,
-      lastDate: V.lastDate(e),
-      processed: V.processedCount(e, today),
-      nextDate: V.nextDate(e, today),
-    };
-  }
+  if (n != null) v.repeat = repeatView(e, today);
   return v;
 }
 
@@ -427,10 +466,7 @@ function buildEntry(state, args, today, base = null) {
   const date = args.date ?? base?.date ?? today;
   if (!validDate(date)) fail("date must be a valid date like 2026-10-19.");
   const personId = args.person !== undefined ? findPerson(state, args.person).id : base?.personId ?? state.people[0].id;
-  const repeat = args.repeat !== undefined ? intArg(args.repeat, "repeat", 0, V.MAX_REPEAT) : V.repeatOf(base) ?? 1;
-  const e = { personId, asset, amount: dir === "out" ? -amount : amount, desc, date };
-  if (repeat !== 1) e.repeat = repeat;
-  return e;
+  return { personId, asset, amount: dir === "out" ? -amount : amount, desc, date, ...repeatArgs(args, base) };
 }
 
 // ---------- Şema yardımcıları ----------
@@ -444,9 +480,14 @@ const S = {
 };
 const obj = (properties = {}, required = []) => ({ type: "object", properties, required, additionalProperties: false });
 
+const REPEAT_FIELDS = {
+  repeat: S.int("Repetition: 1 = once (default), N = N times, 0 = no end (e.g. rent, subscription, salary).", 0, 600),
+  repeat_every: S.int("Repeat once every N units (default 1), e.g. 2 with repeat_unit week = every 2 weeks.", 1, 99),
+  repeat_unit: { type: "string", enum: ["day", "week", "month"], description: 'Unit of repeat_every. Default "month" (same day of month as date; shorter months use their last day).' },
+};
 const PURCHASE_FIELDS = {
   description: S.str("What was bought (shown as the purchase title)."),
-  amount: S.num("Amount in TRY. The purchase total, unless amount_type is per_installment."),
+  amount: S.num("Amount in the purchase's asset (TRY unless asset is given). The purchase total, unless amount_type is per_installment."),
   amount_type: { type: "string", enum: ["total", "per_installment"], description: 'How to read amount. Default "total".' },
   installments: S.int("Number of installments (taksit), 1 = single payment (peşin).", 1, MAX_COUNT),
   date: S.date("Purchase date, YYYY-MM-DD. Decides which statement (ekstre) it falls into."),
@@ -456,6 +497,8 @@ const PURCHASE_FIELDS = {
     type: ["string", "null"], enum: [...K.CATEGORIES.map(c => c.id), null],
     description: `Spending category: ${K.CATEGORIES.map(c => `${c.id} = ${c.name} (${c.hint})`).join("; ")}. null removes it. Omit on add to reuse the category the user gave the same merchant before.`,
   },
+  asset: { type: "string", enum: ["TRY", "USD", "EUR", "GAU"], description: 'What the purchase is paid in: TRY (default), USD, EUR or GAU (grams of gold). Non-TRY purchases are paid at once in cash from that asset (card "nakit", installments 1).' },
+  ...REPEAT_FIELDS,
 };
 const CARD_FIELDS = {
   name: S.str("Card name, e.g. bank name."),
@@ -473,7 +516,7 @@ const ENTRY_FIELDS = {
   description: S.str("What it is, e.g. Maaş, altın alımı."),
   date: S.date("Date, YYYY-MM-DD. For a repeating entry, the date of the first time."),
   person: S.str("Person id or name."),
-  repeat: S.int("Monthly repetition on the same day of month as date: 1 = once (default), N = N months in a row, 0 = every month with no end (e.g. salary, rent).", 0, 600),
+  ...REPEAT_FIELDS,
 };
 
 const READ = { readOnlyHint: true, openWorldHint: false };
@@ -493,7 +536,7 @@ export const TOOLS = [
       const state = await ctx.load();
       const today = ctx.today;
       const start = monthArg(args.month, "month", today);
-      const last = lastPaymentIndex(state);
+      const last = lastPaymentIndex(state, today);
       const end = Math.min(last, start + MAX_MONTHS - 1);
       const months = end >= start ? T.buildCashflow(state.people, state.cards, state.installments, start, end) : [];
       const at = idx => months.find(m => m.idx === idx);
@@ -608,7 +651,7 @@ export const TOOLS = [
   {
     name: "add_purchase",
     title: "Add purchase",
-    description: "Add a single or installment purchase. Payment dates are computed from the card's cutoff and due days: a purchase up to and including the cutoff day goes into that month's statement, installments fall into following statements one month apart; cash is paid on the purchase day. Use dry_run to preview the schedule first.",
+    description: "Add a single or installment purchase — also any spending paid in cash from the user's assets (lira, dollars, euros or gold). Payment dates are computed from the card's cutoff and due days: a purchase up to and including the cutoff day goes into that month's statement, installments fall into following statements one month apart; cash is paid on the purchase day and deducted from that asset's balance. With repeat it recurs (every N days / weeks / months), each time as its own purchase on that card. Use dry_run to preview the schedule first.",
     inputSchema: obj({
       ...PURCHASE_FIELDS,
       date: S.date("Purchase date, YYYY-MM-DD. Default: today."),
@@ -745,7 +788,7 @@ export const TOOLS = [
     async run(args, ctx) {
       const state = await ctx.load();
       const start = T.parseDate(ctx.today).idx;
-      const end = Math.min(lastPaymentIndex(state), start + MAX_MONTHS - 1);
+      const end = Math.min(lastPaymentIndex(state, ctx.today), start + MAX_MONTHS - 1);
       const months = end >= start ? T.buildCashflow(state.people, state.cards, state.installments, start, end) : [];
       return {
         people: state.people.map(p => ({
@@ -811,14 +854,15 @@ export const TOOLS = [
   {
     name: "get_assets",
     title: "Assets (Varlıklar)",
-    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries; repeating entries only up to today), each with its value in TRY at the current market rate, and the total in TRY.",
+    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries minus cash purchases paid from them; repeating ones only up to today), each with its value in TRY at the current market rate, and the total in TRY.",
     inputSchema: obj({ person: S.str("Only this person's assets (id or name).") }),
     annotations: READ,
     async run(args, ctx) {
       const state = await ctx.load();
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
       const rates = await ratesOrNull(ctx);
-      const bals = V.balances(knownEntries(state).filter(e => !person || e.personId === person.id), ctx.today);
+      const bals = V.balances(knownEntries(state).filter(e => !person || e.personId === person.id), ctx.today,
+        cashSpent(state, ctx.today, person?.id));
       const { total, missing } = V.totalTry(bals, rates?.rates);
       return {
         person: person?.name ?? "all",
@@ -866,7 +910,7 @@ export const TOOLS = [
   {
     name: "add_entry",
     title: "Add asset entry",
-    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency) or going out (spending, selling, rent), once or repeating monthly. Credit card purchases go to add_purchase instead.",
+    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency), once or repeating every N days / weeks / months. Spending (çıkış) — in cash from an asset or on a card — goes to add_purchase (with asset and card \"nakit\"); direction \"out\" here is kept for selling or giving away.",
     inputSchema: obj({
       ...ENTRY_FIELDS,
       date: S.date("Date, YYYY-MM-DD. Default: today."),
@@ -878,7 +922,8 @@ export const TOOLS = [
       return ctx.mutate(state => {
         const e = { id: uid(), ...buildEntry(state, args, ctx.today) };
         state.entries.push(e);
-        const balance = V.balances(knownEntries(state).filter(x => x.personId === e.personId), ctx.today)[e.asset] ?? 0;
+        const balance = V.balances(knownEntries(state).filter(x => x.personId === e.personId), ctx.today,
+          cashSpent(state, ctx.today, e.personId))[e.asset] ?? 0;
         return { saved: true, entry: entryView(state, e, rates, ctx.today), balance };
       });
     },
@@ -886,7 +931,7 @@ export const TOOLS = [
   {
     name: "update_entry",
     title: "Update asset entry",
-    description: "Change fields of an asset entry; omitted fields stay as they are. To stop a repeating entry, set repeat to the number of times it has been processed (or 1 to keep only the first); if it has not been processed yet, delete it instead (repeat 0 means every month with no end).",
+    description: "Change fields of an asset entry; omitted fields stay as they are. To stop a repeating entry, set repeat to the number of times it has been processed (or 1 to keep only the first); if it has not been processed yet, delete it instead (repeat 0 means no end).",
     inputSchema: obj({ id: S.str("Entry id."), ...ENTRY_FIELDS }, ["id"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
@@ -1070,9 +1115,10 @@ export const TOOLS = [
       const count = intArg(args.months, "months", 1, 24, 1);
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
       const scoped = person ? { ...state, people: [person] } : state;
+      const rates = state.installments.some(p => T.assetOf(p) !== "TRY") ? (await ratesOrNull(ctx))?.rates : null;
       const months = [];
       for (let idx = last - count + 1; idx <= last; idx++) {
-        const b = I.categoryBreakdown(scoped, idx);
+        const b = I.categoryBreakdown(scoped, idx, rates);
         months.push({
           month: T.monthKey(idx),
           total: round(b.total),
@@ -1103,11 +1149,11 @@ export const TOOLS = [
       if (!validDate(date)) fail('date must be a valid date like "2026-10-18".');
       const timing = I.cardTiming(state, date).filter(x => !x.full);
       const fields = { description: "Simülasyon", ...args, date };
-      if (args.card === undefined) fields.card = timing[0]?.card.id ?? null;
+      if (args.card === undefined) fields.card = args.asset === undefined || assetArg(args.asset) === "TRY" ? timing[0]?.card.id ?? null : null;
       const { personId, p } = buildPurchase(state, fields, ctx.today);
       const purchase = { id: "simulasyon", personId, ...p };
       const after = { ...state, installments: [...state.installments, purchase] };
-      const pays = T.payments(purchase, cardById(state, purchase.cardId));
+      const pays = T.payments(purchase, cardById(state, purchase.cardId), ctx.today);
       const from = pays[0].idx, to = pays[pays.length - 1].idx;
       const flowsOf = s => T.buildCashflow(s.people, s.cards, s.installments, from, to);
       const before = flowsOf(state), next = flowsOf(after);
