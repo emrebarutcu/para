@@ -21,7 +21,7 @@ const TIMES_PRESETS = [[0, "Süresiz"], [3, "3 kez"], [6, "6 kez"], [12, "12 kez
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // takvim pazartesiyle başlar
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates",
-  cashStart: "para.cashStart", cashMode: "para.cashMode" };
+  cashStart: "para.cashStart", cashMode: "para.cashMode", timelineStart: "para.timelineStart" };
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
 const INSIGHTS_SHOWN = 3;        // özette ilk görünen içgörü sayısı
@@ -62,6 +62,7 @@ let entryFilter = "all";      // varlıklarda seçili kişi
 let timelineKind = "all";     // özetteki zaman çizelgesi: all | in | out
 let timelineMode = readPref(PREF.timelineMode) === "calendar" ? "calendar" : "list";
 let timelineDay = null;       // takvimde seçili gün
+let timelineStart = /^([1-9]|[12]\d|3[01])$/.test(readPref(PREF.timelineStart) ?? "") ? readPref(PREF.timelineStart) : "1";   // takvim dönemi: ayın günü
 let cashStart = /^([1-9]|[12]\d|3[01])$/.test(readPref(PREF.cashStart) ?? "") ? readPref(PREF.cashStart) : "today";   // nakit dönemi: "today" | ayın günü
 let cashMode = readPref(PREF.cashMode) === "net" ? "net" : "balance";
 let cashShift = 0;            // nakit grafiğinde bugünün döneminden kaç dönem uzakta
@@ -277,6 +278,7 @@ const els = {
   remaining: $("remainingTotal"), endLabel: $("endLabel"),
   upcoming: $("upcomingList"), peopleSummary: $("peopleSummary"),
   timelineKind: $("timelineKind"), timelineMode: $("timelineMode"), timelineSum: $("timelineSum"),
+  timelineRange: $("timelineRange"), timelineStart: $("timelineStart"), timelineStartWrap: $("timelineStartWrap"),
   timelineCal: $("timelineCal"), timeline: $("timeline"),
   chartBy: $("chartBy"), legend: $("chartLegend"), chart: $("planChart"), chartEmpty: $("chartEmpty"),
   tooltip: $("chartTooltip"),
@@ -473,8 +475,19 @@ function openEvent(ev) {
   location.hash = "#akis";
 }
 
-// Ayın girdi ve çıktıları gün gün: varlık hareketleri (giriş/çıkış) ve kart/nakit ödemeleri.
-// Toplamlar TL'dir; döviz ve altın güncel kurla çevrilir, kuru bilinmeyen hareket toplama girmez.
+// Takvimin dönemi: listede ayın tamamı; takvimde seçilen günden (ör. maaş günü) bir ay sonrasının bir gün öncesine.
+// Bu ay seçiliyken bugünü içeren dönem, diğer aylarda ondan o kadar ay uzaktaki dönem.
+function timelinePeriod(start, today) {
+  const day = timelineMode === "calendar" ? Number(timelineStart) : 1;
+  if (day === 1) return { from: T.dateKey(start, 1), to: T.dateKey(start, 31), whole: true };
+  const t = T.parseDate(today);
+  const idx = start - (t.day < T.dayOf(t.idx, day) ? 1 : 0);
+  return { from: T.dateKey(idx, day), to: T.addDays(T.dateKey(idx + 1, day), -1), whole: false };
+}
+
+// Dönemin (ayın ya da takvimde seçilen günden başlayan dönemin) girdi ve çıktıları gün gün: varlık hareketleri
+// (giriş/çıkış) ve kart/nakit ödemeleri. Toplamlar TL'dir; döviz ve altın güncel kurla çevrilir, kuru bilinmeyen
+// hareket toplama girmez.
 function renderTimeline(start) {
   for (const b of els.timelineKind.querySelectorAll("button")) {
     b.classList.toggle("active", b.dataset.kind === timelineKind);
@@ -486,18 +499,24 @@ function renderTimeline(start) {
   }
   const today = T.todayKey();
   const r = rates?.rates;
-  // Tekrarlayan hareket bu aya düşen tekrarlarının tarihiyle gelir; varlığı bilinmeyen hareket (içe aktarma) atlanır
+  const { from, to, whole } = timelinePeriod(start, today);
+  const inPeriod = date => date >= from && date <= to;
+  els.timelineStartWrap.hidden = timelineMode !== "calendar";
+  if (timelineMode === "calendar") renderStartOptions(els.timelineStart, timelineStart, today, false);
+  els.timelineRange.textContent = whole ? monthLong(start) : `${fmtDayShort(from)} – ${fmtDayShort(to)}`;
+  // Tekrarlayan hareket döneme düşen tekrarlarının tarihiyle gelir; varlığı bilinmeyen hareket (içe aktarma) atlanır
   const entries = [];
   for (const e of knownEntries()) {
     if (!V.asset(e.asset)) continue;
-    for (const date of V.occurrencesIn(e, start)) entries.push({ e, date });
+    for (const { date } of R.between(e, from, to)) entries.push({ e, date });
   }
-  const events = T.buildCashflow(state.people, state.cards, state.installments, start, start)[0].events;
+  const events = T.buildCashflow(state.people, state.cards, state.installments, T.parseDate(from).idx, T.parseDate(to).idx)
+    .flatMap(m => m.events).filter(ev => inPeriod(ev.date));
   // Döviz / altın harcamaları TL ödemelerinde yok: kendi varlıklarıyla çıktıdır
   const foreign = [];
   for (const p of knownPurchases()) {
     if (T.assetOf(p) === "TRY") continue;
-    for (const x of paymentsOf(p, T.dateKey(start, 31))) if (x.idx === start) foreign.push({ p, x });
+    for (const x of paymentsOf(p, to)) if (inPeriod(x.key)) foreign.push({ p, x });
   }
   if (entries.some(x => x.e.asset !== "TRY") || foreign.length) loadRates();
 
@@ -532,7 +551,7 @@ function renderTimeline(start) {
   els.timelineCal.hidden = timelineMode !== "calendar";
   els.timelineCal.parentElement.classList.toggle("cal-mode", timelineMode === "calendar");
   const shown = items.filter(it => timelineKind === "all" || it.kind === timelineKind);
-  if (timelineMode === "calendar") { renderCalendar(start, shown, today, r); return; }
+  if (timelineMode === "calendar") { renderCalendar(from, to, whole, shown, today, r); return; }
   if (!shown.length) {
     const text = timelineKind === "in" ? "Bu ay girdi yok" : timelineKind === "out" ? "Bu ay çıktı yok" : "Bu ay hareket yok";
     els.timeline.append(el("li", "empty", text));
@@ -540,7 +559,7 @@ function renderTimeline(start) {
   }
 
   // Bugün bu ayın içindeyse bugünden sonraki ilk günün önüne "Bugün" çizgisi
-  let nowPlaced = T.parseDate(today).idx !== start;
+  let nowPlaced = !inPeriod(today);
   const days = new Map();
   for (const it of shown) {
     if (!days.has(it.date)) days.set(it.date, []);
@@ -564,23 +583,24 @@ function renderTimeline(start) {
   if (!nowPlaced) els.timeline.append(timelineNow(today));
 }
 
-// Takvim: günlerde o günün girdi/çıktı toplamı; seçili günün hareketleri altta
-function renderCalendar(start, shown, today, r) {
+// Takvim: günlerde o günün girdi/çıktı toplamı; seçili günün hareketleri altta. Dönem iki aya yayılıyorsa yeni ayın
+// ilk gününde ayın adı yazar.
+function renderCalendar(from, to, whole, shown, today, r) {
   const byDay = new Map();
   for (const it of shown) {
     if (!byDay.has(it.date)) byDay.set(it.date, []);
     byDay.get(it.date).push(it);
   }
-  if (T.parseDate(timelineDay)?.idx !== start) {
-    timelineDay = T.parseDate(today).idx === start ? today : shown[0]?.date ?? T.dateKey(start, 1);
+  if (!(timelineDay >= from && timelineDay <= to)) {
+    timelineDay = today >= from && today <= to ? today : shown[0]?.date ?? from;
   }
 
   const grid = el("div", "cal-grid");
   for (const w of CAL_WEEKDAYS) grid.append(el("span", "cal-wd", w));
-  const offset = (T.toDate(T.dateKey(start, 1)).getDay() + 6) % 7;
+  const offset = (T.toDate(from).getDay() + 6) % 7;
   for (let i = 0; i < offset; i++) grid.append(el("span", "cal-pad"));
-  for (let d = 1, n = T.daysInMonth(start); d <= n; d++) {
-    const key = T.dateKey(start, d);
+  for (let key = from; key <= to; key = T.addDays(key, 1)) {
+    const { idx, day: d } = T.parseDate(key);
     const list = byDay.get(key) || [];
     let inSum = 0, outSum = 0, unknown = false;
     for (const it of list) {
@@ -595,7 +615,7 @@ function renderCalendar(start, shown, today, r) {
     b.setAttribute("aria-label", `${fmtDayShort(key)}: ` + (list.length
       ? [inSum && `girdi ${fmt(inSum)}`, outSum && `çıktı ${fmt(outSum)}`, unknown && "kuru bilinmeyen hareket"].filter(Boolean).join(", ")
       : "hareket yok"));
-    b.append(el("span", "cal-n", String(d)));
+    b.append(el("span", "cal-n", !whole && (key === from || d === 1) ? `${d} ${T.monthShort(idx)}` : String(d)));
     if (inSum) b.append(el("span", "cal-v in-text", "+" + fmtShort(inSum)));
     if (outSum) b.append(el("span", "cal-v out-text", "−" + fmtShort(outSum)));
     if (unknown && !inSum && !outSum) b.append(el("span", "cal-v", "•"));
@@ -1113,8 +1133,8 @@ function dayWithSuffix(n) {
   return `${n}'${suffix}`;
 }
 
-// Başlangıç seçenekleri: bugün, süren tekrarlayan TL girişlerinin günleri (en büyük 3), ayın her günü
-function renderCashStart(today) {
+// Başlangıç seçenekleri: (withToday ise) bugün, süren aylık TL girişlerinin günleri (en büyük 3), ayın her günü
+function renderStartOptions(select, value, today, withToday) {
   const incomes = knownEntries()
     .filter(e => e.asset === "TRY" && e.amount > 0 && V.repeatOf(e) != null && R.unit(e) === "month" && V.nextDate(e, today))
     .sort((a, b) => b.amount - a.amount);
@@ -1138,8 +1158,9 @@ function renderCashStart(today) {
     return g;
   };
   const days = Array.from({ length: 31 }, (_, i) => [String(i + 1), `Ayın ${dayWithSuffix(i + 1)}`]);
-  els.cashStart.replaceChildren(option(["today", "Bugün"]), ...(opts.length ? [group("Gelir günü", opts)] : []), group("Ayın günü", days));
-  els.cashStart.value = cashStart;
+  select.replaceChildren(...(withToday ? [option(["today", "Bugün"])] : []), ...(opts.length ? [group("Gelir günü", opts)] : []),
+    group("Ayın günü", days));
+  select.value = value;
 }
 
 let cashHover = null;   // klavyeyle / işaretçiyle seçili gün
@@ -1150,7 +1171,7 @@ function renderCash() {
     b.setAttribute("aria-pressed", String(b.dataset.mode === cashMode));
   }
   const today = T.todayKey();
-  renderCashStart(today);
+  renderStartOptions(els.cashStart, cashStart, today, true);
   const { from, to } = cashPeriod(today, cashStart, cashShift);
   const data = cashSeries(from, to, today);
   const { days } = data;
@@ -3512,6 +3533,13 @@ els.timelineKind.addEventListener("click", e => {
   const kind = e.target.closest("button")?.dataset.kind;
   if (!kind || kind === timelineKind) return;
   timelineKind = kind;
+  render();
+});
+
+els.timelineStart.addEventListener("change", () => {
+  timelineStart = els.timelineStart.value;
+  timelineDay = null;
+  writePref(PREF.timelineStart, timelineStart);
   render();
 });
 

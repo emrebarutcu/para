@@ -145,9 +145,13 @@
         <header class="panel-head">
           <div class="panel-title">
             <h2>Girdi ve çıktılar</h2>
-            <span class="panel-note js-month-label"></span>
+            <span class="panel-note" id="timelineRange"></span>
           </div>
           <div class="panel-tools">
+            <label class="cash-start" id="timelineStartWrap" hidden>
+              <span>Başlangıç</span>
+              <select id="timelineStart" aria-label="Takvimin başladığı gün"></select>
+            </label>
             <div class="seg" id="timelineKind" role="group" aria-label="Hareketleri süz">
               <button type="button" data-kind="all">Tümü</button>
               <button type="button" data-kind="in">Girdi</button>
