@@ -1541,3 +1541,16 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 }
 #perRow { margin-top: 2px; }
 #perRow label { padding: 8px 12px; font-size: 13.5px; }
+
+/* ── Tekrar: sıklık (günde / haftada / ayda bir, Diğer: her N …) ve kaç kez ── */
+.repeat { display: flex; flex-direction: column; gap: 12px; }
+.rep-every { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; color: var(--text-2); }
+.rep-every .seg label { padding: 7px 12px; }
+.rep-times { display: flex; flex-direction: column; gap: 8px; }
+.repeat input[type="number"] {
+  width: 72px; height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface-2);
+  font: inherit; font-size: 16px; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.repeat input[type="number"]:focus { border-color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 3px var(--focus); }
+.repeat input[type="number"].invalid { border-color: var(--danger); }
+.rep-times .inline-input { align-self: flex-start; }

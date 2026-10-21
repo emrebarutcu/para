@@ -109,6 +109,15 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
 
 ### Yükseltme notları
 
+- **4.0.0** — Tek çıkış formu ve her N gün / hafta / ayda bir tekrar. Yeni sütunlar: `purchases.asset`,
+  `purchases.repeat_count`, `purchases.repeat_every`, `purchases.repeat_unit`, `entries.repeat_every`,
+  `entries.repeat_unit`. Yayından **önce** `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh
+  supabase/tablolar.sql`; yalnızca eksik sütunları ekler); sütunlar yoksa yeni sürüm eşitleyemez. Mevcut verinin anlamı
+  değişir: kartsız (nakit) harcamalar artık TL varlık bakiyesinden düşer. Önbellekteki 3.x sürümleri yeni sütunları
+  yazmaz, olduğu gibi bırakır; tekrarlayan harcamayı tek seferlik, döviz harcamasını TL gösterir. 4.0'a geçen cihaz ilk
+  eşitlemede bütün satırları yeniden çeker. MCP: harcama araçlarına isteğe bağlı `asset`, `repeat`, `repeat_every`,
+  `repeat_unit`; varlık araçlarına `repeat_every`, `repeat_unit`. **Uyumsuz:** cevaplardaki `repeat.every` artık sayı
+  (`"month"` yerine; birim `repeat.unit`'te); `get_assets` nakit harcamaları düşer.
 - **3.0.0** — Harcama kategorisi (`purchases.category`, `purchases.category_by`). Yayından **önce**
   `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh supabase/tablolar.sql`; yalnızca eksik sütunları
   ekler); sütunlar yoksa yeni sürüm eşitleyemez. Önbellekteki 2.x sürümleri kategoriyi yazmaz, olduğu gibi bırakır
@@ -182,13 +191,20 @@ kategoriye dokunulmaz).
 
 ### Varlıklar: TL, dolar, euro, gram altın
 
-**Varlıklar** sekmesinde tarihli giriş / çıkış hareketleri tutulur (maaş, döviz ya da altın alımı, harcama, satış).
-Miktar varlığın kendi birimindedir (altında gram); bakiye hareketlerin toplamıdır. Her varlığın ve toplamın TL
-karşılığı güncel satış kuruyla gösterilir.
+**Varlıklar** sekmesinde tarihli girişler (maaş, döviz ya da altın alımı) ve çıkışlar tutulur. Çıkış harcamadır: tek
+form, harcama formu. Varlık formunda **Çıkış** seçilince yazılanlar harcama formuna taşınır; harcama formunda kart, taksit,
+tekrar ve **Varlık** (TL, dolar, euro, gram altın) seçilir. Döviz ve altın harcaması kartsız ve peşindir, TL ödeme
+akışına girmez. Kartsız (nakit) harcamalar ödendikçe o varlığın bakiyesinden düşer ve Varlıklar'daki listede çıkış olarak
+görünür. Eski sürümlerden kalan çıkış hareketleri de harcama formunda açılır; kaydedilince harcamaya dönüşür.
+Miktar varlığın kendi birimindedir (altında gram); bakiye girişlerden nakit harcamalar düşülerek bulunur. Her varlığın
+ve toplamın TL karşılığı güncel satış kuruyla gösterilir.
 
-Hareket her ay tekrarlanabilir (maaş, kira, aidat): formdaki **Tekrar** ile belirli sayıda ay ya da süresiz. Tekrarlar
-ilk tarihin gününde düşer (ay kısaysa ayın son günü); bakiyeye yalnızca tarihi gelmiş tekrarlar girer. Süresiz
-tekrarı durdurmak için ay sayısı işlenen tekrar sayısına çekilir (hiç işlenmediyse hareket silinir; 0 süresiz demektir).
+Giriş de harcama da tekrarlanabilir (maaş, kira, abonelik, haftalık market): formdaki **Tekrar** ile günde, haftada,
+ayda bir ya da **Diğer**le her N gün / hafta / ayda bir (`tekrar.js`); süresiz ya da N kez. Aylık tekrar ilk tarihin
+gününde düşer (ay kısaysa ayın son günü); bakiyeye yalnızca tarihi gelmiş tekrarlar girer. Tekrarlayan harcamanın her
+tekrarı kendi tarihiyle ayrı bir alışveriştir (kartlıysa kendi ekstresine, taksitliyse kendi taksitleriyle); kart
+limitine yalnızca tarihi gelmiş tekrarlar girer. Süresiz tekrarı durdurmak için kaç kez, işlenen tekrar sayısına çekilir
+(hiç işlenmediyse kayıt silinir).
 
 Kurlar sitenin Worker'ından gelir: `GET /api/kur` → `{ rates: { TRY, USD, EUR, GAU }, updatedAt, source }`
 (`mcp/kur.js`). Kaynak [Truncgil](https://finans.truncgil.com) (Türkiye piyasası, gram altın dahil); erişilemezse

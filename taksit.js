@@ -3,6 +3,7 @@
 // kartın son ödeme gününde ödenir; taksitler sonraki ekstrelere birer ay kayarak düşer.
 // Nakit harcama: harcama gününde ödenir (taksitliyse sonraki aylarda aynı gün).
 (function (root) {
+  const R = typeof module === "object" && module.exports ? require("./tekrar.js") : root.Tekrar;
   const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
   const MONTHS_SHORT = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
   const CASH = "nakit";   // kartsız harcamaların seri / grup anahtarı
@@ -159,15 +160,38 @@
   }
 
   // ---------- Harcama ----------
-  // { id, personId, cardId, desc, total, count, date?: "YYYY-MM-DD", firstDue?: "YYYY-MM", planCount? }
+  // { id, personId, cardId, desc, total, count, date?: "YYYY-MM-DD", firstDue?: "YYYY-MM", planCount?, asset?,
+  //   repeat?, every?, unit? }
   // date: harcama tarihi. Tarihi bilinmeyen (Excel'den gelen) kayıtlarda firstDue kalan ilk taksitin
   // ödendiği ay, count/total kalan taksitler, planCount alışverişin asıl taksit sayısıdır.
+  // asset: harcamanın varlığı (USD, EUR, GAU); yoksa TL. Döviz ve altın harcaması kartsız, peşindir; TL nakit akışına
+  // girmez, yalnızca o varlığın bakiyesinden düşer. Kartsız (nakit) harcamalar ödendikçe varlığın bakiyesinden düşer.
+  // repeat / every / unit: harcama date'ten başlayıp her N gün / hafta / ayda bir yinelenir (tekrar.js); her tekrar
+  // kendi tarihiyle aynı karta, aynı taksitle ayrı bir alışveriştir.
+  const FOREIGN = ["USD", "EUR", "GAU"];
+  function assetOf(p) { return FOREIGN.includes(p?.asset) ? p.asset : "TRY"; }
+
   function perInstallment(p) { return p.total / p.count; }
   function planLength(p)     { return Math.max(p.planCount || 0, p.count); }
   function originalTotal(p)  { return perInstallment(p) * planLength(p); }
 
-  // Ödemeler: [{ idx (ödeme ayı), key ("YYYY-MM-DD"), no (1 tabanlı), amount }]
-  function payments(p, card) {
+  // Tekrarlayan harcama (tarihi olan)
+  function repeats(p) { return R.rule(p) != null && !!parseDate(p.date); }
+
+  // Ödemeler: [{ idx (ödeme ayı), key ("YYYY-MM-DD"), no (1 tabanlı), amount }], tarihe göre sıralı.
+  // Tekrarlayan harcamada her tekrarın ödemeleri; at: tekrarın tarihi, occ: kaçıncı tekrar (0 tabanlı). N kez
+  // tekrarlayanın bütün tekrarları, süresizin until gününe (varsayılan bugün) kadar gelenleri.
+  function payments(p, card, until) {
+    if (!repeats(p)) return paymentsOnce(p, card);
+    const end = R.rule(p).n ? R.lastDate(p) : until ?? todayKey();
+    const out = [];
+    for (const { k, date } of R.between(p, p.date, end)) {
+      for (const x of paymentsOnce({ ...p, date }, card)) out.push({ ...x, at: date, occ: k });
+    }
+    return out.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.occ - b.occ));
+  }
+
+  function paymentsOnce(p, card) {
     const amount = perInstallment(p);
     const d = parseDate(p.date);
     const paid = planLength(p) - p.count;
@@ -194,14 +218,31 @@
     return out;
   }
 
+  // Süresiz tekrarlayan harcama: ödemeleri bitmez (akış ve özet ileriye bakarken hesaba katılır)
+  function endless(p) { return repeats(p) && R.rule(p).n === 0; }
+
   // fromIdx ayı ve sonrasında ödenecek taksit sayısı
   function remainingFrom(list, fromIdx) {
     return list.filter(x => x.idx >= fromIdx).length;
   }
 
-  // Bugün ve sonrasında ödenecek tutar — kart limitinden düşen kısım
+  // Bugün ve sonrasında ödenecek tutar — kart limitinden düşen kısım. Tekrarlayan harcamanın tarihi gelmemiş
+  // tekrarları henüz karttan çekilmemiştir, sayılmaz.
   function outstanding(list, today) {
-    return list.filter(x => x.key >= today).reduce((s, x) => s + x.amount, 0);
+    return list.filter(x => x.key >= today && !(x.at > today)).reduce((s, x) => s + x.amount, 0);
+  }
+
+  // Kartsız (nakit) harcamaların today'e kadar (dahil) ödenen kısmı, varlık başına: { TRY: 1250, USD: 40 }.
+  // Varlık bakiyesinden düşer (varlik.js balances). Kartı silinmiş harcama da nakit sayılır (buildCashflow gibi).
+  function cashSpent(purchases, cards, today) {
+    const ids = new Set(cards.map(c => c.id));
+    const out = {};
+    for (const p of purchases) {
+      if (ids.has(p.cardId)) continue;
+      const paid = payments(p, null, today).filter(x => x.key <= today).reduce((s, x) => s + x.amount, 0);
+      if (paid) out[assetOf(p)] = (out[assetOf(p)] || 0) + paid;
+    }
+    return out;
   }
 
   // Ay ay nakit akışı: her ay kişi / kart toplamları ve tarih + kart bazında ödemeler
@@ -214,11 +255,12 @@
       months.set(idx, { idx, total: 0, byPerson: {}, byCard: {}, events: new Map() });
     }
 
+    const until = dateKey(toIdx, 31);
     for (const p of purchases) {
-      if (!known.has(p.personId)) continue;
+      if (!known.has(p.personId) || assetOf(p) !== "TRY") continue;   // döviz / altın harcaması TL akışına girmez
       const card = cardById.get(p.cardId);
       const cardKey = card ? card.id : CASH;
-      for (const pay of payments(p, card)) {
+      for (const pay of payments(p, card, until)) {
         const m = months.get(pay.idx);
         if (!m) continue;
         const key = `${pay.key}|${cardKey}`;
@@ -229,7 +271,7 @@
         }
         ev.total += pay.amount;
         ev.byPerson[p.personId] = (ev.byPerson[p.personId] || 0) + pay.amount;
-        ev.items.push({ purchase: p, no: pay.no, amount: pay.amount });
+        ev.items.push({ purchase: p, no: pay.no, amount: pay.amount, at: pay.at });
         m.total += pay.amount;
         m.byPerson[p.personId] = (m.byPerson[p.personId] || 0) + pay.amount;
         m.byCard[cardKey] = (m.byCard[cardKey] || 0) + pay.amount;
@@ -414,7 +456,8 @@
     MONTHS, MONTHS_SHORT, CASH, SERIES_COUNT,
     monthIndex, monthKey, monthName, monthShort, yearOf, daysInMonth, dayOf, dateKey, parseDate, toDate, todayKey,
     addDays, statementIndex, dueIndex, periods, statementOf, nextStatement, retermCard, termChoices,
-    perInstallment, planLength, originalTotal, payments, remainingFrom, outstanding, buildCashflow,
+    FOREIGN, assetOf, perInstallment, planLength, originalTotal, repeats, payments, endless, remainingFrom, outstanding, cashSpent,
+    buildCashflow,
     defaultState, validDay, validHistory, defaultCard, nextColor, hydrate,
     normalize, titleCase, parseStatement, fromStatement, parseSheetRows, parseWorkbook,
   };

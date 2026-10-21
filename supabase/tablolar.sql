@@ -88,6 +88,17 @@ alter table entries add column if not exists repeat_count integer
 alter table purchases add column if not exists category text check (category ~ '^[a-z]{1,20}$');
 alter table purchases add column if not exists category_by text check (category_by in ('user', 'ai'));
 
+-- Her N gün / hafta / ayda bir tekrar ve harcamanın varlığı (3.x'te yoktu; var olan tablolara eklenir, tekrar.js).
+-- repeat_every boşsa 1, repeat_unit boşsa 'month'. Harcamada asset boşsa TL; döviz ve altın harcaması kartsızdır ve
+-- o varlığın bakiyesinden düşer. Tekrarlayan harcamanın her tekrarı kendi tarihiyle ayrı bir alışveriştir.
+alter table entries add column if not exists repeat_every smallint check (repeat_every between 1 and 99);
+alter table entries add column if not exists repeat_unit text check (repeat_unit in ('day', 'week', 'month'));
+alter table purchases add column if not exists asset text check (asset in ('TRY', 'USD', 'EUR', 'GAU'));
+alter table purchases add column if not exists repeat_count integer
+  check (repeat_count = 0 or repeat_count between 2 and 600);
+alter table purchases add column if not exists repeat_every smallint check (repeat_every between 1 and 99);
+alter table purchases add column if not exists repeat_unit text check (repeat_unit in ('day', 'week', 'month'));
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);
