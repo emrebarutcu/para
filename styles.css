@@ -531,6 +531,9 @@ a { color: inherit; }
   cursor: pointer;
   border-radius: 10px;
   outline: none;
+  -webkit-user-select: none;   /* basılı tutunca metin seçilmesin */
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 .tl-item + .tl-item { border-top: 1px solid var(--line); }
 .tl-item:focus-visible { box-shadow: 0 0 0 2px var(--focus); }

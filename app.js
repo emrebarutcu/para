@@ -711,10 +711,40 @@ function timelineItem(it, today, r) {
   main.append(title, sub);
   li.append(el("span", "tl-mark"), main, side);
   li.addEventListener("click", open);
+  onTap(li, open);
   li.addEventListener("keydown", e => {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
   });
   return li;
+}
+
+// Dokunmatikte kısa dokunuş: iOS Safari çizelge satırlarında dokunuşa click üretmeyebiliyor (ancak basılı tutunca
+// açılıyordu). Parmak kıpırdamadan kısa sürede kalkınca run çalışır; touchend önlendiği için ardından click gelmez.
+// Sayfa kayarken (ya da kaymayı durdurmak için) yapılan dokunuş sayılmaz.
+let lastScroll = 0;
+document.addEventListener("scroll", () => { lastScroll = performance.now(); }, { passive: true, capture: true });
+
+function onTap(node, run) {
+  let start = null;
+  node.addEventListener("touchstart", e => {
+    const t = e.touches[0];
+    start = e.touches.length === 1 && performance.now() - lastScroll > 150
+      ? { x: t.clientX, y: t.clientY, at: performance.now() } : null;
+  }, { passive: true });
+  node.addEventListener("touchmove", e => {
+    const t = e.touches[0];
+    if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 10) start = null;
+  }, { passive: true });
+  node.addEventListener("touchcancel", () => { start = null; });
+  node.addEventListener("touchend", e => {
+    const s = start;
+    start = null;
+    if (!s || performance.now() - s.at > 600 || s.at < lastScroll) return;
+    const t = e.changedTouches[0];
+    if (Math.hypot(t.clientX - s.x, t.clientY - s.y) > 10) return;
+    e.preventDefault();
+    run();
+  });
 }
 
 // ---------- Ödeme ayrıntısı (zaman çizelgesinden) ----------
