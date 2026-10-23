@@ -520,6 +520,21 @@ a { color: inherit; }
 .tl-day + .tl-day, .tl-now + .tl-day, .tl-day + .tl-now { margin-top: 8px; }
 .tl-date { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-3); padding: 2px 0; }
 .tl-tag { padding: 1px 7px; border-radius: 6px; background: var(--primary); color: var(--on-primary); font-size: 11px; }
+/* Günün kart ödemesi: başlıkta sağda küçük işaret, dokununca ödemenin ayrıntısı */
+.tl-date { flex-wrap: wrap; }
+.tl-pay {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%;
+  margin-left: auto; padding: 3px 9px; border: 1px solid var(--line-2); border-radius: 999px;
+  background: var(--surface); color: var(--text-2); font-size: 11.5px; font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.tl-pay + .tl-pay { margin-left: 0; }
+.tl-pay .tl-pay-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-pay .amount { color: var(--expense); white-space: nowrap; }
+.tl-pay:hover { background: var(--surface-2); color: var(--text); }
+.tl-day.planned .tl-pay { border-style: dashed; }
+.cal-pay { display: flex; gap: 2px; margin-top: 1px; }
+.cal-pay .dot { width: 6px; height: 6px; }
 .tl-items { list-style: none; margin: 0; padding: 0; }
 .tl-item {
   position: relative;
