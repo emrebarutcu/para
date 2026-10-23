@@ -263,6 +263,30 @@ a { color: inherit; }
 }
 .chip .dot { box-shadow: 0 0 0 2px var(--surface); }
 
+/* Kart simgesi: kartın renginde küçük kart (manyetik şeritli); nakitte ortası yuvarlak banknot */
+.cmark {
+  display: inline-block;
+  width: 13px; height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: linear-gradient(transparent 2px, rgba(0, 0, 0, .3) 2px 4px, transparent 4px), var(--c, var(--cash));
+}
+.cmark.cash { background: radial-gradient(circle, rgba(255, 255, 255, .7) 0 1.6px, transparent 2.1px), var(--c, var(--cash)); }
+.chip .cmark { box-shadow: 0 0 0 2px var(--surface); }
+
+/* Renk seçimi (kart formu) */
+.swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 44px)); gap: 8px; }
+.swatch {
+  position: relative;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--c);
+  cursor: pointer;
+}
+.swatch input { position: absolute; opacity: 0; pointer-events: none; }
+.swatch.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--c); }
+.swatch:has(input:focus-visible) { outline: 2px solid var(--text-2); outline-offset: 5px; }
+
 /* ── Header + nav ── */
 .app-header {
   position: sticky;
@@ -534,7 +558,8 @@ a { color: inherit; }
 .tl-pay:hover { background: var(--surface-2); color: var(--text); }
 .tl-day.planned .tl-pay { border-style: dashed; }
 .cal-pay { display: flex; gap: 2px; margin-top: 1px; }
-.cal-pay .dot { width: 6px; height: 6px; }
+.cal-pay .cmark { width: 9px; height: 6px; border-radius: 1.5px; background: linear-gradient(transparent 1.5px, rgba(0, 0, 0, .3) 1.5px 2.7px, transparent 2.7px), var(--c); }
+.cal-pay .cmark.cash { background: radial-gradient(circle, rgba(255, 255, 255, .7) 0 1px, transparent 1.4px), var(--c); }
 .tl-items { list-style: none; margin: 0; padding: 0; }
 .tl-item {
   position: relative;
@@ -671,7 +696,7 @@ a { color: inherit; }
 /* ── Ödeme ayrıntısı (halka grafik) ── */
 .ev-head { min-width: 0; }
 .ev-head h2 { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ev-head h2 .dot { flex: none; }
+.ev-head h2 .cmark { flex: none; }
 .ev-date { margin: 2px 0 0; font-size: 13px; color: var(--text-3); }
 .ev-split { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 18px 24px; }
 .donut { position: relative; width: 168px; height: 168px; flex: none; }
