@@ -210,9 +210,9 @@ function dot(color) {
   return d;
 }
 
-// Kartın rengindeki küçük kart simgesi; nakitte nakit renginde banknot (kişiler nokta ile gösterilir)
+// Kartın renginde küçük, çizgi kart simgesi; nakitte nakit renginde banknot (kişiler nokta ile gösterilir)
 function cardMark(id) {
-  const m = el("i", cardById(id) ? "cmark" : "cmark cash");
+  const m = icon(cardById(id) ? "card" : "cash", "cmark");
   m.style.setProperty("--c", cardColor(id));
   return m;
 }
