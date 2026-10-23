@@ -21,6 +21,7 @@
     <symbol id="i-flow" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4M8 13.5h3M8 16.5h6"/></symbol>
     <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5.5 3h13v18l-3.25-2-3.25 2-3.25-2-3.25 2z"/><path d="M9 8h6M9 12h6"/></symbol>
     <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></symbol>
+    <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.5"/></symbol>
     <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9" cy="7" rx="5.5" ry="2.5"/><path d="M3.5 7v4c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V7M3.5 11v4c0 1.4 2.5 2.5 5.5 2.5 1 0 2-.1 2.8-.4"/><ellipse cx="16" cy="14" rx="4.5" ry="2"/><path d="M11.5 14v3.5c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V14"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
@@ -429,6 +430,10 @@
           <span class="field-label">Kartın son 4 hanesi <small>(isteğe bağlı)</small></span>
           <input name="last4" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" placeholder="1234" autocomplete="off" />
         </label>
+        <div class="field">
+          <span class="field-label">Renk</span>
+          <div class="swatches" id="cardColors" role="radiogroup" aria-label="Kart rengi"></div>
+        </div>
         <div class="field-row">
           <label class="field">
             <span class="field-label">Hesap kesim günü</span>

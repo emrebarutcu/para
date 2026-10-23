@@ -210,6 +210,13 @@ function dot(color) {
   return d;
 }
 
+// Kartın renginde küçük, çizgi kart simgesi; nakitte nakit renginde banknot (kişiler nokta ile gösterilir)
+function cardMark(id) {
+  const m = icon(cardById(id) ? "card" : "cash", "cmark");
+  m.style.setProperty("--c", cardColor(id));
+  return m;
+}
+
 // Baş harfler: "Hilal Baba" → "HB"; aynı harfle başlayan başka kişi varsa iki harf ("Be", "Ba")
 function initials(person) {
   const upper = s => s.toLocaleUpperCase("tr-TR");
@@ -301,7 +308,7 @@ const els = {
   repeatRow: $("repeatRow"), repeatVal: $("repeatVal"), purchaseRepeat: $("purchaseRepeat"), assetRow: $("assetRow"), assetVal: $("assetVal"),
   purchaseAssetChips: $("purchaseAssetChips"), countField: $("countField"), cardField: $("cardField"),
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
-  cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"),
+  cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"), cardColors: $("cardColors"),
   termField: $("termField"), termNote: $("termNote"), termChoices: $("termChoices"),
   eventSheet: $("eventSheet"), eventTitle: $("eventTitle"), eventDate: $("eventDate"), eventSplit: $("eventSplit"),
   eventItems: $("eventItems"), eventToFlow: $("eventToFlow"),
@@ -646,7 +653,7 @@ function renderCalendar(from, to, whole, shown, pays, today, r) {
     b.append(n);
     if (paid.length) {
       const marks = el("span", "cal-pay");
-      for (const ev of paid) marks.append(dot(cardColor(ev.cardId)));
+      for (const ev of paid) marks.append(cardMark(ev.cardId));
       b.append(marks);
     }
     if (inSum) b.append(el("span", "cal-v in-text", "+" + fmtShort(inSum)));
@@ -682,7 +689,7 @@ function timelineDayHead(date, today, pays = []) {
     b.type = "button";
     b.setAttribute("aria-haspopup", "dialog");
     b.title = [...new Set(ev.items.map(i => i.purchase.desc))].join(", ");
-    b.append(dot(cardColor(ev.cardId)), el("span", "tl-pay-name", `${cardName(ev.cardId)} ödemesi`), el("span", "amount", "−" + fmt(ev.total)));
+    b.append(cardMark(ev.cardId), el("span", "tl-pay-name", `${cardName(ev.cardId)} ödemesi`), el("span", "amount", "−" + fmt(ev.total)));
     b.addEventListener("click", () => openEventSheet(ev));
     head.append(b);
   }
@@ -731,7 +738,7 @@ function timelineItem(it, today, r) {
     }
     const card = cardById(p.cardId);
     const how = el("span", "who");
-    how.append(dot(cardColor(p.cardId)), document.createTextNode(card ? card.name : code === "TRY" ? "Nakit" : V.asset(code).name));
+    how.append(cardMark(p.cardId), document.createTextNode(card ? card.name : code === "TRY" ? "Nakit" : V.asset(code).name));
     sub.append(how);
     if (T.planLength(p) > 1) sub.append(el("span", "", `${T.planLength(p)} taksit`));
     side.append(el("span", "amount", "−" + money(it.amount, code)));
@@ -786,7 +793,7 @@ let sheetEvent = null;
 function openEventSheet(ev) {
   sheetEvent = ev;
   const today = T.todayKey();
-  els.eventTitle.replaceChildren(dot(cardColor(ev.cardId)), document.createTextNode(ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit ödemeler"));
+  els.eventTitle.replaceChildren(cardMark(ev.cardId), document.createTextNode(ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit ödemeler"));
   els.eventDate.textContent = `${WEEKDAYS[T.toDate(ev.date).getDay()]}, ${fmtDay(ev.date)} · ${relDays(ev.date, today)}`;
 
   const parts = state.people.filter(p => ev.byPerson[p.id] > 0).map(p => ({ person: p, value: ev.byPerson[p.id] }));
@@ -947,7 +954,7 @@ function payRow(ev, today, { relative = false, expandable = false } = {}) {
 
   const main = el("div", "pay-main");
   const title = el("div", "pay-title");
-  title.append(dot(cardColor(ev.cardId)), document.createTextNode(cardName(ev.cardId)));
+  title.append(cardMark(ev.cardId), document.createTextNode(cardName(ev.cardId)));
   const sub = el("div", "pay-sub");
   if (relative) {
     sub.append(el("span", "", `${relDays(ev.date, today)} · ${fmtDayShort(ev.date)}`));
@@ -1667,7 +1674,7 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   main.append(el("div", "p-title", p.desc));
   const meta = el("div", "p-meta");
   const tag = el("span", "card-tag");
-  tag.append(dot(cardColor(p.cardId)), document.createTextNode(cardName(p.cardId)));
+  tag.append(cardMark(p.cardId), document.createTextNode(cardName(p.cardId)));
   meta.append(tag);
   if (p.date) meta.append(el("span", "", fmtDayShort(p.date) + " " + T.yearOf(T.parseDate(p.date).idx)));
   if (code !== "TRY") meta.append(el("span", "", V.asset(code).name));
@@ -2026,7 +2033,7 @@ function syncChecked(root) {
   }
 }
 
-function radioChip(name, value, label, checked, color) {
+function radioChip(name, value, label, checked, mark) {
   const chip = el("label", "chip");
   const input = document.createElement("input");
   input.type = "radio";
@@ -2034,7 +2041,7 @@ function radioChip(name, value, label, checked, color) {
   input.value = value;
   input.checked = checked;
   chip.append(input);
-  if (color) chip.append(dot(color));
+  if (mark) chip.append(mark);
   chip.append(document.createTextNode(label));
   return chip;
 }
@@ -2181,7 +2188,7 @@ function openPurchaseSheet(p, draft) {
     : personFilter !== "all" ? personFilter
     : personById(lastPersonId) ? lastPersonId : state.people[0].id;
   els.personChips.replaceChildren(...state.people.map(x =>
-    radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
+    radioChip("person", x.id, x.name, x.id === personId, dot(seriesVar(x)))));
   els.personField.hidden = state.people.length < 2;
   for (const d of [els.dateRow, els.repeatRow, els.categoryRow, els.personField, els.assetRow]) d.open = false;
 
@@ -2211,8 +2218,8 @@ function openPurchaseSheet(p, draft) {
 
 function renderCardChips(selected) {
   els.cardChips.replaceChildren(
-    ...state.cards.map(c => radioChip("card", c.id, c.name, c.id === selected, seriesVar(c))),
-    radioChip("card", "", "Nakit / banka kartı", selected === "", CASH_COLOR));
+    ...state.cards.map(c => radioChip("card", c.id, c.name, c.id === selected, cardMark(c.id))),
+    radioChip("card", "", "Nakit / banka kartı", selected === "", cardMark("")));
   syncChecked(els.cardChips);
 }
 
@@ -2666,7 +2673,24 @@ function readCardForm() {
     cutoffDay: validDay(f.cutoffDay.value),
     dueDay: validDay(f.dueDay.value),
     last4: f.last4.value.replace(/\D/g, ""),
+    color: Number(f.color.value) || 0,
   };
+}
+
+// Renk seçimi: kişi / kart paletindeki renkler (--s1…--s8)
+function renderColorSwatches(selected) {
+  els.cardColors.replaceChildren(...Array.from({ length: SERIES_COUNT }, (_, i) => {
+    const label = el("label", "swatch" + (i === selected ? " on" : ""));
+    label.style.setProperty("--c", seriesVar({ color: i }));
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "color";
+    input.value = String(i);
+    input.checked = i === selected;
+    input.setAttribute("aria-label", `Renk ${i + 1}`);
+    label.append(input);
+    return label;
+  }));
 }
 
 function openCardSheet(c) {
@@ -2683,6 +2707,7 @@ function openCardSheet(c) {
     f.elements.dueDay.value = c.dueDay;
     f.elements.last4.value = c.last4 || "";
   }
+  renderColorSwatches(c ? c.color % SERIES_COUNT : nextColor(state.cards));
   termChange = null;
   updateCardPreview();
   openSheet(els.cardSheet);
@@ -2692,9 +2717,8 @@ function openCardSheet(c) {
 function updateCardPreview() {
   const v = readCardForm();
   const existing = cardById(editingCardId);
-  const card = { ...v, color: existing ? existing.color : nextColor(state.cards) };
   const stats = existing ? cardStats(existing) : { used: 0, next: null, nextTotal: 0 };
-  const tile = cardTile(card, stats, "div");
+  const tile = cardTile(v, stats, "div");
   els.cardPreview.replaceWith(tile);
   tile.classList.add("cc-preview");
   tile.id = "cardPreview";
@@ -2703,7 +2727,7 @@ function updateCardPreview() {
 
   updateTermChoices(existing, v);
   if (v.cutoffDay && v.dueDay) {
-    const s = T.statementOf(withTerms(existing, v) || card, T.todayKey());
+    const s = T.statementOf(withTerms(existing, v) || v, T.todayKey());
     els.cardHint.textContent = `Bugün yapılan bir harcama ${fmtDay(s.cut)} kesimli ekstreye girer ve ${fmtDay(s.due)} tarihinde ödenir.`;
   } else {
     els.cardHint.textContent = "Kesim ve son ödeme gününü kart ekstrende bulabilirsin.";
@@ -2758,6 +2782,7 @@ els.cardForm.addEventListener("input", e => {
     els.termChoices.classList.remove("invalid");
     syncChecked(els.termChoices);
   }
+  if (e.target.name === "color") syncChecked(els.cardColors);
   updateCardPreview();
 });
 
@@ -2793,7 +2818,7 @@ els.cardForm.addEventListener("submit", e => {
       return { ...rest, ...(v.last4 && { last4 }), ...(history && { history }) };
     });
   } else {
-    state.cards.push({ id: uid(), ...v, color: nextColor(state.cards) });
+    state.cards.push({ id: uid(), ...v });
   }
   saveState();
   els.cardSheet.close();
@@ -2842,7 +2867,7 @@ function openEntrySheet(e, asset, draft) {
     : entryFilter !== "all" ? entryFilter
     : personById(lastPersonId) ? lastPersonId : state.people[0].id;
   els.entryPersonChips.replaceChildren(...state.people.map(x =>
-    radioChip("person", x.id, x.name, x.id === personId, seriesVar(x))));
+    radioChip("person", x.id, x.name, x.id === personId, dot(seriesVar(x)))));
 
   f.elements.dir.value = "in";
   f.elements.amount.value = e ? amountText(e.amount, V.asset(e.asset)?.digits) : "";
