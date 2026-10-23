@@ -220,12 +220,13 @@ aynı işyerinin sonraki harcamasına (farklı yazılışı dahil: "MIGROS TICAR
 kategori verilir. Sabit bir işyeri sözlüğü yoktur; öğrenilmemiş işyerine dil modeli kategori önerir
 (`category_by = 'ai'`, aşağıda: bulutta ya da cihazda). Kullanıcı düzeltirse düzeltmesi öğrenilir.
 
-Özet'teki **Nakit** grafiği bir dönemin TL nakdini gün gün gösterir. Dönem, seçilen başlangıç gününden (Bugün, süren
+Özet'teki **Nakit** grafiği bir dönemin toplam varlığını gün gün gösterir. Dönem, seçilen başlangıç gününden (Bugün, süren
 tekrarlayan bir TL girişinin günü — ör. maaş günü — ya da ayın herhangi bir günü) bir ay sonrasının bir gün öncesine kadar
-sürer; oklarla önceki / sonraki döneme geçilir, tarih aralığına dokununca bugünün dönemine dönülür. Hareketler TL
-hareketleri (tekrarlayanın her tekrarı kendi gününde, tarihi gelmemiş tek seferlik hareket de kendi gününde) ve kart /
-nakit ödemeleridir; döviz ve altın nakit sayılmaz. **Bakiye** görünümü bugüne bağlıdır: bugünün sonu, bugüne kadarki TL
-bakiyesinden bugün ödenecekler düşülerek bulunur; sonraki günler hareketlerle ileri, önceki günler geri taşınır.
+sürer; oklarla önceki / sonraki döneme geçilir, tarih aralığına dokununca bugünün dönemine dönülür. Hareketler bütün varlık
+hareketleri (tekrarlayanın her tekrarı kendi gününde, tarihi gelmemiş tek seferlik hareket de kendi gününde), kart / nakit
+ödemeleri ve döviz / altın harcamalarıdır; döviz ve altın güncel kurla TL'ye çevrilir, kuru alınamayan varlık sayılmaz
+(altta yazar). **Varlık** görünümü bugüne bağlıdır: bugünün sonu, bugüne kadarki toplam varlıktan bugün ödenecekler
+düşülerek bulunur; sonraki günler hareketlerle ileri, önceki günler geri taşınır.
 **Dönem net** görünümü dönem başında sıfırdan başlar, girdi / çıktı / net toplamlarını gösterir. Sıfırın altı kırmızıdır;
 üzerine gelince (ya da odaklanıp ok tuşlarıyla) o günün hareketleri görünür. Seçimler cihazda saklanır
 (`para.cashStart`, `para.cashMode`).
@@ -234,6 +235,11 @@ bakiyesinden bugün ödenecekler düşülerek bulunur; sonraki günler hareketle
 ayın 1'i yerine başka bir günden başlatılabilir: dönem o günden bir ay sonrasının bir gün öncesine kadar sürer (bu ayda
 bugünü içeren dönem); liste, takvim ve girdi / çıktı / net toplamları bu döneme göredir. Seçim cihazda saklanır
 (`para.timelineStart`).
+Satırlar varlık hareketleri ve harcamalardır: harcama alındığı gün görünür (kartı ya da nakit / döviz / altın; taksitli
+alışveriş tamamıyla, taksit sayısıyla; tekrarlayanın her tekrarı kendi gününde), dokununca düzenlenir. Tarihi bilinmeyen
+(içe aktarılmış) harcama satır olmaz. Kart ödemeleri satır değildir: ödeme gününün başlığında işaret olarak durur
+(takvimde günün altında renkli nokta, üzerine gelince tutarı); dokununca ödemenin ayrıntısı açılır. Toplamlar varlık
+hareketleri ve harcamalardandır, kart ödemeleri harcamalarla zaten sayıldığından toplama girmez.
 
 Özet'te **İçgörüler** (`icgoru.js`, model gerekmez; MCP `get_insights` aynısını döndürür): bu ayın serbest nakdi ya da
 açık veren ilk ay (gelir ve sabit giderler varlıklardaki tekrarlayan giriş / çıkışlardan), önümüzdeki 6 ayın taksit /

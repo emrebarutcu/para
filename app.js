@@ -486,8 +486,9 @@ function timelinePeriod(start, today) {
 }
 
 // Dönemin (ayın ya da takvimde seçilen günden başlayan dönemin) girdi ve çıktıları gün gün: varlık hareketleri
-// (giriş/çıkış) ve kart/nakit ödemeleri. Toplamlar TL'dir; döviz ve altın güncel kurla çevrilir, kuru bilinmeyen
-// hareket toplama girmez.
+// (giriş/çıkış) ve harcamalar alındıkları gün (taksitlisi tamamıyla, tekrarlayanın her tekrarı kendi gününde). Kart
+// ödemeleri satır değil, ödeme gününün başlığında işarettir (dokununca ödemenin ayrıntısı); toplamlara girmez, harcamalar
+// zaten sayılır. Toplamlar TL'dir; döviz ve altın güncel kurla çevrilir, kuru bilinmeyen hareket toplama girmez.
 function renderTimeline(start) {
   for (const b of els.timelineKind.querySelectorAll("button")) {
     b.classList.toggle("active", b.dataset.kind === timelineKind);
@@ -509,22 +510,31 @@ function renderTimeline(start) {
     if (!V.asset(e.asset)) continue;
     for (const { date } of R.between(e, from, to)) entries.push({ e, date });
   }
-  const events = T.buildCashflow(state.people, state.cards, state.installments, T.parseDate(from).idx, T.parseDate(to).idx)
-    .flatMap(m => m.events).filter(ev => inPeriod(ev.date));
-  // Döviz / altın harcamaları TL ödemelerinde yok: kendi varlıklarıyla çıktıdır
-  const foreign = [];
+  // Tarihi bilinmeyen (içe aktarılmış) harcama yalnızca kart ödemesinin içinde görünür
+  const spends = [];
   for (const p of knownPurchases()) {
-    if (T.assetOf(p) === "TRY") continue;
-    for (const x of paymentsOf(p, to)) if (inPeriod(x.key)) foreign.push({ p, x });
+    if (!T.parseDate(p.date)) continue;
+    const dates = T.repeats(p) ? R.between(p, from, to).map(x => x.date) : inPeriod(p.date) ? [p.date] : [];
+    for (const date of dates) spends.push({ p, date });
   }
-  if (entries.some(x => x.e.asset !== "TRY") || foreign.length) loadRates();
+  const payDays = new Map();   // ödeme günü → o gün ödenen kart ekstreleri
+  for (const m of T.buildCashflow(state.people, state.cards, state.installments, T.parseDate(from).idx, T.parseDate(to).idx)) {
+    for (const ev of m.events) {
+      if (!ev.cardId || !inPeriod(ev.date)) continue;
+      if (!payDays.has(ev.date)) payDays.set(ev.date, []);
+      payDays.get(ev.date).push(ev);
+    }
+  }
+  if (entries.some(x => x.e.asset !== "TRY") || spends.some(x => T.assetOf(x.p) !== "TRY")) loadRates();
 
-  const order = new Map(state.entries.map((e, i) => [e.id, i]));
+  const entryRank = new Map(state.entries.map((e, i) => [e.id, i]));
+  const spendRank = new Map(state.installments.map((p, i) => [p.id, state.entries.length + i]));
   const items = [
-    ...entries.map(({ e, date }) => ({ kind: e.amount > 0 ? "in" : "out", date, entry: e, value: V.toTry(e.amount, e.asset, r), rank: order.get(e.id) })),
-    ...events.map((ev, i) => ({ kind: "out", date: ev.date, event: ev, value: -ev.total, rank: state.entries.length + i })),
-    ...foreign.map(({ p, x }, i) => ({ kind: "out", date: x.key, purchase: p, amount: x.amount, value: V.toTry(-x.amount, p.asset, r),
-      rank: state.entries.length + events.length + i })),
+    ...entries.map(({ e, date }) => ({ kind: e.amount > 0 ? "in" : "out", date, entry: e, value: V.toTry(e.amount, e.asset, r), rank: entryRank.get(e.id) })),
+    ...spends.map(({ p, date }) => {
+      const amount = T.originalTotal(p);
+      return { kind: "out", date, purchase: p, amount, value: V.toTry(-amount, T.assetOf(p), r), rank: spendRank.get(p.id) };
+    }),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.rank - b.rank);
 
   let inSum = 0, outSum = 0, missing = false;
@@ -550,8 +560,9 @@ function renderTimeline(start) {
   els.timelineCal.hidden = timelineMode !== "calendar";
   els.timelineCal.parentElement.classList.toggle("cal-mode", timelineMode === "calendar");
   const shown = items.filter(it => timelineKind === "all" || it.kind === timelineKind);
-  if (timelineMode === "calendar") { renderCalendar(from, to, whole, shown, today, r); return; }
-  if (!shown.length) {
+  const pays = timelineKind === "in" ? new Map() : payDays;
+  if (timelineMode === "calendar") { renderCalendar(from, to, whole, shown, pays, today, r); return; }
+  if (!shown.length && !pays.size) {
     const when = whole ? "Bu ay" : "Bu dönemde";
     const text = `${when} ${timelineKind === "in" ? "girdi" : timelineKind === "out" ? "çıktı" : "hareket"} yok`;
     els.timeline.append(el("li", "empty", text));
@@ -565,19 +576,20 @@ function renderTimeline(start) {
     if (!days.has(it.date)) days.set(it.date, []);
     days.get(it.date).push(it);
   }
-  for (const [date, list] of days) {
+  for (const date of [...new Set([...days.keys(), ...pays.keys()])].sort()) {
     if (!nowPlaced && date > today) {
       els.timeline.append(timelineNow(today));
       nowPlaced = true;
     }
     if (date === today) nowPlaced = true;
-    const day = el("li", "tl-day" + (date > today ? " planned" : ""));
-    const head = el("div", "tl-date");
-    head.append(el("span", "", `${fmtDayShort(date)} · ${WEEKDAYS[T.toDate(date).getDay()]}`));
-    if (date === today) head.append(el("span", "tl-tag", "Bugün"));
-    const ul = el("ul", "tl-items");
-    for (const it of list) ul.append(timelineItem(it, today, r));
-    day.append(head, ul);
+    const list = days.get(date) || [];
+    const day = el("li", "tl-day" + (date > today ? " planned" : "") + (list.length ? "" : " tl-none"));
+    day.append(timelineDayHead(date, today, pays.get(date)));
+    if (list.length) {
+      const ul = el("ul", "tl-items");
+      for (const it of list) ul.append(timelineItem(it, today, r));
+      day.append(ul);
+    }
     els.timeline.append(day);
   }
   if (!nowPlaced) els.timeline.append(timelineNow(today));
@@ -597,7 +609,7 @@ function renderDayOptions(select, value) {
 
 // Takvim: günlerde o günün girdi/çıktı toplamı; seçili günün hareketleri altta. Dönem iki aya yayılıyorsa yeni ayın
 // ilk gününde ayın adı yazar.
-function renderCalendar(from, to, whole, shown, today, r) {
+function renderCalendar(from, to, whole, shown, pays, today, r) {
   const byDay = new Map();
   for (const it of shown) {
     if (!byDay.has(it.date)) byDay.set(it.date, []);
@@ -620,14 +632,23 @@ function renderCalendar(from, to, whole, shown, today, r) {
       else if (it.value > 0) inSum += it.value;
       else outSum -= it.value;
     }
+    const paid = pays.get(key) || [];
     const selected = key === timelineDay;
     const b = el("button", "cal-day" + (key === today ? " today" : "") + (selected ? " selected" : "") + (key > today ? " planned" : ""));
     b.type = "button";
     b.setAttribute("aria-pressed", String(selected));
-    b.setAttribute("aria-label", `${fmtDayShort(key)}: ` + (list.length
-      ? [inSum && `girdi ${fmt(inSum)}`, outSum && `çıktı ${fmt(outSum)}`, unknown && "kuru bilinmeyen hareket"].filter(Boolean).join(", ")
+    const payText = paid.map(ev => `${cardName(ev.cardId)} ödemesi ${fmt(ev.total)}`);
+    b.setAttribute("aria-label", `${fmtDayShort(key)}: ` + (list.length || paid.length
+      ? [inSum && `girdi ${fmt(inSum)}`, outSum && `çıktı ${fmt(outSum)}`, unknown && "kuru bilinmeyen hareket", ...payText].filter(Boolean).join(", ")
       : "hareket yok"));
-    b.append(el("span", "cal-n", !whole && (key === from || d === 1) ? `${d} ${T.monthShort(idx)}` : String(d)));
+    if (paid.length) b.title = payText.join("\n");   // üzerine gelince o günün kart ödemeleri
+    const n = el("span", "cal-n", !whole && (key === from || d === 1) ? `${d} ${T.monthShort(idx)}` : String(d));
+    b.append(n);
+    if (paid.length) {
+      const marks = el("span", "cal-pay");
+      for (const ev of paid) marks.append(dot(cardColor(ev.cardId)));
+      b.append(marks);
+    }
     if (inSum) b.append(el("span", "cal-v in-text", "+" + fmtShort(inSum)));
     if (outSum) b.append(el("span", "cal-v out-text", "−" + fmtShort(outSum)));
     if (unknown && !inSum && !outSum) b.append(el("span", "cal-v", "•"));
@@ -638,19 +659,34 @@ function renderCalendar(from, to, whole, shown, today, r) {
 
   const list = byDay.get(timelineDay) || [];
   const day = el("li", "tl-day" + (timelineDay > today ? " planned" : ""));
-  const head = el("div", "tl-date");
-  head.append(el("span", "", `${fmtDayShort(timelineDay)} · ${WEEKDAYS[T.toDate(timelineDay).getDay()]}`));
-  if (timelineDay === today) head.append(el("span", "tl-tag", "Bugün"));
-  day.append(head);
+  day.append(timelineDayHead(timelineDay, today, pays.get(timelineDay)));
   if (list.length) {
     const ul = el("ul", "tl-items");
     for (const it of list) ul.append(timelineItem(it, today, r));
     day.append(ul);
   } else {
     day.classList.add("tl-none");
-    day.append(el("p", "tl-empty", timelineKind === "in" ? "Bu gün girdi yok" : timelineKind === "out" ? "Bu gün çıktı yok" : "Bu gün hareket yok"));
+    if (!pays.has(timelineDay)) day.append(el("p", "tl-empty", timelineKind === "in" ? "Bu gün girdi yok" : timelineKind === "out" ? "Bu gün çıktı yok" : "Bu gün hareket yok"));
   }
   els.timeline.append(day);
+}
+
+// Günün başlığı: tarih, bugünse etiket; o gün ödenen kart ekstreleri işaret olarak (dokununca ödemenin ayrıntısı:
+// kime ne kadar düştüğü ve içindeki harcamalar)
+function timelineDayHead(date, today, pays = []) {
+  const head = el("div", "tl-date");
+  head.append(el("span", "", `${fmtDayShort(date)} · ${WEEKDAYS[T.toDate(date).getDay()]}`));
+  if (date === today) head.append(el("span", "tl-tag", "Bugün"));
+  for (const ev of pays) {
+    const b = el("button", "tl-pay");
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "dialog");
+    b.title = [...new Set(ev.items.map(i => i.purchase.desc))].join(", ");
+    b.append(dot(cardColor(ev.cardId)), el("span", "tl-pay-name", `${cardName(ev.cardId)} ödemesi`), el("span", "amount", "−" + fmt(ev.total)));
+    b.addEventListener("click", () => openEventSheet(ev));
+    head.append(b);
+  }
+  return head;
 }
 
 function timelineNow(today) {
@@ -682,8 +718,10 @@ function timelineItem(it, today, r) {
     side.append(el("span", "amount", fmtAsset(e.amount, e.asset, true)));
     if (e.asset !== "TRY") side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
     open = () => openEntrySheet(e);
-  } else if (it.purchase) {
+  } else {
+    // Harcama alındığı gün: kartı (ya da nakit / döviz / altın), taksitliyse taksit sayısı
     const p = it.purchase;
+    const code = T.assetOf(p);
     const person = personById(p.personId);
     title.textContent = p.desc;
     if (state.people.length > 1) {
@@ -691,21 +729,14 @@ function timelineItem(it, today, r) {
       who.append(dot(seriesVar(person)), document.createTextNode(person.name));
       sub.append(who);
     }
-    sub.append(el("span", "", V.asset(p.asset).name));
-    side.append(el("span", "amount", fmtAsset(-it.amount, p.asset, true)),
-      el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
+    const card = cardById(p.cardId);
+    const how = el("span", "who");
+    how.append(dot(cardColor(p.cardId)), document.createTextNode(card ? card.name : code === "TRY" ? "Nakit" : V.asset(code).name));
+    sub.append(how);
+    if (T.planLength(p) > 1) sub.append(el("span", "", `${T.planLength(p)} taksit`));
+    side.append(el("span", "amount", "−" + money(it.amount, code)));
+    if (code !== "TRY") side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
     open = () => openPurchaseSheet(p);
-  } else {
-    const ev = it.event;
-    title.textContent = ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit";
-    if (it.date > today) sub.append(el("span", "", relDays(it.date, today)));
-    const names = [...new Set(ev.items.map(i => i.purchase.desc))];
-    const what = el("span", "who");
-    what.append(dot(cardColor(ev.cardId)), document.createTextNode(names.slice(0, 2).join(", ") + (names.length > 2 ? ` +${names.length - 2}` : "")));
-    sub.append(what);
-    side.append(el("span", "amount", "−" + fmt(ev.total)));
-    li.setAttribute("aria-haspopup", "dialog");
-    open = () => openEventSheet(ev);
   }
 
   main.append(title, sub);
@@ -1100,10 +1131,11 @@ function hideTooltip() { els.tooltip.hidden = true; }
 
 // ---------- Nakit (dönem dönem) ----------
 // Dönem başlangıç gününden (bugün ya da ayın seçilen günü, ör. maaş günü) bir ay sonrasının bir gün öncesine kadar sürer.
-// Hareketler: TL hareketleri (tekrarlayanın her tekrarı kendi gününde) ile kart / nakit ödemeleri; döviz ve altın nakit
-// sayılmaz. Bakiye bugüne bağlanır: bugünün sonu = bugüne kadarki TL bakiyesi (bugün ödenen nakit harcamalar düşülmüş)
-// − bugün ödenecek kart ekstreleri (henüz ödenmedi sayılır). Sonraki günler hareketlerle ileri, önceki günler geri taşınır; tarihi gelmemiş tek seferlik hareket de kendi
-// gününde girer. Dönem net'i dönem başından o güne hareketlerin toplamıdır.
+// Hareketler: bütün varlık hareketleri (tekrarlayanın her tekrarı kendi gününde; döviz ve altın güncel kurla TL), kart /
+// nakit ödemeleri ve döviz / altın harcamaları. Varlık bugüne bağlanır: bugünün sonu = bugüne kadarki toplam varlık
+// (bugün ödenen kartsız harcamalar düşülmüş) − bugün ödenecek kart ekstreleri (henüz ödenmedi sayılır). Sonraki günler
+// hareketlerle ileri, önceki günler geri taşınır; tarihi gelmemiş tek seferlik hareket de kendi gününde girer. Kuru
+// bilinmeyen varlık hiç sayılmaz (missing). Dönem net'i dönem başından o güne hareketlerin toplamıdır.
 
 // Seçili başlangıçla bugünün dönemi; shift dönem kaydırır
 function cashPeriod(today, start, shift) {
@@ -1126,20 +1158,29 @@ function cashSeries(from, to, today) {
     moves.get(date).push(m);
   };
 
-  let anchor = 0, any = false;   // anchor: bugüne kadarki TL bakiyesi (bugünkü hareketler dahil)
+  const r = rates?.rates;
+  const missing = new Set();
+  const toTry = (amount, code) => {
+    const v = V.toTry(amount, code, r);
+    if (v == null) missing.add(code);
+    return v;
+  };
+  let anchor = 0, any = false;   // anchor: bugüne kadarki toplam varlık, TL (bugünkü hareketler dahil)
   for (const e of knownEntries()) {
-    if (e.asset !== "TRY" || !Number.isFinite(e.amount)) continue;
+    if (!V.asset(e.asset) || !Number.isFinite(e.amount)) continue;
     any = true;
+    const value = toTry(e.amount, e.asset);
+    if (value == null) continue;
     if (V.repeatOf(e) == null) {
-      if (e.date <= today) anchor += e.amount;
-      if (e.date >= lo && e.date <= hi) add(e.date, { desc: e.desc, value: e.amount });
+      if (e.date <= today) anchor += value;
+      if (e.date >= lo && e.date <= hi) add(e.date, { desc: e.desc, value });
       continue;
     }
-    anchor += e.amount * V.processedCount(e, today);
-    for (const { date } of R.between(e, lo, hi)) add(date, { desc: e.desc, value: e.amount });
+    anchor += value * V.processedCount(e, today);
+    for (const { date } of R.between(e, lo, hi)) add(date, { desc: e.desc, value });
   }
-  // Nakit harcamalar ödendikçe TL bakiyesinden düşmüştür (bugünkü dahil); kart ödemesi bugün henüz ödenmedi sayılır
-  anchor -= T.cashSpent(knownPurchases(), state.cards, today).TRY || 0;
+  // Kartsız harcamalar ödendikçe varlıktan düşmüştür (bugünkü dahil); kart ödemesi bugün henüz ödenmedi sayılır
+  for (const [code, amount] of Object.entries(T.cashSpent(knownPurchases(), state.cards, today))) anchor -= toTry(amount, code) ?? 0;
   for (const m of T.buildCashflow(state.people, state.cards, state.installments, loIdx, hiIdx)) {
     for (const ev of m.events) {
       if (ev.date < lo || ev.date > hi) continue;
@@ -1147,6 +1188,17 @@ function cashSeries(from, to, today) {
       add(ev.date, { desc: ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit ödemeler", value: -ev.total });
     }
   }
+  // Döviz / altın harcamaları TL akışında yok: kendi varlıklarından düşer
+  for (const p of knownPurchases()) {
+    const code = T.assetOf(p);
+    if (code === "TRY") continue;
+    for (const x of paymentsOf(p, hi)) {
+      if (x.key < lo || x.key > hi) continue;
+      const value = toTry(-x.amount, code);
+      if (value != null) add(x.key, { desc: p.desc, value });
+    }
+  }
+  if (missing.size || knownEntries().some(e => e.asset !== "TRY")) loadRates();
 
   const sum = date => (moves.get(date) || []).reduce((s, m) => s + m.value, 0);
   const r2 = v => Math.round(v * 100) / 100;
@@ -1165,7 +1217,7 @@ function cashSeries(from, to, today) {
     days.push({ date: d, balance: r2(end.get(d)), net: r2(net), moves: list });
   }
   const before = r2(end.get(from) - sum(from));   // dönem başlamadan önceki bakiye
-  return { days, before, inSum: r2(inSum), outSum: r2(outSum), any: any || inSum > 0 || outSum > 0 };
+  return { days, before, inSum: r2(inSum), outSum: r2(outSum), any: any || inSum > 0 || outSum > 0, missing: [...missing] };
 }
 
 // Ayın günü iyelik ekiyle: 1'i, 6'sı, 15'i, 20'si, 30'u
@@ -1245,10 +1297,12 @@ function renderCash() {
   hideTooltip();
   els.cashEmpty.hidden = data.any;
   els.cashNote.hidden = !data.any;
+  els.cashNote.textContent = "Bütün varlık hareketleri (tekrarlayanlar dahil) ile kart ve nakit ödemeleri; döviz ve altın güncel kurla TL."
+    + (data.missing.length ? ` Kuru alınamayan ${data.missing.map(c => V.asset(c).name.toLocaleLowerCase("tr-TR")).join(", ")} dahil değil.` : "");
   svg.style.display = data.any ? "" : "none";
-  svg.setAttribute("aria-label", `${fmtDayShort(from)} – ${fmtDayShort(to)} ${net ? "dönem net nakit hareketi" : "TL bakiyesi"}`);
+  svg.setAttribute("aria-label", `${fmtDayShort(from)} – ${fmtDayShort(to)} ${net ? "dönem net varlık hareketi" : "toplam varlık"}`);
   if (!data.any) {
-    els.cashEmpty.textContent = "TL girişlerini ve çıkışlarını Varlıklar'a ekleyince nakdin dönem dönem seyri burada görünür.";
+    els.cashEmpty.textContent = "Varlıklar'a giriş ve çıkış ekleyince varlığının dönem dönem seyri burada görünür.";
     svg.innerHTML = "";
     return;
   }
