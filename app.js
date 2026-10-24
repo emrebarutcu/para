@@ -1317,6 +1317,7 @@ function cashSeries(from, to, today) {
   // Borç akışları kendi günlerinde; bugünkü kredi taksiti ve beklenen ödemeler kart ekstresi gibi gün sonunda düşer
   for (const f of B.allFlows(state, today, lo, hi)) {
     any = true;
+    if (f.type === "plan" && !f.paid && f.date === today && f.amount > 0) continue;   // gecikmiş / bugünkü tahsilat henüz yok
     const value = toTry(f.amount, f.asset);
     if (value == null) continue;
     if (f.date === today && !f.paid) anchor += value;
@@ -2016,7 +2017,8 @@ function renderAssets() {
   setMoney(els.assetTotal, t.assets);
   // Eşitlik satırı yalnızca borç ya da alacak varsa (dokununca Borçlar)
   els.assetEqLine.hidden = !(t.debt.total > EPS || t.receivable.total > EPS);
-  els.assetEq.textContent = `= Özvarlık ${fmtWhole(t.equity)} + Borç ${fmtWhole(t.debt.total)} ›`;
+  const A = Math.round(t.assets), D = Math.round(t.debt.total);   // Borçlar'daki gibi: Özvarlık farkıdır
+  els.assetEq.textContent = `= Özvarlık ${fmtWhole(A - D)} + Borç ${fmtWhole(D)} ›`;
   els.assetIncl.textContent = t.receivable.total > EPS ? `${fmtWhole(t.receivable.total)} alacak dahil` : "";
   const stale = !rates || ratesFailed || t.missing.length;
   els.ratesNote.classList.toggle("warn-text", !!stale);
@@ -2254,7 +2256,7 @@ function debtPayRow(f, today, { relative = false } = {}) {
   title.append(flowMark(f), el("span", "p-desc", debtName(d)));
   const sub = el("div", "pay-sub");
   if (relative) sub.append(el("span", "", `${relDays(f.date, today)} · ${fmtDayShort(f.date)}`));
-  sub.append(el("span", "", f.of > 1 ? `taksit ${f.no}/${f.of}` : "vade"));
+  sub.append(el("span", "", f.type === "pay" ? "ödeme" : f.of > 1 ? `taksit ${f.no}/${f.of}` : "vade"));
   if (f.late) sub.append(el("span", "out-text", "gecikti"));
   if (!relative && state.people.length > 1) {
     const person = personById(d.personId);
@@ -2273,12 +2275,12 @@ function debtPayRow(f, today, { relative = false } = {}) {
   return li;
 }
 
-// Bu ay bugün ve sonrasında ödenecekler, TL: kart ekstreleri ve borç / kredi taksitleri
+// Bu ay bugün ve sonrasında ödenecekler, TL: kart ekstreleri, nakit taksitler (bugünkü ödenmiştir) ve borç / kredi taksitleri
 function dueThisMonth(today, r) {
   const idx = T.parseDate(today).idx;
   let total = 0;
   for (const m of T.buildCashflow(state.people, state.cards, state.installments, idx, idx)) {
-    for (const ev of m.events) if (ev.cardId && ev.date >= today) total += ev.total;
+    for (const ev of m.events) if (ev.cardId ? ev.date >= today : ev.date > today) total += ev.total;
   }
   for (const f of B.paymentsDue(state, today, today, T.dateKey(idx, 31))) if (!f.paid) total += V.toTry(-f.amount, f.asset, r) ?? 0;
   return total;
@@ -2291,13 +2293,15 @@ function renderDebts() {
   const payer = state.people[0];
 
   setMoney(els.debtTotal, t.debt.total);
-  els.debtEq.textContent = `Varlık ${fmtWhole(t.assets)} = Özvarlık ${fmtWhole(t.equity)} + Borç ${fmtWhole(t.debt.total)}`;
+  // Varlık ve Borç yuvarlanır, Özvarlık farkıdır: tam lirada da toplam tutsun
+  const A = Math.round(t.assets), D = Math.round(t.debt.total);
+  els.debtEq.textContent = `Varlık ${fmtWhole(A)} = Özvarlık ${fmtWhole(A - D)} + Borç ${fmtWhole(D)}`;
   els.debtNote.classList.toggle("warn-text", t.missing.length > 0);
   els.debtNote.textContent = t.missing.length ? `Kur yok · ${assetNames(t.missing)} dahil değil` : "";
   els.debtStats.replaceChildren(
     stat("Alacak", fmtWhole(t.receivable.total)),
     stat("Bu ay ödenecek", fmtWhole(dueThisMonth(today, r))),
-    stat("Özvarlık", fmtWhole(t.equity), t.equity < 0 ? "out-text" : ""));
+    stat("Özvarlık", fmtWhole(A - D), A - D < 0 ? "out-text" : ""));
 
   // Takip bilgisi bir kez; ödeyenin TL hareketi yoksa ekstreler eksiye düşmesin diye bakiye isteği
   const tracked = state.cards.filter(B.tracked);
@@ -2312,8 +2316,9 @@ function renderDebts() {
   const noLira = !!payer && tracked.length > 0 && !knownEntries().some(e => e.personId === payer.id && e.asset === "TRY");
   els.balanceHint.hidden = !noLira;
   if (noLira) {
-    els.balanceHintText.textContent = `Ekstreler ${nameWith(payer.name, "in")} TL bakiyesinden düşer; doğru görünmesi için `
-      + "bugünkü TL bakiyeni bir kez gir.";
+    const own = B.totals(state, today, r, payer.id).balances.TRY ?? 0;
+    els.balanceHintText.textContent = `Ekstreler ${nameWith(payer.name, "in")} TL bakiyesinden düşer. Uygulamada TL bakiyen `
+      + `${fmt(own)} (ekstreler ve borçlar düşülmüş); bankadaki bugünkü bakiyenle aradaki farkı bir kez giriş olarak ekle.`;
   }
 
   for (const b of els.debtSideSeg.querySelectorAll("button")) {
@@ -2532,7 +2537,7 @@ function personDebtRow({ debt: d, status: st }, today, r) {
   }
   const shown = st.done || !st.started ? d.amount : st.remaining;
   const acts = [];
-  if (!loan && st.started && !st.done) {
+  if (!loan && !st.auto && st.started && !st.done) {
     acts.push(rowAction(debt ? "Ödedim" : "Ödedi", debt ? `${name} borcuna ödeme ekle` : `${name} alacağına tahsilat ekle`,
       () => openPaySheet({ debtId: d.id })));
   }
@@ -2595,8 +2600,9 @@ for (const d of document.querySelectorAll("dialog.sheet")) {
 }
 
 // Silme iki dokunuşla, pencerenin içinde: ilki düğmeyi "Evet, sil"e çevirir, ikincisi siler. Birkaç saniye içinde
-// ikinci dokunuş gelmezse ya da pencere kapanırsa düğme eski haline döner.
-function confirmTap(btn, run) {
+// ikinci dokunuş gelmezse ya da pencere kapanırsa düğme eski haline döner. signal: yeniden çizilen listede eski düğmelerin
+// kapanış dinleyicisi kaldırılsın.
+function confirmTap(btn, run, signal) {
   const label = btn.querySelector("span");
   const text = label.textContent;
   let timer;
@@ -2615,7 +2621,7 @@ function confirmTap(btn, run) {
     reset();
     run();
   });
-  btn.closest("dialog").addEventListener("close", reset);
+  btn.closest("dialog").addEventListener("close", reset, signal ? { signal } : undefined);
 }
 
 // Seçili radyo etiketleri sınıfla işaretlenir (:has(:checked) her tarayıcıda güncellenmiyor)
@@ -3364,7 +3370,7 @@ function trackEffect(card, today) {
   if (!B.tracked(card)) return out;
   const payer = state.people[0]?.id;
   const keys = new Set();
-  for (const x of B.cardLines(state, card)) {
+  for (const x of B.cardLines(state, card, today)) {
     if (x.key < out.from || x.at > today) continue;
     if (x.key < today) { out.paid += x.amount; keys.add(x.key); }
     if (x.personId !== payer) out.shares[x.personId] = (out.shares[x.personId] || 0) + x.amount;
@@ -3517,7 +3523,8 @@ els.cardForm.addEventListener("submit", e => {
     return;
   }
   const track = readTrack();
-  if (track.on && (!T.parseDate(track.since) || track.since > T.todayKey())) {
+  const kept = track.since === cardById(editingCardId)?.trackSince;
+  if (track.on && (!T.parseDate(track.since) || (track.since > T.todayKey() && !kept))) {
     f.trackSince.classList.add("invalid");
     f.trackSince.focus();
     toast(track.since ? "Takip tarihi bugünden sonra olamaz" : "Takibin başladığı günü gir");
@@ -3744,8 +3751,8 @@ function openDebtSheet(d, draft = {}) {
   for (const n of f.querySelectorAll(".invalid")) n.classList.remove("invalid");
   const type = d ? debtType(d) : ["borrowed", "lent", "loan"].includes(draft.type) ? draft.type : "borrowed";
   const loan = type === "loan";
-  const plan = d ? d.count > 1 || d.autoPay === true : loan;
-  const count = d?.count ?? (loan ? 12 : 3);
+  const plan = d ? d.kind === "loan" || d.count > 1 || d.autoPay === true : loan;
+  const count = d && plan && d.count >= 1 ? d.count : loan ? 12 : 3;
   const code = d?.asset ?? (V.asset(draft.asset) ? draft.asset : "TRY");
   const digits = V.asset(code).digits;
   // Kredide yazılan taksit tutarıdır; toplamı taksite tam bölünmeyen kredi (asistanla girilmiş) toplamıyla açılır
@@ -3878,6 +3885,10 @@ function collectDebt() {
   } else if (f.moved.checked) {
     principal = editing?.principal > 0 && editing.principal !== editing.amount ? Math.min(editing.principal, total) : total;
   }
+
+  // Kendiliğinden ödenen planda date'ten önceki taksitler takipten önce ödenmiştir; o günlerde el değiştiren para da
+  // varlığa çoktan girmiştir: para girişi / çekilen tutar ancak ilk taksitten önceki bir günde olur
+  if (principal > 0 && (loan || (plan && f.autoPay.checked)) && date && T.parseDate(due) && due < date) errors.push("early");
 
   const d = { kind: loan ? "loan" : "person", personId: f.person.value };
   if (!loan) d.side = type === "lent" ? "receivable" : "debt";
@@ -4071,10 +4082,13 @@ function saveDebt(closed) {
   if (errors.length) {
     const msg = { amount: "Tutarı gir.", party: type === "lent" ? "Kime verdiğini yaz." : "Kimden aldığını yaz.",
       count: `Taksit sayısı 1–${DEBT_MAX_COUNT} arası olmalı.`, first: "İlk taksitin tarihini gir.", date: "Tarihi gir.",
-      principal: "Çekilen tutar geri ödenecek toplamdan büyük olamaz.", person: "Kişi seç." }[errors[0]];
+      principal: "Çekilen tutar geri ödenecek toplamdan büyük olamaz.", person: "Kişi seç.",
+      early: type === "loan" ? "Çekilen tutar ancak ilk taksitten önceki bir günde girilir. Eski krediyse boş bırak."
+        : "İlk taksit bu tarihten önce: para girişi kapatılmalı ya da tarih ilk taksitten önceye alınmalı." }[errors[0]];
     els.debtPreview.replaceChildren(el("div", "warn", msg));
     if (errors[0] === "count" || errors[0] === "first") els.debtPlanRow.open = true;
-    if (errors[0] === "date" || errors[0] === "principal") els.debtEffectRow.open = true;
+    if (errors[0] === "date" || errors[0] === "principal" || errors[0] === "early") els.debtEffectRow.open = true;
+    if (errors[0] === "early") f.date.classList.add("invalid");
     if (errors[0] === "person") els.debtPersonRow.open = true;
     f[errors[0]]?.focus?.();
     return;
@@ -4150,9 +4164,10 @@ function payInfo(target, today, base = state) {
     const chips = [];
     let prefill;
     if (st.auto) {
+      // Taksitler tarihinde kendiliğinden düşer: buraya yalnızca ara / erken ödeme girilir, tutar önceden yazılmaz
       const one = st.count ? d.amount / st.count : st.remaining;
       chips.push(["Bir taksit", Math.min(one, st.remaining)], ["Kalanın tümü", st.remaining]);
-      prefill = Math.min(one, st.remaining);
+      prefill = 0;
     } else {
       const openOf = x => x.amount - x.covered;
       const cur = st.count > 1 ? st.items.find(x => x.state !== "paid") : null;
@@ -4165,7 +4180,8 @@ function payInfo(target, today, base = state) {
     return {
       d, st, code: d.asset, owner: d.personId, remaining: st.remaining, prefill,
       chips: chips.filter(([, v], i, all) => v > EPS && all.findIndex(([, w]) => Math.abs(w - v) <= EPS) === i),
-      title: d.kind === "loan" ? `${name} ödemesi` : debt ? `${nameWith(name, "e")} ödeme` : `${nameWith(name, "den")} tahsilat`,
+      title: st.auto ? `${name} · ${debt ? "ara ödeme" : "ara tahsilat"}`
+        : debt ? `${nameWith(name, "e")} ödeme` : `${nameWith(name, "den")} tahsilat`,
       done: x => (d.kind === "loan" ? `${name} ödemesi eklendi · ${money(x, d.asset)}`
         : debt ? `${nameWith(name, "e")} ${money(x, d.asset)} ödendi` : `${nameWith(name, "den")} ${money(x, d.asset)} alındı`),
       pays: debtPayments(d.id),
@@ -4184,6 +4200,24 @@ function payInfo(target, today, base = state) {
     done: x => `${nameWith(person.name, "den")} ${fmt(x)} alındı`,
     pays: sharePayments(person.id),
   };
+}
+
+// Ödemeyle kapatılan borcun kapanış günü: kendiliğinden ödenende bugün (geçmiş bir gün o günden beri düşülmüş taksitleri
+// silerdi), elle ödenende ödemenin günü
+function closeDay(info, date, today) {
+  return info.st?.auto ? today : date;
+}
+
+// Tutar kısayolları (kalan değiştikçe yeniden: ör. ödeme silinince)
+function renderPayChips(info) {
+  els.payChips.replaceChildren(...info.chips.map(([label, v]) => {
+    const b = el("button", "chip", label);
+    b.type = "button";
+    b.dataset.amount = String(V.round(v, info.code));
+    if (label === "Kalanın tümü") b.dataset.all = "1";
+    b.title = money(v, info.code);
+    return b;
+  }));
 }
 
 function openPaySheet(target, payment) {
@@ -4209,15 +4243,10 @@ function openPaySheet(target, payment) {
   f.elements.date.max = today;
   f.elements.date.min = info.d?.date ?? "";
   f.elements.desc.value = payment?.desc ?? "";
-  els.payCloseRow.hidden = !info.d || !!payment;
-  els.payChips.replaceChildren(...info.chips.map(([label, v]) => {
-    const b = el("button", "chip", label);
-    b.type = "button";
-    b.dataset.amount = String(V.round(v, info.code));
-    if (label === "Kalanın tümü") b.dataset.all = "1";
-    b.title = money(v, info.code);
-    return b;
-  }));
+  // Kapanmış borcun ödemesi düzenlenirken kutu işaretli gelir: kaldırılırsa borç yeniden açılır (kalan sessizce silinmesin)
+  els.payCloseRow.hidden = !info.d || (!!payment && !info.st.closed);
+  f.elements.close.checked = !!payment && !!info.st?.closed;
+  renderPayChips(info);
   renderPayHistory(info);
   updatePayForm();
   openSheet(els.paySheet);
@@ -4226,7 +4255,10 @@ function openPaySheet(target, payment) {
 }
 
 // Hedefin önceki ödemeleri, en yenisi üstte: dokununca düzenlenir; Sil iki dokunuşla siler
+let payHistAbort = null;   // geçmiş satırlarının (confirmTap) pencere kapanış dinleyicileri; yeniden çizilince kaldırılır
 function renderPayHistory(info) {
+  payHistAbort?.abort();
+  payHistAbort = new AbortController();
   const list = [...info.pays].reverse();
   els.payHistory.hidden = !list.length;
   els.payList.replaceChildren();
@@ -4240,14 +4272,22 @@ function renderPayHistory(info) {
     li.append(del);
     els.payList.append(li);
     confirmTap(del, () => {
-      state.debts = state.debts.filter(y => y.id !== x.id);
+      // Kapanmış borcun ödemesi silinince borç yeniden açılır: kapatan ödeme gidince kalan sessizce silinmesin
+      const d = x.debtId ? state.debts.find(y => y.id === x.debtId) : null;
+      const reopen = !!d?.closed;
+      state.debts = state.debts.filter(y => y.id !== x.id)
+        .map(y => (reopen && y.id === d.id ? (({ closed, ...rest }) => rest)(y) : y));
       saveState();
-      toast("Ödeme silindi");
+      toast(reopen ? "Ödeme silindi · kayıt yeniden açıldı" : "Ödeme silindi");
       render();
       if (x.id === editingPayId || !payInfo(payTarget, T.todayKey())) { editingPayId = null; els.paySheet.close(); return; }
-      renderPayHistory(payInfo(payTarget, T.todayKey(), payBase()));
+      const info = payInfo(payTarget, T.todayKey(), payBase());
+      renderPayChips(info);
+      renderPayHistory(info);
+      els.payCloseRow.hidden = !info.d || !!editingPayId;
+      els.payForm.elements.close.checked = false;
       updatePayForm();
-    });
+    }, payHistAbort.signal);
   }
 }
 
@@ -4274,7 +4314,8 @@ function updatePayForm() {
   const x = { id: editingPayId ?? "yeni", kind: "payment", personId: info.d ? info.d.personId : info.person.id,
     ...(info.d && { debtId: info.d.id }), amount, date };
   const close = info.d && !els.payCloseRow.hidden && f.close.checked;
-  const after = { ...base, debts: [...base.debts.map(y => (close && y.id === info.d.id ? { ...y, closed: date } : y)), x] };
+  const closedAt = editingPayId ? info.d?.closed : closeDay(info, date, today);
+  const after = { ...base, debts: [...base.debts.map(y => (close && y.id === info.d.id ? { ...y, closed: closedAt } : y)), x] };
   const left = payInfo(payTarget, today, after).remaining;
   box.append(el("div", "", `Kalan ${m(Math.max(info.remaining, 0))} → ${m(Math.max(left, 0))}`));
   const owner = personById(info.owner);
@@ -4287,10 +4328,15 @@ function updatePayForm() {
   }
   const over = info.d ? amount - Math.max(info.remaining, 0) : -left;
   if (over > EPS && !close) box.append(el("div", "warn", `${m(over)} fazla`));
+  if (close && !editingPayId && over < -EPS) box.append(el("div", "warn", `Kapatınca kalan ${m(-over)} silinir`));
 }
 
 els.payForm.addEventListener("input", e => {
   e.target.classList?.remove("invalid");
+  if (e.target.name === "amount" && !editingPayId) {
+    const info = payInfo(payTarget, T.todayKey(), payBase());
+    if (info?.d && Math.abs(V.round(parseAmount(e.target.value), info.code) - info.remaining) > EPS) els.payForm.elements.close.checked = false;
+  }
   updatePayForm();
 });
 
@@ -4334,8 +4380,9 @@ els.payForm.addEventListener("submit", e => {
     ...(info.d && { debtId: info.d.id }), amount, date, ...(desc && { desc }) };
   if (editingPayId) state.debts = state.debts.map(y => (y.id === editingPayId ? x : y));
   else state.debts.push(x);
-  if (info.d && !els.payCloseRow.hidden && f.close.checked) {
-    state.debts = state.debts.map(y => (y.id === info.d.id ? { ...y, closed: date } : y));
+  if (info.d && !els.payCloseRow.hidden) {
+    const closed = f.close.checked ? (editingPayId ? info.d.closed : closeDay(info, date, today)) : null;
+    state.debts = state.debts.map(y => (y.id !== info.d.id ? y : closed ? { ...y, closed } : (({ closed: _, ...rest }) => rest)(y)));
   }
   saveState();
   els.paySheet.close();
@@ -4932,7 +4979,7 @@ function askOfflineData() {
   if (!local) return;
   const people = local.people.filter(p => !(p.id === "ben" && p.name === "Ben")).length;
   els.moveSummary.textContent = [[local.installments.length, "harcama"], [local.cards.length, "kart"],
-    [local.entries.length, "varlık hareketi"], [local.debts.length, "borç/alacak kaydı"], [people, "kişi"]]
+    [local.entries.length, "varlık hareketi"], [local.debts.filter(x => x.kind !== "payment").length, "borç/alacak kaydı"], [local.debts.filter(x => x.kind === "payment").length, "ödeme"], [people, "kişi"]]
     .filter(([n]) => n).map(([n, w]) => `${n} ${w}`).join(", ");
   els.moveMsg.textContent = "";
   els.moveModal.hidden = false;
@@ -5136,7 +5183,7 @@ if (typeof window.syncInit === 'function') {
       localStorage.setItem(getStorageKey(), JSON.stringify(state));
       render();
     },
-    onSynced() { ensureCardTracking(); checkInbox(); backfillCategories(); },
+    onSynced(pulled) { if (pulled) ensureCardTracking(); checkInbox(); backfillCategories(); },
   });
 }
 

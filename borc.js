@@ -86,15 +86,15 @@
     return T.payments({ total: d.amount, count, date: d.due }, null).map(x => ({ no: x.no, key: x.key, amount: x.amount }));
   }
 
-  // Kendiliğinden ödenen (kredi, autoPay) borcun taksitleri, erken ödemeler sondan düşülmüş ve kapandıktan sonrakiler
-  // atılmış: [{ no, key, amount, before (date'ten önce: takipten önce ödenmiş) }]
+  // Kendiliğinden ödenen (kredi, autoPay) borcun taksitleri, erken ödemeler sondan düşülmüş (ödeme gününden sonrakilerden,
+  // o günkü dahil) ve kapandıktan sonrakiler atılmış: [{ no, key, amount, before (date'ten önce: takipten önce ödenmiş) }]
   function plan(d, pays = []) {
     const items = schedule(d).map(x => ({ ...x, before: x.key < d.date }));
     for (const p of pays) {
       let rest = p.amount;
       for (let i = items.length - 1; i >= 0 && rest > EPS; i--) {
         const x = items[i];
-        if (x.key <= p.date || x.before) break;
+        if (x.key < p.date || x.before) break;   // ödeme günündeki taksit henüz ödenmemiştir, kapatılabilir
         const cut = Math.min(rest, x.amount);
         x.amount -= cut;
         rest -= cut;
@@ -104,7 +104,8 @@
   }
 
   // Borcun bugünkü durumu. remaining: ödenecek (borçta) ya da alınacak (alacakta) kalan, varlığın biriminde.
-  // items: taksitler { no, key, amount, covered, state: "paid" | "due" | "late" | "open" }
+  // items: taksitler { no, key, amount, covered, state: "paid" | "due" | "late" | "open" | "closed" }; covered kendiliğinden
+  // ödenende true / false, elle ödenende kapanan tutar
   function status(d, pays = [], today) {
     const isStarted = started(d, today);
     const closed = !!d.closed && d.closed <= today;
@@ -115,14 +116,15 @@
 
     if (auto(d)) {
       const all = schedule(d);
-      const items = plan(d, pays);
+      const items = plan(d, pays.filter(p => p.date <= today));   // varlığa işlenmemiş (ileri tarihli) ödeme kalanı düşürmez
       const left = items.filter(x => x.key >= today);
       out.count = all.length;
       out.paidCount = all.length - left.length;
       out.items = all.map(x => {
         const cur = items.find(y => y.no === x.no);
-        const st = !cur ? "paid" : x.key < today ? "paid" : x.key === today ? "due" : "open";
-        return { no: x.no, key: x.key, amount: cur ? cur.amount : x.amount, covered: !cur || x.key < today, state: st };
+        const dropped = !cur && !!d.closed && x.key >= d.closed && x.key >= today;   // kapanınca atıldı, ödenmedi
+        const st = dropped ? "closed" : !cur ? "paid" : x.key < today ? "paid" : x.key === today ? "due" : "open";
+        return { no: x.no, key: x.key, amount: cur ? cur.amount : x.amount, covered: !dropped && (!cur || x.key < today), state: st };
       });
       out.remaining = isStarted ? sum(left) : 0;
       out.paid = sum(items.filter(x => !x.before && x.key < today)) + paidIn;
@@ -182,20 +184,21 @@
   }
 
   // ---------- Kartlar ----------
-  // Kartın taksitleri (kişisi bilinen harcamalar; cardStats'taki gibi): [{ ...ödeme, personId, purchase }]
-  function cardLines(state, card) {
+  // Kartın taksitleri (kişisi bilinen harcamalar; cardStats'taki gibi): [{ ...ödeme, personId, purchase }]. Süresiz
+  // tekrarlayan harcamanın tekrarları today'e kadar (MCP'de sunucunun saati değil kullanıcının günü)
+  function cardLines(state, card, today) {
     const people = new Set((state.people || []).map(p => p.id));
     const out = [];
     for (const p of state.installments || []) {
       if (p.cardId !== card.id || !people.has(p.personId)) continue;
-      for (const x of T.payments(p, card)) out.push({ ...x, personId: p.personId, purchase: p });
+      for (const x of T.payments(p, card, today)) out.push({ ...x, personId: p.personId, purchase: p });
     }
     return out.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   }
 
   // Kartın borcu: total (= cardStats.used, T.outstanding), kişi başına, sıradaki ekstre (cut: kesilmiş, ödeme bekliyor)
   function cardDebt(state, card, today) {
-    const lines = cardLines(state, card);
+    const lines = cardLines(state, card, today);
     const owed = lines.filter(x => x.key >= today && !(x.at > today));
     const byPerson = {};
     for (const x of owed) add(byPerson, x.personId, x.amount);
@@ -218,7 +221,7 @@
     for (const c of state.cards || []) {
       if (!tracked(c)) continue;
       const from = since(c, today);
-      total += sum(cardLines(state, c).filter(x => x.key >= from && x.key < today && !(x.at > today)));
+      total += sum(cardLines(state, c, today).filter(x => x.key >= from && x.key < today && !(x.at > today)));
     }
     return total;
   }
@@ -238,7 +241,7 @@
     for (const c of state.cards || []) {
       if (!tracked(c)) continue;
       const from = since(c, today);
-      for (const x of cardLines(state, c)) {
+      for (const x of cardLines(state, c, today)) {
         if (x.personId === payer || x.key < from || x.at > today) continue;
         const s = get(x.personId);
         s.charged += x.amount;

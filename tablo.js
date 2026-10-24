@@ -309,7 +309,7 @@
     const cards = absorb("cards", (a, b) => (a.last4 && b.last4 ? a.last4 === b.last4 : name(a.name) === name(b.name)));
     for (const item of local.cards || []) {
       const at = out.cards.findIndex(x => x.id === cards[item?.id] && x !== item);
-      if (at < 0 || !item.trackSince) continue;
+      if (at < 0 || !item.trackSince || item.trackOff === true) continue;   // takip dışı kartın tarihi yalnızca öneridir
       const kept = out.cards[at];
       if (!kept.trackSince || item.trackSince < kept.trackSince) out.cards[at] = { ...kept, trackSince: item.trackSince };
     }

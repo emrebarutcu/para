@@ -1622,7 +1622,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .rep-times .inline-input { align-self: flex-start; }
 
 /* ── Borçlar ── */
-#debtStats > div { display: flex; flex-direction: column; justify-content: space-between; }   /* iki satırlık etikette tutarlar hizalı */
+.hero-stats > div { display: flex; flex-direction: column; justify-content: space-between; }   /* iki satırlık etikette tutarlar hizalı */
 .debt-groups { display: flex; flex-direction: column; gap: 18px; }
 .debt-group > .panel-head { padding: 0 4px; }
 .debt-group > .panel-head .panel-note { font-variant-numeric: tabular-nums; }

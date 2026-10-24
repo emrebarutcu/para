@@ -123,7 +123,9 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
   ödenmiş ekstreler düşülmez; ilk açılışta bakiye değişmez. Önbellekteki 4.x sürümleri borçları görmez ve takip sütunlarına
   dokunmaz (upsert yalnızca gönderilen sütunları değiştirir): bakiyeleri borç hareketleri ve düşülen ekstreler olmadan
   gösterir, kişi silerken borçlarını silmez (5.0 sahibi olmayan kaydı göstermez); 4.x'te eklenen kart, 5.0'ın onu ilk
-  gördüğü günden takiptedir. Özet'te "Kalan borç" artık "Kalan ödeme" (tutar aynı). MCP: yeni araçlar `list_debts`,
+  gördüğü günden takiptedir. Yeni sürüm etkinleşince aynı cihazda açık kalan 4.x sekmeleri yeniden yüklenir (service
+  worker, yalnızca ana sürüm değişince); eski kod yeni verinin üstüne yazmaz. Takip tarihi yalnızca uzak veri gerçekten
+  çekildikten sonra yazılır, başka cihazın önceki tarihi ezilmez. Özet'te "Kalan borç" artık "Kalan ödeme" (tutar aynı). MCP: yeni araçlar `list_debts`,
   `get_debt`, `add_debt`, `update_debt`, `delete_debt`, `pay_debt`, `delete_debt_payment`; `update_card`'a isteğe bağlı
   `track_statements`, `track_since`; cevaplara eklenenler: `get_assets` → `receivablesTry`, `debtsTry`, `totalAssetsTry`,
   `netWorthTry`, `untrackedCardDebtTry`, `cardTracking`; `list_cards` → `tracking`, `statement`; `update_card` /
@@ -280,11 +282,14 @@ gerekmez), kayıt bir kişinin varlığına aittir (varsayılan ilk kişi, tek k
 da vadeli) ya da taksitlidir. Ödeme ve tahsilat elle kaydedilir (**Ödedim** / **Ödedi**, kısmi olabilir); ödemeler
 taksitleri ilk taksitten başlayarak kapatır, vadesi ya da günü geçip kapanmamış tutar gecikmiştir ("3 gün gecikti").
 Taksitlide **Taksitler tarihinde ödenmiş sayılsın** seçilirse taksitler, kredideki gibi, tarihinde kendiliğinden ödenir;
-gecikme olmaz. Borç alınan para kayıt tarihinde varlığa girer, verilen çıkar; "Para varlığıma girdi / çıktı" kapatılırsa
+gecikme olmaz, satırda Ödedim / Ödedi görünmez (yalnızca formdan ara ödeme). Kapanmış borcun ödemesi silinince borç
+yeniden açılır; kalan sessizce silinmez. Borç alınan para kayıt tarihinde varlığa girer, verilen çıkar; "Para varlığıma girdi / çıktı" kapatılırsa
 (önceden alınmış borcu bakiyeyi bozmadan girmek için) yalnızca borç / alacak eklenir.
 
 **Banka kredisi**: taksit sayısı, taksit tutarı (ya da toplam), ilk taksit tarihi ve çekilen tutar. Taksitler tarihinde
-kendiliğinden ödenir; ek ödeme sondaki taksitlerden düşer, **Bu ödemeyle kapat** krediyi kapatır. Çekilen tutar varlığa
+kendiliğinden ödenir; ek ödeme sondaki taksitlerden düşer (ödeme günündeki taksit dahil), **Bu ödemeyle kapat** krediyi
+bugünle kapatır (geçmiş tarihli kapatma o günden beri ödenmiş taksitleri silerdi). Çekilen tutar yalnızca ilk taksitten
+önceki bir günde girilir. Çekilen tutar varlığa
 girer, borç faiz dahil kalan taksitlerin toplamıdır: aradaki fark (**faiz ve masraf**) kredi başlarken Özvarlık'tan bir kez
 düşer, form aylık faizi yaklaşık gösterir. Ortasından girilen kredinin kayıt tarihinden önceki taksitleri önceden ödenmiş
 sayılır, varlığa etkisi olmaz.
@@ -293,7 +298,8 @@ sayılır, varlığa etkisi olmaz.
 toplamlarda güncel kurla TL'dir (kuru alınamayan varlık sayılmaz, altta yazar).
 
 **Ne zaman ödenmiş sayılır:** kart ekstresi, kredi taksiti ve kendiliğinden ödenen taksit gününün ertesi günü; o gün hâlâ
-"bugün ödenecek"tir (Nakit grafiğindeki kart kuralı gibi). Borç alma / verme, ödeme ve tahsilat kendi gününde. İleri
+"bugün ödenecek"tir (Nakit grafiğindeki kart kuralı gibi). Nakit grafiği gecikmiş ya da bugün beklenen tahsilatı alınmış
+saymaz. Borç alma / verme, ödeme ve tahsilat kendi gününde. İleri
 tarihli borç ya da alacak o güne kadar başlamamıştır: Borç'a, Alacak'a ve bakiyeye girmez.
 
 Nakit grafiği borç hareketlerini de sayar; Girdi ve çıktılar'da bunlar gün başlığında işarettir, toplama girmez
@@ -451,7 +457,7 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 | Kartlar | `list_cards` (kullanılan / kalan limit, ekstre takibi, sıradaki ekstre), `add_card` (eklendiği günden takipte), `update_card` (takip: `track_statements`, `track_since`), `delete_card` |
 | Kişiler | `list_people` (kart payı alacağı), `add_person`, `rename_person`, `delete_person` |
 | Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı; alacak, borç, Varlık, Özvarlık), `list_entries`, `add_entry`, `update_entry`, `delete_entry` |
-| Borçlar / alacaklar | `list_debts` (Eldeki / Alacak / Borç / Varlık / Özvarlık toplamları, kart borçları ve kişi payları, nakit taksitler, kart payları, borçlar), `get_debt` (ödeme planı), `add_debt` (borç aldım / verdim / kredi; tek tutar ya da taksitli, `auto_pay`; `dry_run` ile önizleme), `update_debt` (kapatma dahil), `delete_debt` (ödemeleriyle), `pay_debt` (ödeme / tahsilat; kart payı için `person`), `delete_debt_payment` |
+| Borçlar / alacaklar | `list_debts` (Eldeki / Alacak / Borç / Varlık / Özvarlık toplamları, kart borçları ve kişi payları, nakit taksitler, kart payları, borçlar), `get_debt` (ödeme planı), `add_debt` (borç aldım / verdim / kredi; tek tutar ya da taksitli, `auto_pay`; `dry_run` ile önizleme), `update_debt` (kapatma dahil), `delete_debt` (ödemeleriyle), `pay_debt` (ödeme / tahsilat; kart payı için `person`; `close` kendiliğinden ödenen borcu bugünle kapatır), `delete_debt_payment` (kapanmış borcu yeniden açar: `reopened`) |
 | Banka e-postaları | `get_inbox_address`, `renew_inbox_address`, `list_inbox`, `check_inbox`, `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
 | İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |
 | Yedek | `export_data` (kişiler, kartlar, harcamalar, varlık hareketleri ve borçlar; Ayarlar → Dışa aktar ile aynı), `import_data` |

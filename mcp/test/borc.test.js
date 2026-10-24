@@ -199,3 +199,23 @@ test("borç kaydı olmayan veri sıfır döner; ödenecekler ve metinler", () =>
   assert.ok(Math.abs(B.loanRate(s.debts.find(d => d.id === "kr")) * 100 - 3.92) < 0.01, "aylık faiz");
   assert.equal(B.lastIndex(s, "2026-12-11"), T.monthIndex("2027-03"));
 });
+
+test("taksit gününde yapılan ödeme o günün taksitini de kapatır; ileri tarihli ödeme kalanı düşürmez; kapanınca düşenler", () => {
+  const d = { id: "k", kind: "loan", personId: "ben", asset: "TRY", amount: 3000, date: "2026-10-20", due: "2026-11-05", count: 3 };
+  const s = { people: [{ id: "ben" }], cards: [], installments: [], debts: [d],
+    entries: [{ id: "e", personId: "ben", asset: "TRY", amount: 10000, desc: "x", date: "2026-10-01" }] };
+  // Son taksit günü (5 Oca) bin lira ödenir: ertesi gün ikinci kez düşmez
+  s.debts.push({ id: "p", kind: "payment", personId: "ben", debtId: "k", amount: 1000, date: "2027-01-05" });
+  let t = B.totals(s, "2027-01-06", RATES);
+  near(t.cash, 7000);
+  near(t.debt.total, 0);
+  near(t.equity, 7000);
+  // İleri tarihli ödeme (başka saat dilimindeki cihaz) varlığa işlenmeden kalanı düşürmez
+  s.debts[1] = { ...s.debts[1], date: "2026-11-05" };
+  near(B.status(d, [s.debts[1]], "2026-11-04").remaining, 3000);
+  near(B.totals(s, "2026-11-04", RATES).equity, B.totals({ ...s, debts: [d] }, "2026-11-04", RATES).equity);
+  // Kapatılınca atılan taksitler "closed": ödenmiş görünmez
+  const st = B.status({ ...d, closed: "2026-11-10" }, [], "2026-11-10");
+  assert.deepEqual(st.items.map(x => [x.key, x.state, x.covered]),
+    [["2026-11-05", "paid", true], ["2026-12-05", "closed", false], ["2027-01-05", "closed", false]]);
+});

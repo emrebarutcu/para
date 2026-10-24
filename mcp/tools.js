@@ -536,7 +536,7 @@ function typeOf(d) { return d.kind === "loan" ? "loan" : d.side === "debt" ? "bo
 function amountArg(v, asset) {
   const n = v == null || v === "" || typeof v === "boolean" ? NaN : Number(v);
   const amount = Number.isFinite(n) ? V.round(n, asset) : NaN;
-  if (!(amount > 0)) fail("amount must be a positive number.");
+  if (!(Number.isFinite(amount) && amount > 0)) fail("amount must be a positive number.");
   return amount;
 }
 
@@ -659,6 +659,7 @@ function buildDebt(state, args, today, base = null) {
     total = kind === "per_installment" ? V.round(amount * count, asset) : amount;
   }
   if (!(total > 0)) fail("amount is required.");
+  if (!Number.isFinite(total)) fail("amount is too large.");
 
   // Ana para: date günü el değiştiren (borçta varlığa girer, alacakta çıkar); 0 = para hareketi yok (eski borç).
   // Verilmezse kişisel borçta toplam, kredide yok; düzenlemede toplama eşitse yeni toplamı izler.
@@ -690,6 +691,12 @@ function buildDebt(state, args, today, base = null) {
     if (closed > today) fail("closed must not be after today.");
   }
   if (closed && closed < date) fail(`closed must not be before the debt's date (${date}).`);
+
+  // Kendiliğinden ödenen taksitlerden date'ten öncekiler takipten önce ödenmiş sayılır; o günlerde çekilen para da
+  // varlığa çoktan girmiştir: ana para ancak ilk taksitten önceki bir tarihte girilir (yoksa özvarlık yanlış artar)
+  if (principal > 0 && (loan || autoPay) && due && due < date) {
+    fail(`principal can only be given when date (${date}) is on or before the first installment (${due}): earlier installments count as paid before date. For an existing loan or debt, leave principal out (or 0).`);
+  }
 
   const d = { kind: loan ? "loan" : "person", personId: person.id };
   if (!loan) d.side = type === "borrowed" ? "debt" : "receivable";
@@ -1161,7 +1168,7 @@ export const TOOLS = [
   {
     name: "get_assets",
     title: "Assets (Varlıklar)",
-    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries minus cash purchases paid from them, plus debt / loan money and payments, minus tracked cards' statements paid since tracking began, plus card share payments; repeating ones only up to today), each with its value in TRY at the current market rate, and the total in TRY (totalTry). Also, as in list_debts: receivablesTry (owed to the user), debtsTry, totalAssetsTry (= totalTry + receivablesTry = netWorthTry + debtsTry), netWorthTry, untrackedCardDebtTry (debt of cards whose statements are not tracked, not in debtsTry) and which cards are tracked since when.",
+    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries minus cash purchases paid from them, plus borrowed / loan principal and collections on money lent, minus money lent, repayments and loan installments, minus tracked cards' statements paid since tracking began, plus card share payments; repeating ones only up to today), each with its value in TRY at the current market rate, and the total in TRY (totalTry). Also, as in list_debts: receivablesTry (owed to the user), debtsTry, totalAssetsTry (= totalTry + receivablesTry = netWorthTry + debtsTry), netWorthTry, untrackedCardDebtTry (debt of cards whose statements are not tracked, not in debtsTry) and which cards are tracked since when.",
     inputSchema: obj({ person: S.str("Only this person's assets (id or name).") }),
     annotations: READ,
     async run(args, ctx) {
@@ -1324,7 +1331,8 @@ export const TOOLS = [
         cashInstallments: owes && !q
           ? { totalTry: round(t.debt.cash), byAsset: Object.fromEntries(Object.entries(cash).map(([code, v]) => [code, V.round(v, code)])) }
           : null,
-        shares: side !== "debt" ? shares : [],
+        // Pay ödenmemişse alacak, fazla ödenmişse kullanıcının borcu (Borçlar'daki gibi)
+        shares: shares.filter(v => side === "all" || (side === "debt" ? v.owed < 0 : v.owed >= 0)),
         debts,
         currency: "TRY",
       };
@@ -1449,6 +1457,9 @@ export const TOOLS = [
           const payer = state.people[0];
           if (p.id === payer.id) fail(`${p.name} pays the cards: card shares are what other people owe ${p.name}. Pass someone else, or a debt.`);
           if (!state.cards.some(c => B.tracked(c))) fail("No card's statements are tracked, so nobody owes a card share. Ask the user; update_card track_statements turns tracking on.");
+          // Takip tarihi henüz yazılmamış kartlar bugünden takipte (uygulamadaki gibi); pay her gün kaymasın
+          const cards = B.ensureTracking(state, today);
+          if (cards) state.cards = cards;
           const x = { id: uid(), kind: "payment", personId: p.id, amount: amountArg(args.amount, "TRY"), date, ...(desc && { desc }) };
           state.debts.push(x);
           const s = B.shares(state, today).get(p.id);
@@ -1462,7 +1473,8 @@ export const TOOLS = [
         if (st.closed) fail(`This debt was closed on ${d.closed}; reopen it with update_debt (closed: null) first.`);
         const x = { id: uid(), kind: "payment", personId: d.personId, debtId: d.id, amount: amountArg(args.amount, d.asset), date, ...(desc && { desc }) };
         state.debts.push(x);
-        if (args.close === true) d.closed = date;
+        // Kendiliğinden ödenen borç bugünle kapanır: geçmiş tarihli kapatma, o günden beri ödenmiş taksitleri silerdi
+        if (args.close === true) d.closed = B.auto(d) ? today : date;
         const out = { saved: true, payment: paymentView(x, d.asset), debt: debtView(state, d, today, rates) };
         if (x.amount > st.remaining + 0.005) out.warning = `This payment is more than the ${V.round(st.remaining, d.asset)} ${d.asset} left on the debt.`;
         return out;
@@ -1472,7 +1484,7 @@ export const TOOLS = [
   {
     name: "delete_debt_payment",
     title: "Delete debt payment",
-    description: "Permanently delete a payment recorded with pay_debt (on a debt, or a card share payment); the debt or share is owed again and the asset balance changes back.",
+    description: "Permanently delete a payment recorded with pay_debt (on a debt, or a card share payment); the debt or share is owed again and the asset balance changes back. A closed debt is reopened (reopened: true), so what the payment covered is not silently written off.",
     inputSchema: obj({ id: S.str("Payment id (debt payments in get_debt / list_debts, card share payments in list_debts shares).") }, ["id"]),
     annotations: { ...DESTROY, idempotentHint: true },
     async run(args, ctx) {
@@ -1481,8 +1493,11 @@ export const TOOLS = [
         const x = findDebtPayment(state, args.id);
         const d = x.debtId ? B.known(state).items.find(y => y.id === x.debtId) : null;
         state.debts = state.debts.filter(y => y?.id !== x.id);
+        // Kapanmış borcun ödemesi silinince borç yeniden açılır (kapatan ödeme silinince kalan sessizce silinmesin)
+        const reopened = !!d?.closed;
+        if (reopened) delete d.closed;
         const asset = d?.asset ?? "TRY";
-        const out = { deleted: { id: x.id, date: x.date, amount: V.round(x.amount, asset), asset } };
+        const out = { deleted: { id: x.id, date: x.date, amount: V.round(x.amount, asset), asset }, ...(reopened && { reopened: true }) };
         if (d) out.debt = debtView(state, d, ctx.today, rates);
         else if (!x.debtId) out.share = shareView(state, x.personId, B.shares(state, ctx.today).get(x.personId), ctx.today);
         return out;

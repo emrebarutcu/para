@@ -780,8 +780,11 @@ test("borç ödemesi: kısmi ödeme ve kapatma; kredide erken ödeme sondan dü�
   const removed = await c.call("delete_debt_payment", { id: part.payment.id });
   assert.deepEqual(removed.deleted, { id: part.payment.id, date: "2026-10-10", amount: 4000, asset: "TRY" });
   assert.equal(removed.debt.paid, 7000);
+  // Kapanmış borcun ödemesi silinince borç yeniden açılır: kalan 3.000 sessizce silinmez
+  assert.deepEqual([removed.reopened, removed.debt.status, removed.debt.remaining, removed.debt.closed], [true, "open", 3000, null]);
   assert.match((await c.call("delete_debt_payment", { id: part.payment.id })).error, /No debt payment/);
   assert.equal(await bal(), 23000);
+  assert.equal((await c.call("update_debt", { id: debt.id, closed: "2026-10-18" })).debt.status, "closed");
 
   // Eski kredi (ana para yok), 4 × 1.000, ilk taksit 5 Eki: o taksit ödendi, 1.500 erken ödeme Oca'yı ve Ara'nın yarısını kapatır
   const loan = (await c.call("add_debt", { type: "loan", party: "Garanti", amount: 1000, installments: 4, due_date: "2026-10-05", date: "2026-10-01" })).debt;
