@@ -301,8 +301,10 @@
     }
     const open = T.statementOf(card, today);
     let next = null;
-    const st = cs
-      ? cs.statements.find(x => x.key >= today && x.amount - x.covered > EPS)
+    // Sıradaki ekstre: açık dönemin süresiz tekrarlarının henüz gelmemiş tekrarları da (son ödeme gününe kadar)
+    const view = cs && open.due > today ? cardState(state, card, today, pays, open.due) : cs;
+    const st = view
+      ? view.statements.find(x => x.key >= today && x.amount - x.covered > EPS)
       : statements(lines.filter(x => x.key >= today && !(x.at > today)))[0];
     if (st) {
       const nb = {};

@@ -135,7 +135,8 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
   `receivablesTry`, `debtsTry`, `totalAssetsTry`, `netWorthTry`, `untrackedCardDebtTry`, `cardTracking`; `list_cards` →
   `tracking` (`autoPay`, `unpaid`, `overdue`), `statement`, `payments`; `update_card` / `delete_card` →
   `balanceChangeTry`; `delete_card` → `deletedPayments`; `get_overview` → `debts` (`unpaidCardStatements`), kartlarda
-  `autoPay`; `list_people` → `owesUser`; `delete_person` → `deletedDebts`; `import_data` → `debts`; `export_data`
+  `autoPay`; `list_debts` → `cardCredit`; `list_people` → `owesUser`; `delete_person` → `deletedDebts`,
+  `deletedCardPayments`, `deletedSharePayments`; `import_data` → `debts`; `export_data`
   borçları da verir. **Uyumsuz:** `get_assets` TL bakiyesi artık takipteki kartların ödenen ekstrelerini düşer ve borç
   hareketlerini içerir; takipte kart varken `paylar` içgörüsü yerine `alacak` gelir.
 - **4.0.0** — Tek çıkış formu ve her N gün / hafta / ayda bir tekrar. Yeni sütunlar: `purchases.asset`,
@@ -294,8 +295,10 @@ yalnızca elle ödenen takipteki karta, elle modun başladığı gün ile bugün
 sonraki ekstreleri önceden kapatır; kart borcunu da aşarsa **kartta artı bakiye** olur (Alacaklarım'da; varlıktır,
 Alacak'a girer). Borçlarım'da kart satırı ödenmemiş tutarı ve gecikmeyi (ya da sıradaki ekstreyi) yazar, ödemesi gelmiş
 ya da kesilmiş ekstrede satır içi **Ödendi**; ekstre ayrıntısı ödenip ödenmediğini söyler, altında da **Ödendi** vardır.
-Otomatiğe dönünce ödenmemiş geçmiş ekstreler ödenmiş sayılır (form önizlemede söyler); ödemesi gelmemiş ekstreler için
-ön ödeme varsa dönülmez ("Kartta ₺X ön ödeme var; otomatiğe dönmek için önce ön ödemeyi sil"). Elle ödenen kartta Nakit
+Otomatiğe dönünce ödenmemiş geçmiş ekstreler ödenmiş sayılır (form önizlemede söyler); kaydedilmiş ödemelerin bir kısmı
+otomatikte ödenmiş sayılan önceki ekstrelerde eriyecekse (elle modun başından sonraki ön ödeme) dönülmez, form eriyecek
+tutarı söyler. Bugün tarihli kart ödemesi varken otomatikten elle moda o gün geçilmez (ödeme ikinci kez düşerdi).
+Kart ödemeleri Borçlarım'daki satırdan ya da kart formundaki "Ekstre ödemeleri"nden açılıp düzeltilir, silinir. Elle ödenen kartta Nakit
 grafiği ekstre yerine kaydedilen ödemeleri kendi gününde, ödenmemiş günü gelmiş ekstreleri bugünde düşer; Sıradaki
 ödemeler ve Bu ay ödenecek ödenmemiş ekstreleri sayar (gecikmişler "gecikti" ile en üstte), ödenmiş kısmı düşer; geciken
 ekstre `borc-vade` içgörüsünde de çıkar.

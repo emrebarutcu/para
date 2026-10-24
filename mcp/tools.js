@@ -222,12 +222,35 @@ function statementView(debt) {
 
 // Ekstre takibi ve ödeme modu (borc.js cardDebt): autoPay ekstreler son ödeme gününün ertesi günü ödenmiş sayılır; elle
 // modda (manualSince'tan sonraki ekstreler) pay_debt card=… ile ödenir, unpaid ödemesi gelmiş (gecikmiş ya da bugün),
-// overdue gecikmiş kısım
+// overdue gecikmiş kısım. Otomatikte ödenecek ekstre yoktur (bugün son ödeme günü olan ekstre yarın ödenmiş sayılır): 0
 function trackingView(debt) {
   if (!debt.tracked) return null;
-  const v = { since: debt.since, autoPay: !debt.manual, unpaid: round(debt.unpaid), overdue: round(debt.overdue) };
+  const own = x => (debt.manual ? round(x) : 0);
+  const v = { since: debt.since, autoPay: !debt.manual, unpaid: own(debt.unpaid), overdue: own(debt.overdue) };
   if (debt.manual) Object.assign(v, { manualSince: debt.manualFrom, overdueSince: debt.overdueSince });
   return v;
+}
+
+// Sıradaki ödemelerin ufku (get_overview'daki akışla aynı: bu aydan 24 ay sonrasının sonu)
+const upcomingUntil = today => T.dateKey(T.parseDate(today).idx + 24, 31);
+
+// Elle ödenen takipteki kartın ekstreleri (borc.js cardState; until'e kadar süresiz tekrarların ileriki tekrarları da):
+// ödenecekler (kapanmamış kısmı olan), otomatik ödenmiş sayılanlar hariç. Elle değilse null.
+function manualStatements(state, c, today, until = upcomingUntil(today)) {
+  if (!B.tracked(c) || !B.manual(c)) return null;
+  const cs = B.cardState(state, c, today, undefined, until);
+  return { manualFrom: cs.manualFrom, due: cs.statements.filter(x => !x.auto && x.key <= until && x.amount - x.covered > EPS) };
+}
+
+// Elle ödenen kartın ödenecek ekstresi (Sıradaki ödemeler'de): total kapanmamış kısmı, kişi payları orantılı; covered
+// ödenen kısmı, late son ödeme günü geçmiş
+function cardDueView(state, c, x) {
+  const open = x.amount - x.covered, by = {};
+  for (const l of x.lines) by[l.personId] = (by[l.personId] || 0) + l.amount * open / x.amount;
+  return {
+    date: x.key, card: c.name, total: round(open), byPerson: byName(state, by, personName),
+    ...(x.covered > EPS && { covered: round(x.covered) }), ...(x.state === "late" && { late: true }),
+  };
 }
 
 // Elle ödenen kartın ekstreleri (manualSince'tan sonrakiler; ödemeler en eskiden kapatır): ödenmemiş geçmiş ekstreler,
@@ -256,6 +279,10 @@ function cardView(state, c, today) {
   const s = T.statementOf(c, today);
   const debt = B.cardDebt(state, c, today);
   const payments = cardPaysView(state, c);
+  // Elle ödenen kartta sıradaki ödeme borc.js'in ekstrelerinden: ödenmiş / önceden ödenmiş olan düşer, kapanmamış kısmı
+  // (gecikmişler tracking.unpaid / overdue'da)
+  const own = manualStatements(state, c, today);
+  const first = own?.due.find(x => x.key >= today);
   return {
     id: c.id,
     name: c.name,
@@ -265,7 +292,8 @@ function cardView(state, c, today) {
     available: c.limit ? round(c.limit - used) : null,
     cutoffDay: c.cutoffDay,
     dueDay: c.dueDay,
-    nextPayment: next ? { date: next, amount: round(upcoming.filter(x => x.key === next).reduce((t, x) => t + x.amount, 0)) } : null,
+    nextPayment: own ? (first ? { date: first.key, amount: round(first.amount - first.covered) } : null)
+      : next ? { date: next, amount: round(upcoming.filter(x => x.key === next).reduce((t, x) => t + x.amount, 0)) } : null,
     purchaseCount: mine.length,
     purchaseToday: { statementCutoff: s.cut, dueDate: s.due },
     tracking: trackingView(debt),
@@ -550,7 +578,8 @@ async function debtsDue(state, today, idx, ctx) {
   };
   if (missing.size) out.notIncludedInTotal = [...missing];
   const k = B.known(state);
-  const unpaid = state.cards.map(c => B.cardDebt(state, c, today, k.cardPays.get(c.id) || [])).filter(c => c.unpaid > EPS).map(c => ({
+  // Yalnızca elle ödenen kartlar (otomatikte bugün son ödeme günü olan ekstre yarın kendiliğinden ödenmiş sayılır)
+  const unpaid = state.cards.map(c => B.cardDebt(state, c, today, k.cardPays.get(c.id) || [])).filter(c => c.manual && c.unpaid > EPS).map(c => ({
     card: c.card.name, cardId: c.card.id, amount: round(c.unpaid),
     since: c.statements.find(x => x.state === "late" || x.state === "due").key, ...(c.overdue > EPS && { late: true }),
   }));
@@ -771,8 +800,9 @@ function shareView(state, pid, s, today) {
 }
 
 // Kartın borcu (borc.js cardDebt): debt ödenmemiş taksitler (elle modda ödenmemiş geçmiş ekstreler dahil), statement
-// sıradaki ekstre, byPerson kişi payları; credit fazla ödenmiş kartta artı bakiye (alacak). Takipte autoPay ödeme modu;
-// elle modda unpaid / overdue ve ekstreler; kaydedilen kart ödemeleri (silinebilir)
+// sıradaki ekstre, byPerson kişi payları (kapanmamış ekstrelerden; toplamı borçtur); credit fazla ödenmiş kartta artı
+// bakiye (alacak). Takipte autoPay ödeme modu; elle modda unpaid / overdue ve ekstreler; kaydedilen kart ödemeleri
+// (silinebilir)
 function cardDebtView(state, c, today) {
   const v = {
     cardId: c.card.id, card: c.card.name, tracked: c.tracked, since: c.since, debt: round(Math.max(0, c.total)),
@@ -808,8 +838,11 @@ function trackingArgs(args, cur, today) {
 }
 
 // Ödeme modu (auto_pay; verilmezse kartınki kalır). false → elle: manualSince bugün; aynı çağrıda takip açılıyor ya da
-// track_since değişiyorsa takibin başladığı gün (o günden sonraki ekstreler Ödendi bekler). true → otomatik: manualSince
-// silinir; ödemesi gelmemiş ekstreleri aşan ön ödeme varsa engellenir (önceki ekstrelerde eriyip bakiyeyi değiştirirdi).
+// track_since değişiyorsa takibin başladığı gün (o günden sonraki ekstreler Ödendi bekler). Kartta bugün tarihli ödeme
+// varken bugünden elle moda geçilmez (o güne kadar ödenmiş sayılan ekstrelerde erimiş ödeme ikinci kez düşerdi; borc.js
+// cardPaidToday). true → otomatik: manualSince silinir; kaydedilen ödemelerin bir kısmı sayılmaz olacaksa (önceki
+// ekstrelerde eriyip bakiyeyi değiştirirdi; borc.js cardPrepaid, takibe girecek kartta) engellenir. Takip dışı kart elle
+// modunu korur (uygulamadaki gibi): takip kapalıyken otomatiğe dönülmez, ön ödeme denetimi atlanmasın.
 // v: diğer alanları işlenmiş yeni kart. → { trackSince?, manualSince? }
 function payModeArgs(state, args, cur, v, today) {
   const auto = args.auto_pay;
@@ -819,11 +852,19 @@ function payModeArgs(state, args, cur, v, today) {
   if (auto === false) {
     if (!B.tracked(v)) fail("auto_pay false needs the card's statements tracked: leave out track_statements or pass true.");
     const restart = !B.tracked(cur) || v.trackSince !== cur.trackSince;
-    return { ...(!v.trackSince && { trackSince: today }), manualSince: restart && v.trackSince ? v.trackSince : today };
+    const since = restart && v.trackSince ? v.trackSince : today;
+    if (since === today && B.cardPaidToday(state, cur, today)) {
+      fail(`A payment on ${cur.name} is dated today: switching to paid by hand today would count it twice (it already went against the statements counted as paid). Switch to paid by hand tomorrow.`);
+    }
+    return { ...(!v.trackSince && { trackSince: today }), manualSince: since };
   }
-  const prepaid = B.cardPrepaid(state, { ...v, manualSince: cur.manualSince }, today);
-  if (prepaid > EPS) {
-    fail(`${cur.name} has ${round(prepaid)} TRY paid ahead (card payments beyond the statements due so far). Back on automatic it would count against earlier statements, so delete that payment first (delete_debt_payment; ids in list_cards / list_debts cards payments), then switch.`);
+  if (!B.tracked(v)) {
+    fail(`auto_pay true needs the card's statements tracked: ${cur.name} stays paid by hand while not tracked. Leave out auto_pay, or turn tracking on in the same call (track_statements true or track_since) to switch back to automatic.`);
+  }
+  const lost = B.cardPrepaid(state, { ...v, manualSince: cur.manualSince }, today);
+  if (lost > EPS) {
+    const payer = personName(state, state.people[0]?.id);
+    fail(`${cur.name} can't go back to automatic yet: ${round(lost)} TRY of its recorded card payments would stop counting (on automatic, statements count as paid on their own and payments only count beyond them, so payments ahead of the statements due would go against statements already counted as paid), raising ${payer}'s lira balance by that much. Delete the payment made ahead first (delete_debt_payment; ids in list_cards / list_debts cards payments), or switch once the statements it pays are past their due day.`);
   }
   return {};
 }
@@ -865,7 +906,7 @@ const CARD_FIELDS = {
   cutoff_day: S.int("Statement cutoff day of month (hesap kesim günü).", 1, 31),
   due_day: S.int("Payment due day of month (son ödeme günü).", 1, 31),
   last4: S.str('Last 4 digits of the card (used to match bank e-mails). "" removes it.'),
-  auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call); switching back to true counts unpaid past statements as paid and fails while a payment is ahead of the statements due."),
+  auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call: statements since then are unpaid until marked paid); it fails on a day a card payment is dated (switch the next day). Switching back to true counts unpaid past statements as paid; it fails while recorded card payments would stop counting (payments ahead of the statements due; delete them or wait for those due days) and while the card is not tracked (an untracked card keeps its mode)."),
 };
 
 const ASSET = { type: "string", enum: ["TRY", "USD", "EUR", "GAU"], description: "TRY (Turkish lira), USD, EUR or GAU (gold, in grams)." };
@@ -885,7 +926,7 @@ const DEBT_FIELDS = {
   amount_type: { type: "string", enum: ["total", "per_installment"], description: 'How to read amount. Default "total", for a loan "per_installment" (the monthly installment).' },
   installments: S.int("Number of monthly installments, the first on due_date. Default 1 for borrowed / lent; required for a loan.", 1, MAX_DEBT_COUNT),
   due_date: S.date("Due date (vade) of a single repayment, or the first installment's date; later installments fall on the same day of the following months. Required for a loan and with installments; leave out for no due date."),
-  auto_pay: S.bool("Payment mode. true = each installment counts as paid the day after its date (no pay_debt needed; borrowed / lent need due_date); false = paid only when recorded with pay_debt (Ödendi), unpaid installments past their date show as overdue. Default: true for a loan, false for borrowed / lent. It cannot change once the debt has an installment between its date and today."),
+  auto_pay: S.bool("Payment mode. true = each installment counts as paid the day after its date (no pay_debt needed; borrowed / lent need due_date); false = paid only when recorded with pay_debt (Ödendi), unpaid installments past their date show as overdue. Default: true for a loan, false for borrowed / lent. It cannot change once a loan has an installment between its date and today, or a borrowed / lent debt has an installment before today."),
   principal: S.num("Money that changed hands on date, in the debt's asset: it enters the owner's balance (borrowed, loan) or leaves it (lent). 0 = no money moved now (an older debt already reflected in the balances). Default: amount for borrowed / lent; none for a loan — pass what the bank paid out for a new loan (amount minus principal is interest and fees)."),
   date: S.date("When the debt starts (money changed hands), YYYY-MM-DD. A later date than today = not started yet. Loan installments before it count as paid before."),
   asset: { ...ASSET, description: "What the debt is in: TRY (default), USD, EUR or GAU (grams of gold). Its payments are in the same asset." },
@@ -903,7 +944,7 @@ export const TOOLS = [
   {
     name: "get_overview",
     title: "Overview (Özet)",
-    description: "Dashboard summary like the app's Özet tab: amount due in the month, next month's total, remaining total, the next upcoming payments, per-person and per-card figures (card and cash purchases; card statements count on their due day whatever the payment mode). Debt and loan installments the user pays are separate, under debts (in TRY; upcoming in their own asset); debts.unpaidCardStatements lists cards paid by hand (auto_pay false) with statements past or at their due day not yet marked paid (pay_debt card=…).",
+    description: "Dashboard summary like the app's Özet tab: amount due in the month, next month's total, remaining total, the next upcoming payments, per-person and per-card figures (card and cash purchases; in the month totals card statements count on their due day whatever the payment mode). upcomingPayments: on a card paid by hand (auto_pay false) only what is not paid yet of each statement (covered = the part already paid; statements paid or paid ahead are left out), and its unpaid statements past their due day come first with late: true; a card's nextPayment likewise. Debt and loan installments the user pays are separate, under debts (in TRY; upcoming in their own asset); debts.unpaidCardStatements lists cards paid by hand with statements past or at their due day not yet marked paid (pay_debt card=…).",
     inputSchema: obj({ month: S.month("Month to summarize, YYYY-MM. Default: current month.") }),
     annotations: READ,
     async run(args, ctx) {
@@ -916,11 +957,18 @@ export const TOOLS = [
       const at = idx => months.find(m => m.idx === idx);
       const thisMonth = at(start);
 
-      const from = T.parseDate(today).idx;
-      const upcoming = last >= from
-        ? T.buildCashflow(state.people, state.cards, state.installments, from, Math.min(last, from + 24))
-          .flatMap(m => m.events).filter(e => e.date >= today).slice(0, UPCOMING)
+      // Sıradaki ödemeler (app.js renderUpcoming gibi): elle ödenen kartın ekstreleri borc.js'ten (ödenmiş ya da önceden
+      // ödenmiş olan düşer, kapanmamış kısmı; ödenmemiş geçmiş ekstre late ile en üstte), diğerleri akıştaki ödemeler
+      const from = T.parseDate(today).idx, until = upcomingUntil(today);
+      const events = last >= from
+        ? T.buildCashflow(state.people, state.cards, state.installments, from, Math.min(last, from + 24)).flatMap(m => m.events)
         : [];
+      const manual = new Map(state.cards.map(c => [c.id, manualStatements(state, c, today, until)]).filter(([, m]) => m));
+      const upcoming = [
+        ...events.filter(e => e.date >= today && !(manual.has(e.cardId) && e.date >= manual.get(e.cardId).manualFrom))
+          .map(ev => ({ date: ev.date, view: eventView(state, ev, { items: false }) })),
+        ...[...manual].flatMap(([id, m]) => m.due.map(x => ({ date: x.key, late: x.state === "late", view: cardDueView(state, cardById(state, id), x) }))),
+      ].sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0) || a.date.localeCompare(b.date)).slice(0, UPCOMING);
       return {
         today,
         month: T.monthKey(start),
@@ -930,7 +978,7 @@ export const TOOLS = [
         nextMonth: { month: T.monthKey(start + 1), total: round(at(start + 1)?.total) },
         remainingTotal: round(months.reduce((s, m) => s + m.total, 0)),
         lastPaymentMonth: months.length ? T.monthKey(months[months.length - 1].idx) : null,
-        upcomingPayments: upcoming.map(ev => eventView(state, ev, { items: false })),
+        upcomingPayments: upcoming.map(x => x.view),
         people: state.people.map(p => ({
           name: p.name,
           dueThisMonth: round(thisMonth?.byPerson[p.id]),
@@ -1091,7 +1139,7 @@ export const TOOLS = [
   {
     name: "list_cards",
     title: "List cards (Kartlar)",
-    description: "Credit cards with limit, used limit (installments still to be paid, plus unpaid past statements on a card paid by hand), available limit, cutoff and due days, next payment and where a purchase made today would fall. tracking (null = not tracked): since — statements due from that date leave the first person's lira balance; autoPay true — the day after the due day, false — when marked paid with pay_debt card=… (from manualSince; unpaid = statements due and not paid yet, overdue = the part past the due day, since overdueSince). statement: the next statement to pay, what is not paid of it (alreadyCut = cut, waiting for the due day). payments: recorded statement payments (delete_debt_payment).",
+    description: "Credit cards with limit, used limit (installments still to be paid, plus unpaid past statements on a card paid by hand), available limit, cutoff and due days, next payment (on a card paid by hand, what is not paid yet of the next statement due today or later) and where a purchase made today would fall. tracking (null = not tracked): since — statements due from that date leave the first person's lira balance; autoPay true — the day after the due day, false — when marked paid with pay_debt card=… (from manualSince; unpaid = statements due and not paid yet, overdue = the part past the due day, since overdueSince). statement: the next statement to pay, what is not paid of it (alreadyCut = cut, waiting for the due day). payments: recorded statement payments (delete_debt_payment).",
     inputSchema: obj(),
     annotations: READ,
     async run(args, ctx) {
@@ -1154,7 +1202,15 @@ export const TOOLS = [
         }
         const payer = personName(state, state.people[0]?.id);
         if (B.manual(next) && !B.manual(cur)) {
-          out.note = `From ${next.manualSince} ${next.name}'s statements stay owed until marked paid with pay_debt card="${next.name}" (amount defaults to what is due); unpaid ones past their due day show as overdue. Earlier statements stay paid.`;
+          // Takibin başından elle moda geçince (takip açılıyor ya da track_since değişiyor) o günden beri ödenmiş sayılan
+          // ekstreler ödenmemiş olur; yalnızca bugünden geçişte önceki ekstreler ödenmiş kalır
+          const fresh = !B.tracked(cur) || next.trackSince !== cur.trackSince;
+          const nd = B.cardDebt(state, next, ctx.today);
+          const owed = nd.statements.filter(x => x.state === "late" || x.state === "due");
+          const tail = !fresh ? " Earlier statements stay paid."
+            : owed.length ? ` ${owed.length} statement(s) due since ${next.manualSince} (${round(nd.unpaid)} TRY) are now unpaid: they stay owed until marked paid${owed.some(x => x.state === "late") ? ` (overdue since ${nd.overdueSince})` : ""}.`
+            : "";
+          out.note = `From ${next.manualSince} ${next.name}'s statements stay owed until marked paid with pay_debt card="${next.name}" (amount defaults to what is due); unpaid ones past their due day show as overdue.${tail}`;
         } else if (B.manual(cur) && !B.manual(next)) {
           const late = was.statements.filter(x => x.state === "late");
           out.note = (late.length ? `${late.length} overdue statement(s) (${round(was.overdue)} TRY) now count as paid, deducted from ${payer}'s lira balance. ` : "")
@@ -1243,7 +1299,7 @@ export const TOOLS = [
   {
     name: "delete_person",
     title: "Delete person",
-    description: "Permanently delete a person AND all of their purchases, asset entries and debts (with their payments; deleting the first person also removes the card share payments made to them and the card statement payments they made). At least one person must remain.",
+    description: "Permanently delete a person AND all of their purchases, asset entries and debts (with their payments) and their card share payments; deleting the first person also removes the card share payments made to them and the card statement payments they made (on a card paid by hand those statements are owed again). The result counts each: deletedPurchases, deletedEntries, deletedDebts, deletedCardPayments, deletedSharePayments. At least one person must remain.",
     inputSchema: obj({ person: S.str("Person id or name.") }, ["person"]),
     annotations: DESTROY,
     async run(args, ctx) {
@@ -1256,12 +1312,18 @@ export const TOOLS = [
         // ödemeleri onundur, kişisiyle gider; debtId'siz ve kartsız ödeme kart payıdır)
         const payer = state.people[0].id === p.id;
         const gone = new Set(state.debts.filter(d => d?.kind !== "payment" && d?.personId === p.id).map(d => d.id));
+        const keep = d => d && d.personId !== p.id
+          && !(d.kind === "payment" && (gone.has(d.debtId) || (payer && !d.debtId && !d.cardId)));
+        // Silinen kart ekstresi ödemeleri (elle ödenen kartta o ekstreler yeniden borç olur) ve kart payı ödemeleri
+        const removed = state.debts.filter(d => d?.kind === "payment" && !d.debtId && !keep(d));
         state.people = state.people.filter(x => x.id !== p.id);
         state.installments = state.installments.filter(i => i.personId !== p.id);
         state.entries = state.entries.filter(e => e.personId !== p.id);
-        state.debts = state.debts.filter(d => d && d.personId !== p.id
-          && !(d.kind === "payment" && (gone.has(d.debtId) || (payer && !d.debtId && !d.cardId))));
-        return { deleted: { id: p.id, name: p.name }, deletedPurchases: n, deletedEntries: m, deletedDebts: gone.size };
+        state.debts = state.debts.filter(keep);
+        return {
+          deleted: { id: p.id, name: p.name }, deletedPurchases: n, deletedEntries: m, deletedDebts: gone.size,
+          deletedCardPayments: removed.filter(d => d.cardId).length, deletedSharePayments: removed.filter(d => !d.cardId).length,
+        };
       });
     },
   },
@@ -1382,9 +1444,9 @@ export const TOOLS = [
   {
     name: "list_debts",
     title: "Debts and receivables (Borçlar)",
-    description: "Like the app's Borçlar tab. totals (TRY at the current rate): cash on hand (asset balances), receivables (owed to the user; cardCredit = paid more than a card's debt), debts, total assets = cash + receivables = net worth + debts. cards: each card's debt (unpaid installments), its next statement and each person's part; autoPay is the tracked card's payment mode — for a card paid by hand also unpaid / overdue (since overdueSince), its statements (date, amount, covered = paid part, state paid / due (today) / late / open) and payments (pay_debt card=… marks a statement paid). cashInstallments: unpaid installments of cash purchases. shares: what other people owe the first person for their purchases on tracked cards (pay_debt person=… records their payment). debts: money borrowed or lent and bank loans recorded with add_debt, with what is paid and what is left (autoPay false = installments are paid by hand, overdue past their date).",
+    description: "Like the app's Borçlar tab. totals (TRY at the current rate): cash on hand (asset balances), receivables (owed to the user; cardCredit = paid more than a card's debt), debts, total assets = cash + receivables = net worth + debts. cards: each card's debt (unpaid installments), its next statement and each person's part of that debt; autoPay is the tracked card's payment mode — for a card paid by hand also unpaid / overdue (since overdueSince), its statements (date, amount, covered = paid part, state paid / due (today) / late / open) and payments (pay_debt card=… marks a statement paid). cashInstallments: unpaid installments of cash purchases. shares: what other people owe the first person for their purchases on tracked cards (pay_debt person=… records their payment). cardCredit: tracked cards paid more than their debt (a credit on the card, part of receivables; with side receivable or all). debts: money borrowed or lent and bank loans recorded with add_debt, with what is paid and what is left (autoPay false = installments are paid by hand, overdue past their date).",
     inputSchema: obj({
-      side: { type: "string", enum: ["debt", "receivable", "all"], description: '"debt" = what the user owes (borçlarım: cards, cash installments, borrowed, loans), "receivable" = what others owe the user (alacaklarım: card shares, lent). Default "all".' },
+      side: { type: "string", enum: ["debt", "receivable", "all"], description: '"debt" = what the user owes (borçlarım: cards, cash installments, borrowed, loans), "receivable" = what others owe the user (alacaklarım: card shares, lent, cardCredit). Default "all".' },
       status: { type: "string", enum: ["open", "closed", "all"], description: 'Which debts and card shares: "open" (default; also debts not started yet), "closed" (paid off or closed) or "all".' },
       person: S.str("Only this person's records (id or name): their debts, and for the first person the cards too. This person's card share is listed as well."),
       search: S.str("Case-insensitive text to look for in the other party, description, card or person name."),
@@ -1415,8 +1477,12 @@ export const TOOLS = [
         .filter(([pid]) => !person || person.id === payer || person.id === pid)
         .map(([pid, s]) => shareView(state, pid, s, today))
         .filter(v => has(v.person) && wants(v.owed ? "open" : "closed"));
-      // Kartlar ve nakit taksitler kapanmaz: yalnızca açıklarla (ya da hepsiyle) listelenir
+      // Kartlar ve nakit taksitler kapanmaz: yalnızca açıklarla (ya da hepsiyle) listelenir. Fazla ödenmiş kart (kartta artı
+      // bakiye) alacaktır: alacaklarla da listelenir (uygulamadaki Alacaklarım → Kartlar gibi; receivablesTry'ye girer)
       const owes = side !== "receivable" && status !== "closed";
+      const cardCredit = side !== "debt" && status !== "closed"
+        ? t.cards.filter(c => c.tracked && c.credit > EPS && has(c.card.name)).map(c => ({ cardId: c.card.id, card: c.card.name, credit: round(c.credit) }))
+        : [];
       const cash = B.cashDebt(state, today, person?.id);
       return {
         today,
@@ -1435,6 +1501,7 @@ export const TOOLS = [
           : null,
         // Pay ödenmemişse alacak, fazla ödenmişse kullanıcının borcu (Borçlar'daki gibi)
         shares: shares.filter(v => side === "all" || (side === "debt" ? v.owed < 0 : v.owed >= 0)),
+        cardCredit,
         debts,
         currency: "TRY",
       };
@@ -1491,7 +1558,7 @@ export const TOOLS = [
   {
     name: "update_debt",
     title: "Update debt",
-    description: "Change fields of a debt, receivable or loan; omitted fields stay as they are (changing installments keeps the total unless amount is given too). closed: a date closes it (what is left is no longer owed or expected; a loan's later installments are dropped), null reopens it. Changing person moves its payments too. The payment mode (auto_pay) cannot change once an installment between the debt's date and today exists.",
+    description: "Change fields of a debt, receivable or loan; omitted fields stay as they are (changing installments keeps the total unless amount is given too). closed: a date closes it (what is left is no longer owed or expected; a loan's later installments are dropped), null reopens it. Changing person moves its payments too. The payment mode (auto_pay) cannot change once a loan has an installment between its date and today, or a borrowed / lent debt has an installment before today.",
     inputSchema: obj({
       id: S.str("Debt id."),
       ...DEBT_FIELDS,
@@ -1507,7 +1574,11 @@ export const TOOLS = [
         // Ödeme modu geçmiş taksitler varken değişmez: ödenmiş sayılanlar gecikmiş olur ya da kaydedilen ödemeler ikinci
         // kez düşer (borc.js modeLocked)
         if (B.auto(next) !== B.auto(cur) && B.modeLocked(cur, ctx.today)) {
-          fail(`The payment mode can't change: this ${typeOf(cur) === "loan" ? "loan" : "debt"} has installments between its date (${cur.date}) and today, and switching would reinterpret them (paid ones turning overdue, or recorded payments counting twice). It stays ${B.auto(cur) ? "automatic" : "paid by hand"}${args.auto_pay === undefined ? `; pass auto_pay: ${B.auto(cur)} to keep it` : ""}. To start over, close it (closed) and add a new one from today.`);
+          // Kredide date'ten önceki taksitler takipten önce ödenmiştir (kilitlemez); kişisel borçta bugünden önceki her taksit
+          const loan = cur.kind === "loan";
+          const span = loan ? `installments between its date (${cur.date}) and today` : `an installment due before today (on ${B.schedule(cur)[0].key})`;
+          const fresh = loan ? "a new one from today (date today: earlier installments count as paid before)" : "a new one for what is left, with its due date today or later";
+          fail(`The payment mode can't change: this ${loan ? "loan" : "debt"} has ${span}, and switching would reinterpret them (paid ones turning overdue, or recorded payments counting twice). It stays ${B.auto(cur) ? "automatic" : "paid by hand"}${args.auto_pay === undefined ? `; pass auto_pay: ${B.auto(cur)} to keep it` : ""}. To start over, close it (closed) and add ${fresh}.`);
         }
         // Ödemeler borcun sahibinindir: sahibi değişince aynı kayıtta onlar da taşınır
         state.debts = state.debts.map(x => (x?.id === cur.id ? next
@@ -1906,5 +1977,5 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
-- Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A debt's mode cannot change once it has an installment between its date and today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while a payment is ahead of the statements due. Don't change a mode unless the user asks.
+- Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments made ahead of the statements due would stop counting; a card cannot switch to paid by hand on a day a card payment is dated. Don't change a mode unless the user asks.
 - Reply to the user in their language (the app is Turkish).`;

@@ -494,7 +494,10 @@
           </label>
           <label class="check" id="cardAutoRow"><input type="checkbox" name="autoPay" checked /><span>Son ödeme günü geçince ödendi say</span></label>
           <div class="preview" id="trackPreview" aria-live="polite"></div>
-          <button type="button" class="link" id="cardDebtLink" hidden>Borçlar'da gör ›</button>
+          <div class="card-links">
+            <button type="button" class="link" id="cardPaysLink" hidden>Ekstre ödemeleri ›</button>
+            <button type="button" class="link" id="cardDebtLink" hidden>Borçlar'da gör ›</button>
+          </div>
         </div>
         <div class="field" id="termField" hidden>
           <span class="field-label">Arada kalan harcamalar</span>

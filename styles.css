@@ -1723,3 +1723,6 @@ a.hero-eq { display: block; width: fit-content; }
 .field .track-since input[type="date"] { flex: 1; min-width: 0; max-width: 220px; }
 .card-track .link { align-self: flex-start; border: none; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-2); }
 .card-track .link:hover { color: var(--text); }
+/* Kart formunun bağlantıları yan yana (Ekstre ödemeleri, Borçlar'da gör); ikisi de gizliyse yer kaplamaz */
+.card-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.card-links:not(:has(> :not([hidden]))) { display: none; }

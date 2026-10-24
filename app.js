@@ -346,7 +346,7 @@ const els = {
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"), cardColors: $("cardColors"),
   cardDebt: $("cardDebt"), trackSinceRow: $("trackSinceRow"), cardAutoRow: $("cardAutoRow"), trackPreview: $("trackPreview"),
-  cardDebtLink: $("cardDebtLink"),
+  cardDebtLink: $("cardDebtLink"), cardPaysLink: $("cardPaysLink"),
   termField: $("termField"), termNote: $("termNote"), termChoices: $("termChoices"),
   eventSheet: $("eventSheet"), eventTitle: $("eventTitle"), eventDate: $("eventDate"), eventSplit: $("eventSplit"),
   eventItems: $("eventItems"), eventToFlow: $("eventToFlow"), eventState: $("eventState"), eventOk: $("eventOk"), eventPay: $("eventPay"),
@@ -497,7 +497,7 @@ function renderCategories(idx) {
 
 // Kart / nakit ödemeleri ve borç / kredi ödemeleri tarih sırasıyla, ilk 4'ü; gecikmişler en üstte. Elle ödenen kartın
 // ekstreleri borc.js'ten: ödenmiş ya da önceden ödenmiş olan düşer, ödenmemiş geçmiş ekstre "gecikti" ile kalır, ileriki
-// ekstrenin kapanmamış kısmı
+// ekstrenin kapanmamış kısmı (süresiz tekrarların ileriki tekrarları dahil: until ufku)
 function renderUpcoming(last) {
   const today = T.todayKey();
   const from = todayIndex();
@@ -505,15 +505,15 @@ function renderUpcoming(last) {
   const all = last >= from
     ? T.buildCashflow(state.people, state.cards, state.installments, from, Math.min(last, from + 24)).flatMap(m => m.events)
     : [];
-  const manual = new Map(state.cards.filter(manualCard).map(c => [c.id, B.cardDebt(state, c, today)]));
-  const events = all.filter(e => e.date >= today && !(manual.has(e.cardId) && e.date >= manual.get(e.cardId).manualFrom));
+  const manual = new Map(state.cards.filter(manualCard).map(c => [c.id, { card: c, cs: B.cardState(state, c, today, undefined, until) }]));
+  const events = all.filter(e => e.date >= today && !(manual.has(e.cardId) && e.date >= manual.get(e.cardId).cs.manualFrom));
   const cards = [];
-  for (const cd of manual.values()) {
-    for (const x of cd.statements) {
+  for (const { card: c, cs } of manual.values()) {
+    for (const x of cs.statements) {
       const open = x.amount - x.covered;
       if (x.auto || x.state === "paid" || open <= EPS || x.key > until) continue;
-      const ev = all.find(e => e.cardId === cd.card.id && e.date === x.key);
-      cards.push({ date: x.key, late: x.state === "late", card: { cd, x, open, ev } });
+      const ev = all.find(e => e.cardId === c.id && e.date === x.key);
+      cards.push({ date: x.key, late: x.state === "late", card: { card: c, x, open, ev } });
     }
   }
   const debts = B.paymentsDue(state, today, today, until).filter(f => !f.paid);
@@ -542,8 +542,7 @@ function renderUpcoming(last) {
 
 // Elle ödenen kartın ekstresi (Sıradaki ödemeler, ödeme satırı düzeninde): kapanmamış tutar; ödemesi gelmişse (gecikmiş ya
 // da bugün) dokununca kartın ödeme formu, ileriki ekstrede ekstrenin ayrıntısı
-function cardDueRow({ cd, x, open, ev }, today) {
-  const c = cd.card;
+function cardDueRow({ card: c, x, open, ev }, today) {
   const li = el("li", "pay clickable");
   li.tabIndex = 0;
   li.setAttribute("role", "button");
@@ -627,7 +626,7 @@ function renderTimeline(start) {
     if (!payDays.has(date)) payDays.set(date, []);
     payDays.get(date).push(x);
   };
-  const statements = manualStatements(today);   // elle ödenen kartta ekstrenin durumu (işarette ödendi / ödenmedi)
+  const statements = manualStatements(today, to);   // elle ödenen kartta ekstrenin durumu (işarette ödendi / ödenmedi)
   for (const m of T.buildCashflow(state.people, state.cards, state.installments, T.parseDate(from).idx, T.parseDate(to).idx)) {
     for (const ev of m.events) if (ev.cardId && inPeriod(ev.date)) mark(ev.date, { ev, st: statements.get(`${ev.cardId}|${ev.date}`) });
   }
@@ -934,7 +933,7 @@ function openEventSheet(ev) {
   els.eventTitle.replaceChildren(cardMark(ev.cardId), document.createTextNode(ev.cardId ? `${cardName(ev.cardId)} ödemesi` : "Nakit ödemeler"));
   els.eventDate.textContent = `${WEEKDAYS[T.toDate(ev.date).getDay()]}, ${fmtDay(ev.date)} · ${relDays(ev.date, today)}`;
   const card = cardById(ev.cardId);
-  const x = manualCard(card) ? B.cardState(state, card, today).statements.find(y => y.key === ev.date && !y.auto) : null;
+  const x = manualCard(card) ? B.cardState(state, card, today, undefined, ev.date).statements.find(y => y.key === ev.date && !y.auto) : null;
   const text = x ? statementText(x, today) : "";
   els.eventState.hidden = !text;
   els.eventState.textContent = text;
@@ -1953,14 +1952,15 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
 
 // ---------- Kartlar ----------
 // Limitten kullanılan (borc.js cardUsed: takipteki kartta ödenmemiş geçmiş ekstreler dahil, ön ödeme düşülmüş) ve sıradaki
-// ödeme; elle ödenen kartta ödenmemiş ekstreler varsa onlar (late: gecikmiş), yoksa sıradaki ekstrenin kapanmamış kısmı
+// ödeme; elle ödenen kartta ödenmemiş ekstreler varsa onlar (late: gecikmiş var; overdue: gecikmiş kısım, kutuda yalnızca
+// o yazar), yoksa sıradaki ekstrenin kapanmamış kısmı
 function cardStats(c) {
   const today = T.todayKey();
   if (manualCard(c)) {
     const cd = B.cardDebt(state, c, today);
     const due = cd.unpaid > EPS;
     return { used: B.cardUsed(state, c, today), next: due ? cd.overdueSince ?? today : cd.next?.date ?? null,
-      nextTotal: due ? cd.unpaid : cd.next?.amount ?? 0, late: cd.overdue > EPS };
+      nextTotal: due ? cd.unpaid : cd.next?.amount ?? 0, late: cd.overdue > EPS, overdue: cd.overdue };
   }
   const known = new Set(state.people.map(p => p.id));
   const pays = state.installments
@@ -2007,7 +2007,8 @@ function cardTile(c, stats, tag = "button") {
   const foot = el("div", "cc-foot");
   foot.append(
     el("span", "", c.limit > 0 ? `${fmtShort(stats.used)} / ${fmtShort(c.limit)} kullanıldı` : "Limit girilmedi"),
-    el("span", "", stats.late ? `${fmt(stats.nextTotal)} gecikti` : stats.next ? `${fmtDayShort(stats.next)} · ${fmt(stats.nextTotal)}` : "Bekleyen ödeme yok"));
+    el("span", "", stats.late ? `${fmt(stats.overdue)} gecikti`   // yalnızca gecikmiş kısım; bugün ödenecek satırlarda ayrı
+      : stats.next ? `${fmtDayShort(stats.next)} · ${fmt(stats.nextTotal)}` : "Bekleyen ödeme yok"));
   bottom.append(foot);
 
   const chipRow = el("div", "cc-chiprow");
@@ -2304,15 +2305,25 @@ function statementText(x, today) {
   return x.state === "due" ? `${fmt(open)} bugün ödenecek` : "";
 }
 
+// Elle ödenen kartın ödemesi gelmiş tutarı (borc.js cardDebt): gecikmiş ekstreler ve bugün ödenecek ekstre ayrı
+// ("₺2.000,00 ödenmedi · 31 gün gecikti", "₺3.000,00 bugün ödenecek")
+function unpaidTexts({ unpaid, overdue, overdueSince }, today) {
+  const out = [];
+  if (overdue > EPS) out.push(`${fmt(overdue)} ödenmedi · ${lateDays(overdueSince, today)} gün gecikti`);
+  if (unpaid - overdue > EPS) out.push(`${fmt(unpaid - overdue)} bugün ödenecek`);
+  return out;
+}
+
 // İşaretteki rozet: elle ödenen kartın ekstresi ödendi mi (ileriki açık ekstrede yok)
 function stateTag(x) { return !x ? "" : x.state === "paid" ? "ödendi" : x.state === "late" || x.state === "due" ? "ödenmedi" : ""; }
 
-// Elle ödenen kartların elle moddaki ekstreleri: "kart|son ödeme günü" → ekstre ({ key, amount, covered, state })
-function manualStatements(today) {
+// Elle ödenen kartların elle moddaki ekstreleri: "kart|son ödeme günü" → ekstre ({ key, amount, covered, state }); until:
+// ileriki ekstrelerde süresiz tekrarların o güne kadarki tekrarları
+function manualStatements(today, until) {
   const out = new Map();
   for (const c of state.cards) {
     if (!manualCard(c)) continue;
-    for (const x of B.cardState(state, c, today).statements) if (!x.auto) out.set(`${c.id}|${x.key}`, x);
+    for (const x of B.cardState(state, c, today, undefined, until).statements) if (!x.auto) out.set(`${c.id}|${x.key}`, x);
   }
   return out;
 }
@@ -2394,10 +2405,11 @@ function debtPayRow(f, today, { relative = false } = {}) {
 }
 
 // Bu ay bugün ve sonrasında ödenecekler, TL: kart ekstreleri, nakit taksitler (bugünkü ödenmiştir) ve borç / kredi
-// taksitleri. Elle ödenen kartta borc.js'in ekstreleri: ödenmemiş geçmiş ekstreler dahil, ödenmiş kısımlar hariç
+// taksitleri. Elle ödenen kartta borc.js'in ekstreleri: ödenmemiş geçmiş ekstreler dahil, ödenmiş kısımlar hariç; süresiz
+// tekrarların ay sonuna kadarki tekrarları dahil
 function dueThisMonth(today, r) {
   const idx = T.parseDate(today).idx, end = T.dateKey(idx, 31);
-  const manual = new Map(state.cards.filter(manualCard).map(c => [c.id, B.cardState(state, c, today)]));
+  const manual = new Map(state.cards.filter(manualCard).map(c => [c.id, B.cardState(state, c, today, undefined, end)]));
   let total = 0;
   for (const m of T.buildCashflow(state.people, state.cards, state.installments, idx, idx)) {
     for (const ev of m.events) {
@@ -2569,12 +2581,12 @@ function debtRow({ id, mark, title, meta = [], progress, amount, amountCls = "",
   return row;
 }
 
-// Satır içi "Ödendi" (borç, alacak, kredi, kart, kart payı); aria ne yapıldığını söyler
-function rowAction(label, aria, run) {
+// Satır içi "Ödendi" (borç, alacak, kredi, kart, kart payı) ya da kartın "Ödemeler"i; aria ne yapıldığını söyler
+function rowAction(label, aria, run, ic = "check") {
   const b = el("button", "btn btn-ghost sm debt-act");
   b.type = "button";
   b.setAttribute("aria-label", aria);
-  b.append(icon("check"), el("span", "", label));
+  b.append(icon(ic), el("span", "", label));
   b.addEventListener("click", e => { e.stopPropagation(); run(); });
   return b;
 }
@@ -2614,10 +2626,8 @@ function progressBar(done, total, text) {
 function cardDebtRow(cd, payer, today) {
   const c = cd.card;
   const meta = [];
-  if (cd.manual && cd.overdue > EPS) {
-    meta.push(el("span", "out-text", `${fmt(cd.unpaid)} ödenmedi · ${lateDays(cd.overdueSince, today)} gün gecikti`));
-  } else if (cd.manual && cd.unpaid > EPS) {
-    meta.push(`${fmt(cd.unpaid)} bugün ödenecek`);
+  if (cd.manual && cd.unpaid > EPS) {
+    meta.push(...unpaidTexts(cd, today).map((text, i) => (i === 0 && cd.overdue > EPS ? el("span", "out-text", text) : text)));
   } else if (cd.next) {
     meta.push(`${cd.next.cut ? "Ekstre" : "Dönem içi"} ${fmt(cd.next.amount)} · son ödeme ${fmtDayShort(cd.next.date)}`
       + (cd.next.cut ? " (kesildi)" : ""));
@@ -2629,6 +2639,8 @@ function cardDebtRow(cd, payer, today) {
   const acts = [];
   if (cd.manual && (cd.unpaid > EPS || cd.next?.cut)) {
     acts.push(rowAction("Ödendi", `${c.name} ekstresini ödendi olarak işaretle`, () => openPaySheet({ cardId: c.id })));
+  } else if (cd.manual && cardPayments(c.id).length) {
+    acts.push(payListAction(c));
   }
   return debtRow({
     id: `debt-card-${c.id}`, mark: markOf(cardMark(c.id)), title: c.name, meta, amount: fmt(cd.total),
@@ -2636,12 +2648,18 @@ function cardDebtRow(cd, payer, today) {
   });
 }
 
-// Fazla ödenmiş kart (Alacaklarım): kartta artı bakiye
+// Elle ödenen kartın ödemeleri (ödemesi gelen ekstre yokken de): kartın ödeme formu, altta önceki ödemeler
+function payListAction(c) {
+  return rowAction("Ödemeler", `${c.name} ekstre ödemeleri`, () => openPaySheet({ cardId: c.id }), "receipt");
+}
+
+// Fazla ödenmiş kart (Alacaklarım): kartta artı bakiye; elle ödenen kartta ödemeleri (fazlası silinebilsin)
 function cardCreditRow(cd) {
   const c = cd.card;
+  const acts = cd.manual && cardPayments(c.id).length ? [payListAction(c)] : [];
   return debtRow({
     id: `credit-card-${c.id}`, mark: markOf(cardMark(c.id)), title: c.name, meta: ["kartta artı bakiye"],
-    amount: fmt(cd.credit), amountCls: "in", open: () => openCardSheet(c),
+    amount: fmt(cd.credit), amountCls: "in", open: () => openCardSheet(c), acts,
   });
 }
 
@@ -3529,11 +3547,12 @@ function readTrack() {
 // ödenmiş sayılan ekstreler ve kart ödemeleri), düşülen ekstre sayısı (n), ödenmemiş ekstreler (unpaid, late: günü
 // geçmiş kapanmamış ekstreler) ve diğer kişilerin takipten sonraki taksitleri (shares: alacak)
 function trackEffect(card, today) {
-  const out = { D: 0, n: 0, unpaid: 0, late: [], shares: {}, from: B.since(card, today), manual: false, manualFrom: null };
+  const out = { D: 0, n: 0, unpaid: 0, overdue: 0, overdueSince: null, late: [], shares: {}, from: B.since(card, today), manual: false, manualFrom: null };
   if (!card || !B.tracked(card)) return out;
   const cs = B.cardState(state, card, today);
   const payer = state.people[0]?.id;
-  Object.assign(out, { D: cs.deduction, unpaid: cs.unpaid, manual: B.manual(card), manualFrom: cs.manualFrom });
+  Object.assign(out, { D: cs.deduction, unpaid: cs.unpaid, overdue: cs.overdue, overdueSince: cs.overdueSince,
+    manual: B.manual(card), manualFrom: cs.manualFrom });
   out.n = cs.statements.filter(x => x.auto || x.covered > EPS).length;
   out.late = cs.statements.filter(x => x.state === "late");
   for (const x of cs.lines) if (x.personId !== payer) out.shares[x.personId] = (out.shares[x.personId] || 0) + x.amount;
@@ -3552,11 +3571,11 @@ function renderCardTrack(existing) {
   const cd = existing ? B.cardDebt(state, existing, today) : null;
   els.cardDebt.hidden = !cd;
   els.cardDebtLink.hidden = !(cd?.total > EPS);
+  // Elle ödenen kartın ödemeleri (ön ödemeyi silmek için de): kartın ödeme formu
+  els.cardPaysLink.hidden = !(manualCard(existing) && cardPayments(existing.id).length);
   if (cd) {
     const parts = [];
-    if (cd.manual && cd.unpaid > EPS) {
-      parts.push(`${fmt(cd.unpaid)} ödenmedi` + (cd.overdue > EPS ? ` · ${lateDays(cd.overdueSince, today)} gün gecikti` : " · bugün ödenecek"));
-    }
+    if (cd.manual && cd.unpaid > EPS) parts.push(...unpaidTexts(cd, today));
     if (cd.next && !(cd.manual && cd.unpaid > EPS && cd.next.date <= today)) {
       parts.push(cd.next.cut ? `Bu ekstre ${fmt(cd.next.amount)} · ${fmtDayShort(cd.next.date)} (kesildi)`
         : `Dönem içi ${fmt(cd.next.amount)} · ${fmtDayShort(cd.next.date)}`);
@@ -3583,12 +3602,17 @@ function renderCardTrack(existing) {
     return;
   }
   const b = trackEffect(existing, today);
-  const a = trackEffect(withTracking(existing, track, today), today);
+  const after = withTracking(existing, track, today);
+  const a = trackEffect(after, today);
   const tracked = B.tracked(existing);
-  // Elleden otomatiğe: ödemesi gelmemiş ekstreleri aşan ön ödeme önceki ekstrelerde erirdi (borc.js cardPrepaid)
-  const prepaid = on && track.auto && b.manual ? B.cardPrepaid(state, existing, today) : 0;
+  // Elleden otomatiğe: ön ödeme önceki ekstrelerde eriyecekse (R3) ya da otomatikten elleye bugün, bugün ödeme varken
+  const prepaid = autoPrepaid(existing, track, today);
   if (prepaid > EPS) {
-    line(`Kartta ${fmt(prepaid)} ön ödeme var; otomatiğe dönmek için önce ön ödemeyi sil.`, "warn");
+    line(prepaidText(existing, prepaid) + ".", "warn");
+    return;
+  }
+  if (manualTodayBlocked(existing, track, today)) {
+    line(`${PAID_TODAY}.`, "warn");
     return;
   }
   const sum = list => list.reduce((s, x) => s + x.amount - x.covered, 0);
@@ -3611,18 +3635,40 @@ function renderCardTrack(existing) {
     else if (d < -EPS) lines.push(`${nameWith(p.name, "in")} ${fmt(-d)} payı alacaktan çıkar`);
   }
   if (tracked && !on) lines.push("kartın borcu toplam borca girmez");
-  if (!tracked && on && cd.total > EPS) lines.push(`kartın borcu (${fmt(cd.total)}) toplam borca girer`);
+  // Yeniden takipte borç takibin başından (elle modda ödenmemiş geçmiş ekstreler dahil, kart ödemeleri düşülmüş)
+  const total = !tracked && on ? B.cardDebt(state, after, today).total : 0;
+  if (total > EPS) lines.push(`kartın borcu (${fmt(total)}) toplam borca girer`);
   if (lines.length) line(lines.join("; "));
   else if (tracked !== on || (on && a.from !== b.from)) line("Bu tarihler arasında ekstre yok; bakiye ve alacak değişmez.");
   else if (on && a.manual) {
     line(`${fmtDay(a.manualFrom)} tarihinden beri ekstreler Ödendi işaretlenince TL bakiyenden düşer.`);
-    if (a.unpaid > EPS) line(`${fmt(a.unpaid)} ödenmedi` + (a.late.length ? ` · ${lateDays(a.late[0].key, today)} gün gecikti` : " · bugün ödenecek"), a.late.length ? "warn" : "");
+    if (a.unpaid > EPS) line(unpaidTexts(a, today).join(" · "), a.late.length ? "warn" : "");
   } else if (on) {
     line(a.n ? `${fmtDay(a.from)} tarihinden beri ${a.n} ekstre (${fmt(a.D)}) TL bakiyenden düştü.`
       : `Ekstreler ${fmtDay(a.from)} tarihinden beri son ödeme gününün ertesi günü TL bakiyenden düşer.`);
   } else {
     line("Takip dışı: ekstreler TL bakiyenden düşmez, kartın borcu toplam borca girmez.");
   }
+}
+
+// Elleden otomatiğe dönüşte önceki ekstrelerde eriyecek ön ödeme (borc.js cardPrepaid; R3). Takip dışıyken elle kalmış
+// kart da yeniden takibe otomatik alınırken denetlenir: kart formdaki başlangıç gününden takipte sayılır.
+function autoPrepaid(card, { on, since, auto }, today) {
+  if (!card || !on || !auto || !B.manual(card)) return 0;
+  return B.cardPrepaid(state, { ...card, trackOff: false, trackSince: since }, today);
+}
+function prepaidText(card, prepaid) {
+  return `Otomatiğe dönersen kartın ${fmt(prepaid)} ön ödemesi ödenmiş sayılan önceki ekstrelerde erir. Önce `
+    + (B.tracked(card) ? "ön ödemeyi sil" : "kartı elle ödemeyle takibe al ve ön ödemeyi sil");
+}
+
+// Otomatikten elle moda bugün geçiş (withTracking'de manualSince bugün) kartta bugün tarihli ödeme varken engellenir: o
+// ödeme, bugüne kadar ödenmiş sayılan ekstrelerde erimişken ikinci kez düşerdi (borc.js cardPaidToday). Takip başlıyor ya
+// da başlangıç günü değişiyorsa elle mod takibin başından (R2): engel yok.
+const PAID_TODAY = "Bugün bu karta ödeme kaydedildi; elle moda yarın geçebilirsin";
+function manualTodayBlocked(card, { on, since, auto }, today) {
+  return !!card && on && !auto && B.tracked(card) && !B.manual(card) && B.since(card, today) === since
+    && B.cardPaidToday(state, card, today);
 }
 
 // Formdaki takip ve ödeme şekli karta yazılır: takip açıksa başlangıç günü (trackOff kalkar), kapalıysa trackOff
@@ -3724,11 +3770,17 @@ els.cardForm.addEventListener("submit", e => {
     toast(track.since ? "Takip tarihi bugünden sonra olamaz" : "Takibin başladığı günü gir");
     return;
   }
-  // Elleden otomatiğe dönüş: ödemesi gelmemiş ekstreleri aşan ön ödeme varsa engellenir (R3)
-  const prepaid = before && track.on && track.auto && manualCard(before) ? B.cardPrepaid(state, before, today) : 0;
+  // Elleden otomatiğe dönüş: ön ödeme önceki ekstrelerde eriyecekse engellenir (R3; takip dışından otomatik takibe de)
+  const prepaid = autoPrepaid(before, track, today);
   if (prepaid > EPS) {
     f.autoPay.focus();
-    toast(`Kartta ${fmt(prepaid)} ön ödeme var; otomatiğe dönmek için önce ön ödemeyi sil`);
+    toast(prepaidText(before, prepaid));
+    return;
+  }
+  // Otomatikten elleye bugün geçiş: kartta bugün ödeme varsa ikinci kez düşerdi
+  if (manualTodayBlocked(before, track, today)) {
+    f.autoPay.focus();
+    toast(PAID_TODAY);
     return;
   }
   if (!v.last4) delete v.last4;
@@ -3773,6 +3825,14 @@ els.cardDelete.addEventListener("click", () => {
 });
 
 els.addCard.addEventListener("click", () => openCardSheet());
+
+// Elle ödenen kartın ekstre ödemeleri: kartın ödeme formu (önceki ödemeler altta; düzenlenir, silinir)
+els.cardPaysLink.addEventListener("click", () => {
+  const id = editingCardId;
+  els.cardSheet.close();
+  editingCardId = null;
+  openPaySheet({ cardId: id });
+});
 
 // Kartın borcu Borçlar'da: Borçlarım'da kartın satırına kaydırılır
 els.cardDebtLink.addEventListener("click", () => {
@@ -4110,6 +4170,14 @@ function collectDebt() {
   return { d, errors, type, plan, per, count };
 }
 
+// Ödeme şekli kilidi (borc.js modeLocked): geçmiş taksiti olan kayıtta otomatik / elle değişmez
+function modeLockText(d) {
+  return `${d.count > 1 || d.kind === "loan" ? "Geçmiş taksitleri olduğu" : "Vadesi geçtiği"} için ödeme şekli değiştirilemez`;
+}
+function modeChangeText(d) {
+  return `${modeLockText(d)} (vadesiz kayıt elle ödenir). Vadeyi geri gir ya da kaydı kapatıp yenisini ekle.`;
+}
+
 function updateDebtForm() {
   const { d, errors, type, plan, per, count } = collectDebt();
   const f = els.debtForm.elements;
@@ -4137,7 +4205,7 @@ function updateDebtForm() {
   els.debtAutoText.textContent = plan ? "Taksitler tarihinde ödenmiş sayılsın" : "Vadesinde ödenmiş sayılsın";
   f.autoPay.disabled = locked;
   els.debtAutoNote.hidden = !locked || els.debtAutoRow.hidden;
-  els.debtAutoNote.textContent = locked ? `${editing.count > 1 || editing.kind === "loan" ? "Geçmiş taksitleri olduğu" : "Vadesi geçtiği"} için ödeme şekli değiştirilemez.` : "";
+  els.debtAutoNote.textContent = locked ? `${modeLockText(editing)}.` : "";
   els.debtMovedRow.hidden = loan;
   els.debtPrincipalField.hidden = !loan;
   els.debtMovedText.textContent = lent ? "Para varlığımdan çıktı" : "Para varlığıma girdi";
@@ -4163,6 +4231,11 @@ function updateDebtForm() {
   els.debtSum.replaceChildren();
   if (errors.includes("principal")) box.append(el("div", "warn", "Çekilen tutar geri ödenecek toplamdan büyük olamaz."));
   if (errors.some(e => ["amount", "count", "first", "date", "principal"].includes(e))) return;
+  // Kilitli kayıt vadesiz olursa da ödeme şekli değişir (geçmiş taksitler başka sayılırdı): kaydedilmez
+  if (locked && B.auto(d) !== B.auto(editing)) {
+    box.append(el("div", "warn", modeChangeText(editing)));
+    return;
+  }
 
   const items = B.schedule(d);
   const auto = B.auto(d);
@@ -4320,6 +4393,13 @@ function saveDebt(closed) {
     f[errors[0]]?.focus?.();
     return;
   }
+  // Ödeme şekli kilidi: tek sefere / vadesize geçişle de aşılmaz (kaydedilen kayıt d'nin kendisi; MCP update_debt gibi)
+  const cur = editingDebtId ? state.debts.find(x => x.id === editingDebtId) : null;
+  if (cur && B.modeLocked(cur, T.todayKey()) && B.auto(d) !== B.auto(cur)) {
+    els.debtPreview.replaceChildren(el("div", "warn", modeChangeText(cur)));
+    els.debtPlanRow.open = true;
+    return;
+  }
   if (closed !== undefined) {
     if (closed) d.closed = closed; else delete d.closed;
   }
@@ -4372,7 +4452,8 @@ confirmTap(els.debtDelete, () => {
 // Hedef: borcun ödemesi, alacağın tahsilatı, kredinin ödemesi (otomatikte ara ödeme: sondaki taksitlerden düşer) —
 // { debtId } —, kişinin kart payı ödemesi — { personId }; TL, ilk kişinin varlığına girer — ya da elle ödenen kartın ekstre
 // ödemesi — { cardId, key? } (key: seçilen ekstrenin son ödeme günü); TL, ilk kişinin varlığından çıkar. Tutar
-// kısayolları, tarih (en geç bugün; en erken kaydın tarihi, kartta elle ödemenin başladığı gün: düzenlemede de), not;
+// kısayolları, tarih (en geç bugün; en erken kaydın tarihi, kartta elle ödemenin başladığı gün: düzenlemede de, daha önceki
+// ödeme kendi gününde kalabilir), not;
 // borçta "Bu ödemeyle kapat". Önizleme: kalan (kartta ödenmemiş) ve bakiye önce / sonra, fazla ödeme. Altta önceki
 // ödemeler: dokununca düzenlenir, Sil ile (iki dokunuş) silinir.
 
@@ -4453,6 +4534,8 @@ function cardPayInfo(target, today, base) {
   const pick = target.key ? list.find(x => x.key === target.key) : null;
   const cur = pick ?? unpaid[unpaid.length - 1] ?? cut;
   const upTo = pick ? list.filter(x => x.key <= pick.key).reduce((s, x) => s + openOf(x), 0) : 0;
+  // Ödenen ekstre(ler): seçilen ekstreye kadar, yoksa ödemesi gelenler, yoksa kesilmiş sıradaki (önerilen tutar)
+  const owed = upTo > EPS ? upTo : cd.unpaid > EPS ? cd.unpaid : cut ? openOf(cut) : 0;
   // Kartta payı olan, henüz ödemeyen diğer kişiler: kendi payını sana ödediyse o kart payı ödemesidir
   const others = [...B.shares(base, today).values()].filter(s => s.person && s.byCard[c.id] > EPS && s.remaining > EPS)
     .map(s => s.person.name);
@@ -4460,22 +4543,22 @@ function cardPayInfo(target, today, base) {
   return {
     card: c, cd, code: "TRY", owner: payer.id, remaining: cd.total, min: cd.manualFrom ?? "",
     pay: { personId: payer.id, cardId: c.id },
-    prefill: upTo > EPS ? upTo : cd.unpaid > EPS ? cd.unpaid : cut ? openOf(cut) : 0,
+    prefill: owed,
     chips: payChipList([["Bu ekstre", cur ? openOf(cur) : 0], ["Ödemesi gelen", cd.unpaid]]),
     due: cur && cur.key <= today ? cur.key : null,
     note: cur && list.some(x => x.key < cur.key) ? "Önceki ödenmemiş ekstreler önce kapanır." : "",
     hint: names ? `${names} kendi ${others.length > 1 ? "paylarını" : "payını"} sana ödediyse Alacaklarım'dan Ödendi ile ekle.` : "",
     title: `${c.name} ekstresi`,
-    done: x => `${c.name} ekstresi ödendi · ${fmt(x)}`,
+    done: x => (owed <= EPS ? `${c.name} kartına ${fmt(x)} ödeme eklendi`
+      : x + EPS < owed ? `${c.name} ekstresi kısmen ödendi · kalan ${fmt(owed - x)}` : `${c.name} ekstresi ödendi · ${fmt(x)}`),
     pays: cardPayments(c.id),
   };
 }
 
 // Kartın ödeme formundaki durum: ödenmemiş (gecikmiş ya da bugün) ya da sıradaki ekstre, kart borcu ya da artı bakiye
 function cardPayStatus(cd, today) {
-  return [cd.overdue > EPS ? `${fmt(cd.unpaid)} ödenmedi · ${lateDays(cd.overdueSince, today)} gün gecikti`
-    : cd.unpaid > EPS ? `${fmt(cd.unpaid)} bugün ödenecek`
-    : cd.next && `${cd.next.cut ? "ekstre" : "dönem içi"} ${fmt(cd.next.amount)} · son ödeme ${fmtDayShort(cd.next.date)}`,
+  return [...(cd.unpaid > EPS ? unpaidTexts(cd, today)
+    : [cd.next && `${cd.next.cut ? "ekstre" : "dönem içi"} ${fmt(cd.next.amount)} · son ödeme ${fmtDayShort(cd.next.date)}`]),
   cd.total < -EPS ? `${fmt(-cd.total)} fazla ödendi (kartta artı bakiye)` : `kart borcu ${fmt(Math.max(cd.total, 0))}`];
 }
 
@@ -4495,6 +4578,14 @@ function renderPayChips(info) {
     b.title = money(v, info.code);
     return b;
   }));
+}
+
+// Ödeme günü en erken günden (min) önce olamaz; düzenlenen ödeme zaten önceyse (kartta önceki elle dönemden kalan) kendi
+// gününde kalabilir: E'den önceki ödeme max(A, Pb)'de erimiştir, E'ye taşınırsa ikinci kez düşerdi
+function payDateOk(info, date) {
+  if (!info.min || date >= info.min) return true;
+  const orig = editingPayId ? state.debts.find(y => y.id === editingPayId) : null;
+  return orig?.date === date;
 }
 
 function openPaySheet(target, payment) {
@@ -4518,7 +4609,7 @@ function openPaySheet(target, payment) {
   f.elements.amount.value = amount > EPS ? amountText(V.round(amount, info.code), a.digits) : "";
   f.elements.date.value = payment?.date ?? today;
   f.elements.date.max = today;
-  f.elements.date.min = info.min;
+  f.elements.date.min = payment && info.min && payment.date < info.min ? payment.date : info.min;
   f.elements.desc.value = payment?.desc ?? "";
   // Kapanmış borcun ödemesi düzenlenirken kutu işaretli gelir: kaldırılırsa borç yeniden açılır (kalan sessizce silinmesin)
   els.payCloseRow.hidden = !info.d || (!!payment && !info.st.closed);
@@ -4597,7 +4688,7 @@ function updatePayForm() {
     .filter(Boolean).join(" · ");
   if (!(amount > 0) || !T.parseDate(date)) return;
   if (date > today) { box.append(el("div", "warn", "Ödeme tarihi bugünden sonra olamaz.")); return; }
-  if (info.min && date < info.min) { box.append(el("div", "warn", `Ödeme ${fmtDay(info.min)} öncesine girilemez.`)); return; }
+  if (!payDateOk(info, date)) { box.append(el("div", "warn", `Ödeme ${fmtDay(info.min)} öncesine girilemez.`)); return; }
 
   // Kaydedilince: kalan (kartta ödenmemiş ekstreler ya da kart borcu) ve sahibinin bakiyesi
   const x = { id: editingPayId ?? "yeni", kind: "payment", ...info.pay, amount, date };
@@ -4656,7 +4747,7 @@ els.payForm.addEventListener("submit", e => {
   if (!info) { els.paySheet.close(); return; }
   const amount = V.round(parseAmount(f.amount.value), info.code);
   const date = T.parseDate(f.date.value) ? f.date.value : "";
-  const bad = !(amount > 0) ? "amount" : !date || date > today || (info.min && date < info.min) ? "date" : null;
+  const bad = !(amount > 0) ? "amount" : !date || date > today || !payDateOk(info, date) ? "date" : null;
   f.amount.classList.toggle("invalid", bad === "amount");
   f.date.classList.toggle("invalid", bad === "date");
   if (bad) {
