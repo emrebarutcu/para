@@ -7,10 +7,10 @@ const NOW = () => new Date("2026-10-18T09:00:00Z");
 const ORIGIN = "https://cashfollow.app";
 
 // Bellekte Supabase: auth/v1/user ve kullanılan PostgREST uçları (RLS: yalnızca token sahibinin satırları)
-const DATA = ["people", "cards", "purchases", "entries"];
+const DATA = ["people", "cards", "purchases", "entries", "debts"];
 const RATES = { USD: { Selling: 40 }, EUR: { Selling: 45 }, GRA: { Selling: 4000 }, Update_Date: "2026-10-18 12:00:00" };
 function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { id: "u2", email: "x@y.z" } } } = {}) {
-  const db = { people: [], cards: [], purchases: [], entries: [], inbox_messages: [], inbox_addresses: [] };
+  const db = { people: [], cards: [], purchases: [], entries: [], debts: [], inbox_messages: [], inbox_addresses: [] };
   const rates = { down: false };
   let clock = 0;
   const stamp = () => new Date(Date.UTC(2026, 9, 18, 9, 0, 0, ++clock)).toISOString().replace("Z", "+00:00");
@@ -60,13 +60,13 @@ function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { i
     if (method === "POST" && DATA.includes(table)) {
       for (const row of body) {
         if (row.user_id !== user.id) return reply({ message: "rls" }, 403);
-        if ((table === "purchases" || table === "entries") && !db.people.some(x => x.user_id === user.id && x.id === row.person_id)) return reply({ code: "23503" }, 409);
+        if ((table === "purchases" || table === "entries" || table === "debts") && !db.people.some(x => x.user_id === user.id && x.id === row.person_id)) return reply({ code: "23503" }, 409);
         if (table === "purchases" && row.card_id && !db.cards.some(x => x.user_id === user.id && x.id === row.card_id)) return reply({ code: "23503" }, 409);
       }
       for (const row of body) {
         const cur = rows.find(x => x.user_id === user.id && x.id === row.id);
         if (cur) Object.assign(cur, row, { updated_at: stamp() });
-        else { const at = stamp(); rows.push({ ...row, created_at: at, updated_at: at }); }
+        else { const at = stamp(); rows.push({ ...(table === "cards" && { track_off: false }), ...row, created_at: at, updated_at: at }); }
       }
       return reply(null, 201);
     }

@@ -329,3 +329,91 @@ test("harcama: döviz / altın varlığı ve tekrar sütunları; tarihsiz harcam
   assert.equal(back[1].unit, "week");
   assert.equal(back[2].repeat, undefined);
 });
+
+const debt = (id, extra = {}) => ({
+  user_id: "u1", id, kind: "person", person_id: "ben", debt_id: null, side: "debt", party: "Mehmet", description: "",
+  asset: "TRY", amount: "10000", principal: "10000", date: "2026-11-05", due: null, count: null, auto_pay: null, closed: null,
+  created_at: at(), updated_at: at(), deleted_at: null, ...extra,
+});
+
+test("borçlar: her tür satıra çevrilir ve geri gelir; geçersiz kayıt yazılmaz", () => {
+  const rows = {
+    ...server(),
+    debts: [
+      debt("m"),
+      debt("kr", { kind: "loan", side: null, party: "Garanti", amount: "22000", principal: "20000", due: "2026-12-10", count: 4 }),
+      debt("al", { side: "receivable", party: "Ali", asset: "USD", principal: null, due: "2027-01-05", count: 3, auto_pay: true }),
+      debt("o1", { kind: "payment", debt_id: "m", side: null, party: null, asset: null, amount: "2500", principal: null, date: "2026-11-20" }),
+      debt("s1", { kind: "payment", person_id: "ali", side: null, party: null, asset: null, amount: 1000, principal: null }),
+    ],
+  };
+  const state = toState(rows);
+  assert.deepEqual(state.debts, [
+    { id: "m", kind: "person", personId: "ben", side: "debt", party: "Mehmet", asset: "TRY", amount: 10000, principal: 10000, date: "2026-11-05" },
+    { id: "kr", kind: "loan", personId: "ben", party: "Garanti", asset: "TRY", amount: 22000, principal: 20000, date: "2026-11-05", due: "2026-12-10", count: 4 },
+    { id: "al", kind: "person", personId: "ben", side: "receivable", party: "Ali", asset: "USD", amount: 10000, date: "2026-11-05", due: "2027-01-05", count: 3, autoPay: true },
+    { id: "o1", kind: "payment", personId: "ben", debtId: "m", amount: 2500, date: "2026-11-20" },
+    { id: "s1", kind: "payment", personId: "ali", amount: 1000, date: "2026-11-05" },
+  ]);
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(state, baseOf(rows))[t], { upsert: [], delete: [] }, t);
+
+  const bad = [
+    { id: "b1", kind: "person", personId: "ben", side: "debt", asset: "TRY", amount: Infinity, date: "2026-11-01" },
+    { id: "b2", kind: "person", personId: "ben", asset: "TRY", amount: 5, date: "2026-11-01" },             // yönsüz
+    { id: "b3", kind: "loan", personId: "ben", asset: "TRY", amount: 5, date: "2026-11-01", count: 3 },   // vadesiz kredi
+    { id: "b4", kind: "payment", personId: "ben", amount: 0, date: "2026-11-01" },
+    { id: "b5", kind: "card", personId: "ben", amount: 5, date: "2026-11-01" },
+    { id: "b6", kind: "person", personId: "yok", side: "debt", asset: "TRY", amount: 5, date: "2026-11-01" },   // kişisi yok
+    { id: "b7", kind: "person", personId: "ben", side: "debt", asset: "XAU", amount: 5, date: "2026-11-01" },
+  ];
+  const plan = changes({ ...state, debts: [...state.debts, ...bad] }, baseOf(rows));
+  assert.deepEqual(plan.debts, { upsert: [], delete: [] });
+
+  // Sayısız taksit ve otomatik ödeme vadesiz yazılmaz; kayıt kişisinin silinmesi borcu da siler
+  const loose = changes({ people: state.people, debts: [{ id: "n", kind: "person", personId: "ali", side: "receivable", asset: "EUR",
+    amount: 50, principal: -1, date: "2026-11-01", count: 3, autoPay: true, desc: "Not" }] }, {}).debts.upsert[0].row;
+  assert.deepEqual(loose, { id: "n", kind: "person", person_id: "ali", debt_id: null, side: "receivable", party: null, description: "Not",
+    asset: "EUR", amount: 50, principal: null, date: "2026-11-01", due: null, count: null, auto_pay: null, closed: null });
+});
+
+test("kart takibi: track_since / track_off satıra çevrilir; 4.x tabanı rekey ile çevrilir, takip başlayınca kart yazılır", () => {
+  const rows = server();
+  const old = baseOf(rows);
+  for (const id of Object.keys(old.cards)) {
+    const { track_since, track_off, ...row } = JSON.parse(old.cards[id]);
+    old.cards[id] = JSON.stringify(row);
+  }
+  const state = toState(rows);
+  assert.equal(state.cards[0].trackSince, undefined);
+  assert.ok(changes(state, old).cards.upsert.length);   // çevrilmeden her kart yeniden yazılırdı
+  const base = rekey(old);
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(state, base)[t], { upsert: [], delete: [] }, t);
+
+  state.cards[0] = { ...state.cards[0], trackSince: "2026-10-24" };
+  state.cards.push({ id: "k2", name: "Eşimin", limit: 0, cutoffDay: 1, dueDay: 10, color: 1, trackOff: true });
+  const up = changes(state, base).cards.upsert.map(x => [x.id, x.row.track_since, x.row.track_off]);
+  assert.deepEqual(up, [["k1", "2026-10-24", false], ["k2", null, true]]);
+  const back = toState({ cards: [card("k1", { track_since: "2026-10-24", track_off: false }), card("k2", { track_off: true })] });
+  assert.deepEqual(back.cards.map(c => [c.trackSince, c.trackOff]), [["2026-10-24", undefined], [undefined, true]]);
+});
+
+test("cihazdaki borçlar hesaba eklenir; birleşen kartın takibi erken başlayanınkidir", () => {
+  const account = {
+    people: [{ id: "ben", name: "Emre", color: 0 }],
+    cards: [{ id: "k1", name: "Bonus", limit: 0, cutoffDay: 12, dueDay: 22, color: 0, last4: "1234", trackSince: "2026-10-24" }],
+    installments: [], entries: [], debts: [],
+  };
+  const local = {
+    people: [{ id: "ben", name: "Ben", color: 0 }, { id: "x1", name: "Ali", color: 1 }],
+    cards: [{ id: "c9", name: "Bonus", limit: 0, cutoffDay: 12, dueDay: 22, color: 0, last4: "1234", trackSince: "2026-10-20" }],
+    installments: [], entries: [],
+    debts: [
+      { id: "d1", kind: "person", personId: "x1", side: "debt", party: "Can", asset: "TRY", amount: 100, date: "2026-10-21" },
+      { id: "d2", kind: "payment", personId: "x1", debtId: "d1", amount: 50, date: "2026-10-22" },
+    ],
+  };
+  const out = combine(account, local);
+  assert.deepEqual(out.cards.map(c => [c.id, c.trackSince]), [["k1", "2026-10-20"]]);
+  assert.deepEqual(out.debts.map(d => [d.id, d.personId, d.debtId]), [["d1", "x1", undefined], ["d2", "x1", "d1"]]);
+  assert.equal(account.cards[0].trackSince, "2026-10-24");   // hesabın verisi değişmez
+});

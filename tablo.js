@@ -1,15 +1,21 @@
 // ---------- Supabase tabloları ↔ uygulama verisi (DOM'dan bağımsız) ----------
-// Uygulama veriyi tek nesne olarak tutar ({ people, cards, installments, entries }); Supabase'te her kişi, kart,
-// harcama ve varlık hareketi ayrı bir satırdır (supabase/tablolar.sql). Senkronizasyon (sync.js, mcp/supabase.js) son eşitlenen satırları
+// Uygulama veriyi tek nesne olarak tutar ({ people, cards, installments, entries, debts }); Supabase'te her kişi, kart,
+// harcama, varlık hareketi ve borç kaydı ayrı bir satırdır (supabase/tablolar.sql). Senkronizasyon (sync.js, mcp/supabase.js) son eşitlenen satırları
 // (taban: tablo → id → satırın JSON'u) bugünkü veriyle karşılaştırır: yalnızca değişen satırlar yazılır, veriden
 // çıkanlar silindi olarak işaretlenir. Uzaktan gelen satır, yerelde henüz yazılmamış değişikliği ezmez.
 (function (root) {
-  // Yazma sırası da budur: harcama kişisine ve kartına, hareket kişisine bağlıdır
-  const TABLES = ["people", "cards", "purchases", "entries"];
-  const FIELD = { people: "people", cards: "cards", purchases: "installments", entries: "entries" };
+  // Yazma sırası da budur: harcama kişisine ve kartına, hareket ve borç kişisine bağlıdır
+  const TABLES = ["people", "cards", "purchases", "entries", "debts"];
+  const FIELD = { people: "people", cards: "cards", purchases: "installments", entries: "entries", debts: "debts" };
   const ASSETS = ["TRY", "USD", "EUR", "GAU"];   // varlik.js
+  const DEBT_KINDS = ["person", "loan", "payment"], DEBT_SIDES = ["debt", "receivable"];   // borc.js
 
   const num = v => (typeof v === "number" ? v : Number(v));
+  // Artı, sonlu tutar; değilse null (Infinity JSON'da null olur, tablonun kısıtını ihlal eder)
+  function pos(v) {
+    const n = num(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
   function int(v, lo, hi) {
     const n = Math.round(num(v));
     return n >= lo && n <= hi ? n : null;
@@ -69,6 +75,7 @@
         cutoff_day: cutoff, due_day: due, color: int(c.color, 0, 999) ?? 0,
         last4: /^\d{4}$/.test(c.last4) ? c.last4 : null,
         history: history(c.history, "cutoffDay", "dueDay")?.map(h => ({ until: h.until, cutoff_day: h.c, due_day: h.d })) ?? null,
+        track_since: dateKey(c.trackSince), track_off: c.trackOff === true,
       };
     },
     purchases: p => {
@@ -90,6 +97,31 @@
       if (!validId(e.personId) || !ASSETS.includes(e.asset) || !Number.isFinite(amount) || amount === 0 || !date) return null;
       return { id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date, ...repeatCols(e) };
     },
+    // Borç kaydı (borc.js): person kişiyle borç / alacak, loan kredi, payment ödeme / tahsilat (debt_id boşsa kart payı)
+    debts: d => {
+      const kind = DEBT_KINDS.includes(d.kind) ? d.kind : null, date = dateKey(d.date);
+      if (!kind || !validId(d.personId) || !date) return null;
+      const amount = pos(d.amount);
+      if (amount == null) return null;
+      const head = kind !== "payment";
+      const due = head ? dateKey(d.due) : null;
+      const count = head && due ? int(d.count, 1, 600) : null;
+      if (head && !ASSETS.includes(d.asset)) return null;
+      if (kind === "person" && !DEBT_SIDES.includes(d.side)) return null;
+      if (kind === "loan" && (!due || count == null)) return null;
+      return {
+        id: d.id, kind, person_id: d.personId,
+        debt_id: kind === "payment" && validId(d.debtId) ? d.debtId : null,
+        side: kind === "person" ? d.side : null,
+        party: head && d.party ? String(d.party) : null,
+        description: String(d.desc ?? ""),
+        asset: head ? d.asset : null,
+        amount, principal: head ? pos(d.principal) : null,
+        date, due, count,
+        auto_pay: kind === "person" && due && d.autoPay === true ? true : null,
+        closed: head ? dateKey(d.closed) : null,
+      };
+    },
   };
 
   // Satır → kayıt (uygulamadaki biçim: boş alanlar yazılmaz)
@@ -100,6 +132,9 @@
       if (r.last4) c.last4 = r.last4;
       const h = history(r.history, "cutoff_day", "due_day");
       if (h) c.history = h.map(x => ({ until: x.until, cutoffDay: x.c, dueDay: x.d }));
+      const since = dateKey(r.track_since);
+      if (since) c.trackSince = since;
+      if (r.track_off === true) c.trackOff = true;
       return c;
     },
     purchases: r => {
@@ -120,6 +155,22 @@
       repeatFields(r, e);
       return e;
     },
+    debts: r => {
+      const d = { id: r.id, kind: r.kind, personId: r.person_id };
+      if (r.debt_id) d.debtId = r.debt_id;
+      if (r.side) d.side = r.side;
+      if (r.party) d.party = r.party;
+      if (r.description) d.desc = r.description;
+      if (r.asset) d.asset = r.asset;
+      d.amount = Number(r.amount);
+      if (r.principal != null) d.principal = Number(r.principal);
+      d.date = r.date;
+      if (r.due) d.due = r.due;
+      if (r.count != null) d.count = Number(r.count);
+      if (r.auto_pay) d.autoPay = true;
+      if (r.closed) d.closed = r.closed;
+      return d;
+    },
   };
 
   function keyOf(table, item) {
@@ -129,8 +180,9 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 4;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
-                      // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit
+  const SCHEMA = 5;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
+                      // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit;
+                      // 5: cards.track_since / track_off (debts yeni tablo)
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base) {
@@ -173,7 +225,7 @@
   }
 
   // Yazılacaklar: tablo → { upsert: [{ id, key, row }], delete: [id] }. Taban, yazma başarılınca key'lerle güncellenir.
-  // Harcamanın / hareketin kişisi tabloda yoksa yazılmaz; harcamanın kartı yoksa nakit yazılır (uygulamada da nakit sayılır).
+  // Harcamanın / hareketin / borç kaydının kişisi tabloda yoksa yazılmaz; harcamanın kartı yoksa nakit yazılır (uygulamada da nakit sayılır).
   function changes(state, base) {
     const out = {}, exists = {};
     for (const t of TABLES) {
@@ -191,6 +243,7 @@
       out[t] = { upsert, delete: Object.keys(known).filter(id => !seen.has(id)) };
     }
     out.entries.upsert = out.entries.upsert.filter(x => exists.people.has(x.row.person_id));
+    out.debts.upsert = out.debts.upsert.filter(x => exists.people.has(x.row.person_id));
     out.purchases.upsert = out.purchases.upsert
       .filter(x => exists.people.has(x.row.person_id))
       .map(x => (x.row.card_id && !exists.cards.has(x.row.card_id) ? { ...x, row: { ...x.row, card_id: null } } : x));
@@ -236,7 +289,8 @@
 
   // Girişsiz kullanılan cihazın verisini (local) hesabın verisine (account) ekler. Aynı id'li kayıt aynı kayıttır
   // (daha önce eşitlenmiş olabilir; varsayılan kişi her yerde "ben"), iki kez eklenmez. Kişi aynı adlı kişiyle, kart
-  // aynı son 4 haneli ya da aynı adlı kartla birleşir; harcama ve hareketler birleşilen kişiye / karta bağlanır.
+  // aynı son 4 haneli ya da aynı adlı kartla birleşir; harcama, hareket ve borçlar birleşilen kişiye / karta bağlanır.
+  // Birleşen kartın takibi daha erken başlayanınkidir.
   function combine(account, local) {
     const out = { ...account };
     const name = s => String(s ?? "").trim().toLocaleLowerCase("tr-TR");
@@ -253,7 +307,13 @@
     };
     const people = absorb("people", (a, b) => name(a.name) === name(b.name));
     const cards = absorb("cards", (a, b) => (a.last4 && b.last4 ? a.last4 === b.last4 : name(a.name) === name(b.name)));
-    for (const field of ["installments", "entries"]) {
+    for (const item of local.cards || []) {
+      const at = out.cards.findIndex(x => x.id === cards[item?.id] && x !== item);
+      if (at < 0 || !item.trackSince) continue;
+      const kept = out.cards[at];
+      if (!kept.trackSince || item.trackSince < kept.trackSince) out.cards[at] = { ...kept, trackSince: item.trackSince };
+    }
+    for (const field of ["installments", "entries", "debts"]) {
       const list = [...(account[field] || [])], ids = new Set(list.map(x => x.id));
       for (const item of local[field] || []) {
         if (!item || ids.has(item.id)) continue;

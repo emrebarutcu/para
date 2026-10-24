@@ -1,4 +1,4 @@
--- Kişiler, kartlar, harcamalar ve varlık hareketleri ayrı tablolarda
+-- Kişiler, kartlar, harcamalar, varlık hareketleri ve borçlar ayrı tablolarda
 -- Eskiden kullanıcının bütün verisi cashflow_data'da tek bir JSON'du; her yazma bütün belgeyi değiştirdiği için
 -- iki cihaz (ya da uygulama ve asistan) aynı anda yazınca biri diğerinin değişikliğini siliyordu. Artık her kişi,
 -- kart ve harcama ayrı bir satırdır: uygulama (sync.js) ve asistan (mcp/supabase.js) yalnızca değişen satırları
@@ -99,10 +99,53 @@ alter table purchases add column if not exists repeat_count integer
 alter table purchases add column if not exists repeat_every smallint check (repeat_every between 1 and 99);
 alter table purchases add column if not exists repeat_unit text check (repeat_unit in ('day', 'week', 'month'));
 
+-- Kartın ekstre takibi (4.x'te yoktu; var olan tabloya eklenir, borc.js): track_since'tan sonra son ödeme günü geçen
+-- ekstreler ilk kişinin TL varlığından düşer, kartta diğer kişilerin o günden sonraki taksitleri onlardan alacaktır.
+-- Boşsa uygulama kartı ilk gördüğü günle doldurur; track_off kart takip dışı (ör. eşin kartı).
+alter table cards add column if not exists track_since date;
+alter table cards add column if not exists track_off boolean not null default false;
+
+-- Borçlar ve alacaklar (borc.js). Tek tablo, kind'a göre:
+--   person: biriyle borç (side 'debt') ya da alacak ('receivable'); party karşı taraf (serbest metin), amount ödenecek
+--           toplam, principal date günü varlığa giren / çıkan (boşsa para hareketi yok), due vade ya da ilk taksit,
+--           count taksit sayısı, auto_pay taksitler tarihinde ödenmiş sayılır (değilse yalnızca kaydedilen ödemeler)
+--   loan:   banka kredisi; amount taksit × count, taksitler due'dan başlayıp ayda bir tarihinde ödenmiş sayılır
+--   payment: debt_id'li ödeme / tahsilat / erken ödeme (borcun varlığında); debt_id boşsa person_id'nin kart payı
+--           ödemesi (TL, ilk kişiye girer)
+-- debt_id'de bilerek yabancı anahtar yok: ödemenin borçtan önce yazılması eşitlemeyi durdurmasın.
+create table if not exists debts (
+  user_id     uuid not null default auth.uid() references auth.users on delete cascade,
+  id          text not null check (length(id) between 1 and 100),
+  kind        text not null check (kind in ('person', 'loan', 'payment')),
+  person_id   text not null,
+  debt_id     text check (length(debt_id) between 1 and 100),
+  side        text check (side in ('debt', 'receivable')),
+  party       text,
+  description text not null default '',
+  asset       text check (asset in ('TRY', 'USD', 'EUR', 'GAU')),
+  amount      numeric not null check (amount > 0),
+  principal   numeric check (principal > 0),
+  date        date not null,
+  due         date,
+  count       integer check (count between 1 and 600),
+  auto_pay    boolean,
+  closed      date,
+  created_at  timestamptz not null default clock_timestamp(),
+  updated_at  timestamptz not null default clock_timestamp(),
+  deleted_at  timestamptz,
+  primary key (user_id, id),
+  foreign key (user_id, person_id) references people (user_id, id),
+  check (kind = 'payment' or asset is not null),
+  check (kind <> 'person' or side is not null),
+  check (kind <> 'loan' or (due is not null and count is not null)),
+  check (count is null or due is not null)
+);
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);
 create index if not exists entries_sync   on entries   (user_id, updated_at);
+create index if not exists debts_sync     on debts     (user_id, updated_at);
 
 -- updated_at her yazmada sunucu saatiyle yenilenir; created_at değiştirilemez
 create or replace function touch_row() returns trigger
@@ -118,7 +161,7 @@ $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['people', 'cards', 'purchases', 'entries'] loop
+  foreach t in array array['people', 'cards', 'purchases', 'entries', 'debts'] loop
     execute format('drop trigger if exists touch on %I', t);
     execute format('create trigger touch before insert or update on %I for each row execute function touch_row()', t);
 
@@ -291,6 +334,7 @@ select d.user_id,
        jsonb_array_length(coalesce(d.data->'cards', '[]')) as json_cards,
        (select count(*) from cards c where c.user_id = d.user_id and c.deleted_at is null) as cards,
        jsonb_array_length(coalesce(d.data->'installments', '[]')) as json_purchases,
-       (select count(*) from purchases x where x.user_id = d.user_id and x.deleted_at is null) as purchases
+       (select count(*) from purchases x where x.user_id = d.user_id and x.deleted_at is null) as purchases,
+       (select count(*) from debts b where b.user_id = d.user_id and b.deleted_at is null) as debts
 from cashflow_data d;
 */

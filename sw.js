@@ -1,6 +1,6 @@
 importScripts('/version.js');
 const CACHE = 'cashfollow-' + self.APP_VERSION;
-const ASSETS = ['/', '/index.html', '/version.js', '/styles.css', '/app.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/sync.js', '/kategori.js', '/icgoru.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg'];
+const ASSETS = ['/', '/index.html', '/version.js', '/styles.css', '/app.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/borc.js', '/sync.js', '/kategori.js', '/icgoru.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
