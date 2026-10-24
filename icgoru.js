@@ -1,8 +1,11 @@
 // ---------- İçgörüler (DOM'dan bağımsız) ----------
 // Kayıtlı veriden kurallarla hesaplanır (model gerekmez): ayın serbest nakdi, taksit yükünün gelire oranı, borcun
 // biteceği ay, dolmak üzere olan limitler, yaklaşan ödeme sıçraması, bugün hangi kartla alışveriş yapılırsa ilk
-// ödemenin en geç geleceği, düzenli ödemeler (abonelik), kategoride olağandışı artış, diğer kişilerin payı.
-// Gelir varlık girişlerinden, sabit giderler tekrarlayan harcamalardan ve çıkışlardan gelir; döviz ve altın güncel kurla TL'dir.
+// ödemenin en geç geleceği, düzenli ödemeler (abonelik), kategoride olağandışı artış, geciken ya da yaklaşan borç
+// ödemeleri (elle ödenen kartların geciken ekstreleri dahil), ödemesi gelen alacaklar (kart payları ve kişiler), diğer
+// kişilerin payı (takipte kart yoksa).
+// Gelir varlık girişlerinden, sabit giderler tekrarlayan harcamalardan ve çıkışlardan gelir; borç ve kredi taksitleri
+// ödemelere girer, borç alınan para gelir sayılmaz (borc.js). Döviz ve altın güncel kurla TL'dir.
 // app.js (Özet) ve MCP (get_insights) kullanır.
 (function (root) {
   const node = typeof module === "object" && module.exports;
@@ -10,6 +13,7 @@
   const V = node ? require("./varlik.js") : root.Varlik;
   const K = node ? require("./kategori.js") : root.Kategori;
   const R = node ? require("./tekrar.js") : root.Tekrar;
+  const B = node ? require("./borc.js") : root.Borc;
 
   const HORIZON = 6;          // serbest nakit ve taksit yükü için bakılan ay (bu ay dahil)
   const PEAK_MONTHS = 12;     // ödeme sıçraması için bakılan ay
@@ -21,6 +25,8 @@
   const SUB_MONTHS = 3;       // aynı işyerine en az bu kadar farklı ayda peşin ödeme → düzenli
   const SUB_SPREAD = 1.25;    // düzenli ödemenin tutarları arasında en fazla bu oran
   const UNCATEGORIZED = 3;    // son 3 ayda bu kadar kategorisiz harcama varsa öneri
+  const DUE_SOON = 7;         // borç ödemesi bu kadar gün içindeyse uyarı
+  const EPS = 0.005;
 
   const money = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
   const fmt = n => money.format(Math.round(n || 0));
@@ -28,6 +34,30 @@
   const monthLong = idx => `${T.monthName(idx)} ${T.yearOf(idx)}`;
   const round = n => Math.round((n || 0) * 100) / 100;
   const days = (from, to) => Math.round((T.toDate(to) - T.toDate(from)) / 864e5);
+  const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+  // Varlığın kendi biriminde: TL fmt ile, döviz "$100", altın "12,5 gr"
+  function amountText(n, code) {
+    if (code === "TRY") return fmt(n);
+    const a = V.asset(code);
+    const s = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: a.digits }).format(n);
+    return code === "GAU" ? `${s} gr` : `${a.symbol}${s}`;
+  }
+
+  // "3 gün gecikti", "bugün", "yarın", "10 Ara, 3 gün sonra"
+  function dueText(date, today, overdue) {
+    if (overdue) return `${days(date, today)} gün gecikti`;
+    const n = days(today, date);
+    if (n <= 0) return "bugün";
+    if (n === 1) return "yarın";
+    const d = T.parseDate(date);
+    return `${d.day} ${T.monthShort(d.idx)}, ${n} gün sonra`;
+  }
+
+  // Borcun karşı tarafı (isimlere ek getirilmez)
+  function who(d) {
+    return d.party || d.desc || (d.kind === "loan" ? "Kredi" : B.side(d) === "debt" ? "Borç" : "Alacak");
+  }
 
   function known(state) {
     const ids = new Set(state.people.map(p => p.id));
@@ -37,11 +67,13 @@
     };
   }
 
-  // Ayın girdi / çıktıları (TL): varlık girişleri gelir, çıkışları ve döviz / altın harcamaları gider; kart / nakit
-  // ödemeleri ayrı. Kuru bilinmeyen hareket sayılmaz (missing).
-  function monthFlows(state, idx, rates, months) {
+  // Ayın girdi / çıktıları (TL): varlık girişleri gelir; çıkışları, döviz / altın harcamaları ve borç verilen para gider;
+  // kart / nakit ödemeleri ile borç ve kredi ödemeleri ayrı (payments). inflow borç alınan para, tahsilatlar ve kart payı
+  // ödemeleridir: yalnızca bilgi içindir, net'e girmez (borç serbest nakit değildir). Kuru bilinmeyen hareket sayılmaz
+  // (missing). today borçların bugünkü durumu içindir (geciken beklenen ödeme bugüne düşer).
+  function monthFlows(state, idx, rates, months, today = T.todayKey()) {
     const { entries, purchases } = known(state);
-    let income = 0, outflow = 0, missing = false;
+    let income = 0, outflow = 0, inflow = 0, debtPaid = 0, missing = false;
     for (const e of entries) {
       const n = V.occurrencesIn(e, idx).length;
       if (!n) continue;
@@ -56,8 +88,16 @@
       const v = V.toTry(paid, p.asset, rates);
       if (v == null) missing = true; else outflow += v;
     }
-    const payments = months.find(m => m.idx === idx)?.total || 0;
-    return { idx, income, outflow, payments, net: income - outflow - payments, missing };
+    // Borç akışları: gelen para inflow; borç tarafında ödenen (ödeme, taksit, beklenen ödeme) payments; verilen borç gider
+    for (const f of B.allFlows(state, today, T.dateKey(idx, 1), T.dateKey(idx, 31))) {
+      const v = V.toTry(f.amount, f.asset, rates);
+      if (v == null) { missing = true; continue; }
+      if (v > 0) inflow += v;
+      else if (B.side(f.debt) === "debt") debtPaid -= v;
+      else outflow -= v;
+    }
+    const payments = (months.find(m => m.idx === idx)?.total || 0) + debtPaid;
+    return { idx, income, outflow, inflow, payments, net: income - outflow - payments, missing };
   }
 
   // Harcama tarihine göre ay ay kategori toplamları (taksitli alışveriş tamamıyla alındığı aya, tekrarlayanın her
@@ -127,14 +167,14 @@
     return out.sort((a, b) => b.monthly - a.monthly);
   }
 
-  // Bugün yapılacak alışverişin her kartta ilk ödemesi; ilk ödemesi en geç olan önce. Limiti dolu kart sonda.
-  function cardTiming(state, today) {
-    const { purchases } = known(state);
+  // date günü yapılacak alışverişin her kartta ilk ödemesi; ilk ödemesi en geç olan önce. Limiti dolu kart sonda. Limit
+  // kullanımı alışveriş gününe değil bugüne göredir (borc.js cardUsed: elle ödenen kartta ödenmemiş geçmiş ekstreler dahil)
+  function cardTiming(state, date, today = T.todayKey()) {
     return state.cards.map(c => {
-      const s = T.statementOf(c, today);
-      const used = T.outstanding(purchases.filter(p => p.cardId === c.id).flatMap(p => T.payments(p, c)), today);
+      const s = T.statementOf(c, date);
+      const used = B.cardUsed(state, c, today);
       const available = c.limit > 0 ? c.limit - used : null;
-      return { card: c, due: s.due, cut: s.cut, days: days(today, s.due), used, available, full: available != null && available <= 0 };
+      return { card: c, due: s.due, cut: s.cut, days: days(date, s.due), used, available, full: available != null && available <= 0 };
     }).sort((a, b) => a.full - b.full || b.days - a.days || (b.available ?? Infinity) - (a.available ?? Infinity));
   }
 
@@ -146,9 +186,10 @@
     const out = [];
     const add = x => out.push(x);
 
-    // Gelir: tekrarlayan bir giriş (maaş) ya da son iki ayda giriş varsa serbest nakit hesaplanır
+    // Gelir: tekrarlayan bir giriş (maaş) ya da son iki ayda giriş varsa serbest nakit hesaplanır (borç alınan para
+    // varlık girişi değildir, gelir sayılmaz)
     const hasIncome = entries.some(e => e.amount > 0 && (V.repeatOf(e) != null || (T.parseDate(e.date)?.idx ?? -1) >= t - 1));
-    const flows = Array.from({ length: HORIZON }, (_, i) => monthFlows(state, t + i, rates, cashflow));
+    const flows = Array.from({ length: HORIZON }, (_, i) => monthFlows(state, t + i, rates, cashflow, today));
     if (hasIncome) {
       const short = flows.find(f => f.net < 0);
       if (short) {
@@ -171,7 +212,7 @@
         const r = paying / income;
         add({
           id: "yuk", tone: r >= 0.5 ? "warn" : "info", title: `Taksit / gelir oranı ${pct(r)}`,
-          text: `Önümüzdeki ${HORIZON} ayın ${fmt(income)} girdisinin ${fmt(paying)} kadarı şimdiden kart ve taksit ödemelerine ayrılmış.`
+          text: `Önümüzdeki ${HORIZON} ayın ${fmt(income)} girdisinin ${fmt(paying)} kadarı şimdiden kart, kredi ve taksit ödemelerine ayrılmış.`
             + (r >= 0.5 ? " Yeni taksite girmeden önce bu oranın düşmesini beklemek iyi olabilir." : ""),
           data: { months: HORIZON, income: round(income), payments: round(paying), ratio: Math.round(r * 1000) / 1000 },
         });
@@ -184,8 +225,40 @@
       });
     }
 
+    // Borç ödemeleri (kişilere borç ve krediler; elle ödenende gecikebilir): geciken ya da DUE_SOON gün içinde gelen.
+    // Elle ödenen kartların son ödeme günü geçmiş ödenmemiş ekstreleri de (yaklaşan ekstre kart ödemelerindedir)
+    const debts = B.known(state);
+    const active = debts.items.map(d => ({ d, st: B.status(d, debts.pays.get(d.id), today) })).filter(x => x.st.started && !x.st.done);
+    const due = [];
+    const item = (d, amount, date, overdue) => ({ ref: { debtId: d.id }, name: who(d), asset: d.asset, amount, date, overdue });
+    for (const { d, st } of active) {
+      if (B.side(d) !== "debt") continue;
+      if (st.overdue > EPS) due.push(item(d, st.overdue, st.overdueSince, true));
+      else if (st.next && days(today, st.next.date) <= DUE_SOON) due.push(item(d, st.next.amount, st.next.date, false));
+    }
+    for (const c of state.cards) {
+      if (!B.tracked(c) || !B.manual(c)) continue;
+      const cd = B.cardDebt(state, c, today, debts.cardPays.get(c.id) || []);
+      if (cd.overdue > EPS) {
+        due.push({ ref: { cardId: c.id }, name: `${c.name} ekstresi`, party: c.name, asset: "TRY", amount: cd.overdue, date: cd.overdueSince, overdue: true });
+      }
+    }
+    if (due.length) {
+      due.sort((a, b) => b.overdue - a.overdue || byDate(a, b));
+      const late = due.filter(x => x.overdue).length;
+      add({
+        id: "borc-vade", tone: "warn",
+        title: late ? (late > 1 ? `${late} borç ödemesi gecikti` : "Borç ödemen gecikti")
+          : due.length > 1 ? `${due.length} borç ödemesi yaklaşıyor` : "Borç ödemesi yaklaşıyor",
+        text: due.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${dueText(x.date, today, x.overdue)})`).join(", ") + "."
+          + (late ? " Ödediysen Borçlar'da işaretle." : ""),
+        action: { kind: "debt", label: "Borçlar" },
+        data: due.map(x => ({ ...x.ref, party: x.party ?? x.name, amount: V.round(x.amount, x.asset), asset: x.asset, date: x.date, overdue: x.overdue })),
+      });
+    }
+
     // Limit
-    for (const x of cardTiming(state, today)) {
+    for (const x of cardTiming(state, today, today)) {
       const c = x.card;
       if (!(c.limit > 0) || x.used / c.limit < LIMIT_WARN) continue;
       add({
@@ -227,7 +300,7 @@
     }
 
     // Kart seçimi
-    const timing = cardTiming(state, today).filter(x => !x.full);
+    const timing = cardTiming(state, today, today).filter(x => !x.full);
     if (timing.length >= 2 && timing[0].days - timing[timing.length - 1].days >= CARD_GAP) {
       const best = timing[0], worst = timing[timing.length - 1];
       add({
@@ -249,9 +322,31 @@
       });
     }
 
-    // Diğer kişilerin bu ayki payı (aile üyeleri ya da kartını kullananlar)
+    // Alacaklar: takipteki kartlarda ödemesi gelmiş kart payları ve geciken alacaklar (kendiliğinden ödenen gecikmez)
+    const shares = B.shares(state, today);
+    const owed = state.people.map(p => shares.get(p.id)).filter(s => s?.dueNow > EPS)
+      .map(s => ({ personId: s.person.id, name: s.person.name, amount: s.dueNow, asset: "TRY" }));
+    const sharesDue = owed.reduce((sum, x) => sum + x.amount, 0);
+    for (const { d, st } of active) {
+      if (B.side(d) === "receivable" && st.overdue > EPS) {
+        owed.push({ debtId: d.id, name: who(d), amount: st.overdue, asset: d.asset, date: st.overdueSince, overdue: true });
+      }
+    }
+    if (owed.length) {
+      const late = owed.filter(x => x.overdue).length;
+      add({
+        id: "alacak", tone: late ? "warn" : "info",
+        title: late ? (late > 1 ? `${late} alacağın gecikti` : "Alacağın gecikti") : `Ödemesi gelen alacak ${fmt(sharesDue)}`,
+        text: owed.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${x.overdue ? dueText(x.date, today, true) : "kart payı"})`).join(", ")
+          + ". Ödendiyse Alacaklarım'da işaretle" + (sharesDue > 0 ? ", kart payı için hatırlatma da gönderebilirsin." : "."),
+        action: { kind: "debt", label: "Alacaklar" },
+        data: owed.map(x => ({ ...x, amount: V.round(x.amount, x.asset) })),
+      });
+    }
+
+    // Diğer kişilerin bu ayki payı (aile üyeleri ya da kartını kullananlar); takipte kart varsa yerine alacak çıkar
     const month = cashflow.find(m => m.idx === t);
-    const others = state.people.slice(1).filter(p => month?.byPerson[p.id] > 0);
+    const others = state.cards.some(B.tracked) ? [] : state.people.slice(1).filter(p => month?.byPerson[p.id] > 0);
     if (others.length) {
       const total = others.reduce((s, p) => s + month.byPerson[p.id], 0);
       add({

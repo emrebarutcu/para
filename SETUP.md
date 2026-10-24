@@ -4,8 +4,11 @@
 
 1. [supabase.com](https://supabase.com) → New project oluştur
 2. **SQL Editor** → `supabase/tablolar.sql` dosyasını çalıştır. Kişiler (`people`), kartlar (`cards`),
-   harcamalar (`purchases`) ve varlık hareketleri (`entries`) ayrı tablolardır; her kullanıcı yalnızca kendi
-   satırlarını görür (RLS). Dosya daha önce çalıştırıldıysa yeniden çalıştırmak eksik tabloyu ekler.
+   harcamalar (`purchases`), varlık hareketleri (`entries`) ve borçlar (`debts`: kişiyle borç / alacak, banka kredisi
+   ve bunların ödemeleri, kart ekstresi ödemeleri `card_id` ile; `kind` ile ayrılır) ayrı tablolardır; her kullanıcı
+   yalnızca kendi satırlarını görür (RLS). Kartın ekstre takibi `cards.track_since` / `cards.track_off`, ödeme modu
+   `cards.manual_since` sütunlarındadır (bölüm 4 → Borçlar ve alacaklar).
+   Dosya daha önce çalıştırıldıysa yeniden çalıştırmak eksik tabloyu ve sütunları ekler.
 
    **Eski kurulumdan geçiş** (veri `cashflow_data`'da tek JSON olarak duruyorsa): aynı dosya, yeni sürüm yayınlanmadan
    **önce** bir kez çalıştırılır. Herkesin JSON'unu tablolara taşır (`cashflow_data` silinmez) ve geçiş döneminde
@@ -109,6 +112,33 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
 
 ### Yükseltme notları
 
+- **5.0.0** — Borçlar sekmesi: kişilerle borç / alacak, banka kredisi, kart borcu ve kartta diğer kişilerin payları
+  (alacak); "Varlık = Özvarlık + Borç"; kart ve borçta ödeme modu (otomatik ya da elle **Ödendi**). Yeni tablo `debts`
+  (kart ekstresi ödemeleri `debts.card_id` ile) ve yeni sütunlar `cards.track_since`, `cards.track_off`,
+  `cards.manual_since`. Yayından **önce** `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh
+  supabase/tablolar.sql`; yalnızca eksik tabloyu, sütunları ve kısıtları ekler; 5.0 önizlemesi için çalıştırıldıysa
+  yeniden çalıştırılır); tablo ve sütunlar yoksa yeni sürüm eşitleyemez. 5.0'a geçen cihaz ilk eşitlemede bütün
+  satırları yeniden çeker (SCHEMA 6; 5.0 önizlemesiyle eşitlemiş cihaz da bir kez). Mevcut verinin anlamı değişir:
+  5.0'ın ilk açıldığı gün bütün kartlar o günden takibe girer; bundan sonra son ödeme günü geçen ekstreler, son ödeme
+  gününün ertesi günü ilk kişinin TL varlık bakiyesinden düşer (otomatik mod, varsayılan); kullanıcının kartlarında
+  diğer kişilerin sonraki taksitleri onlardan alacak olur. Kart ödemesini elle nakit harcama (ya da tekrarlayan çıkış)
+  olarak girenlerde bundan sonraki ekstreler iki kez düşer: bu kayıtlar (tekrarlayansa sonraki tekrarları) silinmeli ya
+  da o kartın takibi kart formunda kapatılmalı. Takip başlamadan ödenmiş ekstreler düşülmez; ilk açılışta bakiye
+  değişmez. Önbellekteki 4.x sürümleri borçları görmez ve takip sütunlarına dokunmaz (upsert yalnızca gönderilen
+  sütunları değiştirir): bakiyeleri borç hareketleri ve düşülen ekstreler olmadan gösterir, kişi ya da kart silerken
+  borçlarını / kart ödemelerini silmez (5.0 sahibi olmayan kaydı göstermez); 4.x'te eklenen kart, 5.0'ın onu ilk
+  gördüğü günden takiptedir. Yeni sürüm etkinleşince aynı cihazda açık kalan 4.x sekmeleri yeniden yüklenir (service
+  worker, yalnızca ana sürüm değişince); eski kod yeni verinin üstüne yazmaz. Takip tarihi yalnızca uzak veri gerçekten
+  çekildikten sonra yazılır, başka cihazın önceki tarihi ezilmez. Özet'te "Kalan borç" artık "Kalan ödeme" (tutar aynı). MCP: yeni araçlar `list_debts`,
+  `get_debt`, `add_debt`, `update_debt`, `delete_debt`, `pay_debt`, `delete_debt_payment`; `update_card`'a isteğe bağlı
+  `track_statements`, `track_since`, `auto_pay`, `add_card`'a `auto_pay`; cevaplara eklenenler: `get_assets` →
+  `receivablesTry`, `debtsTry`, `totalAssetsTry`, `netWorthTry`, `untrackedCardDebtTry`, `cardTracking`; `list_cards` →
+  `tracking` (`autoPay`, `unpaid`, `overdue`), `statement`, `payments`; `update_card` / `delete_card` →
+  `balanceChangeTry`; `delete_card` → `deletedPayments`; `get_overview` → `debts` (`unpaidCardStatements`), kartlarda
+  `autoPay`; `list_debts` → `cardCredit`; `list_people` → `owesUser`; `delete_person` → `deletedDebts`,
+  `deletedCardPayments`, `deletedSharePayments`; `import_data` → `debts`; `export_data`
+  borçları da verir. **Uyumsuz:** `get_assets` TL bakiyesi artık takipteki kartların ödenen ekstrelerini düşer ve borç
+  hareketlerini içerir; takipte kart varken `paylar` içgörüsü yerine `alacak` gelir.
 - **4.0.0** — Tek çıkış formu ve her N gün / hafta / ayda bir tekrar. Yeni sütunlar: `purchases.asset`,
   `purchases.repeat_count`, `purchases.repeat_every`, `purchases.repeat_unit`, `entries.repeat_every`,
   `entries.repeat_unit`. Yayından **önce** `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh
@@ -149,20 +179,26 @@ Giriş yapmamış kullanıcıya ilk açılışta giriş / kayıt penceresi çık
 pencere bir daha çıkmaz (`para.offline`), Özet'in üstünde verilerin yalnızca bu cihazda durduğunu söyleyen bir not görünür.
 Girişsiz kullanımın verisi `cashflow.v1`'de, hesabınki `cashflow.v1.<kullanıcı id>`'de durur. Girişsizken veri girilmiş
 cihazda giriş yapılınca kullanıcı seçer: **Hesabıma taşı** (önce hesaptaki veri çekilir, cihazdakiler eklenir; aynı id'li
-kayıt bir kez, aynı adlı kişi ve aynı son 4 haneli / aynı adlı kart birleşir — `Tablo.combine`) ya da **Sil, hesabımdakilerle
-devam et**. Seçilene kadar cihazdaki veri silinmez, pencere her girişte yeniden çıkar.
-Her kayıttan 1.5s sonra yalnızca değişen kişi / kart / harcama / varlık hareketi satırları yazılır; silinenler satırdan kalkmaz,
+kayıt bir kez, aynı adlı kişi ve aynı son 4 haneli / aynı adlı kart birleşir, kartta erken takip tarihi kalır —
+`Tablo.combine`) ya da **Sil, hesabımdakilerle devam et**. Seçilene kadar cihazdaki veri silinmez, pencere her girişte
+yeniden çıkar.
+Her kayıttan 1.5s sonra yalnızca değişen kişi / kart / harcama / varlık hareketi / borç satırları yazılır (borç, alacak,
+kredi ve ödemeleri tek tabloda, `debts`; ödeme borcundan önce yazılabilir, sıra önemsizdir); silinenler satırdan kalkmaz,
 `deleted_at` ile işaretlenir. Uygulama açılınca, öne gelince ve başka cihaz (ya da asistan) yazınca (Realtime)
 son okumadan beri değişen satırlar çekilir. Aynı anda farklı kayıtlar değişirse hepsi korunur; aynı kayıt iki
 cihazda değişirse sonra yazan kazanır. Hiç eşitlenmemiş cihazda buluttaki veri esastır.
 
 ## 4. Kartlar ve nakit akışı
 
-Uygulama beş sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, dönemlik nakit grafiği, sıradaki ödemeler,
+Uygulama altı sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, dönemlik nakit grafiği, sıradaki ödemeler,
 kişiler, kategoriler, aylık grafik),
-**Akış** (ödemeler ay ay, tarih + kart bazında; "Tablo" görünümü Excel'deki ay × kişi özeti),
-**Harcamalar**, **Kartlar** ve **Varlıklar**. Yeni harcama (Varlıklar'da yeni hareket) `+` düğmesiyle eklenir;
-içe/dışa aktarma ve tema ayarlardadır.
+**Akış** (ödemeler ay ay, tarih + kart bazında, borç ve kredi ödemeleri her ayın altında ayrı; "Tablo" görünümü Excel'deki
+ay × kişi özeti), **Harcamalar** (mobilde "Harcama"), **Kartlar**, **Borçlar** ve **Varlıklar**. Yeni harcama
+(Varlıklar'da yeni hareket, Borçlar'da borç ya da alacak) `+` düğmesiyle eklenir; içe/dışa aktarma ve tema ayarlardadır.
+
+Özet'in üstündeki tutar yine kart ve nakit taksitleridir; borç ve kredi taksitleri altında ayrı satırdadır
+("+ ₺5.500 borç ödemesi", dokununca Borçlar) ve sıradaki ödemelere karışır. Eski "Kalan borç"un adı **Kalan ödeme**
+oldu, tutarı aynı (seçilen aydan başlayarak ödenecek kart ve nakit taksitleri); kişilerde "borç yok" yerine "kalan yok".
 
 **Kartlar** sekmesinde her kart için ad, limit, hesap kesim günü ve son ödeme günü girilir.
 Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
@@ -177,7 +213,8 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
   başlasın** (kesilmiş ekstreler kalır, henüz kesilmemişler yeni günlere göre bir ekstreye girer) ya da **günleri yanlış
   girmiştim** (şimdiki günlerle hesaplananlar, geçmiş dahil, yeni günlerle; daha önceki gün değişiklikleri kalır). Kesilmiş ekstrelerin günleri kartta saklanır (`history`).
 
-Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar.
+Kart limiti, bugünden sonra ödenecek taksitlerin toplamıyla dolar; elle ödenen kartta (aşağıda) ödenmemiş geçmiş
+ekstreler de limitte kalır, ön ödeme düşülür (`B.cardUsed`).
 
 Harcama formu sade tutulur: görünen yalnızca tutar (Türkçe yazım: `1.250,50`), ne alındığı (önceki harcamalardan öneri),
 taksit ("Diğer" ile istenen sayı; taksitliyse "Yazdığım tutar taksit başına" kutusu) ve kart; altta tek satır özet
@@ -196,8 +233,10 @@ form, harcama formu. Varlık formunda **Çıkış** seçilince yazılanlar harca
 tekrar ve **Varlık** (TL, dolar, euro, gram altın) seçilir. Döviz ve altın harcaması kartsız ve peşindir, TL ödeme
 akışına girmez. Kartsız (nakit) harcamalar ödendikçe o varlığın bakiyesinden düşer ve Varlıklar'daki listede çıkış olarak
 görünür. Eski sürümlerden kalan çıkış hareketleri de harcama formunda açılır; kaydedilince harcamaya dönüşür.
-Miktar varlığın kendi birimindedir (altında gram); bakiye girişlerden nakit harcamalar düşülerek bulunur. Her varlığın
-ve toplamın TL karşılığı güncel satış kuruyla gösterilir.
+Miktar varlığın kendi birimindedir (altında gram); bakiye girişlerden nakit harcamalar düşülerek bulunur, borç
+hareketleri ve takipteki kartların ödenen ekstreleri de bakiyeye işler (aşağıda). Her varlığın ve toplamın TL karşılığı
+güncel satış kuruyla gösterilir. Üstteki **Varlık** alacakları da içerir ("₺3.000 alacak dahil"; ayrıca **Alacak**
+kutusu), altındaki "= Özvarlık + Borç" satırı Borçlar'a götürür.
 
 Giriş de harcama da tekrarlanabilir (maaş, kira, abonelik, haftalık market): formdaki **Tekrar** ile günde, haftada,
 ayda bir ya da **Diğer**le her N gün / hafta / ayda bir (`tekrar.js`); süresiz ya da N kez. Aylık tekrar ilk tarihin
@@ -212,6 +251,91 @@ dolar / euro open.er-api.com'dan, gram altın gold-api.com'un ons fiyatından he
 Sonuç 10 dakika önbellekte tutulur; uygulama son alınan kuru cihazda saklar, çevrimdışıyken onu kullanır.
 Ek ayar ya da anahtar gerekmez.
 
+### Borçlar ve alacaklar
+
+**Borçlar** sekmesi (`borc.js`) kart borcunu, kişilerle borç / alacağı ve banka kredilerini bir arada gösterir:
+**Borçlarım** ve **Alacaklarım** diye ikiye ayrılır, kapananlar altta açılır listededir. Tutarlar güncel kurla TL'dir,
+Tümü ya da tek kişi için hesaplanır:
+
+- **Eldeki**: varlık bakiyeleri (Varlıklar'daki); borç hareketleri ve takipteki kartların ödenen ekstreleri dahil.
+- **Alacak**: başlamış alacakların kalanı, diğer kişilerin takipteki kartlardaki payı (ödedikleri düşülerek) ve kartta
+  artı bakiye (kart borcundan fazla ödenen).
+- **Varlık** = Eldeki + Alacak.
+- **Borç**: takipteki kartların ödenmemiş taksitleri (bütün kişilerinki), nakit harcamaların kalan taksitleri, kredilerin
+  ve kişilere borçların kalanı, fazla ödenmiş kart payları.
+- **Özvarlık** = Varlık − Borç.
+
+Borçlar'ın ve Varlıklar'ın üstünde **Varlık = Özvarlık + Borç** yazar. Borç almak, ödemek, borç vermek, tahsil etmek ve
+ekstrenin ödenmesi Özvarlık'ı değiştirmez (para bir yerden çıkıp ötekine girer); değiştiren harcamalar ve kredinin faiz ve
+masrafıdır.
+
+**Kart borcu** kaydedilmez, harcamalardan gelir: kartın ödenmemiş taksitleri (Kartlar'daki bekleyen borç). Borçlarım'da
+her kart için bu ekstre (kesildiyse son ödeme günüyle, değilse dönem içi), toplam kalan ve kişi payları görünür. Kartta
+diğer kişiler için yapılan harcamaların taksitleri onlardan **alacaktır**: Alacaklarım'da kişi başına ödemesi gelen,
+sonraki ve toplam. **Ödendi** (kişi ödedi) payın tamamını ya da bir kısmını kapatır (ödenen ilk kişinin TL varlığına
+girer, taksitleri ilk taksitten başlayarak kapatır); fazla ödenen pay borca geçer. Paylaşım düğmesi kişiye taksitlerini,
+ödediğini ve kalanını metin olarak verir.
+
+**Kart takibi kendiliğindendir.** Yeni sürüm ilk açıldığı gün bütün kartlar o günden takibe girer (`cards.track_since`),
+sonra eklenen kart eklendiği günden. Takipteki kartın bu tarihten sonra gelen ekstresi, son ödeme gününün ertesi günü ilk
+kişinin TL varlığından düşer (kartları ilk kişi öder; ekstreyi ayrıca çıkış olarak girmek gerekmez); kartta diğer kişilerin
+bu tarihten sonraki taksitleri alacak olur, öncekiler ödenmiş sayılır. Takip başlayınca Borçlar'da bir kez bilgi şeridi
+çıkar (`para.trackNotice`); ilk kişinin hiç TL girişi yoksa açılış bakiyesi önerilir (**Bakiye gir**).
+Kullanıcının ödemediği kart (ör. eşinin kartı) kart formunda "Ekstreler TL varlığımdan düşsün" kapatılarak takipten çıkar
+(`cards.track_off`): Borçlar'da soluk ve "toplama dahil değil" görünür, düşülmüş ekstreleri (kart ödemeleri dahil) TL
+bakiyesine geri döner. Takibin başladığı tarih de aynı yerden değişir; form geçmişe etkisini önceden gösterir.
+
+**Kartın ödeme modu**: takip bloğundaki **Son ödeme günü geçince ödendi say** varsayılan işaretlidir (yukarıdaki gibi).
+Kapatılırsa (`cards.manual_since` = bugün; takip aynı kayıtta başlıyor ya da başlangıç günü değişiyorsa takibin başladığı
+gün) o günden sonraki ekstreler **Ödendi** ile kart ödemesi kaydedilene kadar borçta kalır, son ödeme günü geçince "2 gün
+gecikti" görünür; öncekiler ödenmiş kalır. Kart ödemesi (`debts.card_id`) kayıt gününde ilk kişinin TL varlığından düşer;
+yalnızca elle ödenen takipteki karta, elle modun başladığı gün ile bugün arasındaki bir tarihe girilir. Ödeme formu
+ödemesi gelmiş ekstrelerin (yoksa kesilmiş ekstrenin) tamamıyla dolu açılır, değiştirilebilir: ödemeler en eski
+ödenmemiş ekstreden başlayarak kapatır, kısmi ödemede kalan borçta (günü geçmişse gecikmiş) ve limitte kalır, fazlası
+sonraki ekstreleri önceden kapatır; kart borcunu da aşarsa **kartta artı bakiye** olur (Alacaklarım'da; varlıktır,
+Alacak'a girer). Borçlarım'da kart satırı ödenmemiş tutarı ve gecikmeyi (ya da sıradaki ekstreyi) yazar, ödemesi gelmiş
+ya da kesilmiş ekstrede satır içi **Ödendi**; ekstre ayrıntısı ödenip ödenmediğini söyler, altında da **Ödendi** vardır.
+Otomatiğe dönünce ödenmemiş geçmiş ekstreler ödenmiş sayılır (form önizlemede söyler); kaydedilmiş ödemelerin bir kısmı
+otomatikte ödenmiş sayılan önceki ekstrelerde eriyecekse (elle modun başından sonraki ön ödeme) dönülmez, form eriyecek
+tutarı söyler. Bugün tarihli kart ödemesi varken otomatikten elle moda o gün geçilmez (ödeme ikinci kez düşerdi).
+Kart ödemeleri Borçlarım'daki satırdan ya da kart formundaki "Ekstre ödemeleri"nden açılıp düzeltilir, silinir. Elle ödenen kartta Nakit
+grafiği ekstre yerine kaydedilen ödemeleri kendi gününde, ödenmemiş günü gelmiş ekstreleri bugünde düşer; Sıradaki
+ödemeler ve Bu ay ödenecek ödenmemiş ekstreleri sayar (gecikmişler "gecikti" ile en üstte), ödenmiş kısmı düşer; geciken
+ekstre `borc-vade` içgörüsünde de çıkar.
+
+**Kişiyle borç / alacak** (formda Borç aldım / Borç verdim): karşı taraf serbest metindir (kişiler listesinde olması
+gerekmez), kayıt bir kişinin varlığına aittir (varsayılan ilk kişi, tek kişide sorulmaz). Geri ödeme tek sefer (vadesiz ya
+da vadeli) ya da taksitlidir. Ödeme ve tahsilat varsayılan olarak elle kaydedilir (satır içi **Ödendi**, kısmi
+olabilir); ödemeler taksitleri ilk taksitten başlayarak kapatır, vadesi ya da günü geçip kapanmamış tutar gecikmiştir
+("3 gün gecikti"; geçmiş tarihli kayıtta da). Vadeli ya da taksitlide **Taksitler tarihinde ödenmiş sayılsın** seçilirse
+taksitler, kredideki gibi, tarihinde kendiliğinden ödenir; gecikme olmaz, satırda Ödendi görünmez (yalnızca formdan ara
+ödeme). **Mod kilidi**: kayıt tarihi ile bugün arasında taksiti olan borçta ve kredide bu kutu değiştirilemez, kilitlenir
+ve nedenini yazar (değiştirmek geçmiş taksitleri yeniden yorumlardı: ödenmiş sayılan gecikmiş olur ya da kaydedilen
+ödemeler ikinci kez düşer). Kapanmış borcun ödemesi silinince borç yeniden açılır; kalan sessizce silinmez. Borç alınan
+para kayıt tarihinde varlığa girer, verilen çıkar; "Para varlığıma girdi / çıktı" kapatılırsa (önceden alınmış borcu
+bakiyeyi bozmadan girmek için) yalnızca borç / alacak eklenir.
+
+**Banka kredisi**: taksit sayısı, taksit tutarı (ya da toplam), ilk taksit tarihi ve çekilen tutar. Taksitler varsayılan
+olarak tarihinde kendiliğinden ödenir (**Taksitler tarihinde ödenmiş sayılsın** işaretli); ek ödeme sondaki taksitlerden
+düşer (ödeme günündeki taksit dahil), **Bu ödemeyle kapat** krediyi bugünle kapatır (geçmiş tarihli kapatma o günden beri
+ödenmiş taksitleri silerdi). Kutu kapatılırsa (`debts.auto_pay` false) kredi kişiyle borç gibi elle ödenir: satır içi
+**Ödendi**, ödemeler ilk taksitten başlayarak kapatır, günü geçen taksit gecikir. Çekilen tutar yalnızca ilk taksitten
+önceki bir günde girilir. Çekilen tutar varlığa girer, borç faiz dahil kalan taksitlerin toplamıdır: aradaki fark (**faiz
+ve masraf**) kredi başlarken Özvarlık'tan bir kez düşer, form aylık faizi yaklaşık gösterir. Ortasından girilen kredinin
+kayıt tarihinden önceki taksitleri (iki modda da) önceden ödenmiş sayılır, varlığa etkisi olmaz.
+
+**Döviz ve altın**: borç ve alacak dolar, euro ya da gram altın da olabilir. Hareketleri o varlığın bakiyesini değiştirir,
+toplamlarda güncel kurla TL'dir (kuru alınamayan varlık sayılmaz, altta yazar).
+
+**Ne zaman ödenmiş sayılır:** otomatik modda kart ekstresi ve taksit gününün ertesi günü; o gün hâlâ "bugün
+ödenecek"tir (Nakit grafiğindeki kart kuralı gibi). Elle modda kaydedilen ödemenin gününde (Ödendi). Nakit grafiği
+gecikmiş ya da bugün beklenen tahsilatı alınmış saymaz. Borç alma / verme, ödeme ve tahsilat kendi gününde. İleri
+tarihli borç ya da alacak o güne kadar başlamamıştır: Borç'a, Alacak'a ve bakiyeye girmez.
+
+Nakit grafiği borç hareketlerini de sayar; Girdi ve çıktılar'da bunlar gün başlığında işarettir, toplama girmez
+(aşağıda). Kişi silinince borç / alacakları ve ödemeleri de silinir; kart silinince kart ödemeleri de silinir, o karttan
+düşülmüş ekstreler TL bakiyesine geri döner (onay metni tutarı ve ödeme sayısını söyler).
+
 ### Kategoriler ve içgörüler
 
 Harcamaların kategorisi vardır (`kategori.js`: Market, Yeme-içme, Ulaşım, Alışveriş, Elektronik, Ev, Faturalar, Sağlık ve
@@ -224,9 +348,12 @@ kategori verilir. Sabit bir işyeri sözlüğü yoktur; öğrenilmemiş işyerin
 tekrarlayan bir TL girişinin günü — ör. maaş günü — ya da ayın herhangi bir günü) bir ay sonrasının bir gün öncesine kadar
 sürer; oklarla önceki / sonraki döneme geçilir, tarih aralığına dokununca bugünün dönemine dönülür. Hareketler bütün varlık
 hareketleri (tekrarlayanın her tekrarı kendi gününde, tarihi gelmemiş tek seferlik hareket de kendi gününde), kart / nakit
-ödemeleri ve döviz / altın harcamalarıdır; döviz ve altın güncel kurla TL'ye çevrilir, kuru alınamayan varlık sayılmaz
-(altta yazar). **Varlık** görünümü bugüne bağlıdır: bugünün sonu, bugüne kadarki toplam varlıktan bugün ödenecekler
-düşülerek bulunur; sonraki günler hareketlerle ileri, önceki günler geri taşınır.
+ödemeleri (elle ödenen kartta ekstre yerine kaydedilen kart ödemeleri; ödenmemiş günü gelmiş ekstreler bugünde),
+döviz / altın harcamaları ve borç hareketleridir (borç alma / verme, ödeme, tahsilat, kredi taksiti, kart payı ödemesi;
+elle ödenecek borcun beklenen ödemesi kendi gününde, gecikmişse bugün); döviz ve altın güncel kurla TL'ye çevrilir, kuru
+alınamayan varlık sayılmaz (altta yazar). **Varlık** görünümü bugüne bağlıdır: bugünün sonu, bugüne kadarki toplam
+varlıktan (Varlıklar'daki bakiyeler) bugün ödenecekler (kart ekstresi, ödenmemiş ekstre, kredi taksiti) düşülerek
+bulunur; sonraki günler hareketlerle ileri, önceki günler geri taşınır.
 **Dönem net** görünümü dönem başında sıfırdan başlar, girdi / çıktı / net toplamlarını gösterir. Sıfırın altı kırmızıdır;
 üzerine gelince (ya da odaklanıp ok tuşlarıyla) o günün hareketleri görünür. Seçimler cihazda saklanır
 (`para.cashStart`, `para.cashMode`).
@@ -239,15 +366,22 @@ Satırlar varlık hareketleri ve harcamalardır: harcama alındığı gün gör�
 alışveriş tamamıyla, taksit sayısıyla; tekrarlayanın her tekrarı kendi gününde), dokununca düzenlenir. Tarihi bilinmeyen
 (içe aktarılmış) harcama satır olmaz. Kart ödemeleri satır değildir: ödeme gününün başlığında işaret olarak durur
 (takvimde günün altında renkli nokta, üzerine gelince tutarı); dokununca ödemenin ayrıntısı açılır. Toplamlar varlık
-hareketleri ve harcamalardandır, kart ödemeleri harcamalarla zaten sayıldığından toplama girmez.
+hareketleri ve harcamalardandır, kart ödemeleri harcamalarla zaten sayıldığından toplama girmez. Borç hareketleri (borç
+alma / verme, ödeme, tahsilat, kredi taksiti, kart payı ödemesi) de kart ödemeleri gibi gün başlığında işarettir, dokununca
+borç açılır; para el değiştirir, gelir ya da gider değildir, toplama girmez. Toplama giren tek borç kalemi kredinin faiz ve
+masrafıdır (çekildiği gün, çıktı olarak).
 
 Özet'te **İçgörüler** (`icgoru.js`, model gerekmez; MCP `get_insights` aynısını döndürür): bu ayın serbest nakdi ya da
-açık veren ilk ay (gelir ve sabit giderler varlıklardaki tekrarlayan giriş / çıkışlardan), önümüzdeki 6 ayın taksit /
-gelir oranı, dolmak üzere olan limitler, yaklaşan ödeme sıçraması, bir kategoride önceki 3 ayın ortalamasının üstüne
-çıkan harcama, bugünkü alışverişte ilk ödemesi en geç gelen kart, düzenli ödemeler (her ay aynı işyerine peşin ödeme,
-tekrarlayan çıkışlar), diğer kişilerin bu ayki payı, son taksitin ayı. Altında ayın harcamaları kategoriye göre
-(harcama tarihine göre; taksitli alışveriş tamamıyla alındığı aya). Kişiler listesinde diğer kişilerin yanındaki
-düğme o kişinin ayın taksitlerini, kart ve tarihleriyle paylaşım menüsüne (yoksa WhatsApp'a) metin olarak verir.
+açık veren ilk ay (gelir ve sabit giderler varlıklardaki tekrarlayan giriş / çıkışlardan; borç ve kredi taksitleri
+ödemelere girer, borç alınan para gelir sayılmaz), önümüzdeki 6 ayın taksit / gelir oranı, dolmak üzere olan limitler,
+yaklaşan ödeme sıçraması, bir kategoride önceki 3 ayın ortalamasının üstüne çıkan harcama, bugünkü alışverişte ilk
+ödemesi en geç gelen kart, düzenli ödemeler (her ay aynı işyerine peşin ödeme, tekrarlayan çıkışlar), geciken ya da 7 gün
+içinde gelen borç ödemeleri ve elle ödenen kartların geciken ekstreleri (`borc-vade`), ödemesi gelmiş kart payları ve
+geciken alacaklar (`alacak`), diğer kişilerin bu ayki payı (`paylar`; yalnızca hiç takipte kart yoksa, varsa yerine
+`alacak` çıkar), son taksitin ayı. `borc-vade` ve `alacak`a dokununca Borçlar açılır. Altında ayın harcamaları kategoriye göre (harcama tarihine göre; taksitli alışveriş
+tamamıyla alındığı aya). Kişiler listesinde diğer kişilerin yanındaki düğme o kişinin ayın taksitlerini, kart ve
+tarihleriyle paylaşım menüsüne (yoksa WhatsApp'a) metin olarak verir (kart payı varsa ödediği ve kalanıyla); kişinin alt
+satırında alacağı ve geciken kısmı yazar.
 Harcama formu, başka bir kartla ilk ödeme en az 10 gün daha geç geliyorsa söyler.
 
 ### Kategori önerisi: bulut ve cihaz
@@ -349,16 +483,18 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 
 | Alan | Araçlar |
 | --- | --- |
-| Özet / akış | `get_overview` (bu ay, gelecek ay, kalan, yaklaşan ödemeler), `get_cashflow` (ay ay ödemeler, kişi / kart toplamları) |
+| Özet / akış | `get_overview` (bu ay, gelecek ay, kalan, yaklaşan ödemeler, ayrıca borç / kredi ödemeleri ve elle ödenen kartların ödenmemiş ekstreleri: `debts.unpaidCardStatements`), `get_cashflow` (ay ay ödemeler, kişi / kart toplamları) |
 | Harcamalar | `list_purchases`, `get_purchase` (taksit takvimi), `add_purchase` (`dry_run` ile önizleme), `update_purchase`, `delete_purchase` |
-| Kartlar | `list_cards` (kullanılan / kalan limit), `add_card`, `update_card`, `delete_card` |
-| Kişiler | `list_people`, `add_person`, `rename_person`, `delete_person` |
-| Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı), `list_entries`, `add_entry`, `update_entry`, `delete_entry` |
+| Kartlar | `list_cards` (kullanılan / kalan limit, ekstre takibi ve ödeme modu, sıradaki ekstre; elle ödenen kartta `unpaid`, `overdue`, kart ödemeleri), `add_card` (eklendiği günden takipte; `auto_pay` false: elle ödenir), `update_card` (takip: `track_statements`, `track_since`; ödeme modu `auto_pay`, ön ödeme varken otomatiğe dönüş hata döner), `delete_card` (kart ödemeleriyle) |
+| Kişiler | `list_people` (kart payı alacağı), `add_person`, `rename_person`, `delete_person` |
+| Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı; alacak, borç, Varlık, Özvarlık), `list_entries`, `add_entry`, `update_entry`, `delete_entry` |
+| Borçlar / alacaklar | `list_debts` (Eldeki / Alacak / Borç / Varlık / Özvarlık toplamları, kart borçları ve kişi payları, nakit taksitler, kart payları, borçlar), `get_debt` (ödeme planı), `add_debt` (borç aldım / verdim / kredi; tek tutar ya da taksitli; `auto_pay`: kredide varsayılan true, kişiyle borçta false; `dry_run` ile önizleme), `update_debt` (kapatma dahil; kayıt tarihi ile bugün arasında taksiti olanda `auto_pay` değişmez, hata döner), `delete_debt` (ödemeleriyle), `pay_debt` (ödeme / tahsilat; kart payı için `person`; elle ödenen kartın ekstresi için `card`: `amount` verilmezse ödemesi gelen (yoksa kesilmiş ekstre), kısmi olabilir; `close` kendiliğinden ödenen borcu bugünle kapatır), `delete_debt_payment` (kart ödemesi dahil; kapanmış borcu yeniden açar: `reopened`) |
 | Banka e-postaları | `get_inbox_address`, `renew_inbox_address`, `list_inbox`, `check_inbox`, `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
 | İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |
-| Yedek | `export_data`, `import_data` |
+| Yedek | `export_data` (kişiler, kartlar, harcamalar, varlık hareketleri ve borçlar; Ayarlar → Dışa aktar ile aynı), `import_data` |
 
-Ödeme tarihleri uygulamayla aynı kodla (`taksit.js`, `eposta.js`) hesaplanır; doğrulama kuralları formlardakiyle aynıdır.
+Ödeme tarihleri ve borç hesapları uygulamayla aynı kodla (`taksit.js`, `borc.js`, `eposta.js`) hesaplanır; doğrulama
+kuralları formlardakiyle aynıdır.
 Sunucu `mcp/server.js`, sitenin Worker'ında çalışır (`mcp/worker.js`, `wrangler.jsonc`); `main`'e birleştirince sitenin
 yanında kendiliğinden yayınlanır. Testler: `cd mcp && npm test`.
 

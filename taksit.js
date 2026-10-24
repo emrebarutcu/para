@@ -51,7 +51,8 @@
   }
 
   // ---------- Kart ----------
-  // { id, name, limit, cutoffDay, dueDay, color, history? }
+  // { id, name, limit, cutoffDay, dueDay, color, last4?, history?, trackSince?, trackOff? }
+  // trackSince / trackOff: ekstre takibi (borc.js) — trackSince'tan sonra ödenen ekstreler ilk kişinin TL varlığından düşer.
   // history: kesim / son ödeme günü değişmeden önceki günler, [{ until: "YYYY-MM-DD", cutoffDay, dueDay }] until'e göre
   // sıralı. Kesimi until'e kadar olan ekstreler o günlerle kesilmiştir; sonrakiler bir sonraki günlerle (en son kartın).
 
@@ -286,15 +287,17 @@
   }
 
   // ---------- Kayıtlı veri ----------
-  // { people: [{ id, name, color }], cards: [kart], installments: [harcama], entries: [varlık hareketi (varlik.js)] }
+  // { people: [{ id, name, color }], cards: [kart], installments: [harcama], entries: [varlık hareketi (varlik.js)],
+  //   debts: [borç / alacak / kredi / ödeme (borc.js)] }
   const SERIES_COUNT = 8;   // styles.css'teki --s1…--s8
 
   function defaultState() {
     return {
       people: [{ id: "ben", name: "Ben", color: 0 }],
-      cards: [],              // { id, name, limit, cutoffDay, dueDay, color, last4? }
+      cards: [],              // { id, name, limit, cutoffDay, dueDay, color, last4?, history?, trackSince?, trackOff? }
       installments: [],       // harcamalar
       entries: [],            // TL / döviz / altın giriş ve çıkışları
+      debts: [],              // borçlar, alacaklar, krediler ve ödemeleri
     };
   }
 
@@ -338,6 +341,7 @@
     if (!Array.isArray(s.cards)) s.cards = [];
     if (!Array.isArray(s.installments)) s.installments = [];
     if (!Array.isArray(s.entries)) s.entries = [];
+    if (!Array.isArray(s.debts)) s.debts = [];
     s.cards = s.cards.map(c => {
       if (!c || typeof c !== "object" || !("history" in c)) return c;
       const { history, ...rest } = c;

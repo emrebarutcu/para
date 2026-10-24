@@ -276,9 +276,11 @@
   // ── Internal ────────────────────────────────────────────────────────────────
   // Önce uzak veri çekilir (ve bekleyen değişiklikler yazılır), sonra e-postalar işlenir: harcama güncel verinin
   // üstüne eklensin
+  // onSynced(pulled): pulled, uzak veri bu sefer gerçekten çekildiyse true (çekilemediyse uzaktaki değerler henüz bilinmez)
   async function refresh() {
-    await run(async uid => { await pull(uid); await push(uid); });
-    if (typeof onSyncedCb === 'function') onSyncedCb();
+    let pulled = false;
+    await run(async uid => { await pull(uid); pulled = true; await push(uid); });
+    if (typeof onSyncedCb === 'function') onSyncedCb(pulled);
   }
 
   // ── Veri: kişiler, kartlar, harcamalar (supabase/tablolar.sql, tablo.js) ──────
