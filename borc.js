@@ -336,10 +336,10 @@
     return addSpent(T.cashSpent(cash, state.cards || [], today), debtSpent(state, today, pid));
   }
 
-  // Kullanıcının ödeyecekleri (borç tarafı: kredi / borç taksitleri ve beklenen ödemeler), from…to: Özet, Akış, içgörüler
+  // Kullanıcının borç ödemeleri (borç tarafı: kredi / borç taksitleri, kaydedilen ve beklenen ödemeler), from…to: Özet,
+  // Akış, içgörüler. Yapılmışlar da gelir (paid); sıradakiler için !paid süzülür.
   function paymentsDue(state, today, from, to, pid) {
-    return allFlows(state, today, from, to, pid)
-      .filter(f => f.debt && side(f.debt) === "debt" && (f.type === "inst" || f.type === "plan"));
+    return allFlows(state, today, from, to, pid).filter(f => f.debt && side(f.debt) === "debt" && f.amount < 0);
   }
 
   // ---------- Toplamlar ----------

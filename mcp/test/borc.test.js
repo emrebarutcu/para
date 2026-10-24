@@ -190,7 +190,11 @@ test("borç kaydı olmayan veri sıfır döner; ödenecekler ve metinler", () =>
   const { s, steps } = scenario();
   for (const [, act] of steps) act();
   const due = B.paymentsDue(s, "2026-12-11", "2026-12-01", "2026-12-31");
-  assert.deepEqual(due.map(f => [f.date, f.amount, f.type]), [["2026-12-10", -5500, "inst"]]);
+  assert.deepEqual(due.map(f => [f.date, f.amount, f.type, f.paid]), [["2026-12-10", -5500, "inst", true]]);
+  s.debts.push({ id: "mp", kind: "payment", personId: "ben", debtId: "m", amount: 2000, date: "2026-12-05" });
+  assert.deepEqual(B.paymentsDue(s, "2026-12-11", "2026-12-01", "2026-12-31").map(f => [f.date, f.amount, f.type]),
+    [["2026-12-05", -2000, "pay"], ["2026-12-10", -5500, "inst"]]);
+  s.debts.pop();
   assert.equal(B.flowText(due[0], s), "Garanti · taksit 1/4");
   assert.ok(Math.abs(B.loanRate(s.debts.find(d => d.id === "kr")) * 100 - 3.92) < 0.01, "aylık faiz");
   assert.equal(B.lastIndex(s, "2026-12-11"), T.monthIndex("2027-03"));
