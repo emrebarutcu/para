@@ -949,7 +949,7 @@ test("elle ödenen kart: son ödeme günü geçince TL değişmez ve gecikir; Ö
   assert.deepEqual(await worth(d21), [9000, 0, 2000, 9000, 7000]);   // otomatikte 8.000 TL, 1.000 borç olurdu
   assert.deepEqual((await d21.call("list_debts")).cards, [{
     cardId: "bonus", card: "Bonus", tracked: true, since: "2026-09-01", debt: 2000,
-    statement: { date: "2026-11-20", amount: 1000, alreadyCut: false }, byPerson: { Ben: 1000 }, autoPay: false,
+    statement: { date: "2026-11-20", amount: 1000, alreadyCut: false }, byPerson: { Ben: 2000 }, autoPay: false,
     manualSince: "2026-10-18", unpaid: 1000, overdue: 1000, overdueSince: "2026-10-20",
     statements: [{ date: "2026-10-20", amount: 1000, covered: 0, state: "late" }, { date: "2026-11-20", amount: 1000, covered: 0, state: "open" }],
   }]);
@@ -1001,7 +1001,7 @@ test("elle ödenen kart: son ödeme günü geçince TL değişmez ve gecikir; Ö
   assert.deepEqual([over.card.debt, over.card.credit, over.card.overdue], [0, 1400, 0]);
   assert.deepEqual(await worth(d22), [5600, 1400, 0, 7000, 7000]);
   assert.equal((await d22.call("list_debts")).totals.receivablesByKind.cardCredit, 1400);
-  assert.match((await d22.call("update_card", { card: "Bonus", auto_pay: true })).error, /Bonus has 1400 TRY paid ahead.*delete_debt_payment/);
+  assert.match((await d22.call("update_card", { card: "Bonus", auto_pay: true })).error, /Bonus has 1000 TRY paid ahead.*delete_debt_payment/);
   assert.equal(stored(sb).cards[0].manualSince, "2026-10-18");
   await d22.call("delete_debt_payment", { id: over.payment.id });
 

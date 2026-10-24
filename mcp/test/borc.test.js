@@ -288,8 +288,18 @@ test("ön ödeme: elle modda ileriki ekstreleri kapatır (otomatiğe dönüş en
   const c = B.cardDebt(s, s.cards[0], "2026-11-20");
   near(c.total, 2000);
   assert.deepEqual(c.statements.map(x => [x.key, x.covered, x.state]), [["2026-11-22", 3000, "paid"], ["2026-12-22", 2000, "open"], ["2027-01-22", 0, "open"]]);
-  near(B.cardPrepaid(s, s.cards[0], "2026-11-20"), 5000);
-  near(B.cardPrepaid(s, s.cards[0], "2026-11-25"), 2000);   // 22 Kas'ınki artık ödemesi gelmiş ekstre
+  // Elle mod takibin başından: otomatiğe dönünce düşen değişmez (max(A, P) = P), engel yok
+  near(B.cardPrepaid(s, s.cards[0], "2026-11-20"), 0);
+  near(B.cardPrepaid(s, s.cards[0], "2026-11-25"), 0);
+  // Elle mod sonradan (22 Kas ekstresi otomatik ödenmiş sayıldı): Ara'ya ön ödeme otomatiğe dönünce erirdi → engel
+  const late = base();
+  late.cards[0].manualSince = "2026-11-25";
+  late.debts.push(cardPay("c2", 2000, "2026-11-30"));
+  near(B.cardPrepaid(late, late.cards[0], "2026-11-30"), 2000);
+  near(B.totals(late, "2026-11-30", RATES).cash, 45000);
+  // Bugün ödeme varken elleye geçilmez (aynı gün otomatik → elle ödemeyi ikinci kez düşürürdü)
+  assert.equal(B.cardPaidToday(late, late.cards[0], "2026-11-30"), true);
+  assert.equal(B.cardPaidToday(late, late.cards[0], "2026-12-01"), false);
   // Otomatikte ön ödeme
   const a = base();
   a.debts.push(cardPay("c1", 5000, "2026-11-20"));

@@ -234,18 +234,21 @@
   // D = max(A, Pb) + Pa varlıktan düşen; borç = S'den sonraki taksitler − D (eksiyse kartta artı bakiye, credit).
   // Ödemeler (D − A) E'den sonraki ekstreleri sırayla kapatır: kapanmamış ekstre günü geçmişse late, bugünse due,
   // sonraysa open. Otomatikte bugünden önceki ekstreler ödenmiş sayılır, ödemeler ancak sonrakileri önceden kapatır.
-  function cardState(state, card, today, pays) {
+  // until: ekstre listesi için ufuk (süresiz tekrarların ileriki tekrarları da ileriki ekstrelere girer); borç, D ve
+  // kapanma bugüne kadar alınanlarla hesaplanır.
+  function cardState(state, card, today, pays, until) {
     pays ??= known(state).cardPays.get(card.id) || [];
     const S = since(card, today);
     const E = manual(card) ? (card.manualSince > S ? card.manualSince : S) : null;
     const cut = E && E < today ? E : today;
-    const lines = cardLines(state, card, today).filter(x => x.key >= S && !(x.at > today));
+    const all = cardLines(state, card, until && until > today ? until : today).filter(x => x.key >= S);
+    const lines = all.filter(x => !(x.at > today));
     const P = pays.filter(p => p.date >= S && p.date <= today);
     const A = sum(lines.filter(x => x.key < cut));
     const Pb = sum(P.filter(p => !E || p.date < E)), Pa = E ? sum(P.filter(p => p.date >= E)) : 0;
     const D = Math.max(A, Pb) + Pa;
     let pool = D - A;
-    const list = statements(lines).map(st => {
+    const list = statements(until ? all : lines).map(st => {
       if (st.key < cut) return { ...st, covered: st.amount, state: "paid", auto: true };
       const covered = Math.min(pool, st.amount);
       pool -= covered;
@@ -264,12 +267,19 @@
     };
   }
 
-  // Elle moddaki kartta ödemesi gelmemiş ekstreleri aşan ön ödeme: otomatiğe dönerken (manualSince silinince) önceki
-  // ekstrelerde erirdi; varsa otomatiğe dönülmez
+  // Elle moddaki kart otomatiğe dönerse (manualSince silinince) varlıktan düşenin azalacağı tutar: ön ödeme, elle modun
+  // başından önce ödenmiş sayılan ekstrelerde erir. Sıfırdan büyükse otomatiğe dönülmez (para kaybolmasın).
   function cardPrepaid(state, card, today) {
     if (!tracked(card) || !manual(card)) return 0;
-    const cs = cardState(state, card, today);
-    return sum(cs.statements.filter(x => x.key >= today), x => x.covered) + cs.prepaid;
+    const { manualSince, ...auto } = card;
+    const lost = cardState(state, card, today).deduction - cardState(state, auto, today).deduction;
+    return lost > EPS ? lost : 0;
+  }
+
+  // Kartta bugün ya da sonra tarihli ödeme var mı: otomatikten elle moda bugün geçilirse bu ödemeler (o güne kadar
+  // ödenmiş sayılan ekstrelerde erimişken) ikinci kez düşerdi; o gün geçilmez
+  function cardPaidToday(state, card, today) {
+    return (known(state).cardPays.get(card.id) || []).some(p => p.date >= today);
   }
 
   // Kartın borcu: total (takipteki kartta S'den sonraki taksitler − ödenen; takip dışında T.outstanding), kişi başına
@@ -280,7 +290,15 @@
     const cs = isTracked ? cardState(state, card, today, pays) : null;
     const lines = cs ? cs.lines : cardLines(state, card, today);
     const byPerson = {};
-    for (const x of lines) if (x.key >= today && !(x.at > today)) add(byPerson, x.personId, x.amount);
+    if (cs) {
+      // Kapanmamış ekstrelerin kişi payları (kısmen ödenmişte orantılı): kart borcuyla toplanır
+      for (const st of cs.statements) {
+        const ratio = st.amount > EPS ? (st.amount - st.covered) / st.amount : 0;
+        if (ratio > EPS) for (const x of st.lines) add(byPerson, x.personId, x.amount * ratio);
+      }
+    } else {
+      for (const x of lines) if (x.key >= today && !(x.at > today)) add(byPerson, x.personId, x.amount);
+    }
     const open = T.statementOf(card, today);
     let next = null;
     const st = cs
@@ -570,7 +588,7 @@
 
   const api = {
     KINDS, SIDES, tracked, manual, since, ensureTracking, side, sign, auto, started, known, schedule, plan, status, modeLocked,
-    flows, cardLines, cardState, cardPrepaid, cardDebt, cardUsed, cardPaid, cardMoves, shares, shareItems, cashDebt, allFlows,
+    flows, cardLines, cardState, cardPrepaid, cardPaidToday, cardDebt, cardUsed, cardPaid, cardMoves, shares, shareItems, cashDebt, allFlows,
     debtSpent, addSpent, spent, paymentsDue, totals, flowText, loanRate, lastIndex,
   };
   if (node) module.exports = api;

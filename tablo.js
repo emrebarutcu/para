@@ -320,6 +320,16 @@
       const kept = out.cards[at];
       if (!kept.trackSince || item.trackSince < kept.trackSince) out.cards[at] = { ...kept, trackSince: item.trackSince };
     }
+    // Yerelde elle ödenen kart hesapta otomatikse elle mod yerelden gelir: yereldeki kart ödemeleri (ön ödeme dahil)
+    // otomatik kartta önceki ekstrelerde erirdi (borc.js cardPrepaid)
+    for (const item of local.cards || []) {
+      const at = out.cards.findIndex(x => x.id === cards[item?.id] && x !== item);
+      if (at < 0 || !item.manualSince || item.trackOff === true) continue;
+      const kept = out.cards[at];
+      if (kept.manualSince || kept.trackOff === true) continue;
+      const from = item.trackSince && item.trackSince > item.manualSince ? item.trackSince : item.manualSince;
+      out.cards[at] = { ...kept, manualSince: from };
+    }
     for (const field of ["installments", "entries", "debts"]) {
       const list = [...(account[field] || [])], ids = new Set(list.map(x => x.id));
       for (const item of local[field] || []) {

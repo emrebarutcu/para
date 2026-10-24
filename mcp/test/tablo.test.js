@@ -451,3 +451,17 @@ test("elle ödeme: kart ödemesi (card_id), cards.manual_since ve elle kredi sat
   const plain = toState({ ...rows, cards: [card("k1", { track_since: "2026-09-01", track_off: false })], debts: [rows.debts[1]] });
   for (const t of Tablo.TABLES) assert.deepEqual(changes(plain, rekey(old))[t].upsert.map(x => x.id), t === "debts" ? [] : [], t);
 });
+
+test("birleşmede yereldeki elle ödenen kartın modu hesaptaki otomatik karta geçer (ödemeleri önceki ekstrelerde erimesin)", () => {
+  const account = { people: [{ id: "ben", name: "Ben", color: 0 }], installments: [], entries: [], debts: [],
+    cards: [{ id: "k", name: "Bonus", limit: 0, cutoffDay: 12, dueDay: 22, color: 0, last4: "1234", trackSince: "2026-09-01" }] };
+  const local = { people: [{ id: "ben", name: "Ben", color: 0 }], installments: [], entries: [],
+    cards: [{ id: "l", name: "Bonus", limit: 0, cutoffDay: 12, dueDay: 22, color: 0, last4: "1234", trackSince: "2026-10-01", manualSince: "2026-10-01" }],
+    debts: [{ id: "p", kind: "payment", personId: "ben", cardId: "l", amount: 3000, date: "2026-10-23" }] };
+  const out = combine(account, local);
+  assert.deepEqual(out.cards.map(c => [c.id, c.trackSince, c.manualSince]), [["k", "2026-09-01", "2026-10-01"]]);
+  assert.equal(out.debts[0].cardId, "k");
+  // Hesaptaki kart zaten elleyse ya da yereldeki takip dışıysa dokunulmaz
+  const off = combine(account, { ...local, cards: [{ ...local.cards[0], trackOff: true }] });
+  assert.equal(off.cards[0].manualSince, undefined);
+});
