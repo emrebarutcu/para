@@ -2896,12 +2896,12 @@ function countTile(value, checked) {
 const tileMoney = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
 
 // Kutulardaki tutar: yazılan toplamsa taksit başına düşen, "Taksit başına"ysa toplam. Diğer seçiliyken yazılan sayı.
-// Harcama formunda; borç formu kendi formunu, kutularını, sınırını ve varlığını verir.
-function renderCountTiles(f = els.purchaseForm.elements, grid = els.countChips, { max = 60, code = "TRY" } = {}) {
+// Harcama formunda; borç formu kendi formunu, kutularını, sınırını, varlığını ve kısaltma eşiğini (5 dar kutu) verir.
+function renderCountTiles(f = els.purchaseForm.elements, grid = els.countChips, { max = 60, code = "TRY", compact = 1e5 } = {}) {
   const amount = parseAmount(f.amount.value);
   const per = f.per.value === "1";
   const custom = Math.round(Number(f.count.value));
-  const short = v => (code === "TRY" ? (v >= 1e5 ? "₺" + fmtShort(v) : tileMoney.format(v))
+  const short = v => (code === "TRY" ? (v >= compact ? "₺" + fmtShort(v) : tileMoney.format(v))
     : code === "GAU" ? `${fmtShort(v)} gr` : V.asset(code).symbol + fmtShort(v));
   for (const tile of grid.children) {
     const v = tile.querySelector("input").value;
@@ -3921,7 +3921,7 @@ function updateDebtForm() {
     b.classList.toggle("on", b.dataset.due ? f.due.value === monthLater(d.date || today, Number(b.dataset.due)) : !f.due.value);
   }
   for (const b of els.debtDateChips.querySelectorAll("[data-day]")) b.classList.toggle("on", f.date.value === T.addDays(today, Number(b.dataset.day)));
-  renderCountTiles(f, els.debtCountChips, { max: DEBT_MAX_COUNT, code: d.asset });
+  renderCountTiles(f, els.debtCountChips, { max: DEBT_MAX_COUNT, code: d.asset, compact: 1e4 });
 
   // Açılır satırların değerleri
   els.debtPlanVal.textContent = plan ? `${count > 0 ? count : "?"} taksit` + (!loan && f.autoPay.checked ? " · otomatik" : "")
