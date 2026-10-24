@@ -663,7 +663,7 @@ test("borçlar: borç aldım / borç verdim / kredi ekleme, listeleme, düzenlem
   await bad({ type: "loan", amount: 1000, installments: 12 }, /due_date .* required for a loan/);
   await bad({ type: "loan", amount: 1000, due_date: "2026-11-05" }, /installments .* required for a loan/);
   await bad({ type: "loan", amount: 1000, installments: 601, due_date: "2026-11-05" }, /between 1 and 600/);
-  await bad({ type: "loan", amount: 1000, installments: 12, due_date: "2026-11-05", auto_pay: false }, /always paid automatically/);
+  await bad({ type: "loan", amount: 1000, installments: 12, due_date: "2026-11-05", auto_pay: "no" }, /auto_pay must be true or false/);
   await bad({ type: "borrowed", party: "X", amount: 100, principal: 200 }, /principal \(200\) must not be more than amount/);
   await bad({ type: "borrowed", party: "X", amount: 100, principal: -1 }, /principal must be zero or a positive/);
   await bad({ type: "borrowed", party: "X", amount: 100, auto_pay: true }, /auto_pay needs due_date/);
@@ -708,7 +708,7 @@ test("borçlar: borç aldım / borç verdim / kredi ekleme, listeleme, düzenlem
   assert.deepEqual(all.totals, {
     cashTry: 24000, receivablesTry: 3000, debtsTry: 18200, totalAssetsTry: 27000, netWorthTry: 8800, untrackedCardDebtTry: 0,
     debtsByKind: { cards: 0, cashInstallments: 0, loans: 13200, people: 5000, overpaidCardShares: 0 },
-    receivablesByKind: { cardShares: 0, people: 3000 },
+    receivablesByKind: { cardShares: 0, people: 3000, cardCredit: 0 },
   });
   assert.deepEqual([all.cards, all.shares, all.cashInstallments], [[], [], { totalTry: 0, byAsset: {} }]);
   assert.deepEqual((await c.call("list_debts", { side: "receivable" })).debts.map(d => d.party), ["Ali"]);
@@ -760,7 +760,8 @@ test("borç ödemesi: kısmi ödeme ve kapatma; kredide erken ödeme sondan dü�
 
   const { debt } = await c.call("add_debt", { type: "borrowed", party: "Mehmet", amount: 10000, date: "2026-10-01", due_date: "2026-12-01" });
   assert.match((await c.call("pay_debt", { amount: 100 })).error, /Pass debt/);
-  assert.match((await c.call("pay_debt", { debt: debt.id, person: "Ben", amount: 100 })).error, /not both/);
+  assert.match((await c.call("pay_debt", { debt: debt.id, person: "Ben", amount: 100 })).error, /only one of debt, person or card/);
+  assert.match((await c.call("pay_debt", { debt: debt.id })).error, /amount is required/);
   assert.match((await c.call("pay_debt", { debt: debt.id, amount: 100, date: "2026-10-19" })).error, /not be after today/);
   assert.match((await c.call("pay_debt", { debt: debt.id, amount: 100, date: "2026-09-30" })).error, /before the debt's date \(2026-10-01\)/);
   assert.match((await c.call("pay_debt", { debt: debt.id, amount: 0 })).error, /positive/);
@@ -817,8 +818,12 @@ test("borç ödemesi: kısmi ödeme ve kapatma; kredide erken ödeme sondan dü�
   assert.deepEqual([auto.remaining, auto.overdue, auto.paid, auto.nextPayment.date, auto.autoPay], [1000, 0, 1000, "2026-11-15", true]);
   assert.equal(await bal(), before - 2000 + 1000);   // verilen 2.000 çıktı, 15 Eki taksiti geldi
   assert.equal(stored(sb).debts.find(d => d.id === auto.id).autoPay, true);
-  const switched = await c.call("update_debt", { id: manual.id, auto_pay: true });
-  assert.deepEqual([switched.debt.remaining, switched.debt.overdue], [1000, 0]);
+  // 15 Eki taksiti geçmişte: ödeme modu değişmez (gecikmiş taksit ödenmiş sayılır, ödenen ikinci kez düşerdi)
+  assert.match((await c.call("update_debt", { id: manual.id, auto_pay: true })).error, /payment mode can't change.*2026-09-01.*stays paid by hand/);
+  assert.match((await c.call("update_debt", { id: auto.id, auto_pay: false })).error, /stays automatic/);
+  // Tür değişince varsayılan mod da değişirdi: kilitliyken kayıttaki modun verilmesi istenir
+  assert.match((await c.call("update_debt", { id: manual.id, type: "loan" })).error, /pass auto_pay: false to keep it/);
+  assert.equal((await c.call("update_debt", { id: manual.id, description: "Araba" })).debt.autoPay, false);
 });
 
 test("kart takibi: ekstre son ödeme gününün ertesi günü TL'den düşer; diğer kişinin payı alacaktır, ödeyince kapanır", async () => {
@@ -849,13 +854,14 @@ test("kart takibi: ekstre son ödeme gününün ertesi günü TL'den düşer; di
   assert.deepEqual((await c.call("get_assets")).cardTracking, [{ card: "Bonus", cardId: "bonus", since: "2026-09-01" }]);
 
   const card = (await c.call("list_cards")).cards[0];
-  assert.deepEqual([card.used, card.tracking, card.statement], [3000, { since: "2026-09-01" }, { date: "2026-10-20", amount: 1500, alreadyCut: true }]);
+  assert.deepEqual([card.used, card.tracking, card.statement],
+    [3000, { since: "2026-09-01", autoPay: true, unpaid: 0, overdue: 0 }, { date: "2026-10-20", amount: 1500, alreadyCut: true }]);
   const people = (await c.call("list_people")).people;
   assert.deepEqual(people.map(p => p.owesUser), [undefined, 1500]);
   const list = await c.call("list_debts");
   assert.deepEqual(list.cards, [{
     cardId: "bonus", card: "Bonus", tracked: true, since: "2026-09-01", debt: 3000,
-    statement: { date: "2026-10-20", amount: 1500, alreadyCut: true }, byPerson: { Ben: 2000, Annem: 1000 },
+    statement: { date: "2026-10-20", amount: 1500, alreadyCut: true }, byPerson: { Ben: 2000, Annem: 1000 }, autoPay: true,
   }]);
   assert.deepEqual(list.shares, [{ personId: "anne", person: "Annem", owed: 1500, dueNow: 500, settled: 0, nextPayment: { date: "2026-10-20", amount: 500 }, payments: [] }]);
   assert.deepEqual((await c.call("list_debts", { side: "debt" })).shares, []);
@@ -890,7 +896,7 @@ test("kart takibi: ekstre son ödeme gününün ertesi günü TL'den düşer; di
 
   // Yeniden takipte: verilmezse bugünden (düşülen yok), sonra 1 Eyl'den
   const back = await c.call("update_card", { card: "Bonus", track_statements: true });
-  assert.deepEqual([back.balanceChangeTry, back.card.tracking], [0, { since: "2026-10-18" }]);
+  assert.deepEqual([back.balanceChangeTry, back.card.tracking.since], [0, "2026-10-18"]);
   assert.equal(stored(sb).cards[0].trackOff, undefined);
   assert.equal((await c.call("update_card", { card: "Bonus", track_since: "2026-09-01" })).balanceChangeTry, -1500);
   // Takip alanları verilmezse korunur
@@ -900,10 +906,178 @@ test("kart takibi: ekstre son ödeme gününün ertesi günü TL'den düşer; di
 
   // Kart silinince düşülen ekstresi bakiyeye döner; yeni kart bugünden takipte
   const del = await c.call("delete_card", { card: "Bonus" });
-  assert.deepEqual([del.deletedPurchases, del.balanceChangeTry], [2, 1500]);
+  assert.deepEqual([del.deletedPurchases, del.deletedPayments, del.balanceChangeTry], [2, 0, 1500]);
   const added = await c.call("add_card", { name: "World", cutoff_day: 1, due_day: 10 });
-  assert.deepEqual(added.card.tracking, { since: "2026-10-18" });
+  assert.deepEqual(added.card.tracking, { since: "2026-10-18", autoPay: true, unpaid: 0, overdue: 0 });
   assert.equal(stored(sb).cards[0].trackSince, "2026-10-18");
+});
+
+test("elle ödenen kart: son ödeme günü geçince TL değişmez ve gecikir; Ödendi tam / kısmi; ön ödeme varken otomatiğe dönülmez; kart silinince ödemeleri de gider", async () => {
+  const sb = fakeSupabase();
+  // Bonus 1 Eyl'den beri takipte (kesim 10, son ödeme 20). 5 Eyl: TV 3 × 1.000 → 20 Eyl, 20 Eki, 20 Kas
+  seed(sb, {
+    people: [{ id: "ben", name: "Ben", color: 0 }],
+    cards: [{ id: "bonus", name: "Bonus", limit: 50000, cutoffDay: 10, dueDay: 20, color: 0, trackSince: "2026-09-01" }],
+    installments: [{ id: "tv", personId: "ben", cardId: "bonus", desc: "TV", total: 3000, count: 3, date: "2026-09-05" }],
+    entries: [{ id: "e1", personId: "ben", asset: "TRY", amount: 10000, desc: "Maaş", date: "2026-09-01" }],
+  });
+  const c = client(sb);
+  const on = day => client(sb, "good", { now: () => new Date(`${day}T09:00:00Z`) });
+  const worth = async (cl = c) => {
+    const a = await cl.call("get_assets");
+    assert.equal(a.totalAssetsTry, a.netWorthTry + a.debtsTry);
+    return [a.totalTry, a.receivablesTry, a.debtsTry, a.totalAssetsTry, a.netWorthTry];
+  };
+  assert.deepEqual(await worth(), [9000, 0, 2000, 9000, 7000]);   // 20 Eyl ekstresi kendiliğinden ödendi
+
+  // Elle moda geçiş bugünden: önceki ekstreler ödenmiş kalır, bakiye değişmez
+  const man = await c.call("update_card", { card: "Bonus", auto_pay: false });
+  assert.deepEqual(man.card.tracking, { since: "2026-09-01", autoPay: false, unpaid: 0, overdue: 0, manualSince: "2026-10-18", overdueSince: null });
+  assert.equal(man.balanceChangeTry, 0);
+  assert.match(man.note, /^From 2026-10-18 Bonus's statements stay owed until marked paid with pay_debt card="Bonus"/);
+  assert.deepEqual([stored(sb).cards[0].manualSince, sb.db.cards[0].manual_since], ["2026-10-18", "2026-10-18"]);
+  assert.match((await c.call("update_card", { card: "Bonus", auto_pay: "no" })).error, /auto_pay must be true or false/);
+
+  // Son ödeme günü: bugün ödenecek; ertesi gün ödenmediyse gecikti, TL düşmez
+  const d20 = on("2026-10-20");
+  assert.deepEqual(await worth(d20), [9000, 0, 2000, 9000, 7000]);
+  assert.deepEqual((await d20.call("list_debts")).cards[0].statements,
+    [{ date: "2026-10-20", amount: 1000, covered: 0, state: "due" }, { date: "2026-11-20", amount: 1000, covered: 0, state: "open" }]);
+  assert.deepEqual((await d20.call("get_overview")).debts.unpaidCardStatements, [{ card: "Bonus", cardId: "bonus", amount: 1000, since: "2026-10-20" }]);
+
+  const d21 = on("2026-10-21");
+  assert.deepEqual(await worth(d21), [9000, 0, 2000, 9000, 7000]);   // otomatikte 8.000 TL, 1.000 borç olurdu
+  assert.deepEqual((await d21.call("list_debts")).cards, [{
+    cardId: "bonus", card: "Bonus", tracked: true, since: "2026-09-01", debt: 2000,
+    statement: { date: "2026-11-20", amount: 1000, alreadyCut: false }, byPerson: { Ben: 1000 }, autoPay: false,
+    manualSince: "2026-10-18", unpaid: 1000, overdue: 1000, overdueSince: "2026-10-20",
+    statements: [{ date: "2026-10-20", amount: 1000, covered: 0, state: "late" }, { date: "2026-11-20", amount: 1000, covered: 0, state: "open" }],
+  }]);
+  const listed = (await d21.call("list_cards")).cards[0];
+  assert.deepEqual([listed.used, listed.available, listed.tracking.overdue, listed.tracking.overdueSince], [2000, 48000, 1000, "2026-10-20"]);
+  const ov = await d21.call("get_overview");
+  assert.deepEqual(ov.debts.unpaidCardStatements, [{ card: "Bonus", cardId: "bonus", amount: 1000, since: "2026-10-20", late: true }]);
+  assert.deepEqual(ov.cards[0], { name: "Bonus", used: 2000, available: 48000, nextPayment: { date: "2026-11-20", amount: 1000 }, autoPay: false, unpaid: 1000, overdue: 1000 });
+  assert.deepEqual((await d21.call("get_insights")).insights.find(x => x.id === "borc-vade").data,
+    [{ cardId: "bonus", party: "Bonus", amount: 1000, asset: "TRY", date: "2026-10-20", overdue: true }]);
+
+  assert.match((await d21.call("pay_debt", { card: "Bonus", amount: 100, date: "2026-10-17" })).error, /not be before 2026-10-18/);
+  assert.match((await d21.call("pay_debt", { card: "Bonus", amount: 100, date: "2026-10-22" })).error, /not be after today/);
+  assert.match((await d21.call("pay_debt", { card: "Bonus", close: true })).error, /close is only for a debt/);
+  assert.match((await d21.call("pay_debt", { card: "nakit" })).error, /Cash is not a card/);
+  assert.match((await d21.call("pay_debt", { card: "Bonus", person: "Ben" })).error, /only one of debt, person or card \(got person and card\)/);
+  assert.equal(stored(sb).debts.length, 0);
+
+  // Ödendi: tutar verilmezse ödemesi gelen ekstreler; TL düşer, gecikme kalkar
+  const full = await d21.call("pay_debt", { card: "bonus" });
+  assert.deepEqual(full.payment, { id: full.payment.id, date: "2026-10-21", amount: 1000, asset: "TRY" });
+  assert.deepEqual([full.card.debt, full.card.unpaid, full.card.overdue, full.card.overdueSince, full.warning], [1000, 0, 0, null, undefined]);
+  assert.deepEqual(full.card.statements,
+    [{ date: "2026-10-20", amount: 1000, covered: 1000, state: "paid" }, { date: "2026-11-20", amount: 1000, covered: 0, state: "open" }]);
+  assert.deepEqual(full.card.payments, [full.payment]);
+  assert.deepEqual(await worth(d21), [8000, 0, 1000, 8000, 7000]);
+  const row = sb.db.debts.find(r => r.id === full.payment.id);
+  assert.deepEqual([row.kind, row.person_id, row.card_id, row.debt_id], ["payment", "ben", "bonus", null]);
+  assert.match((await d21.call("pay_debt", { card: "Bonus" })).error, /amount is required: no statement of Bonus is due or cut yet \(next: 1000 TRY so far, due 2026-11-20\)/);
+
+  // Kesilmiş ekstre: tutar verilmezse onun tamamı; ödeme silinince yeniden borç
+  const d12 = on("2026-11-12");
+  const cut = await d12.call("pay_debt", { card: "Bonus" });
+  assert.deepEqual([cut.payment.amount, cut.card.debt, cut.card.statement, cut.warning], [1000, 0, null, undefined]);
+  const undo = await d12.call("delete_debt_payment", { id: cut.payment.id });
+  assert.deepEqual([undo.deleted.amount, undo.card.debt, undo.card.statement], [1000, 1000, { date: "2026-11-20", amount: 1000, alreadyCut: true }]);
+  assert.equal(undo.share, undefined);   // kart ödemesi kart payı değildir
+
+  // Kısmi ödeme: kalanı gecikmiş kalır
+  const d22 = on("2026-11-22");
+  const part = await d22.call("pay_debt", { card: "Bonus", amount: 400 });
+  assert.deepEqual([part.card.debt, part.card.unpaid, part.card.overdue, part.card.overdueSince], [600, 600, 600, "2026-11-20"]);
+  assert.deepEqual(part.card.statements, [{ date: "2026-11-20", amount: 1000, covered: 400, state: "late" }]);
+  assert.deepEqual(await worth(d22), [7600, 0, 600, 7600, 7000]);
+
+  // Borçtan fazlası kartta artı bakiye (alacak); ön ödeme varken otomatiğe dönülmez
+  const over = await d22.call("pay_debt", { card: "Bonus", amount: 2000 });
+  assert.match(over.warning, /1400 TRY more than the statements due or already cut \(600 TRY\).*1400 TRY is more than the card's whole debt/);
+  assert.deepEqual([over.card.debt, over.card.credit, over.card.overdue], [0, 1400, 0]);
+  assert.deepEqual(await worth(d22), [5600, 1400, 0, 7000, 7000]);
+  assert.equal((await d22.call("list_debts")).totals.receivablesByKind.cardCredit, 1400);
+  assert.match((await d22.call("update_card", { card: "Bonus", auto_pay: true })).error, /Bonus has 1400 TRY paid ahead.*delete_debt_payment/);
+  assert.equal(stored(sb).cards[0].manualSince, "2026-10-18");
+  await d22.call("delete_debt_payment", { id: over.payment.id });
+
+  // Otomatiğe dönüş: gecikmiş kalan ödenmiş sayılır (bakiyeden düşer), kaydedilen ödemeler ikinci kez düşmez
+  const back = await d22.call("update_card", { card: "Bonus", auto_pay: true });
+  assert.match(back.note, /^1 overdue statement\(s\) \(600 TRY\) now count as paid, deducted from Ben's lira balance/);
+  assert.deepEqual([back.balanceChangeTry, back.card.tracking], [-600, { since: "2026-09-01", autoPay: true, unpaid: 0, overdue: 0 }]);
+  assert.equal(stored(sb).cards[0].manualSince, undefined);
+  assert.deepEqual(await worth(d22), [7000, 0, 0, 7000, 7000]);
+  assert.match((await d22.call("pay_debt", { card: "Bonus", amount: 100 })).error, /paid automatically .*update_card auto_pay false/);
+
+  // Takip dışı kartta elle mod ve Ödendi yok; takip aynı çağrıda açılırken elle mod takibin başladığı günden
+  await c.call("add_card", { name: "World", cutoff_day: 25, due_day: 5 });
+  await c.call("update_card", { card: "World", track_statements: false });
+  assert.match((await c.call("pay_debt", { card: "World", amount: 100 })).error, /World's statements are not tracked/);
+  assert.match((await c.call("update_card", { card: "World", auto_pay: false })).error, /needs the card's statements tracked/);
+  const restart = await c.call("update_card", { card: "World", track_since: "2026-09-01", auto_pay: false });
+  assert.deepEqual([restart.card.tracking.since, restart.card.tracking.manualSince], ["2026-09-01", "2026-09-01"]);
+  const added = await c.call("add_card", { name: "Axess", cutoff_day: 1, due_day: 10, auto_pay: false });
+  assert.deepEqual(added.card.tracking, { since: "2026-10-18", autoPay: false, unpaid: 0, overdue: 0, manualSince: "2026-10-18", overdueSince: null });
+
+  // Kart silinince ödemeleri de gider; düşülen ekstreler bakiyeye döner
+  const del = await d22.call("delete_card", { card: "Bonus" });
+  assert.deepEqual([del.deletedPurchases, del.deletedPayments, del.balanceChangeTry], [1, 2, 3000]);
+  assert.deepEqual(stored(sb).debts, []);
+  assert.ok(sb.db.debts.every(r => r.deleted_at));
+  assert.deepEqual(await worth(d22), [10000, 0, 0, 10000, 10000]);
+  assert.match((await d22.call("delete_debt_payment", { id: full.payment.id })).error, /list_cards \(payments\)/);
+});
+
+test("elle ödenen kredi: taksit günü geçince gecikir, Ödendi ile kapanır; ödeme modu geçmiş taksit varken değişmez", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  await c.call("add_entry", { asset: "TRY", direction: "in", amount: 10000, description: "Maaş", date: "2026-10-01" });
+  const worth = async (cl = c) => {
+    const a = await cl.call("get_assets");
+    assert.equal(a.totalAssetsTry, a.netWorthTry + a.debtsTry);
+    return [a.totalTry, a.receivablesTry, a.debtsTry, a.totalAssetsTry, a.netWorthTry];
+  };
+  // Takipten önceki taksitli kredi elle modda da ana parayla girilemez
+  assert.match((await c.call("add_debt", { type: "loan", amount: 1000, installments: 3, due_date: "2026-09-05", date: "2026-10-01", principal: 2000, auto_pay: false })).error,
+    /principal can only be given when date/);
+
+  // 2.700 çekildi, 3 × 1.000 (5 Eki, Kas, Ara); 5 Eki taksiti ödenmedi
+  const added = await c.call("add_debt", { type: "loan", party: "Garanti", amount: 1000, installments: 3, due_date: "2026-10-05", date: "2026-10-01", principal: 2700, auto_pay: false });
+  const loan = added.debt;
+  assert.deepEqual([loan.autoPay, loan.remaining, loan.overdue, loan.overdueSince, loan.paid], [false, 3000, 1000, "2026-10-05", 0]);
+  assert.match(added.preview.note, /paid by hand: each installment is paid only when recorded with pay_debt/);
+  assert.equal(stored(sb).debts[0].autoPay, false);
+  assert.equal(sb.db.debts[0].auto_pay, false);
+  assert.deepEqual(await worth(), [12700, 0, 3000, 12700, 9700]);   // otomatikte 11.700 TL, 2.000 borç
+  assert.deepEqual((await c.call("get_insights")).insights.find(x => x.id === "borc-vade").data,
+    [{ debtId: loan.id, party: "Garanti", amount: 1000, asset: "TRY", date: "2026-10-05", overdue: true }]);
+
+  // Mod kilidi: 5 Eki taksiti kayıt tarihiyle bugün arasında
+  assert.match((await c.call("update_debt", { id: loan.id, auto_pay: true })).error, /payment mode can't change: this loan has installments between its date \(2026-10-01\) and today/);
+  assert.equal(stored(sb).debts[0].autoPay, false);
+
+  // Ödendi: ilk taksitten kapatır
+  const paid = await c.call("pay_debt", { debt: loan.id, amount: 1000 });
+  assert.deepEqual([paid.debt.overdue, paid.debt.remaining, paid.debt.nextPayment], [0, 2000, { date: "2026-11-05", amount: 1000, installment: "2/3" }]);
+  assert.deepEqual(await worth(), [11700, 0, 2000, 11700, 9700]);
+  const nov = client(sb, "good", { now: () => new Date("2026-11-06T09:00:00Z") });
+  const late = await nov.call("get_debt", { id: loan.id });
+  assert.deepEqual([late.overdue, late.overdueSince], [1000, "2026-11-05"]);
+  assert.deepEqual(late.schedule.map(x => [x.date, x.covered, x.state]), [["2026-10-05", 1000, "paid"], ["2026-11-05", 0, "late"], ["2026-12-05", 0, "open"]]);
+  assert.deepEqual(await worth(nov), [11700, 0, 2000, 11700, 9700]);
+
+  // Taksiti henüz gelmemiş kredinin modu değişir; varsayılan otomatik
+  const fresh = (await c.call("add_debt", { type: "loan", party: "Akbank", amount: 500, installments: 2, due_date: "2026-11-01" })).debt;
+  assert.equal(fresh.autoPay, true);
+  const switched = await c.call("update_debt", { id: fresh.id, auto_pay: false });
+  assert.equal(switched.debt.autoPay, false);
+  assert.match((await c.call("get_debt", { id: fresh.id })).preview.note, /paid by hand/);
+  assert.equal((await c.call("update_debt", { id: fresh.id, auto_pay: true })).debt.autoPay, true);
+  assert.equal(stored(sb).debts.find(d => d.id === fresh.id).autoPay, undefined);
 });
 
 test("borç silme zincirleri; yalnızca değişen borç satırları yazılır", async () => {

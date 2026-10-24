@@ -2,7 +2,8 @@
 // Kayıtlı veriden kurallarla hesaplanır (model gerekmez): ayın serbest nakdi, taksit yükünün gelire oranı, borcun
 // biteceği ay, dolmak üzere olan limitler, yaklaşan ödeme sıçraması, bugün hangi kartla alışveriş yapılırsa ilk
 // ödemenin en geç geleceği, düzenli ödemeler (abonelik), kategoride olağandışı artış, geciken ya da yaklaşan borç
-// ödemeleri, ödemesi gelen alacaklar (kart payları ve kişiler), diğer kişilerin payı (takipte kart yoksa).
+// ödemeleri (elle ödenen kartların geciken ekstreleri dahil), ödemesi gelen alacaklar (kart payları ve kişiler), diğer
+// kişilerin payı (takipte kart yoksa).
 // Gelir varlık girişlerinden, sabit giderler tekrarlayan harcamalardan ve çıkışlardan gelir; borç ve kredi taksitleri
 // ödemelere girer, borç alınan para gelir sayılmaz (borc.js). Döviz ve altın güncel kurla TL'dir.
 // app.js (Özet) ve MCP (get_insights) kullanır.
@@ -166,14 +167,14 @@
     return out.sort((a, b) => b.monthly - a.monthly);
   }
 
-  // Bugün yapılacak alışverişin her kartta ilk ödemesi; ilk ödemesi en geç olan önce. Limiti dolu kart sonda.
-  function cardTiming(state, today) {
-    const { purchases } = known(state);
+  // date günü yapılacak alışverişin her kartta ilk ödemesi; ilk ödemesi en geç olan önce. Limiti dolu kart sonda. Limit
+  // kullanımı alışveriş gününe değil bugüne göredir (borc.js cardUsed: elle ödenen kartta ödenmemiş geçmiş ekstreler dahil)
+  function cardTiming(state, date, today = T.todayKey()) {
     return state.cards.map(c => {
-      const s = T.statementOf(c, today);
-      const used = T.outstanding(purchases.filter(p => p.cardId === c.id).flatMap(p => T.payments(p, c)), today);
+      const s = T.statementOf(c, date);
+      const used = B.cardUsed(state, c, today);
       const available = c.limit > 0 ? c.limit - used : null;
-      return { card: c, due: s.due, cut: s.cut, days: days(today, s.due), used, available, full: available != null && available <= 0 };
+      return { card: c, due: s.due, cut: s.cut, days: days(date, s.due), used, available, full: available != null && available <= 0 };
     }).sort((a, b) => a.full - b.full || b.days - a.days || (b.available ?? Infinity) - (a.available ?? Infinity));
   }
 
@@ -224,14 +225,23 @@
       });
     }
 
-    // Borç ödemeleri (kişilere borç ve krediler): geciken ya da DUE_SOON gün içinde gelen
+    // Borç ödemeleri (kişilere borç ve krediler; elle ödenende gecikebilir): geciken ya da DUE_SOON gün içinde gelen.
+    // Elle ödenen kartların son ödeme günü geçmiş ödenmemiş ekstreleri de (yaklaşan ekstre kart ödemelerindedir)
     const debts = B.known(state);
     const active = debts.items.map(d => ({ d, st: B.status(d, debts.pays.get(d.id), today) })).filter(x => x.st.started && !x.st.done);
     const due = [];
+    const item = (d, amount, date, overdue) => ({ ref: { debtId: d.id }, name: who(d), asset: d.asset, amount, date, overdue });
     for (const { d, st } of active) {
       if (B.side(d) !== "debt") continue;
-      if (st.overdue > EPS) due.push({ d, amount: st.overdue, date: st.overdueSince, overdue: true });
-      else if (st.next && days(today, st.next.date) <= DUE_SOON) due.push({ d, amount: st.next.amount, date: st.next.date, overdue: false });
+      if (st.overdue > EPS) due.push(item(d, st.overdue, st.overdueSince, true));
+      else if (st.next && days(today, st.next.date) <= DUE_SOON) due.push(item(d, st.next.amount, st.next.date, false));
+    }
+    for (const c of state.cards) {
+      if (!B.tracked(c) || !B.manual(c)) continue;
+      const cd = B.cardDebt(state, c, today, debts.cardPays.get(c.id) || []);
+      if (cd.overdue > EPS) {
+        due.push({ ref: { cardId: c.id }, name: `${c.name} ekstresi`, party: c.name, asset: "TRY", amount: cd.overdue, date: cd.overdueSince, overdue: true });
+      }
     }
     if (due.length) {
       due.sort((a, b) => b.overdue - a.overdue || byDate(a, b));
@@ -240,15 +250,15 @@
         id: "borc-vade", tone: "warn",
         title: late ? (late > 1 ? `${late} borç ödemesi gecikti` : "Borç ödemen gecikti")
           : due.length > 1 ? `${due.length} borç ödemesi yaklaşıyor` : "Borç ödemesi yaklaşıyor",
-        text: due.map(x => `${who(x.d)} ${amountText(x.amount, x.d.asset)} (${dueText(x.date, today, x.overdue)})`).join(", ") + "."
+        text: due.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${dueText(x.date, today, x.overdue)})`).join(", ") + "."
           + (late ? " Ödediysen Borçlar'da işaretle." : ""),
         action: { kind: "debt", label: "Borçlar" },
-        data: due.map(x => ({ debtId: x.d.id, party: who(x.d), amount: V.round(x.amount, x.d.asset), asset: x.d.asset, date: x.date, overdue: x.overdue })),
+        data: due.map(x => ({ ...x.ref, party: x.party ?? x.name, amount: V.round(x.amount, x.asset), asset: x.asset, date: x.date, overdue: x.overdue })),
       });
     }
 
     // Limit
-    for (const x of cardTiming(state, today)) {
+    for (const x of cardTiming(state, today, today)) {
       const c = x.card;
       if (!(c.limit > 0) || x.used / c.limit < LIMIT_WARN) continue;
       add({
@@ -290,7 +300,7 @@
     }
 
     // Kart seçimi
-    const timing = cardTiming(state, today).filter(x => !x.full);
+    const timing = cardTiming(state, today, today).filter(x => !x.full);
     if (timing.length >= 2 && timing[0].days - timing[timing.length - 1].days >= CARD_GAP) {
       const best = timing[0], worst = timing[timing.length - 1];
       add({

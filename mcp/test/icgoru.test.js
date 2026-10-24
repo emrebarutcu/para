@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import I from "../../icgoru.js";
 import K from "../../kategori.js";
+import T from "../../taksit.js";
 
 const TODAY = "2026-10-20";
 const base = () => ({
@@ -169,6 +170,91 @@ test("borc-vade: geciken ve 7 gün içindeki borç ödemeleri; kapanan, başlama
   assert.deepEqual(after.find(x => x.id === "borc-vade").data.map(x => x.debtId), ["usd", "kr"]);
   assert.equal(after.find(x => x.id === "borc-vade").title, "2 borç ödemesi yaklaşıyor");
   assert.ok(!ids(after).includes("alacak"));
+});
+
+// Bonus (kesim 19, son ödeme 29) 1 Eyl'den beri takipte ve elle ödeniyor; TV 3 × 1.000 → 29 Eyl, 29 Eki, 29 Kas
+function manualCard() {
+  const s = base();
+  Object.assign(s.cards[0], { trackSince: "2026-09-01", manualSince: "2026-09-01" });
+  s.installments.push({ id: "tv", personId: "ben", cardId: "bonus", desc: "TV", total: 3000, count: 3, date: "2026-09-10" });
+  s.debts = [];
+  return s;
+}
+const cardPay = (id, amount, date) => ({ id, kind: "payment", personId: "ben", cardId: "bonus", amount, date });
+
+test("borc-vade: elle ödenen kartın geciken ekstresi ve elle kredi; otomatik kartta ve ödenince yok", () => {
+  const s = manualCard();
+  // World otomatik: 25 Eyl kesimli ekstre 5 Eki'de kendiliğinden ödendi, uyarı yok
+  s.cards[1].trackSince = "2026-09-01";
+  s.installments.push({ id: "ks", personId: "ben", cardId: "world", desc: "Kitap", total: 500, count: 1, date: "2026-09-20" });
+  // Elle kredi: 5 Eki taksiti ödenmedi
+  s.debts.push({ id: "kr", kind: "loan", personId: "ben", party: "Garanti", asset: "TRY", amount: 3000, date: "2026-09-01",
+    due: "2026-10-05", count: 3, autoPay: false });
+  let due = I.insights(s, { today: TODAY }).find(x => x.id === "borc-vade");
+  assert.equal(due.title, "2 borç ödemesi gecikti");
+  assert.deepEqual(due.data, [
+    { cardId: "bonus", party: "Bonus", amount: 1000, asset: "TRY", date: "2026-09-29", overdue: true },
+    { debtId: "kr", party: "Garanti", amount: 1000, asset: "TRY", date: "2026-10-05", overdue: true },
+  ]);
+  assert.equal(due.text, "Bonus ekstresi ₺1.000 (21 gün gecikti), Garanti ₺1.000 (15 gün gecikti). Ödediysen Borçlar'da işaretle.");
+
+  // Ekstre kısmen ödenince kalanı gecikmiş kalır; tamamı ödenince kart uyarısı kalkar (kart ödemesi alacak da değildir)
+  s.debts.push(cardPay("c1", 400, "2026-10-01"));
+  due = I.insights(s, { today: TODAY }).find(x => x.id === "borc-vade");
+  assert.deepEqual(due.data[0], { cardId: "bonus", party: "Bonus", amount: 600, asset: "TRY", date: "2026-09-29", overdue: true });
+  s.debts.push(cardPay("c2", 600, "2026-10-20"));
+  const out = I.insights(s, { today: TODAY });
+  assert.deepEqual(out.find(x => x.id === "borc-vade").data.map(x => x.debtId ?? x.cardId), ["kr"]);
+  assert.equal(out.find(x => x.id === "borc-vade").title, "Borç ödemen gecikti");
+  assert.ok(!ids(out).includes("alacak"));
+
+  // Otomatiğe dönen kartta ekstreler ödenmiş sayılır
+  delete s.cards[0].manualSince;
+  s.debts = s.debts.filter(x => !x.cardId);
+  assert.deepEqual(I.insights(s, { today: TODAY }).find(x => x.id === "borc-vade").data.map(x => x.debtId ?? x.cardId), ["kr"]);
+});
+
+test("limit kullanımı bugüne göre (alışveriş gününe değil); elle kartta ödenmemiş geçmiş ekstre de kullanımda", () => {
+  const s = manualCard();
+  // 29 Eyl ekstresi ödenmedi: 3.000 kullanımda (otomatikte 2.000)
+  const used = date => I.cardTiming(s, date, TODAY).find(x => x.card.id === "bonus");
+  assert.equal(used("2026-10-20").used, 3000);
+  assert.equal(used("2026-12-01").used, 3000);    // alışveriş günü ileride olsa da bugünkü kullanım
+  assert.equal(used("2026-12-01").available, 7000);
+  assert.equal(used("2026-12-01").due, "2026-12-29");
+  s.debts.push(cardPay("c1", 1000, "2026-10-20"));
+  assert.equal(used("2026-10-20").used, 2000);
+  delete s.cards[0].manualSince;
+  s.debts = [];
+  assert.equal(used("2026-10-20").used, 2000);
+
+  // Limit içgörüsü de aynı kullanımla: 8.000'lik ödenmemiş ekstreyle %80 dolu
+  const big = manualCard();
+  big.installments.push({ id: "pc", personId: "ben", cardId: "bonus", desc: "Laptop", total: 5000, count: 1, date: "2026-09-12" });
+  const limit = I.insights(big, { today: TODAY }).find(x => x.id === "limit-bonus");
+  assert.deepEqual(limit.data, { card: "Bonus", used: 8000, limit: 10000 });
+});
+
+test("elle kart: ödenmemiş ekstre ödemelerde kendi ayında kalır; kart ödemesi ikinci kez ya da girdi olarak sayılmaz", () => {
+  const months = s => T.buildCashflow(s.people, s.cards, s.installments, OCT - 1, OCT + 2);
+  const flows = s => [OCT - 1, OCT, OCT + 1].map(idx => {
+    const f = I.monthFlows(s, idx, null, months(s), TODAY);
+    return [f.payments, f.inflow, f.outflow, f.net];
+  });
+  const salary = { id: "maas", personId: "ben", asset: "TRY", amount: 30000, desc: "Maaş", date: "2026-01-15", repeat: 0 };
+  const auto = manualCard();
+  delete auto.cards[0].manualSince;
+  auto.entries.push(salary);
+  const expected = [[1000, 0, 0, 29000], [1000, 0, 0, 29000], [1000, 0, 0, 29000]];
+  assert.deepEqual(flows(auto), expected);
+  // Elle kartta 29 Eyl ekstresi ödenmedi: yine Eylül ödemelerinde (months.total), bugüne taşınmaz
+  const s = manualCard();
+  s.entries.push(salary);
+  assert.deepEqual(flows(s), expected);
+  // 20 Eki'de 2.000 ödendi (Eyl ekstresi + Eki ekstresi önceden): ödemeler değişmez, toplam ekstrelerin toplamı kalır
+  s.debts.push(cardPay("c1", 2000, "2026-10-20"));
+  assert.deepEqual(flows(s), expected);
+  assert.equal(I.insights(s, { today: TODAY }).find(x => x.id === "serbest").data.net, 29000);
 });
 
 test("alacak: takipteki kartta ödemesi gelen kart payı; paylar yalnızca takipte kart yokken", () => {

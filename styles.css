@@ -1642,7 +1642,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .purchase.muted { opacity: .55; }
 .p-meta .who { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .p-meta .out-text { color: var(--expense); font-weight: 500; }
-/* Satır içi "Ödedim / Ödedi" (ve paylaş): telefonda yazılar sığsın diye ayrıntıların altında, genişte sağda */
+/* Satır içi "Ödendi" (ve paylaş): telefonda yazılar sığsın diye ayrıntıların altında, genişte sağda */
 .row-acts { display: flex; align-items: center; gap: 6px; grid-column: 2 / -1; margin-top: -4px; }
 .row-acts .icon-btn .ic { width: 17px; height: 17px; }
 .debt-act .ic { width: 16px; height: 16px; }
@@ -1656,6 +1656,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .count-grid.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 #debtPerRow label { padding: 8px 12px; font-size: 13.5px; }
 .preview .debt-plan-text { color: var(--text); font-weight: 600; }
+#debtAutoNote { margin-top: -6px; }   /* ödeme şekli kilitliyse kutunun hemen altında nedeni */
 
 /* Ödemeler listesi (borç, ödeme ve kart payı pencerelerinde) */
 .pay-hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
@@ -1705,6 +1706,13 @@ a.hero-eq { display: block; width: fit-content; }
 
 /* Girdi ve çıktılarda borç akışı: girdi yönündeki tutar gelir renginde */
 .tl-pay .amount.in { color: var(--income); }
+/* Elle ödenen kartın ekstre işaretinde durum rozeti: ödendi / ödenmedi */
+.tl-state { flex: none; padding: 0 6px; border-radius: 999px; background: var(--surface-2); font-size: 10.5px; font-weight: 600; line-height: 16px; }
+.tl-state.paid { color: var(--income); }
+.tl-state.late { color: var(--expense); }
+/* Ekstre ayrıntısında durum: gecikmiş gider, ödenmiş gelir renginde */
+.p-status.late { color: var(--expense); }
+.p-status.paid { color: var(--income); }
 
 /* Özet Kişiler: kart payı olan satır kart payı penceresini açar */
 .people-sum li.clickable { cursor: pointer; border-radius: 12px; }

@@ -293,7 +293,8 @@
       <div id="entryWrap"></div>
       <p class="footnote">TL karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Kurlar internet varken
         birkaç dakikada bir yenilenir; çevrimdışıyken son alınan kur kullanılır. Bakiyelere borç ve alacak hareketleri de
-        girer; takipteki kartların ekstresi son ödeme gününün ertesi günü TL bakiyesinden düşer.</p>
+        girer; takipteki kartların ekstresi son ödeme gününün ertesi günü (elle ödenen kartta Ödendi işaretlenince) TL
+        bakiyesinden düşer.</p>
     </section>
   </main>
 
@@ -491,6 +492,7 @@
             <input name="trackSince" type="date" aria-label="Takibin başladığı gün" />
             <span>tarihinden beri</span>
           </label>
+          <label class="check" id="cardAutoRow"><input type="checkbox" name="autoPay" checked /><span>Son ödeme günü geçince ödendi say</span></label>
           <div class="preview" id="trackPreview" aria-live="polite"></div>
           <button type="button" class="link" id="cardDebtLink" hidden>Borçlar'da gör ›</button>
         </div>
@@ -570,8 +572,9 @@
                   <span class="field-label">İlk taksit</span>
                   <input name="first" type="date" />
                 </label>
-                <label class="check" id="debtAutoRow"><input type="checkbox" name="autoPay" /><span>Taksitler tarihinde ödenmiş sayılsın</span></label>
               </div>
+              <label class="check" id="debtAutoRow"><input type="checkbox" name="autoPay" /><span id="debtAutoText">Taksitler tarihinde ödenmiş sayılsın</span></label>
+              <p class="hint" id="debtAutoNote"></p>
             </div>
           </details>
           <details class="row" id="debtEffectRow">
@@ -632,7 +635,7 @@
     </form>
   </dialog>
 
-  <!-- ── Ödeme / tahsilat (borç, kredi, kart payı) ──────── -->
+  <!-- ── Ödeme / tahsilat (borç, kredi, kart payı, kart ekstresi) ── -->
   <dialog class="sheet" id="paySheet" aria-labelledby="payTitle">
     <form id="payForm" class="sheet-form" novalidate>
       <header class="sheet-head">
@@ -654,12 +657,14 @@
             <div class="chips" id="payDateChips" role="group" aria-label="Tarih kısayolları">
               <button type="button" class="chip" data-day="0">Bugün</button>
               <button type="button" class="chip" data-day="-1">Dün</button>
+              <button type="button" class="chip" data-date="" id="payDueChip" hidden>Son ödeme günü</button>
             </div>
             <input name="date" type="date" aria-label="Ödeme tarihi" />
           </div>
         </div>
         <input class="desc-input" name="desc" type="text" placeholder="Not (isteğe bağlı)" autocomplete="off" enterkeyhint="done" aria-label="Not" />
         <label class="check" id="payCloseRow"><input type="checkbox" name="close" /><span>Bu ödemeyle kapat</span></label>
+        <p class="hint" id="payHint"></p>
         <div class="preview" id="payPreview" aria-live="polite"></div>
         <section id="payHistory" hidden>
           <h3 class="ev-sub">Önceki ödemeler</h3>
@@ -698,7 +703,7 @@
         <button type="button" class="btn btn-ghost" id="shareRemind"><svg class="ic"><use href="#i-share"/></svg><span>Hatırlat</span></button>
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Kapat</button>
-        <button type="button" class="btn btn-primary" id="sharePaid">Ödedi</button>
+        <button type="button" class="btn btn-primary" id="sharePaid" aria-label="Kart payı ödemesi ekle">Ödendi</button>
       </footer>
     </div>
   </dialog>
@@ -732,6 +737,7 @@
         <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
       <div class="sheet-body">
+        <p class="p-status" id="eventState" hidden></p>
         <div class="ev-split" id="eventSplit"></div>
         <section>
           <h3 class="ev-sub">Harcamalar</h3>
@@ -741,7 +747,8 @@
       <footer class="sheet-foot">
         <button type="button" class="btn btn-ghost" id="eventToFlow">Akışta göster</button>
         <span class="spacer"></span>
-        <button type="button" class="btn btn-primary" data-close>Tamam</button>
+        <button type="button" class="btn btn-primary" id="eventOk" data-close>Tamam</button>
+        <button type="button" class="btn btn-primary" id="eventPay" hidden>Ödendi</button>
       </footer>
     </div>
   </dialog>
