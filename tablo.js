@@ -75,7 +75,7 @@
         cutoff_day: cutoff, due_day: due, color: int(c.color, 0, 999) ?? 0,
         last4: /^\d{4}$/.test(c.last4) ? c.last4 : null,
         history: history(c.history, "cutoffDay", "dueDay")?.map(h => ({ until: h.until, cutoff_day: h.c, due_day: h.d })) ?? null,
-        track_since: dateKey(c.trackSince), track_off: c.trackOff === true,
+        track_since: dateKey(c.trackSince), track_off: c.trackOff === true, manual_since: dateKey(c.manualSince),
       };
     },
     purchases: p => {
@@ -112,13 +112,15 @@
       return {
         id: d.id, kind, person_id: d.personId,
         debt_id: kind === "payment" && validId(d.debtId) ? d.debtId : null,
+        card_id: kind === "payment" && !validId(d.debtId) && validId(d.cardId) ? d.cardId : null,
         side: kind === "person" ? d.side : null,
         party: head && d.party ? String(d.party) : null,
         description: String(d.desc ?? ""),
         asset: head ? d.asset : null,
         amount, principal: head ? pos(d.principal) : null,
         date, due, count,
-        auto_pay: kind === "person" && due && d.autoPay === true ? true : null,
+        // Ödeme modu: boşsa türün varsayılanı (kredi otomatik, kişisel borç elle)
+        auto_pay: kind === "person" && due && d.autoPay === true ? true : kind === "loan" && d.autoPay === false ? false : null,
         closed: head ? dateKey(d.closed) : null,
       };
     },
@@ -135,6 +137,8 @@
       const since = dateKey(r.track_since);
       if (since) c.trackSince = since;
       if (r.track_off === true) c.trackOff = true;
+      const manual = dateKey(r.manual_since);
+      if (manual) c.manualSince = manual;
       return c;
     },
     purchases: r => {
@@ -158,6 +162,7 @@
     debts: r => {
       const d = { id: r.id, kind: r.kind, personId: r.person_id };
       if (r.debt_id) d.debtId = r.debt_id;
+      if (r.card_id) d.cardId = r.card_id;
       if (r.side) d.side = r.side;
       if (r.party) d.party = r.party;
       if (r.description) d.desc = r.description;
@@ -167,7 +172,8 @@
       d.date = r.date;
       if (r.due) d.due = r.due;
       if (r.count != null) d.count = Number(r.count);
-      if (r.auto_pay) d.autoPay = true;
+      if (r.auto_pay === true) d.autoPay = true;
+      else if (r.auto_pay === false) d.autoPay = false;
       if (r.closed) d.closed = r.closed;
       return d;
     },
@@ -180,9 +186,9 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 5;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
+  const SCHEMA = 6;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
                       // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit;
-                      // 5: cards.track_since / track_off (debts yeni tablo)
+                      // 5: cards.track_since / track_off (debts yeni tablo); 6: cards.manual_since, debts.card_id
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base) {
@@ -243,7 +249,8 @@
       out[t] = { upsert, delete: Object.keys(known).filter(id => !seen.has(id)) };
     }
     out.entries.upsert = out.entries.upsert.filter(x => exists.people.has(x.row.person_id));
-    out.debts.upsert = out.debts.upsert.filter(x => exists.people.has(x.row.person_id));
+    // Kartı tabloda olmayan kart ödemesi yazılmaz (kartsız ödeme kart payı ödemesi demektir, boşaltılmaz)
+    out.debts.upsert = out.debts.upsert.filter(x => exists.people.has(x.row.person_id) && (!x.row.card_id || exists.cards.has(x.row.card_id)));
     out.purchases.upsert = out.purchases.upsert
       .filter(x => exists.people.has(x.row.person_id))
       .map(x => (x.row.card_id && !exists.cards.has(x.row.card_id) ? { ...x, row: { ...x.row, card_id: null } } : x));

@@ -372,7 +372,7 @@ test("borçlar: her tür satıra çevrilir ve geri gelir; geçersiz kayıt yazı
   // Sayısız taksit ve otomatik ödeme vadesiz yazılmaz; kayıt kişisinin silinmesi borcu da siler
   const loose = changes({ people: state.people, debts: [{ id: "n", kind: "person", personId: "ali", side: "receivable", asset: "EUR",
     amount: 50, principal: -1, date: "2026-11-01", count: 3, autoPay: true, desc: "Not" }] }, {}).debts.upsert[0].row;
-  assert.deepEqual(loose, { id: "n", kind: "person", person_id: "ali", debt_id: null, side: "receivable", party: null, description: "Not",
+  assert.deepEqual(loose, { id: "n", kind: "person", person_id: "ali", debt_id: null, card_id: null, side: "receivable", party: null, description: "Not",
     asset: "EUR", amount: 50, principal: null, date: "2026-11-01", due: null, count: null, auto_pay: null, closed: null });
 });
 
@@ -416,4 +416,38 @@ test("cihazdaki borçlar hesaba eklenir; birleşen kartın takibi erken başlaya
   assert.deepEqual(out.cards.map(c => [c.id, c.trackSince]), [["k1", "2026-10-20"]]);
   assert.deepEqual(out.debts.map(d => [d.id, d.personId, d.debtId]), [["d1", "x1", undefined], ["d2", "x1", "d1"]]);
   assert.equal(account.cards[0].trackSince, "2026-10-24");   // hesabın verisi değişmez
+});
+
+test("elle ödeme: kart ödemesi (card_id), cards.manual_since ve elle kredi satıra çevrilir; kartı bilinmeyen ödeme yazılmaz", () => {
+  const rows = {
+    ...server(),
+    cards: [card("k1", { manual_since: "2026-10-24", track_since: "2026-09-01", track_off: false })],
+    debts: [
+      debt("kp", { kind: "payment", card_id: "k1", side: null, party: null, asset: null, amount: "3000", principal: null, date: "2026-10-25" }),
+      debt("kr", { kind: "loan", side: null, party: "Garanti", due: "2026-12-10", count: 4, auto_pay: false }),
+    ],
+  };
+  const state = toState(rows);
+  assert.equal(state.cards[0].manualSince, "2026-10-24");
+  assert.deepEqual(state.debts[0], { id: "kp", kind: "payment", personId: "ben", cardId: "k1", amount: 3000, date: "2026-10-25" });
+  assert.equal(state.debts[1].autoPay, false);
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(state, baseOf(rows))[t], { upsert: [], delete: [] }, t);
+
+  // Kartı yalnızca yerelde olan ödeme yazılmaz; borcu olan ödemede card_id boş kalır
+  const plan = changes({ ...state, debts: [
+    { id: "x1", kind: "payment", personId: "ben", cardId: "yok", amount: 5, date: "2026-10-25" },
+    { id: "x2", kind: "payment", personId: "ben", debtId: "kr", cardId: "k1", amount: 5, date: "2026-10-25" },
+  ] }, baseOf(rows)).debts.upsert;
+  assert.deepEqual(plan.map(x => [x.id, x.row.debt_id, x.row.card_id]), [["x2", "kr", null]]);
+
+  // 5. biçim tabanı (manual_since / card_id yok) rekey ile çevrilir: yükseltmede bir şey yazılmaz
+  const old = baseOf(rows);
+  for (const t of ["cards", "debts"]) {
+    for (const id of Object.keys(old[t])) {
+      const { manual_since, card_id, ...row } = JSON.parse(old[t][id]);
+      old[t][id] = JSON.stringify(row);
+    }
+  }
+  const plain = toState({ ...rows, cards: [card("k1", { track_since: "2026-09-01", track_off: false })], debts: [rows.debts[1]] });
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(plain, rekey(old))[t].upsert.map(x => x.id), t === "debts" ? [] : [], t);
 });

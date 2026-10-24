@@ -2,18 +2,21 @@
 // Kayıt (state.debts, tablo debts):
 //   { id, kind: "person", side: "debt" | "receivable", personId, party, desc?, asset, amount, principal?, date,
 //     due?, count?, autoPay?, closed? }   biriyle borç ya da alacak; party karşı taraf (serbest metin)
-//   { id, kind: "loan", personId, party?, desc?, asset, amount, principal?, date, due, count, closed? }   banka kredisi
-//   { id, kind: "payment", personId, debtId?, amount, date, desc? }   ödeme / tahsilat; debtId yoksa kart payı ödemesi
+//   { id, kind: "loan", personId, party?, desc?, asset, amount, principal?, date, due, count, autoPay?, closed? }   kredi
+//   { id, kind: "payment", personId, debtId?, cardId?, amount, date, desc? }   ödeme / tahsilat; cardId'liyse kart ekstresi
+//     ödemesi (ilk kişinin TL varlığından), ikisi de yoksa personId'nin kart payı ödemesi
 // personId kaydın sahibidir (varlığı etkilenen kişi). amount ödenecek toplam (kredide taksit × sayı), principal date günü
 // varlığa giren (borçta) ya da çıkan (alacakta) para; yoksa para hareketi olmamıştır (eski borç). due vade ya da ilk
 // taksit, count taksit sayısı: taksitler due'dan başlayıp ayda bir düşer (ay kısaysa ayın son günü).
-// Kredi ve autoPay'li kişisel borçta taksit, tarihinin ertesi günü ödenmiş sayılır (kart ekstresi gibi; tarihinde "bugün
-// ödenecek"); date'ten önceki taksitler takipten önce ödenmiştir, varlığa etkisi yoktur. Erken ödeme sondaki
-// taksitlerden düşer. autoPay'siz kişisel borç yalnızca kaydedilen ödemelerle kapanır; taksitler beklentidir (gecikme).
+// Ödeme modu (autoPay): kredide varsayılan otomatik (autoPay false elle), kişisel borçta varsayılan elle (autoPay true
+// otomatik). Otomatikte taksit tarihinin ertesi günü ödenmiş sayılır (kart ekstresi gibi; tarihinde "bugün ödenecek"),
+// erken ödeme sondaki taksitlerden düşer. Elle modda yalnızca kaydedilen ödemelerle kapanır (ilk taksitten başlayarak);
+// günü geçip kapanmayan taksit gecikmiştir. Kredide date'ten önceki taksitler takipten önce ödenmiştir, varlığa etkisi yoktur.
 //
-// Kart borcu kaydedilmez, harcamalardan gelir: kartın ödenmemiş taksitleri (T.outstanding). Takipteki kartın
-// (card.trackSince; trackOff değilse) trackSince'tan sonra son ödeme günü geçen ekstreleri ilk kişinin TL varlığından düşer;
-// kartta diğer kişilerin trackSince'tan sonraki taksitleri onlardan alacaktır, kart payı ödemeleri (debtId'siz payment)
+// Kart borcu kaydedilmez, harcamalardan gelir. Takipteki kartın (card.trackSince; trackOff değilse) trackSince'tan
+// sonraki ekstreleri ilk kişinin TL varlığından düşer (D, cardState): otomatikte son ödeme gününün ertesi günü, elle
+// modda (card.manualSince'tan sonraki ekstreler) Ödendi ile kaydedilen kart ödemeleriyle. Kart borcu = trackSince'tan
+// sonraki taksitler − D. Kartta diğer kişilerin trackSince'tan sonraki taksitleri onlardan alacaktır, kart payı ödemeleri
 // ilk kişinin TL varlığına girer. Böylece Varlık (eldeki + alacak) = Özvarlık + Borç her gün tutar.
 (function (root) {
   const node = typeof module === "object" && module.exports;
@@ -31,6 +34,8 @@
 
   // ---------- Kart takibi ----------
   function tracked(card) { return !!card && card.trackOff !== true; }
+  // Ekstreler elle ödenir (Ödendi): manualSince'tan sonraki ekstreler kaydedilen ödemelerle kapanır
+  function manual(card) { return valid(card?.manualSince); }
   // Takibin başladığı gün; henüz doldurulmadıysa bugün (bugünden takipte gibi: düşülen yok, alacak bugünden)
   function since(card, today) { return valid(card?.trackSince) ? card.trackSince : today; }
 
@@ -48,7 +53,7 @@
   // ---------- Kayıtlar ----------
   function side(d) { return d.kind === "loan" ? "debt" : d.side; }
   function sign(d) { return side(d) === "debt" ? 1 : -1; }   // borçta para gelir (+), alacakta çıkar (−)
-  function auto(d) { return d.kind === "loan" || (d.autoPay === true && valid(d.due)); }
+  function auto(d) { return valid(d.due) && (d.kind === "loan" ? d.autoPay !== false : d.autoPay === true); }
   function started(d, today) { return d.date <= today; }
 
   function validHead(d) {
@@ -59,23 +64,29 @@
     return true;
   }
 
-  // Sahibi bilinen geçerli kayıtlar: items (borç / alacak / kredi), pays (debtId → ödemeler, tarihe göre), settlements
-  // (kart payı ödemeleri), payer (ilk kişi: kartları ödeyen)
+  // Sahibi bilinen geçerli kayıtlar: items (borç / alacak / kredi), pays (debtId → ödemeler, tarihe göre), cardPays
+  // (cardId → kart ekstresi ödemeleri), settlements (kart payı ödemeleri), payer (ilk kişi: kartları ödeyen)
   function known(state) {
     const people = new Set((state.people || []).map(p => p.id));
+    const cards = new Set((state.cards || []).map(c => c.id));
     const payer = state.people?.[0]?.id ?? null;
-    const items = [], pays = new Map(), settlements = [];
+    const items = [], pays = new Map(), cardPays = new Map(), settlements = [];
     for (const d of state.debts || []) {
       if (d && people.has(d.personId) && validHead(d)) { items.push(d); pays.set(d.id, []); }
     }
     for (const x of state.debts || []) {
       if (!x || x.kind !== "payment" || !(Number.isFinite(x.amount) && x.amount > 0) || !valid(x.date)) continue;
       if (x.debtId) pays.get(x.debtId)?.push(x);
-      else if (people.has(x.personId) && x.personId !== payer) settlements.push(x);
+      else if (x.cardId) {
+        if (!cards.has(x.cardId) || !people.has(x.personId)) continue;   // kartı / kişisi silinmiş
+        if (!cardPays.has(x.cardId)) cardPays.set(x.cardId, []);
+        cardPays.get(x.cardId).push(x);
+      } else if (people.has(x.personId) && x.personId !== payer) settlements.push(x);
     }
     for (const list of pays.values()) list.sort(byDate);
+    for (const list of cardPays.values()) list.sort(byDate);
     settlements.sort(byDate);
-    return { items, pays, settlements, payer };
+    return { items, pays, cardPays, settlements, payer };
   }
 
   // ---------- Plan ve durum ----------
@@ -131,12 +142,16 @@
       const n = left[0];
       out.next = n ? { date: n.key, amount: sum(left.filter(x => x.key === n.key)), no: n.no } : null;
     } else {
-      out.paid = paidIn;
-      out.remaining = isStarted && !closed ? Math.max(0, d.amount - paidIn) : 0;
-      let pool = paidIn;
+      // Kredide kayıt tarihinden önceki taksitler takipten önce ödenmiştir (kişisel borçta gecikmiş kalır)
       const items = schedule(d);
+      const before = x => d.kind === "loan" && x.key < d.date;
+      const pre = sum(items.filter(before));
+      out.paid = paidIn;
+      out.remaining = isStarted && !closed ? Math.max(0, d.amount - pre - paidIn) : 0;
+      let pool = paidIn;
       out.count = items.length;
       out.items = items.map(x => {
+        if (before(x)) { out.paidCount++; return { no: x.no, key: x.key, amount: x.amount, covered: x.amount, state: "paid" }; }
         const covered = Math.min(pool, x.amount);
         pool -= covered;
         const open = x.amount - covered;
@@ -153,6 +168,13 @@
     }
     out.done = closed || (isStarted && out.remaining <= EPS);
     return out;
+  }
+
+  // Ödeme modu (otomatik / elle) değiştirilebilir mi: geçmişte (takipten sonra, bugünden önce) taksiti olan borçta
+  // değiştirmek geçmiş taksitleri yeniden yorumlar (ödenmiş sayılan gecikmiş olur ya da kaydedilen ödemeler ikinci kez
+  // düşer); o zaman kilitlidir
+  function modeLocked(d, today) {
+    return schedule(d).some(x => x.key < today && !(d.kind === "loan" && x.key < d.date));
   }
 
   // Varlığa akışlar (sahibinin, borcun varlığında; amount işaretli): [{ date, amount, asset, type, paid, debt, no?, of?,
@@ -196,34 +218,136 @@
     return out.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   }
 
-  // Kartın borcu: total (= cardStats.used, T.outstanding), kişi başına, sıradaki ekstre (cut: kesilmiş, ödeme bekliyor)
-  function cardDebt(state, card, today) {
-    const lines = cardLines(state, card, today);
-    const owed = lines.filter(x => x.key >= today && !(x.at > today));
-    const byPerson = {};
-    for (const x of owed) add(byPerson, x.personId, x.amount);
-    const open = T.statementOf(card, today);
-    const first = owed[0];
-    let next = null;
-    if (first) {
-      const same = owed.filter(x => x.key === first.key);
-      const nb = {};
-      for (const x of same) add(nb, x.personId, x.amount);
-      next = { date: first.key, amount: sum(same), byPerson: nb, cut: first.key < open.due };
+  // Kartın ekstreleri (son ödeme gününe göre toplanmış taksitler): [{ key, amount, lines }]
+  function statements(lines) {
+    const out = [];
+    for (const x of lines) {
+      const last = out[out.length - 1];
+      if (last && last.key === x.key) { last.amount += x.amount; last.lines.push(x); }
+      else out.push({ key: x.key, amount: x.amount, lines: [x] });
     }
-    return { card, total: T.outstanding(lines, today), byPerson, next, open: { cut: open.cut, due: open.due },
-      tracked: tracked(card), since: tracked(card) ? since(card, today) : null };
+    return out;
   }
 
-  // Takipteki kartlarda since ≤ son ödeme < today ekstreler (TL): ilk kişinin varlığından düşer
+  // Takipteki kartın ekstre durumu. S = trackSince, E = elle modun başladığı gün (max(manualSince, S); otomatikte yok).
+  // A: E'den (otomatikte bugünden) önceki ekstreler, Pb / Pa: E'den önce / sonra kart ödemeleri (S ≤ tarih ≤ bugün).
+  // D = max(A, Pb) + Pa varlıktan düşen; borç = S'den sonraki taksitler − D (eksiyse kartta artı bakiye, credit).
+  // Ödemeler (D − A) E'den sonraki ekstreleri sırayla kapatır: kapanmamış ekstre günü geçmişse late, bugünse due,
+  // sonraysa open. Otomatikte bugünden önceki ekstreler ödenmiş sayılır, ödemeler ancak sonrakileri önceden kapatır.
+  function cardState(state, card, today, pays) {
+    pays ??= known(state).cardPays.get(card.id) || [];
+    const S = since(card, today);
+    const E = manual(card) ? (card.manualSince > S ? card.manualSince : S) : null;
+    const cut = E && E < today ? E : today;
+    const lines = cardLines(state, card, today).filter(x => x.key >= S && !(x.at > today));
+    const P = pays.filter(p => p.date >= S && p.date <= today);
+    const A = sum(lines.filter(x => x.key < cut));
+    const Pb = sum(P.filter(p => !E || p.date < E)), Pa = E ? sum(P.filter(p => p.date >= E)) : 0;
+    const D = Math.max(A, Pb) + Pa;
+    let pool = D - A;
+    const list = statements(lines).map(st => {
+      if (st.key < cut) return { ...st, covered: st.amount, state: "paid", auto: true };
+      const covered = Math.min(pool, st.amount);
+      pool -= covered;
+      const open = st.amount - covered;
+      const state = open <= EPS ? "paid" : st.key < today ? "late" : st.key === today ? "due" : "open";
+      return { ...st, covered, state, auto: false };
+    });
+    const late = list.filter(x => x.state === "late");
+    const unpaid = list.filter(x => x.state === "late" || x.state === "due");
+    const debt = sum(lines) - D;
+    return {
+      since: S, manualFrom: E, deduction: D, debt: Math.abs(debt) <= EPS ? 0 : debt, credit: Math.max(0, -debt),
+      statements: list, prepaid: Math.max(0, pool), lines,
+      unpaid: sum(unpaid, x => x.amount - x.covered), overdue: sum(late, x => x.amount - x.covered),
+      overdueSince: late[0]?.key ?? null,
+    };
+  }
+
+  // Elle moddaki kartta ödemesi gelmemiş ekstreleri aşan ön ödeme: otomatiğe dönerken (manualSince silinince) önceki
+  // ekstrelerde erirdi; varsa otomatiğe dönülmez
+  function cardPrepaid(state, card, today) {
+    if (!tracked(card) || !manual(card)) return 0;
+    const cs = cardState(state, card, today);
+    return sum(cs.statements.filter(x => x.key >= today), x => x.covered) + cs.prepaid;
+  }
+
+  // Kartın borcu: total (takipteki kartta S'den sonraki taksitler − ödenen; takip dışında T.outstanding), kişi başına
+  // (bugünden sonraki taksitler), sıradaki ekstre (kapanmamış kısmı; cut: kesilmiş, ödeme bekliyor), elle modda ödenmemiş
+  // (unpaid: günü gelmiş) ve gecikmiş (overdue) tutar
+  function cardDebt(state, card, today, pays) {
+    const isTracked = tracked(card);
+    const cs = isTracked ? cardState(state, card, today, pays) : null;
+    const lines = cs ? cs.lines : cardLines(state, card, today);
+    const byPerson = {};
+    for (const x of lines) if (x.key >= today && !(x.at > today)) add(byPerson, x.personId, x.amount);
+    const open = T.statementOf(card, today);
+    let next = null;
+    const st = cs
+      ? cs.statements.find(x => x.key >= today && x.amount - x.covered > EPS)
+      : statements(lines.filter(x => x.key >= today && !(x.at > today)))[0];
+    if (st) {
+      const nb = {};
+      for (const x of st.lines) add(nb, x.personId, x.amount);
+      next = { date: st.key, amount: st.amount - (st.covered || 0), byPerson: nb, cut: st.key < open.due };
+    }
+    return {
+      card, total: cs ? cs.debt : T.outstanding(lines, today), byPerson, next, open: { cut: open.cut, due: open.due },
+      tracked: isTracked, since: isTracked ? cs.since : null, manual: isTracked && manual(card), manualFrom: cs?.manualFrom ?? null,
+      unpaid: cs?.unpaid ?? 0, overdue: cs?.overdue ?? 0, overdueSince: cs?.overdueSince ?? null, credit: cs?.credit ?? 0,
+      statements: cs?.statements ?? [],
+    };
+  }
+
+  // Limitten kullanılan: takipteki kartta borç (elle modda ödenmemiş geçmiş ekstreler dahil, ön ödeme düşülmüş); takip
+  // bugünden sonra başlıyorsa aradaki taksitler de; takip dışında bugün ve sonra ödenecekler (T.outstanding)
+  function cardUsed(state, card, today) {
+    if (!tracked(card)) return T.outstanding(cardLines(state, card, today), today);
+    const cs = cardState(state, card, today);
+    const gap = cs.since > today ? sum(cardLines(state, card, today).filter(x => x.key >= today && x.key < cs.since && !(x.at > today))) : 0;
+    return Math.max(0, cs.debt) + gap;
+  }
+
+  // Takipteki kartların varlıktan düşeni (TL, ilk kişiden): Σ D
   function cardPaid(state, today) {
+    const k = known(state);
     let total = 0;
+    for (const c of state.cards || []) if (tracked(c)) total += cardState(state, c, today, k.cardPays.get(c.id) || []).deduction;
+    return total;
+  }
+
+  // Nakit grafiği için takipteki kartların hareketleri (TL, eksi), from…to: { date, amount, cardId, type, planned }.
+  // type: statement (otomatik ödenen ya da ileride ödenecek ekstre, kapanmamış kısmı), payment (kart ödemesi), prepay
+  // (otomatikte ekstreleri aşan ön ödeme), unpaid (günü gelmiş ödenmemiş ekstreler, bugünde). Bugüne kadarki hareketlerin
+  // toplamı D'dir (geriye doğru bakiye tutarlı). trackSince'tan önceki ekstreler burada yok (takip dışı gibi).
+  // until: ileriki ekstreler için süresiz tekrarların son günü.
+  function cardMoves(state, today, from, to, until = to) {
+    const k = known(state);
+    const out = [];
+    const push = m => { if (m.date >= from && m.date <= to && m.amount < -EPS) out.push(m); };
     for (const c of state.cards || []) {
       if (!tracked(c)) continue;
-      const from = since(c, today);
-      total += sum(cardLines(state, c, today).filter(x => x.key >= from && x.key < today && !(x.at > today)));
+      const pays = k.cardPays.get(c.id) || [];
+      const cs = cardState(state, c, today, pays);
+      const E = cs.manualFrom, cut = E && E < today ? E : today;
+      const P = pays.filter(p => p.date >= cs.since && p.date <= today);
+      const A = sum(cs.statements.filter(x => x.key < cut));
+      const Pb = P.filter(p => !E || p.date < E);
+      for (const x of cs.statements) {
+        if (x.key < cut) push({ date: x.key, amount: -x.amount, cardId: c.id, type: "statement", planned: false });
+      }
+      // E'den önceki ödemeler A'yı aştıysa fazlası son ödemenin gününde (ön ödeme)
+      const extra = sum(Pb) - A;
+      if (extra > EPS) push({ date: Pb[Pb.length - 1].date, amount: -extra, cardId: c.id, type: "prepay", planned: false });
+      if (E) for (const p of P) if (p.date >= E) push({ date: p.date, amount: -p.amount, cardId: c.id, type: "payment", planned: false, payment: p });
+      const unpaid = sum(cs.statements.filter(x => x.key >= cut && x.key <= today), x => x.amount - x.covered);
+      if (unpaid > EPS) push({ date: today, amount: -unpaid, cardId: c.id, type: "unpaid", planned: true });
+      // İleriki ekstreler: süresiz tekrarların ileriki tekrarları da (until'e kadar), kapanmış kısmı düşülerek
+      const covered = new Map(cs.statements.filter(x => x.key > today).map(x => [x.key, x.covered]));
+      const future = statements(cardLines(state, c, until).filter(x => x.key > today && x.key >= cs.since));
+      for (const x of future) push({ date: x.key, amount: -(x.amount - (covered.get(x.key) || 0)), cardId: c.id, type: "statement", planned: true });
     }
-    return total;
+    return out.sort(byDate);
   }
 
   // Diğer kişilerin takipteki kartlardaki payları: pid → { person, charged, settled, remaining (eksiyse fazla ödedi),
@@ -361,7 +485,7 @@
       return v ?? 0;
     };
 
-    const receivable = { people: 0, cards: 0, total: 0 };
+    const receivable = { people: 0, cards: 0, cardCredit: 0, total: 0 };
     const debt = { cards: 0, cash: 0, loans: 0, people: 0, overpaid: 0, total: 0 };
     const list = [];
     for (const d of k.items) {
@@ -375,11 +499,13 @@
       else debt.people += v;
     }
     const withPayer = inScope(pid, k.payer);
-    const cardList = (state.cards || []).map(c => cardDebt(state, c, today));
+    const cardList = (state.cards || []).map(c => cardDebt(state, c, today, k.cardPays.get(c.id) || []));
     let untracked = 0;
     if (withPayer) {
       for (const c of cardList) {
-        if (c.tracked) debt.cards += c.total; else untracked += c.total;
+        if (!c.tracked) untracked += c.total;
+        else if (c.total > 0) debt.cards += c.total;
+        else receivable.cardCredit -= c.total;   // fazla ödenmiş kart: kartta artı bakiye
       }
       for (const s of shares(state, today).values()) {
         if (s.remaining > 0) receivable.cards += s.remaining;
@@ -387,7 +513,7 @@
       }
     }
     for (const [code, v] of Object.entries(cashDebt(state, today, pid === "all" ? undefined : pid))) debt.cash += tl(v, code);
-    receivable.total = receivable.people + receivable.cards;
+    receivable.total = receivable.people + receivable.cards + receivable.cardCredit;
     debt.total = debt.cards + debt.cash + debt.loans + debt.people + debt.overpaid;
     const assets = cash.total + receivable.total;
     return {
@@ -443,9 +569,9 @@
   }
 
   const api = {
-    KINDS, SIDES, tracked, since, ensureTracking, side, sign, auto, started, known, schedule, plan, status, flows,
-    cardLines, cardDebt, cardPaid, shares, shareItems, cashDebt, allFlows, debtSpent, addSpent, spent, paymentsDue, totals,
-    flowText, loanRate, lastIndex,
+    KINDS, SIDES, tracked, manual, since, ensureTracking, side, sign, auto, started, known, schedule, plan, status, modeLocked,
+    flows, cardLines, cardState, cardPrepaid, cardDebt, cardUsed, cardPaid, cardMoves, shares, shareItems, cashDebt, allFlows,
+    debtSpent, addSpent, spent, paymentsDue, totals, flowText, loanRate, lastIndex,
   };
   if (node) module.exports = api;
   else root.Borc = api;
