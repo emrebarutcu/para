@@ -3588,9 +3588,8 @@ function trackChange(card, track, today) {
       : track.auto ? "Ekstre, son ödeme gününün ertesi günü TL bakiyenden düşer."
       : "Ekstre, Ödendi işaretleyince TL bakiyenden düşer; günü geçerse gecikmiş görünür." };
   }
-  const prepaid = autoPrepaid(card, track, today);
-  if (prepaid > EPS) return { text: prepaidText(prepaid), warn: true };
-  if (manualTodayBlocked(card, track, today)) return { text: PAID_TODAY, warn: true };
+  if (autoPrepaid(card, track, today) > EPS) return { text: prepaidText(card, track.since, today), warn: true };
+  if (paidTodayBlocked(card, track, today)) return { text: B.tracked(card) ? PAID_TODAY : PAID_TODAY_ON, warn: true };
   const tracked = B.tracked(card);
   if (tracked === track.on && (!track.on || B.manual(card) === !track.auto)) return null;
   const after = withTracking(card, track, today);
@@ -3617,21 +3616,31 @@ function autoPrepaid(card, { on, since, auto }, today) {
   if (!card || !on || !auto || !B.manual(card)) return 0;
   return B.cardPrepaid(state, { ...card, trackOff: false, trackSince: since }, today);
 }
-function prepaidText(prepaid) {
-  return `Bu kartta ileriki ekstreler için ${fmt(prepaid)} ödeme var. Otomatiğe geçmek için önce o ödemeyi sil (Ekstre ödemeleri).`;
+// Engelin metni: kaydedilen ödemelerin bugüne kadarki (bugün dahil) ekstreleri aşan kısmı, yani ileriki ekstreler için
+// ödenen; o kadarı çıkarılınca engel kalkar. Aşan yoksa engel bugün ödenecek ekstrenin ödemesinden: otomatikte o ekstre
+// yarın ödenmiş sayılır, otomatiğe yarın geçilir.
+function prepaidText(card, since, today) {
+  const cs = B.cardState(state, { ...card, trackOff: false, trackSince: since }, today);
+  const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((s, x) => s + x.amount, 0);
+  return ahead > EPS
+    ? `Bu kartta ileriki ekstreler için ${fmt(ahead)} ödeme var. Otomatiğe geçmek için önce bu tutarı Ekstre ödemeleri'nden çıkar.`
+    : "Bugünkü ekstreye ödeme girdin; otomatiğe yarın geçebilirsin.";
 }
 
-// Otomatikten elle moda geçiş (withTracking'de manualSince bugün) kartta bugün tarihli ödeme varken engellenir: o ödeme,
-// bugüne kadar ödenmiş sayılan ekstrelerde erimişken ikinci kez düşerdi (borc.js cardPaidToday). Takibe giren kartta
-// elle mod takibin başından (R2): engel yok.
+// Kartta bugün tarihli ödeme varken (borc.js cardPaidToday) o gün iki geçiş engellenir. Otomatikten elle moda
+// (withTracking'de manualSince bugün): ödeme, bugüne kadar ödenmiş sayılan ekstrelerde erimişken ikinci kez düşerdi.
+// Hesaba katılmayan kartı yeniden katma (takip bugün başlar): ödediği ekstre takipten önce kalır, ödeme sonraki
+// ekstreleri kapatırdı.
 const PAID_TODAY = "Bugün bu karta ödeme girdin; elle işaretlemeye yarın geçebilirsin.";
-function manualTodayBlocked(card, { on, auto }, today) {
-  return !!card && on && !auto && B.tracked(card) && !B.manual(card) && B.cardPaidToday(state, card, today);
+const PAID_TODAY_ON = "Bugün bu karta ödeme girdin; kartı yarın yeniden hesaba katabilirsin.";
+function paidTodayBlocked(card, { on, auto }, today) {
+  if (!card || !on || !B.cardPaidToday(state, card, today)) return false;
+  return !B.tracked(card) || (!auto && !B.manual(card));
 }
 
 // Formdaki seçim karta yazılır: hesaba katılmayan kartta trackOff (trackSince ve manualSince saklanır), takipte başlangıç
 // günü (trackOff kalkar). Otomatikten elleye geçişte manualSince bugün: takibe giren kartta bu, takibin başladığı gündür
-// (R2). Elleden otomatiğe manualSince silinir (R3: ön ödeme varsa kayıt engellenir); elle kalan kartta değişmez.
+// (R2; o gün ödeme varsa paidTodayBlocked). Elleden otomatiğe manualSince silinir (R3: ön ödeme varsa kayıt engellenir); elle kalan kartta değişmez.
 function withTracking(card, { on, since, auto }, today) {
   const { trackOff, manualSince, ...rest } = card;
   const before = cardById(card.id);
@@ -3720,9 +3729,9 @@ els.cardForm.addEventListener("submit", e => {
   const today = T.todayKey();
   const before = cardById(editingCardId);
   const track = readTrack(before, today);
-  // Elleden otomatiğe dönüş: ön ödeme önceki ekstrelerde eriyecekse engellenir (R3); otomatikten elleye bugün geçiş:
-  // kartta bugün ödeme varsa ikinci kez düşerdi
-  const blocked = autoPrepaid(before, track, today) > EPS || manualTodayBlocked(before, track, today);
+  // Elleden otomatiğe dönüş: ön ödeme önceki ekstrelerde eriyecekse engellenir (R3); otomatikten elleye ya da yeniden
+  // hesaba katmada kartta bugün ödeme varsa (paidTodayBlocked)
+  const blocked = autoPrepaid(before, track, today) > EPS || paidTodayBlocked(before, track, today);
   if (blocked) {
     els.cardPayMode.querySelector("input:checked")?.focus();
     toast(trackChange(before, track, today).text);
@@ -4036,12 +4045,12 @@ function renderDebtEdit(d) {
        st.overdue > EPS && `${m(st.overdue)} gecikti`, st.next && `sonraki ${fmtDayShort(st.next.date)}`])
     .filter(Boolean).join(" · ");
   // Başlamamış borç kapatılamaz, ödenemez (ödeme borcun tarihinden önce olamaz); tamamı ödenen kendiliğinden kapanmıştır;
-  // kapalı borca ödeme eklenmez. Kendiliğinden ödenende buradan ara ödeme girilir (satırda Ödendi yok).
+  // kapalı ya da tamamı ödenmiş borca ödeme eklenmez (önceki ödemeler düzeltilir, silinir). Kendiliğinden ödenende buradan ara ödeme girilir (satırda Ödendi yok).
   const word = { borrowed: "Borcu", lent: "Alacağı", loan: "Krediyi" }[debtType(d)];
   els.debtCloseBtn.hidden = !st.started || (st.done && !st.closed);
   els.debtCloseBtn.textContent = st.closed ? "Yeniden aç" : `${word} kapat`;
   els.debtCloseBtn.setAttribute("aria-label", st.closed ? `${word} yeniden aç` : `${word} kapat`);
-  els.debtPayBtn.hidden = !st.started || st.closed;
+  els.debtPayBtn.hidden = !st.started || st.done;
   els.debtPayBtn.textContent = debt ? (st.auto ? "+ Ara ödeme" : "+ Ödeme") : st.auto ? "+ Ara tahsilat" : "+ Tahsilat";
   els.debtPays.hidden = !pays.length && els.debtPayBtn.hidden;
   els.debtPayList.replaceChildren(...[...pays].reverse().map(x => payHistRow(x, d.asset, () => {
@@ -4377,8 +4386,11 @@ els.debtForm.addEventListener("submit", e => { e.preventDefault(); saveDebt(); }
 els.debtCloseBtn.addEventListener("click", () => {
   const d = state.debts.find(x => x.id === editingDebtId);
   if (!d) return;
-  const st = B.status(d, debtPayments(d.id), T.todayKey());
-  if (!d.closed && st.remaining > EPS && !confirm(`Kalan ${money(st.remaining, d.asset)} silinip kapatılsın mı?`)) return;
+  // Kapatma formdakileri de kaydeder: onaydaki kalan kaydedilecek hâliyle (form hatalıysa saveDebt zaten kaydetmez)
+  const { d: next, errors } = collectDebt();
+  const x = errors.length ? d : { id: d.id, ...next };
+  const st = B.status(x, debtPayments(d.id), T.todayKey());
+  if (!d.closed && st.remaining > EPS && !confirm(`Kalan ${money(st.remaining, x.asset)} silinip kapatılsın mı?`)) return;
   saveDebt(d.closed ? null : T.todayKey());
 });
 els.debtPayBtn.addEventListener("click", () => {
@@ -4537,8 +4549,8 @@ function openPaySheet(target, payment) {
   editingPayId = payment?.id ?? null;
   const info = payInfo(target, today, payBase());
   if (!info) { editingPayId = null; return; }
-  if (!payment && info.d && (info.st.closed || !info.st.started)) {
-    toast(info.st.closed ? "Kapanmış kayda ödeme eklenmez; önce yeniden aç" : "Henüz başlamadı");
+  if (!payment && info.d && (info.st.done || !info.st.started)) {
+    toast(info.st.closed ? "Kapanmış kayda ödeme eklenmez; önce yeniden aç" : info.st.done ? "Kalan yok" : "Henüz başlamadı");
     return;
   }
   const f = els.payForm;
@@ -4633,8 +4645,10 @@ function updatePayForm() {
   const after = { ...base, debts: [...base.debts, x] };
   const next = payInfo(payTarget, today, after);
   const left = next.remaining;
+  // Kapanmış borcun ödemesi düzenlenirken kalan yoktur (kapanınca silindi): kalan ve fazla yazılmaz
+  const closed = !!info.st?.closed;
   if (info.cd && info.cd.unpaid > EPS) box.append(el("div", "", `Ödenmemiş ${m(info.cd.unpaid)} → ${m(next.cd.unpaid)}`));
-  else box.append(el("div", "", `${info.cd ? "Kart borcu" : "Kalan"} ${m(Math.max(info.remaining, 0))} → ${m(Math.max(left, 0))}`));
+  else if (!closed) box.append(el("div", "", `${info.cd ? "Kart borcu" : "Kalan"} ${m(Math.max(info.remaining, 0))} → ${m(Math.max(left, 0))}`));
   const owner = personById(info.owner);
   if (owner) {
     const entries = knownEntries().filter(e => e.personId === owner.id);
@@ -4644,7 +4658,7 @@ function updatePayForm() {
       + `${fmtAsset(bal(base), info.code)} → ${fmtAsset(bal(after), info.code)}`));
   }
   const over = info.d || info.cd ? amount - Math.max(info.remaining, 0) : -left;
-  if (over > EPS) box.append(el("div", "warn", `${m(over)} fazla${info.cd ? " (kartta artı bakiye)" : ""}`));
+  if (over > EPS && !closed) box.append(el("div", "warn", `${m(over)} fazla${info.cd ? " (kartta artı bakiye)" : ""}`));
 }
 
 els.payForm.addEventListener("input", e => {
