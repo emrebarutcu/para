@@ -191,17 +191,19 @@ test("borc-vade: elle ödenen kartın geciken ekstresi ve elle kredi; otomatik k
   s.debts.push({ id: "kr", kind: "loan", personId: "ben", party: "Garanti", asset: "TRY", amount: 3000, date: "2026-09-01",
     due: "2026-10-05", count: 3, autoPay: false });
   let due = I.insights(s, { today: TODAY }).find(x => x.id === "borc-vade");
-  assert.equal(due.title, "2 borç ödemesi gecikti");
+  assert.equal(due.title, "2 ödemen gecikti");
   assert.deepEqual(due.data, [
     { cardId: "bonus", party: "Bonus", amount: 1000, asset: "TRY", date: "2026-09-29", overdue: true },
     { debtId: "kr", party: "Garanti", amount: 1000, asset: "TRY", date: "2026-10-05", overdue: true },
   ]);
-  assert.equal(due.text, "Bonus ekstresi ₺1.000 (21 gün gecikti), Garanti ₺1.000 (15 gün gecikti). Ödediysen Borçlar'da işaretle.");
+  assert.equal(due.text, "Bonus ekstresi ₺1.000 (21 gün gecikti), Garanti ₺1.000 (15 gün gecikti). Ödediysen Borçlar'da satırındaki “Ödendi”ye dokun.");
 
   // Ekstre kısmen ödenince kalanı gecikmiş kalır; tamamı ödenince kart uyarısı kalkar (kart ödemesi alacak da değildir)
   s.debts.push(cardPay("c1", 400, "2026-10-01"));
   due = I.insights(s, { today: TODAY }).find(x => x.id === "borc-vade");
   assert.deepEqual(due.data[0], { cardId: "bonus", party: "Bonus", amount: 600, asset: "TRY", date: "2026-09-29", overdue: true });
+  // Yalnızca kart ekstresi gecikmişse başlıkta adı
+  assert.equal(I.insights({ ...s, debts: s.debts.filter(x => x.id !== "kr") }, { today: TODAY }).find(x => x.id === "borc-vade").title, "Bonus ekstresi gecikti");
   s.debts.push(cardPay("c2", 600, "2026-10-20"));
   const out = I.insights(s, { today: TODAY });
   assert.deepEqual(out.find(x => x.id === "borc-vade").data.map(x => x.debtId ?? x.cardId), ["kr"]);
@@ -266,9 +268,9 @@ test("alacak: takipteki kartta ödemesi gelen kart payı; paylar yalnızca takip
   let out = I.insights(s, { today: TODAY });
   const owed = out.find(x => x.id === "alacak");
   assert.equal(owed.tone, "info");
-  assert.equal(owed.title, "Ödemesi gelen alacak ₺600");
+  assert.equal(owed.title, "Günü gelen alacağın ₺600");
   assert.deepEqual(owed.data, [{ personId: "ali", name: "Ali", amount: 600, asset: "TRY" }]);
-  assert.match(owed.text, /^Ali ₺600 \(kart payı\)\. .*hatırlatma/);
+  assert.match(owed.text, /^Ali ₺600 \(kartındaki harcamaları\)\. .*hatırlatma/);
   assert.ok(!ids(out).includes("paylar"));   // takip açık: yerine alacak
 
   // Yalnızca World takipte: Bonus'taki pay alacak değil, paylar da çıkmaz
@@ -276,11 +278,14 @@ test("alacak: takipteki kartta ödemesi gelen kart payı; paylar yalnızca takip
   out = I.insights(s, { today: TODAY });
   assert.ok(!ids(out).includes("alacak") && !ids(out).includes("paylar"));
 
-  // Hiç takipte kart yok: eski paylar içgörüsü
+  // Hiç hesaba katılan kart yok: hesaba katılmayan kartın harcamaları sayılmaz (paylar da çıkmaz); nakit harcamalarda
+  // eski paylar içgörüsü
   s.cards[1].trackOff = true;
   out = I.insights(s, { today: TODAY });
-  assert.ok(!ids(out).includes("alacak"));
-  assert.deepEqual(out.find(x => x.id === "paylar").data, [{ person: "Ali", personId: "ali", amount: 1000 }]);
+  assert.ok(!ids(out).includes("alacak") && !ids(out).includes("paylar"));
+  s.installments.push({ id: "kurs", personId: "ali", cardId: null, desc: "Kurs", total: 700, count: 1, date: "2026-10-05" });
+  out = I.insights(s, { today: TODAY });
+  assert.deepEqual(out.find(x => x.id === "paylar").data, [{ person: "Ali", personId: "ali", amount: 700 }]);
 });
 
 test("kategori: öğrenilen kategori aynı işyerinin farklı yazılışına da gelir; model örnekleri son seçimler", () => {

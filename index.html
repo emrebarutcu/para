@@ -242,7 +242,7 @@
         </button>
       </div>
       <div class="card-grid" id="cardGrid"></div>
-      <p class="footnote">Kesim günü dahil o güne kadarki harcamalar o ayın ekstresine girer. Ekstre, son ödeme günü kesimden sonraysa aynı ay, değilse ertesi ay ödenir; taksitler sonraki ekstrelere birer ay kayarak düşer.</p>
+      <p class="footnote">Kesim gününe kadar (o gün dahil) yaptığın harcamalar o ayın ekstresine girer; ekstreyi son ödeme gününe kadar ödersin. Taksitli harcamada ilk taksit bu ekstreye, sonrakiler her ay bir sonraki ekstreye eklenir. Ekstrelerin TL bakiyenden nasıl düşeceğini kartın formundaki “Ekstre ödemesi”nden seçersin.</p>
     </section>
 
     <!-- ── Borçlar ──────────────────────────────────────── -->
@@ -292,9 +292,9 @@
       <div class="asset-grid" id="assetGrid"></div>
       <div id="entryWrap"></div>
       <p class="footnote">TL karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Kurlar internet varken
-        birkaç dakikada bir yenilenir; çevrimdışıyken son alınan kur kullanılır. Bakiyelere borç ve alacak hareketleri de
-        girer; takipteki kartların ekstresi son ödeme gününün ertesi günü (elle ödenen kartta Ödendi işaretlenince) TL
-        bakiyesinden düşer.</p>
+        birkaç dakikada bir yenilenir; çevrimdışıyken son alınan kur kullanılır. Bakiyelere borç ve alacak ödemeleri de
+        girer. Kart ekstreleri TL bakiyenden düşer: “Otomatik” kartlarda son ödeme gününün ertesi günü, “Ben işaretlerim”
+        kartlarında “Ödendi”ye dokunduğunda. “Hesaba katılmasın” seçtiğin kartlar bakiyeni etkilemez.</p>
     </section>
   </main>
 
@@ -484,24 +484,24 @@
           </label>
         </div>
         <p class="hint" id="cardHint"></p>
-        <p class="hint" id="cardDebt" hidden></p>
+        <p class="hint card-debt" id="cardDebt" hidden></p>
         <div class="field card-track">
           <span class="field-label" id="cardPayLabel">Ekstre ödemesi</span>
           <div class="seg seg-full" id="cardPayMode" role="radiogroup" aria-labelledby="cardPayLabel">
             <label><input type="radio" name="payMode" value="auto" checked /><span>Otomatik</span></label>
             <label><input type="radio" name="payMode" value="manual" /><span>Ben işaretlerim</span></label>
-            <label><input type="radio" name="payMode" value="off" /><span>Hesaba katma</span></label>
+            <label><input type="radio" name="payMode" value="off" /><span>Hesaba katılmasın</span></label>
           </div>
           <div class="preview" id="trackPreview" aria-live="polite"></div>
           <div class="card-links">
-            <button type="button" class="link" id="cardPaysLink" hidden>Ekstre ödemeleri ›</button>
+            <button type="button" class="link" id="cardPaysLink" hidden>Kart ödemelerin ›</button>
             <button type="button" class="link" id="cardDebtLink" hidden>Borçlar'da gör ›</button>
           </div>
         </div>
         <div class="field" id="termField" hidden>
-          <span class="field-label">Arada kalan harcamalar</span>
+          <span class="field-label">Günler değişince harcamalar</span>
           <p class="hint" id="termNote"></p>
-          <div class="choices" id="termChoices" role="radiogroup" aria-label="Arada kalan harcamalar"></div>
+          <div class="choices" id="termChoices" role="radiogroup" aria-label="Günler değişince harcamalar"></div>
         </div>
       </div>
       <footer class="sheet-foot">
@@ -693,7 +693,7 @@
       <div class="sheet-body">
         <dl class="tl-sum" id="shareStats"></dl>
         <section>
-          <h3 class="ev-sub">Kart payı taksitleri</h3>
+          <h3 class="ev-sub">Kartlarındaki harcamaları</h3>
           <ul class="pay-list" id="shareItems"></ul>
         </section>
         <section id="sharePaysBox" hidden>
@@ -705,7 +705,7 @@
         <button type="button" class="btn btn-ghost" id="shareRemind"><svg class="ic"><use href="#i-share"/></svg><span>Hatırlat</span></button>
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Kapat</button>
-        <button type="button" class="btn btn-primary" id="sharePaid" aria-label="Kart payı ödemesi ekle">Ödendi</button>
+        <button type="button" class="btn btn-primary" id="sharePaid" aria-label="Gelen ödemeyi kaydet">Ödendi</button>
       </footer>
     </div>
   </dialog>

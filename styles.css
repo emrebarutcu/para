@@ -509,6 +509,8 @@ a { color: inherit; }
 .pay + .pay { border-top: 1px solid var(--line); }
 .pay.clickable { cursor: pointer; border-radius: 12px; outline: none; }
 .pay.past { opacity: .5; }
+/* Hesaba katılmayan kartın ekstresi: soluk, toplamlara girmez */
+.pay.ignored, .tl-pay.ignored { opacity: .55; }
 .date-badge {
   width: 46px; height: 50px;
   display: flex;
@@ -1719,7 +1721,10 @@ a.hero-eq { display: block; width: fit-content; }
 .people-sum li.clickable { cursor: pointer; border-radius: 12px; }
 
 /* Kart formu: borç ve ekstre takibi */
-.card-track .seg label { padding: 6px 4px; line-height: 1.25; }
+.card-track .seg label { display: flex; align-items: center; justify-content: center; padding: 6px 4px; line-height: 1.25; }
+.card-track .preview .track-change { color: var(--text); font-weight: 500; }
+/* Kartın borcu kısa satırlar hâlinde (Gecikmiş / Son gün bugün / Kart borcu / kişilerin harcamaları) */
+.card-debt, #payStatus { white-space: pre-line; }
 .card-track .link { align-self: flex-start; border: none; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-2); }
 .card-track .link:hover { color: var(--text); }
 /* Kart formunun bağlantıları yan yana (Ekstre ödemeleri, Borçlar'da gör); ikisi de gizliyse yer kaplamaz */

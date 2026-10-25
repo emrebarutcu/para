@@ -823,7 +823,9 @@ function cardDebtView(state, c, today) {
 
 // Ekstre takibi: track_statements false → takip dışı; true ya da track_since → takipte, track_since'tan (verilmezse
 // bugünden; zaten takipteyse başlangıcı korunur). İkisi de verilmezse karttaki değerler kalır (buildCard yeniden kurar).
-function trackingArgs(args, cur, today) {
+// Takibe giren kartta bugün tarihli ödeme varsa (borc.js cardPaidToday) varsayılan başlangıç yarındır: bugünkü ödeme,
+// ödediği ekstreyle birlikte takipten önce kalır (bugünden başlasa sonraki ekstreleri kapatırdı).
+function trackingArgs(state, args, cur, today) {
   const on = args.track_statements, since = args.track_since;
   if (on !== undefined && typeof on !== "boolean") fail("track_statements must be true or false.");
   if (since !== undefined) {
@@ -833,14 +835,15 @@ function trackingArgs(args, cur, today) {
   }
   const keep = { ...(cur.trackSince && { trackSince: cur.trackSince }), ...(cur.trackOff === true && { trackOff: true }) };
   if (on === false) return { ...keep, trackOff: true };
-  if (on === true || since !== undefined) return { trackSince: since ?? (B.tracked(cur) && cur.trackSince ? cur.trackSince : today) };
+  const start = B.cardPaidToday(state, cur, today) ? T.addDays(today, 1) : today;
+  if (on === true || since !== undefined) return { trackSince: since ?? (B.tracked(cur) && cur.trackSince ? cur.trackSince : start) };
   return keep;
 }
 
 // Ödeme modu (auto_pay; verilmezse kartınki kalır). false → elle: manualSince bugün; aynı çağrıda takip açılıyor ya da
 // track_since değişiyorsa takibin başladığı gün (o günden sonraki ekstreler Ödendi bekler). Kartta bugün tarihli ödeme
-// varken bugünden elle moda geçilmez (o güne kadar ödenmiş sayılan ekstrelerde erimiş ödeme ikinci kez düşerdi; borc.js
-// cardPaidToday). true → otomatik: manualSince silinir; kaydedilen ödemelerin bir kısmı sayılmaz olacaksa (önceki
+// varsa elle mod yarın başlar (borc.js cardPaidToday): bugünden başlasa o güne kadar ödenmiş sayılan ekstrelerde erimiş
+// ödeme ikinci kez düşerdi; yarından başlayınca bugün otomatikteki hâliyle aynıdır. true → otomatik: manualSince silinir; kaydedilen ödemelerin bir kısmı sayılmaz olacaksa (önceki
 // ekstrelerde eriyip bakiyeyi değiştirirdi; borc.js cardPrepaid, takibe girecek kartta) engellenir. Takip dışı kart elle
 // modunu korur (uygulamadaki gibi): takip kapalıyken otomatiğe dönülmez, ön ödeme denetimi atlanmasın.
 // v: diğer alanları işlenmiş yeni kart. → { trackSince?, manualSince? }
@@ -852,10 +855,7 @@ function payModeArgs(state, args, cur, v, today) {
   if (auto === false) {
     if (!B.tracked(v)) fail("auto_pay false needs the card's statements tracked: leave out track_statements or pass true.");
     const restart = !B.tracked(cur) || v.trackSince !== cur.trackSince;
-    const since = restart && v.trackSince ? v.trackSince : today;
-    if (since === today && B.cardPaidToday(state, cur, today)) {
-      fail(`A payment on ${cur.name} is dated today: switching to paid by hand today would count it twice (it already went against the statements counted as paid). Switch to paid by hand tomorrow.`);
-    }
+    const since = restart && v.trackSince ? v.trackSince : B.cardPaidToday(state, cur, today) ? T.addDays(today, 1) : today;
     return { ...(!v.trackSince && { trackSince: today }), manualSince: since };
   }
   if (!B.tracked(v)) {
@@ -1183,15 +1183,15 @@ export const TOOLS = [
       return ctx.mutate(state => {
         const cur = findCard(state, args.card) ?? fail("Cash is not a card.");
         // buildCard kartı yeniden kurar: takip alanları verilmezse karttan taşınır
-        const v = { id: cur.id, ...buildCard(state, args, cur), color: cur.color, ...trackingArgs(args, cur, ctx.today) };
+        const v = { id: cur.id, ...buildCard(state, args, cur), color: cur.color, ...trackingArgs(state, args, cur, ctx.today) };
         const change = T.termChoices(cur, { cutoffDay: v.cutoffDay, dueDay: v.dueDay }, state.installments, ctx.today);
         const transition = typeof args.transition === "string" && change.cards && Object.hasOwn(change.cards, args.transition) ? args.transition : undefined;
         if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition));
         const chosen = transition ? change.cards[transition] : change.card;
         const built = chosen.history ? { ...v, history: chosen.history } : v;
         const next = { ...built, ...payModeArgs(state, args, cur, built, ctx.today) };
-        // Takibi bugünden başlayan (takibe giren ya da başlangıcı bugüne alınan) kartta bugün tarihli ödeme, ödediği ekstre
-        // takipten önce kaldığı için sonraki ekstreleri kapatırdı (borc.js cardPaidToday): o gün bugünden takibe alınmaz
+        // Açıkça bugünden takibe alınan (track_since bugün) kartta bugün tarihli ödeme, ödediği ekstre takipten önce kaldığı
+        // için sonraki ekstreleri kapatırdı (borc.js cardPaidToday); varsayılan başlangıç bu durumda zaten yarındır
         if (B.tracked(next) && next.trackSince === ctx.today && (!B.tracked(cur) || cur.trackSince !== ctx.today)
           && B.cardPaidToday(state, cur, ctx.today)) {
           fail(`A payment on ${cur.name} is dated today: tracking from today would apply it to later statements (the statement it paid falls before tracking). Turn tracking on tomorrow, or pass an earlier track_since.`);
