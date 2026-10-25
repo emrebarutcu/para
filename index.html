@@ -254,11 +254,11 @@
         </div>
         <div class="hero-amount" id="debtTotal"></div>
         <p class="hero-eq" id="debtEq"></p>
-        <dl class="hero-stats" id="debtStats"></dl>
+        <dl class="hero-stats two" id="debtStats"></dl>
       </div>
       <div class="offline-note info" id="trackNote" hidden>
         <svg class="ic"><use href="#i-card"/></svg>
-        <p class="row-text"><strong>Kartlar takipte</strong><small id="trackNoteText"></small></p>
+        <p class="row-text"><strong>Kart borçların burada</strong><small id="trackNoteText"></small></p>
         <button type="button" class="btn btn-ghost sm" id="trackNoteOk">Tamam</button>
       </div>
       <div class="offline-note info" id="balanceHint" hidden>
@@ -484,15 +484,14 @@
           </label>
         </div>
         <p class="hint" id="cardHint"></p>
+        <p class="hint" id="cardDebt" hidden></p>
         <div class="field card-track">
-          <span class="field-label">Borç</span>
-          <p class="hint" id="cardDebt" hidden></p>
-          <label class="check"><input type="checkbox" name="track" checked /><span>Ekstreler TL varlığımdan düşsün</span></label>
-          <label class="track-since" id="trackSinceRow">
-            <input name="trackSince" type="date" aria-label="Takibin başladığı gün" />
-            <span>tarihinden beri</span>
-          </label>
-          <label class="check" id="cardAutoRow"><input type="checkbox" name="autoPay" checked /><span>Son ödeme günü geçince ödendi say</span></label>
+          <span class="field-label" id="cardPayLabel">Ekstre ödemesi</span>
+          <div class="seg seg-full" id="cardPayMode" role="radiogroup" aria-labelledby="cardPayLabel">
+            <label><input type="radio" name="payMode" value="auto" checked /><span>Otomatik</span></label>
+            <label><input type="radio" name="payMode" value="manual" /><span>Ben işaretlerim</span></label>
+            <label><input type="radio" name="payMode" value="off" /><span>Hesaba katma</span></label>
+          </div>
           <div class="preview" id="trackPreview" aria-live="polite"></div>
           <div class="card-links">
             <button type="button" class="link" id="cardPaysLink" hidden>Ekstre ödemeleri ›</button>
@@ -522,7 +521,7 @@
         <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
       <div class="sheet-body">
-        <p class="p-status" id="debtStatus" hidden></p>
+        <p class="p-status" id="debtStatus" hidden><span id="debtStatusText"></span><button type="button" class="link" id="debtCloseBtn" hidden></button></p>
 
         <div class="seg seg-full" role="radiogroup" aria-label="Tür">
           <label><input type="radio" name="type" value="borrowed" checked /><span>Borç aldım</span></label>
@@ -622,15 +621,16 @@
 
         <div class="preview" id="debtPreview" aria-live="polite"></div>
         <section class="debt-pays" id="debtPays" hidden>
-          <h3 class="ev-sub">Ödemeler</h3>
+          <div class="debt-pays-head">
+            <h3 class="ev-sub">Ödemeler</h3>
+            <button type="button" class="link" id="debtPayBtn" hidden></button>
+          </div>
           <ul class="pay-hist" id="debtPayList"></ul>
         </section>
       </div>
       <footer class="sheet-foot wrap">
         <div class="sheet-sum" id="debtSum" aria-live="polite"></div>
         <button type="button" class="btn btn-danger" id="debtDelete" hidden><svg class="ic"><use href="#i-trash"/></svg><span>Sil</span></button>
-        <button type="button" class="btn btn-ghost" id="debtCloseBtn" hidden>Kapat</button>
-        <button type="button" class="btn btn-ghost" id="debtPayBtn" hidden>Ödeme ekle</button>
         <span class="spacer"></span>
         <button type="button" class="btn btn-ghost" data-close>Vazgeç</button>
         <button type="submit" class="btn btn-primary">Kaydet</button>
@@ -666,7 +666,6 @@
           </div>
         </div>
         <input class="desc-input" name="desc" type="text" placeholder="Not (isteğe bağlı)" autocomplete="off" enterkeyhint="done" aria-label="Not" />
-        <label class="check" id="payCloseRow"><input type="checkbox" name="close" /><span>Bu ödemeyle kapat</span></label>
         <p class="hint" id="payHint"></p>
         <div class="preview" id="payPreview" aria-live="polite"></div>
         <section id="payHistory" hidden>
