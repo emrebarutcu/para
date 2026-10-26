@@ -1235,3 +1235,43 @@ test("borç silme zincirleri; yalnızca değişen borç satırları yazılır", 
   assert.deepEqual([payer.deletedDebts, payer.deletedCardPayments, payer.deletedSharePayments], [0, 1, 1]);
   assert.deepEqual(stored(sb).debts, []);
 });
+
+test("hesaba katılmayan kart ödeme toplamlarında yok; elle modu yarın başlayan kart bugün otomatik gibi", async () => {
+  const sb = fakeSupabase();
+  // Bonus elle (1 Eyl'den): 24 Eyl ekstresi 1.000 gecikmiş, 24 Eki 1.800 bugün. EşKart hesaba katılmıyor: 12 × 1.000
+  seed(sb, {
+    people: [{ id: "ben", name: "Ben", color: 0 }],
+    cards: [
+      { id: "bonus", name: "Bonus", limit: 50000, cutoffDay: 14, dueDay: 24, color: 0, trackSince: "2026-08-01", manualSince: "2026-09-01" },
+      { id: "es", name: "EşKart", limit: 50000, cutoffDay: 14, dueDay: 24, color: 1, trackOff: true },
+    ],
+    installments: [
+      { id: "a", personId: "ben", cardId: "bonus", desc: "A", total: 1000, count: 1, date: "2026-09-05" },
+      { id: "b", personId: "ben", cardId: "bonus", desc: "B", total: 1800, count: 1, date: "2026-10-05" },
+      { id: "k", personId: "ben", cardId: "es", desc: "Kanepe", total: 12000, count: 12, date: "2026-10-05" },
+    ],
+    entries: [{ id: "e1", personId: "ben", asset: "TRY", amount: 50000, desc: "Maaş", date: "2026-08-01" }],
+  });
+  const c = client(sb, "good", { now: () => new Date("2026-10-24T09:00:00Z") });
+
+  // Özet, Akış ve Kişiler: EşKart toplamlara girmez, sıradaki ödemelerde yok; Akış'ta notCounted ile listelenir
+  const ov = await c.call("get_overview");
+  assert.deepEqual([ov.dueThisMonth, ov.dueThisMonthByCard, ov.remainingTotal, ov.lastPaymentMonth], [1800, { Bonus: 1800 }, 1800, "2026-10"]);
+  assert.ok(ov.upcomingPayments.every(x => x.card !== "EşKart"));
+  const cf = await c.call("get_cashflow", { from_month: "2026-11", months: 1, include_items: false });
+  assert.deepEqual([cf.months[0].total, cf.months[0].payments.map(x => [x.card, !!x.notCounted])], [0, [["EşKart", true]]]);
+  assert.equal((await c.call("list_people")).people[0].remaining, 1800);
+  const sim = await c.call("simulate_purchase", { amount: 500 });
+  assert.deepEqual(sim.cardsCompared.map(x => x.card), ["Bonus"]);
+
+  // Bugün ödendi, otomatiğe geçti, aynı gün yeniden elle: elle mod yarın başlar; bugün ödenecek elle ekstre yok, 24 Eki
+  // ekstresi sıradaki ödemelerde bir kez, Ödendi bugün girilmez
+  await c.call("pay_debt", { card: "Bonus", amount: 1000 });
+  await c.call("update_card", { card: "Bonus", auto_pay: true });
+  const man = await c.call("update_card", { card: "Bonus", auto_pay: false });
+  assert.deepEqual([man.balanceChangeTry, man.card.tracking.autoPay, man.card.tracking.unpaid, man.card.tracking.manualSince], [0, false, 0, "2026-10-25"]);
+  const ov2 = await c.call("get_overview");
+  assert.equal(ov2.upcomingPayments.filter(x => x.card === "Bonus" && x.date === "2026-10-24").length, 1);
+  assert.equal(ov2.debts.unpaidCardStatements, undefined);
+  assert.match((await c.call("pay_debt", { card: "Bonus", amount: 100 })).error, /paid automatically until 2026-10-25/);
+});

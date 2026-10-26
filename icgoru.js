@@ -267,7 +267,7 @@
     // Limit
     for (const x of cardTiming(state, today, today)) {
       const c = x.card;
-      if (!(c.limit > 0) || x.used / c.limit < LIMIT_WARN) continue;
+      if (!B.tracked(c) || !(c.limit > 0) || x.used / c.limit < LIMIT_WARN) continue;   // hesaba katılmayan kart uyarılmaz
       add({
         id: `limit-${c.id}`, tone: "warn", title: x.full ? `${c.name} limiti doldu` : `${c.name} limiti ${pct(x.used / c.limit)} dolu`,
         text: x.full ? `Kart borcu ${fmt(x.used)}, limit ${fmt(c.limit)}.` : `Kullanılabilir ${fmt(x.available)} kaldı.`,
@@ -307,7 +307,7 @@
     }
 
     // Kart seçimi
-    const timing = cardTiming(state, today, today).filter(x => !x.full);
+    const timing = cardTiming(state, today, today).filter(x => !x.full && B.tracked(x.card));   // eşin kartı önerilmez
     if (timing.length >= 2 && timing[0].days - timing[timing.length - 1].days >= CARD_GAP) {
       const best = timing[0], worst = timing[timing.length - 1];
       add({

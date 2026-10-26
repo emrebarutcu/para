@@ -57,6 +57,12 @@ test("limit dolmak üzere; kart seçimi: ilk ödemesi en geç olan", () => {
   assert.equal(card.data[0].card, "Bonus");
   assert.equal(card.data[0].firstPayment, "2026-11-29");
   assert.equal(card.data[1].firstPayment, "2026-11-05");
+
+  // Hesaba katılmayan kart (ör. eşinin kartı) önerilmez, limiti için uyarı çıkmaz
+  s.cards[0].trackOff = true;
+  const off = I.insights(s, { today: TODAY });
+  assert.ok(!ids(off).includes("limit-bonus"));
+  assert.ok(!(off.find(x => x.id === "kart")?.data ?? []).some(x => x.card === "Bonus"));
 });
 
 test("düzenli ödemeler, kategori artışı ve diğer kişilerin payı", () => {

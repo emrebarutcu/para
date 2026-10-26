@@ -374,17 +374,16 @@ function cashflow(fromIdx, toIdx) {
   const months = T.buildCashflow(state.people, state.cards, state.installments, fromIdx, toIdx);
   const off = new Set(state.cards.filter(c => !B.tracked(c)).map(c => c.id));
   if (!off.size) return months;
-  const cents = x => Math.round(x * 100) / 100;
+  // Etkilenen ayda toplamlar sayılan olaylardan yeniden toplanır (çıkarma yuvarlama kaydırırdı)
   return months.map(m => {
-    const out = { ...m, byPerson: { ...m.byPerson }, byCard: { ...m.byCard } };
+    if (!m.events.some(ev => off.has(ev.cardId))) return m;
+    const out = { ...m, total: 0, byPerson: {}, byCard: { ...m.byCard } };
     out.events = m.events.map(ev => {
-      if (!off.has(ev.cardId)) return ev;
-      out.total = cents(out.total - ev.total);
-      for (const [pid, v] of Object.entries(ev.byPerson)) out.byPerson[pid] = cents(out.byPerson[pid] - v);
-      delete out.byCard[ev.cardId];
-      return { ...ev, ignored: true };
+      if (off.has(ev.cardId)) { delete out.byCard[ev.cardId]; return { ...ev, ignored: true }; }
+      out.total += ev.total;
+      for (const [pid, v] of Object.entries(ev.byPerson)) out.byPerson[pid] = (out.byPerson[pid] || 0) + v;
+      return ev;
     });
-    for (const pid of Object.keys(out.byPerson)) if (!out.byPerson[pid]) delete out.byPerson[pid];
     return out;
   });
 }
@@ -428,7 +427,9 @@ function renderOverview(months, start, last) {
   els.nextLabel.textContent = T.monthName(start + 1);
   els.nextTotal.textContent = fmt(at(start + 1)?.total || 0);
   els.remaining.textContent = fmt(months.reduce((s, m) => s + m.total, 0));
-  els.endLabel.textContent = months.length ? `${T.monthShort(months[months.length - 1].idx)} ${T.yearOf(months[months.length - 1].idx)}` : "—";
+  // Son taksit: ödenecek bir şey kalan son ay (hesaba katılmayan kartın ayları aralıkta kalabilir; Akış'ta soluk görünür)
+  const lastDue = [...months].reverse().find(m => m.total > EPS);
+  els.endLabel.textContent = lastDue ? `${T.monthShort(lastDue.idx)} ${T.yearOf(lastDue.idx)}` : "—";
   // Ayın borç ve kredi ödemeleri ayrı satırda (yukarıdaki tutar yalnızca kart ve nakit ödemeleri); dokununca Borçlar
   const debtDue = dueSum(B.paymentsDue(state, T.todayKey(), T.dateKey(start, 1), T.dateKey(start, 31)), rates?.rates);
   els.heroDebt.hidden = !(debtDue > EPS);
@@ -781,7 +782,7 @@ function renderCalendar(from, to, whole, shown, pays, today, r) {
     b.setAttribute("aria-pressed", String(selected));
     const payText = paid.map(({ ev, st, flow }) => (ev ? `${cardName(ev.cardId)} ekstresi ${fmt(ev.total)}`
         + (ev.ignored ? " (hesaba katılmıyor)" : stateTag(st) ? ` (${stateTag(st)})` : "")
-      : `${B.flowText(flow, state)} ${flowMoney(flow)}`));
+      : `${flowLabel(flow)} ${flowMoney(flow)}`));
     b.setAttribute("aria-label", `${fmtDayShort(key)}: ` + (list.length || paid.length
       ? [inSum && `girdi ${fmt(inSum)}`, outSum && `çıktı ${fmt(outSum)}`, unknown && "kuru bilinmeyen hareket", ...payText].filter(Boolean).join(", ")
       : "hareket yok"));
@@ -829,14 +830,16 @@ function timelineDayHead(date, today, pays = []) {
     if (ev) {
       b.title = [...new Set(ev.items.map(i => i.purchase.desc))].join(", ");
       if (ev.ignored) b.classList.add("ignored");
-      b.append(cardMark(ev.cardId), el("span", "tl-pay-name", `${cardName(ev.cardId)} ekstresi`));
-      // Durum: ödendi / son gün bugün / gecikti; yalnızca gecikti kırmızı. Hesaba katılmayan kartta etiket
+      // Durum: ödendi / son gün bugün / gecikti; yalnızca gecikti kırmızı. Hesaba katılmayan kartta etiket. Etiket varken
+      // ad yalın kart adı (dar ekranda ad kırpılmasın; tam adı ipucunda)
       const tag = ev.ignored ? "hesaba katılmıyor" : stateTag(st);
+      b.title = `${cardName(ev.cardId)} ekstresi — ${b.title}`;
+      b.append(cardMark(ev.cardId), el("span", "tl-pay-name", tag ? cardName(ev.cardId) : `${cardName(ev.cardId)} ekstresi`));
       if (tag) b.append(el("span", "tl-state" + (ev.ignored ? "" : st.state === "paid" ? " paid" : st.state === "late" ? " late" : ""), tag));
       b.append(el("span", "amount", fmt(ev.total)));
       b.addEventListener("click", () => openEventSheet(ev));
     } else {
-      b.append(flowMark(f), el("span", "tl-pay-name", B.flowText(f, state)), el("span", "amount" + (f.amount > 0 ? " in" : ""), flowMoney(f)));
+      b.append(flowMark(f), el("span", "tl-pay-name", flowLabel(f)), el("span", "amount" + (f.amount > 0 ? " in" : ""), flowMoney(f)));
       b.addEventListener("click", () => openFlow(f));
     }
     head.append(b);
@@ -967,6 +970,13 @@ function eventStatus(card, ev, today) {
     return { x, text: statementText(x, today) || (x.key < open.due
       ? `Ekstre kesildi · son ödeme ${fmtDayShort(x.key)}. Ödeyince “Ödendi”ye dokun.`
       : `Ekstre henüz kesilmedi${x.key === open.due ? ` · kesim ${fmtDayShort(open.cut)}` : ""} · son ödeme ${fmtDayShort(x.key)}.`) };
+  }
+  // "Ben işaretlerim" ileride başlıyorsa (bugün ödeme varken geçildi, startDay) o günden sonraki ekstreler Ödendi bekler
+  const since = B.since(card, today);
+  const from = B.manual(card) ? (card.manualSince > since ? card.manualSince : since) : null;
+  if (from && from > today && ev.date >= from) {
+    return { text: `“Ben işaretlerim” ${from === T.addDays(today, 1) ? "yarın" : `${fmtDayShort(from)} günü`} başlar · `
+      + `son ödeme ${fmtDayShort(ev.date)}. Ödeyince “Ödendi”ye dokun.` };
   }
   const paidOn = T.addDays(ev.date, 1);
   return { text: ev.date < today ? `Ödenmiş sayıldı: ${fmtDayShort(paidOn)} günü TL bakiyenden düştü.`
@@ -1445,7 +1455,8 @@ function cashSeries(from, to, today) {
     const c = cardById(mv.cardId);
     if (mv.planned && mv.date === today) anchor += mv.amount;
     const desc = mv.type === "payment" ? `${c.name} · kart ödemen` : mv.type === "prepay" ? `${c.name} · erken ödeme`
-      : mv.type === "unpaid" && B.manual(c) ? `${c.name} · ödenmemiş ekstre (gecikti, bugünde gösteriliyor)` : `${c.name} ekstresi`;
+      : mv.type === "unpaid" && manualCard(c, today)
+        ? `${c.name} · ödenmemiş ekstre${B.cardDebt(state, c, today).overdue > EPS ? " (gecikti)" : ""}` : `${c.name} ekstresi`;
     add(mv.date, { desc, value: mv.amount });
   }
   // Borç akışları kendi günlerinde; bugünkü kredi taksiti ve beklenen ödemeler kart ekstresi gibi gün sonunda düşer
@@ -1455,7 +1466,7 @@ function cashSeries(from, to, today) {
     const value = toTry(f.amount, f.asset);
     if (value == null) continue;
     if (f.date === today && !f.paid) anchor += value;
-    add(f.date, { desc: B.flowText(f, state), value });
+    add(f.date, { desc: flowLabel(f), value });
   }
   // Döviz / altın harcamaları TL akışında yok: kendi varlıklarından düşer
   for (const p of knownPurchases()) {
@@ -2420,6 +2431,10 @@ function flowMark(f) {
   m.style.setProperty("--c", "var(--text-2)");
   return m;
 }
+// Borç akışının adı (borc.js flowText); kartındaki harcamalar için kişinin ödemesi "Annem · sana ödedi"
+function flowLabel(f) {
+  return f.type === "share" ? `${personById(f.payment.personId)?.name ?? "?"} · sana ödedi` : B.flowText(f, state);
+}
 // Akışın işaretli tutarı kendi biriminde: "−₺5.500,00", "+$100,00"
 function flowMoney(f) { return (f.amount < 0 ? "−" : "+") + money(Math.abs(f.amount), f.asset); }
 // Borç akışının penceresi: kart payı ödemesinde kişinin kart payı, diğerlerinde borcun kendisi
@@ -3065,7 +3080,7 @@ function renderCardTip(cardId, date) {
   tip.hidden = true;
   const card = cardById(cardId);
   if (!card || !date || editingId) return;
-  const timing = I.cardTiming(state, date).filter(x => !x.full);
+  const timing = I.cardTiming(state, date).filter(x => !x.full && B.tracked(x.card));   // hesaba katılmayan kart önerilmez
   const mine = timing.find(x => x.card.id === card.id), best = timing[0];
   if (!mine || !best || best.card.id === card.id || best.days - mine.days < 10) return;
   tip.textContent = `${best.card.name} ile alırsan bunu ${best.days - mine.days} gün daha geç ödersin (son ödeme ${fmtDayShort(best.due)}). Seçmek için dokun.`;
@@ -3357,7 +3372,7 @@ function updatePurchasePreview() {
     const sum = list => list.reduce((s, x) => s + x.amount, 0);
     if (past.length) {
       box.append(el("div", "", `Bu harcamanın ${fmt(sum(past))} kadarı, son ödeme günü geçmiş ${new Set(past.map(x => x.key)).size} `
-        + `ekstreye giriyor. Bu kısım ödenmiş sayılır ve ${nameWith(payer.name, "in")} TL bakiyesinden düşer.`));
+        + "ekstreye giriyor. Bu kısım ödenmiş sayılır ve TL bakiyenden düşer."));
     }
     if (unpaid.length) {
       box.append(el("div", "", `Bu harcamanın ${fmt(sum(unpaid))} kadarı, son ödeme günü geçmiş ${new Set(unpaid.map(x => x.key)).size} `
@@ -3685,7 +3700,8 @@ function renderCardTrack(existing) {
 // engelleyen durum (R3); değişmediyse null
 function trackChange(card, track, today) {
   if (!card) return null;
-  if (autoPrepaid(card, track, today) > EPS) return { text: prepaidText(card, track.since, today), warn: true };
+  const lost = autoPrepaid(card, track, today);
+  if (lost > EPS) return { text: prepaidText(card, track.since, today, lost), warn: true };
   const tracked = B.tracked(card);
   if (tracked === track.on && (!track.on || B.manual(card) === !track.auto)) return null;
   const after = withTracking(card, track, today);
@@ -3721,17 +3737,19 @@ function autoPrepaid(card, { on, since, auto }, today) {
   if (!card || !on || !auto || !B.manual(card)) return 0;
   return B.cardPrepaid(state, { ...card, trackOff: false, trackSince: since }, today);
 }
-// Engelin metni: kaydedilen ödemelerin bugüne kadarki (bugün dahil) ekstreleri aşan kısmı, yani son ödeme günü
-// gelmemiş ekstreler için ödenen; o kadarı çıkarılınca engel kalkar. Aşan yoksa engel son ödeme günü bugün olan
-// ekstrenin ödemesinden: otomatikte o ekstre yarın ödenmiş sayılır, otomatiğe yarın geçilir.
-function prepaidText(card, since, today) {
+// Engelin metni (lost: otomatikte sayılmayacak tutar, borc.js cardPrepaid): kaydedilen ödemelerin bugüne kadarki (bugün
+// dahil) ekstreleri aşan kısmı, yani son ödeme günü gelmemiş ekstreler için ödenen; o kadarı çıkarılınca engel kalkar.
+// Aşan yoksa engel son ödeme günü bugün olan ekstreye kaydedilen ödemeden: otomatikte o ekstre ancak yarın ödenmiş
+// sayılır, bugün geçilirse TL bakiyesi bugünlük yüksek görünür; otomatiğe yarın geçilir.
+function prepaidText(card, since, today, lost) {
   const cs = B.cardState(state, { ...card, trackOff: false, trackSince: since }, today);
   const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((s, x) => s + x.amount, 0);
   return ahead > EPS
     ? `“Otomatik”e geçilemiyor: bu karta, son ödeme günü gelmemiş ekstreler için ${fmt(ahead)} erken ödeme kaydettin; `
-      + `“Otomatik”te bu ödeme sayılmazdı. Önce “Kart ödemelerin”den bu ödemeyi sil ya da ${fmt(ahead)} kadar azalt.`
-    : "“Otomatik”e bugün geçilemiyor: son ödeme günü bugün olan ekstreye bugün ödeme kaydettin; bugün geçersen bu "
-      + "ekstre yarın bir kez daha TL bakiyenden düşer. Yarın geçebilirsin.";
+      + `“Otomatik”te bunun ${fmt(lost)} kadarı sayılmaz, TL bakiyen o kadar yüksek görünür. Önce “Kart ödemelerin”den bu `
+      + `ödemeyi sil ya da ${fmt(ahead)} kadar azalt.`
+    : "“Otomatik”e bugün geçilemiyor: son ödeme günü bugün olan ekstre “Otomatik”te ancak yarın ödenmiş sayılır; bugün "
+      + `geçersen ona yaptığın ödeme yüzünden TL bakiyen bugünlük ${fmt(lost)} yüksek görünür. Yarın geçebilirsin.`;
 }
 
 // Formdaki seçim karta yazılır: hesaba katılmayan kartta trackOff (trackSince ve manualSince saklanır), takipte başlangıç
@@ -4756,7 +4774,9 @@ function updatePayForm() {
     const entries = knownEntries().filter(e => e.personId === owner.id);
     const bal = s => V.balances(entries, today, B.spent(s, today, owner.id))[info.code] ?? 0;
     const a = V.asset(info.code);
-    box.append(el("div", "", `${nameWith(owner.name, "in")} ${a.short === "TL" ? "TL" : a.name.toLocaleLowerCase("tr-TR")} bakiyesi `
+    // İlk kişi (kullanıcı) için ikinci tekil: "TL bakiyen"; başkasına ait borçta adıyla
+    const unit = a.short === "TL" ? "TL" : a.name.toLocaleLowerCase("tr-TR");
+    box.append(el("div", "", (owner.id === state.people[0]?.id ? `${a.short === "TL" ? "TL" : a.name} bakiyen ` : `${nameWith(owner.name, "in")} ${unit} bakiyesi `)
       + `${fmtAsset(bal(base), info.code)} → ${fmtAsset(bal(after), info.code)}`));
   }
   const over = info.d || info.cd ? amount - Math.max(info.remaining, 0) : -left;
