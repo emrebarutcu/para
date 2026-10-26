@@ -1712,7 +1712,7 @@ a.hero-eq { display: block; width: fit-content; }
 /* Elle ödenen kartın ekstre işaretinde durum rozeti: ödendi / ödenmedi */
 .tl-state { flex: none; padding: 0 6px; border-radius: 999px; background: var(--surface-2); font-size: 10.5px; font-weight: 600; line-height: 16px; }
 /* Dar ekranda önce etiket kısalır, kart adı kırpılmaz */
-.tl-pay .tl-state { flex: 0 10 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-pay .tl-state { flex: 1 1 0; min-width: 0; max-width: max-content; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl-state.paid { color: var(--income); }
 .tl-state.late { color: var(--expense); }
 /* Ekstre ayrıntısında durum: gecikmiş gider, ödenmiş gelir renginde */

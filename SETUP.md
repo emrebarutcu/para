@@ -289,11 +289,14 @@ harcamaları, kart borcuna dahil); kartın ödeme formunun durumu da aynı satı
 eşinin kartı) **Hesaba katılmasın** ile takipten çıkar (`cards.track_off`), düşülmüş ekstreleri (kart ödemeleri dahil)
 TL bakiyesine geri döner ve **her yerde dışarıdadır**: Borçlar'da başlığında toplam olmayan "Hesaba katılmayan kartlar"
 grubunda soluk; Özet'in "Bu ay ödenecek" kutusu, sonraki ay, Kalan ödeme, Aylık ödemeler grafiği ve Kişiler'in ay
-toplamları, Borçlar'ın "Bu ay ödenecek"i, Nakit grafiği ve içgörüler (`icgoru.js` ödeme akışı) onu saymaz (`app.js`
-`cashflow`: ekstre olayları `ignored`); Akış, takvim ve ekstre ayrıntısında soluk "hesaba katılmıyor" etiketiyle
-görünür, Sıradaki ödemeler'de yoktur; Kartlar sekmesindeki kutusunda "Hesaba katılmıyor" yazar. Yeniden hesaba katılan
-kart bugünden takibe girer. Formda tarih yoktur: takibin geçmiş bir günden başlaması asistanla girilir (`update_card`
-`track_since`).
+toplamları, Borçlar'ın "Bu ay ödenecek"i, Nakit grafiği, içgörüler (`icgoru.js` ödeme akışı, düzenli ödemeler, kart
+önerisi, limit uyarısı), harcama formundaki kart önerisi ve asistanın `get_overview` / `get_cashflow` (`notCounted`) /
+`list_people` / `simulate_purchase`'ı onu saymaz (`app.js` ve `mcp/tools.js` `cashflow`: ekstre olayları `ignored`,
+etkilenen ay yeniden toplanır); ödeme penceresini de uzatmaz (`lastPaymentIndex`). Özet'te "Son taksit" ödenecek bir şey
+kalan son aydır, hesaba katılan süresiz tekrarlayan harcama varsa "Süresiz" (asistanda `lastPaymentMonth` null,
+`endless`); Akış, takvim ve ekstre ayrıntısında soluk "hesaba katılmıyor" etiketiyle görünür, Sıradaki ödemeler'de
+yoktur; Kartlar sekmesindeki kutusunda "Hesaba katılmıyor" yazar. Yeniden hesaba katılan kart bugünden takibe girer.
+Formda tarih yoktur: takibin geçmiş bir günden başlaması asistanla girilir (`update_card` `track_since`).
 
 **Aynı gün kuralı**: kartta bugün tarihli kart ödemesi varsa (`B.cardPaidToday`) yeni başlangıç yarındır; uyarı çıkmaz,
 önizleme gri bir satırla söyler. Yeniden hesaba katılan kartın takibi yarın başlar (bugünkü ödeme, ödediği ekstreyle

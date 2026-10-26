@@ -270,6 +270,8 @@ function lastPaymentIndex() {
   let last = -Infinity;
   for (const p of knownPurchases()) {
     if (T.assetOf(p) !== "TRY") continue;
+    const card = cardById(p.cardId);
+    if (card && !B.tracked(card)) continue;   // hesaba katılmayan kart ödeme penceresini uzatmaz
     const list = paymentsOf(p);
     if (list.length) last = Math.max(last, list[list.length - 1].idx);
     if (T.endless(p)) last = Math.max(last, todayIndex() + 11);
@@ -427,9 +429,10 @@ function renderOverview(months, start, last) {
   els.nextLabel.textContent = T.monthName(start + 1);
   els.nextTotal.textContent = fmt(at(start + 1)?.total || 0);
   els.remaining.textContent = fmt(months.reduce((s, m) => s + m.total, 0));
-  // Son taksit: ödenecek bir şey kalan son ay (hesaba katılmayan kartın ayları aralıkta kalabilir; Akış'ta soluk görünür)
+  // Son taksit: ödenecek bir şey kalan son ay; süresiz tekrarlayan (hesaba katılan) harcama varsa bitmez
+  const endless = knownPurchases().some(p => T.assetOf(p) === "TRY" && T.endless(p) && !(cardById(p.cardId) && !B.tracked(cardById(p.cardId))));
   const lastDue = [...months].reverse().find(m => m.total > EPS);
-  els.endLabel.textContent = lastDue ? `${T.monthShort(lastDue.idx)} ${T.yearOf(lastDue.idx)}` : "—";
+  els.endLabel.textContent = endless ? "Süresiz" : lastDue ? `${T.monthShort(lastDue.idx)} ${T.yearOf(lastDue.idx)}` : "—";
   // Ayın borç ve kredi ödemeleri ayrı satırda (yukarıdaki tutar yalnızca kart ve nakit ödemeleri); dokununca Borçlar
   const debtDue = dueSum(B.paymentsDue(state, T.todayKey(), T.dateKey(start, 1), T.dateKey(start, 31)), rates?.rates);
   els.heroDebt.hidden = !(debtDue > EPS);
@@ -3744,12 +3747,18 @@ function autoPrepaid(card, { on, since, auto }, today) {
 function prepaidText(card, since, today, lost) {
   const cs = B.cardState(state, { ...card, trackOff: false, trackSince: since }, today);
   const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((s, x) => s + x.amount, 0);
-  return ahead > EPS
-    ? `“Otomatik”e geçilemiyor: bu karta, son ödeme günü gelmemiş ekstreler için ${fmt(ahead)} erken ödeme kaydettin; `
-      + `“Otomatik”te bunun ${fmt(lost)} kadarı sayılmaz, TL bakiyen o kadar yüksek görünür. Önce “Kart ödemelerin”den bu `
-      + `ödemeyi sil ya da ${fmt(ahead)} kadar azalt.`
-    : "“Otomatik”e bugün geçilemiyor: son ödeme günü bugün olan ekstre “Otomatik”te ancak yarın ödenmiş sayılır; bugün "
+  if (!(ahead > EPS)) {
+    return "“Otomatik”e bugün geçilemiyor: son ödeme günü bugün olan ekstre “Otomatik”te ancak yarın ödenmiş sayılır; bugün "
       + `geçersen ona yaptığın ödeme yüzünden TL bakiyen bugünlük ${fmt(lost)} yüksek görünür. Yarın geçebilirsin.`;
+  }
+  // Erken ödemenin kapattığı son ileriki ekstre: onun son ödeme günü geçince engel kendiliğinden kalkar (kart borcunu da
+  // aşan ödemede bu gün yok). lost erken ödemeden büyükse son ödeme günü bugün olan ekstreye yapılan ödeme de bugün sayılmaz.
+  const last = cs.prepaid > EPS ? null : cs.statements.filter(x => x.key > today && x.covered > EPS).at(-1);
+  return `“Otomatik”e geçilemiyor: bu karta, son ödeme günü gelmemiş ekstreler için ${fmt(ahead)} erken ödeme kaydettin; `
+    + `“Otomatik”te ödemelerinin ${fmt(lost)} kadarı ${last ? `${fmtDayShort(last.key)} gününe kadar ` : ""}sayılmaz, TL bakiyen o `
+    + "kadar yüksek görünür. " + (last ? `${fmtDayShort(T.addDays(last.key, 1))} günü “Otomatik”e geçebilirsin; hemen geçmek için `
+      : "Geçmek için önce ") + `“Kart ödemelerin”den bu ödemeyi sil ya da ${fmt(ahead)} kadar azalt`
+    + (lost > ahead + EPS ? " (son ödeme günü bugün olan ekstre yüzünden en erken yarın)." : ".");
 }
 
 // Formdaki seçim karta yazılır: hesaba katılmayan kartta trackOff (trackSince ve manualSince saklanır), takipte başlangıç

@@ -85,6 +85,12 @@ test("düzenli ödemeler, kategori artışı ve diğer kişilerin payı", () => 
   const cats = I.categoryBreakdown(s, 2026 * 12 + 9);
   assert.deepEqual(cats.rows.map(r => r.id), ["market", "", "eglence"]);
   assert.equal(cats.compared, 3);
+
+  // Hesaba katılmayan kartın aboneliği düzenli ödemelere girmez; hesaba katılan kartta girer
+  s.installments.push({ id: "sp", personId: "ben", cardId: "bonus", desc: "Spotify", total: 60, count: 1, date: "2026-09-02", repeat: 0 });
+  assert.ok(!I.insights(s, { today: TODAY }).find(x => x.id === "duzenli").data.some(x => x.name === "Spotify"));
+  s.cards[0].trackOff = false;
+  assert.ok(I.insights(s, { today: TODAY }).find(x => x.id === "duzenli").data.some(x => x.name === "Spotify"));
 });
 
 const OCT = 2026 * 12 + 9;

@@ -177,6 +177,8 @@ function lastPaymentIndex(state, today) {
   let last = -Infinity;
   for (const p of knownPurchases(state)) {
     if (T.assetOf(p) !== "TRY") continue;
+    const card = cardById(state, p.cardId);
+    if (card && !B.tracked(card)) continue;   // hesaba katılmayan kart ödeme penceresini uzatmaz
     const pays = paymentsOf(state, p, today);
     if (pays.length) last = Math.max(last, pays[pays.length - 1].idx);
     if (T.endless(p)) last = Math.max(last, T.parseDate(today).idx + 11);
@@ -890,7 +892,14 @@ function payModeArgs(state, args, cur, v, today) {
   const lost = B.cardPrepaid(state, { ...v, manualSince: cur.manualSince }, today);
   if (lost > EPS) {
     const payer = personName(state, state.people[0]?.id);
-    fail(`${cur.name} can't go back to automatic yet: ${round(lost)} TRY of its recorded card payments would stop counting (on automatic, statements count as paid on their own and payments only count beyond them, so payments ahead of the statements due would go against statements already counted as paid), raising ${payer}'s lira balance by that much. Delete the payment made ahead first (delete_debt_payment; ids in list_cards / list_debts cards payments), or switch once the statements it pays are past their due day.`);
+    // Erken ödenen (son ödeme günü gelmemiş ekstreler için) kısım; yoksa engel son ödeme günü bugün olan ekstreye yapılan
+    // ödemeden: otomatikte o ekstre ancak yarın ödenmiş sayılır (uygulamadaki prepaidText gibi)
+    const cs = B.cardState(state, { ...v, manualSince: cur.manualSince }, today);
+    const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((t, x) => t + x.amount, 0);
+    if (ahead <= EPS) {
+      fail(`${cur.name} can't go back to automatic today: on automatic its statement due today counts as paid only tomorrow, so ${round(lost)} TRY of the card payments recorded for it would not count today, raising ${payer}'s lira balance by that much for today. Switch tomorrow; don't delete the payment.`);
+    }
+    fail(`${cur.name} can't go back to automatic yet: ${round(ahead)} TRY was paid ahead for statements not due yet, and on automatic ${round(lost)} TRY of its recorded card payments would stop counting until those due days pass (statements count as paid on their own and payments only count beyond them), raising ${payer}'s lira balance by that much. Delete or reduce the payment made ahead by ${round(ahead)} TRY (delete_debt_payment; ids in list_cards / list_debts cards payments), or switch the day after the due day of the last statement it pays.`);
   }
   return {};
 }
@@ -932,7 +941,7 @@ const CARD_FIELDS = {
   cutoff_day: S.int("Statement cutoff day of month (hesap kesim günü).", 1, 31),
   due_day: S.int("Payment due day of month (son ödeme günü).", 1, 31),
   last4: S.str('Last 4 digits of the card (used to match bank e-mails). "" removes it.'),
-  auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call: statements since then are unpaid until marked paid); on a day a card payment is dated it starts tomorrow instead (the card stays automatic today). Switching back to true counts unpaid past statements as paid; it fails while recorded card payments would stop counting (payments ahead of the statements due; delete them or wait for those due days) and while the card is not tracked (an untracked card keeps its mode)."),
+  auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call: statements since then are unpaid until marked paid); on a day a card payment is dated it starts tomorrow instead (the card stays automatic today). Switching back to true counts unpaid past statements as paid; it fails while recorded card payments would stop counting (payments for statements not past their due day yet: on a statement's due day switch the next day; for payments made ahead, delete them or wait until the day after those due days) and while the card is not tracked (an untracked card keeps its mode)."),
 };
 
 const ASSET = { type: "string", enum: ["TRY", "USD", "EUR", "GAU"], description: "TRY (Turkish lira), USD, EUR or GAU (gold, in grams)." };
@@ -981,6 +990,7 @@ export const TOOLS = [
       const end = Math.min(last, start + MAX_MONTHS - 1);
       const months = end >= start ? cashflow(state, start, end) : [];
       const at = idx => months.find(m => m.idx === idx);
+      const endless = knownPurchases(state).some(p => T.assetOf(p) === "TRY" && T.endless(p) && !(cardById(state, p.cardId) && !B.tracked(cardById(state, p.cardId))));
       const thisMonth = at(start);
 
       // Sıradaki ödemeler (app.js renderUpcoming gibi): elle ödenen kartın ekstreleri borc.js'ten (ödenmiş ya da önceden
@@ -1003,7 +1013,9 @@ export const TOOLS = [
         dueThisMonthByCard: byName(state, thisMonth?.byCard ?? {}, cardKeyName),
         nextMonth: { month: T.monthKey(start + 1), total: round(at(start + 1)?.total) },
         remainingTotal: round(months.reduce((s, m) => s + m.total, 0)),
-        lastPaymentMonth: (m => (m ? T.monthKey(m.idx) : null))([...months].reverse().find(m => m.total > EPS)),
+        // Süresiz tekrarlayan (hesaba katılan) harcama varsa ödemeler bitmez: null, endless true
+        lastPaymentMonth: endless ? null : (m => (m ? T.monthKey(m.idx) : null))([...months].reverse().find(m => m.total > EPS)),
+        ...(endless && { endless: true }),
         upcomingPayments: upcoming.map(x => x.view),
         people: state.people.map(p => ({
           name: p.name,
@@ -1669,6 +1681,7 @@ export const TOOLS = [
           if (!B.tracked(card)) fail(`${card.name}'s statements are not tracked, so they are not paid from the balances. Ask the user; update_card track_statements turns tracking on.`);
           if (!B.manual(card)) fail(`${card.name}'s statements are paid automatically (the day after the due day); there is nothing to mark paid. To mark them paid by hand, update_card auto_pay false first (ask the user).`);
           const cd = B.cardDebt(state, card, today);
+          if (cd.since > today) fail(`${card.name} is counted from ${cd.since} (tracking was turned back on today, a day a card payment is dated, so it starts tomorrow): statements due before then don't affect the balances; there is nothing to mark paid today.`);
           if (cd.manualFrom > today) fail(`${card.name}'s statements are paid automatically until ${cd.manualFrom}, when paying by hand starts (a card payment was dated the day it switched); there is nothing to mark paid today.`);
           if (date < cd.manualFrom) fail(`date must not be before ${cd.manualFrom}: ${card.name}'s statements are paid by hand from then on (earlier ones counted as paid automatically).`);
           // Ödemesi gelen (gecikmiş ya da bugün) ekstreler, yoksa kesilmiş ekstre; fazlası ileriki ekstreleri önceden kapatır
@@ -2011,5 +2024,5 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
-- Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments made ahead of the statements due would stop counting; on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
+- Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
 - Reply to the user in their language (the app is Turkish).`;

@@ -145,12 +145,13 @@
   function recurring(state, today, rates) {
     const t = T.parseDate(today).idx;
     const groups = new Map(), out = [];
-    for (const p of known(state).purchases) {
+    const own = paying(state, known(state).purchases);   // hesaba katılmayan kartın abonelikleri sayılmaz
+    for (const p of own) {
       if (!T.repeats(p) || !R.nextDate(p, today)) continue;
       const v = V.toTry(T.originalTotal(p) * R.perMonth(p), T.assetOf(p), rates);
       if (v != null) out.push({ name: p.desc, monthly: v, kind: "purchase", category: p.category ?? null });
     }
-    for (const p of known(state).purchases) {
+    for (const p of own) {
       const d = T.parseDate(p.date);
       if (!d || T.repeats(p) || T.assetOf(p) !== "TRY" || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
       const key = K.keyOf(p.desc);
