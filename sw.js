@@ -1,6 +1,6 @@
 importScripts('/version.js');
 const CACHE = 'cashfollow-' + self.APP_VERSION;
-const ASSETS = ['/', '/index.html', '/version.js', '/styles.css', '/app.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/sync.js', '/kategori.js', '/icgoru.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg'];
+const ASSETS = ['/', '/index.html', '/version.js', '/styles.css', '/app.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/borc.js', '/sync.js', '/kategori.js', '/icgoru.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -8,12 +8,21 @@ self.addEventListener('install', e => {
   );
 });
 
+// Ana sürüm (MAJOR) değiştiyse veri biçimi de değişmiştir: aynı cihazda açık kalan eski sürüm sekmeleri yeniden yüklenir,
+// eski kod yeni verinin üstüne yazmasın (ör. 4.x sekmesi borçları ve kart takibini bilmez)
+const major = v => String(v).replace('cashfollow-', '').split('.')[0];
+
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
+    caches.keys().then(keys => {
       // Yalnızca uygulamanın eski sürüm önbellekleri; yapay zekâ modeli ve vektörleri (yz.js) sürümden bağımsız kalır
-      Promise.all(keys.filter(k => k.startsWith('cashfollow-') && k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+      const old = keys.filter(k => k.startsWith('cashfollow-') && k !== CACHE);
+      return Promise.all(old.map(k => caches.delete(k))).then(() => old);
+    }).then(old => self.clients.claim().then(() => {
+      if (!old.some(k => major(k) !== major(self.APP_VERSION))) return;
+      return self.clients.matchAll({ type: 'window' })
+        .then(cs => Promise.all(cs.map(c => c.navigate(c.url).catch(() => {}))));
+    }))
   );
 });
 

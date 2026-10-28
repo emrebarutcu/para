@@ -329,8 +329,8 @@ a { color: inherit; }
   left: 0; right: 0; bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--surface) 86%, transparent);
   backdrop-filter: saturate(1.6) blur(18px);
   -webkit-backdrop-filter: saturate(1.6) blur(18px);
@@ -352,6 +352,14 @@ a { color: inherit; }
 .tabs a .ic { width: 22px; height: 22px; }
 .tabs a.active { color: var(--text); }
 .tabs a.active .ic { stroke-width: 2.1; }
+/* Altı sekme dar ekranda sığsın: hücre küçülebilir, ad sığmazsa üç noktayla biter; "Harcamalar" mobilde kısa */
+.tabs a { min-width: 0; }
+.tabs a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabs .tab-l { display: none; }
+@media (max-width: 359px) {
+  .tabs a { font-size: 10.5px; }
+  .tabs a .ic { width: 21px; height: 21px; }
+}
 
 .fab {
   position: fixed;
@@ -484,6 +492,9 @@ a { color: inherit; }
 .hero-stats > div + div { padding-left: 12px; border-left: 1px solid var(--line); }
 .hero-stats dt { font-size: 12px; color: var(--text-3); margin-bottom: 3px; }
 .hero-stats dd { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Tutarın altında eşitlik satırı: "Varlık ₺80.000 = Özvarlık ₺44.000 + Borç ₺36.000" */
+.hero-eq { margin: -6px 0 14px; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.hero-eq:empty { display: none; }
 
 /* ── Payment rows (Özet + Akış) ── */
 .pay-list { list-style: none; margin: 0; padding: 0; }
@@ -1239,6 +1250,9 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .offline-note .row-text { margin: 0; }
 .offline-note .row-text small { line-height: 1.45; }
 .offline-note .btn { flex: none; }
+/* Bilgi şeridi (uyarı değil): tek renkli */
+.offline-note.info { border-color: var(--line); background: var(--surface); }
+.offline-note.info > .ic { color: var(--text-2); }
 #authBtn.auth-active { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 
 /* ── Toast ── */
@@ -1397,6 +1411,8 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   .tabs a .ic { width: 18px; height: 18px; }
   .tabs a:hover { color: var(--text); }
   .tabs a.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px var(--line); }
+  .tabs .tab-l { display: inline; }
+  .tabs .tab-s { display: none; }
   .app-main { padding: 16px 24px 56px; }
   .view { gap: 20px; }
   .hero { padding: 26px 28px 22px; }
@@ -1409,6 +1425,12 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   .card-grid { grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .asset-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; }
   .toast { bottom: 28px; }
+}
+
+/* Altı sekme başlıkta: dar masaüstünde marka adı gizlenir, sekmeler sıkışır */
+@media (min-width: 900px) and (max-width: 1099px) {
+  .brand-name { display: none; }
+  .tabs a { padding: 7px 10px; gap: 6px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1526,6 +1548,7 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   transition: border-color .15s, box-shadow .15s, background .15s;
 }
 .row-body input[type="date"]:focus { border-color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 3px var(--focus); }
+.row-body input[type="date"].invalid { border-color: var(--danger); }
 
 /* ── Metin alanları: üzerine gelme, hata, sayı okları ── */
 @media (hover: hover) {
@@ -1597,3 +1620,109 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .repeat input[type="number"]:focus { border-color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 3px var(--focus); }
 .repeat input[type="number"].invalid { border-color: var(--danger); }
 .rep-times .inline-input { align-self: flex-start; }
+
+/* ── Borçlar ── */
+.hero-stats > div { display: flex; flex-direction: column; justify-content: space-between; }   /* iki satırlık etikette tutarlar hizalı */
+.debt-groups { display: flex; flex-direction: column; gap: 18px; }
+.debt-group > .panel-head { padding: 0 4px; }
+.debt-group > .panel-head .panel-note { font-variant-numeric: tabular-nums; }
+/* Satırın işareti: kart / banka simgesi ya da karşı tarafın baş harfleri; nötr daire (renk yalnızca kartın) */
+.mark {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  color: var(--text-2);
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.mark .cmark, .mark > .ic { width: 18px; height: 18px; }
+.purchase.muted { opacity: .55; }
+.p-meta .who { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.p-meta .out-text { color: var(--expense); font-weight: 500; }
+/* Satır içi "Ödendi" (ve paylaş): telefonda yazılar sığsın diye ayrıntıların altında, genişte sağda */
+.row-acts { display: flex; align-items: center; gap: 6px; grid-column: 2 / -1; margin-top: -4px; }
+.row-acts .icon-btn .ic { width: 17px; height: 17px; }
+.debt-act .ic { width: 16px; height: 16px; }
+@media (min-width: 640px) {
+  .purchase.act { grid-template-columns: 40px minmax(0, 1fr) auto auto; }
+  .row-acts { grid-column: auto; margin-top: 0; }
+}
+
+/* Borç formu */
+.debt-plan { display: flex; flex-direction: column; gap: 12px; }
+.count-grid.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#debtPerRow label { padding: 8px 12px; font-size: 13.5px; }
+.preview .debt-plan-text { color: var(--text); font-weight: 600; }
+#debtAutoNote { margin-top: -6px; }   /* ödeme şekli kilitliyse kutunun hemen altında nedeni */
+
+/* Ödemeler listesi (borç, ödeme ve kart payı pencerelerinde) */
+.pay-hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pay-hist li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 9px 6px; border-radius: 10px;
+}
+.pay-hist li:has(.btn) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.pay-hist li + li { border-top: 1px solid var(--line); }
+.pay-hist li.editable { cursor: pointer; outline: none; transition: background .15s; }
+.pay-hist li.editable:hover, .pay-hist li.editable:focus-visible { background: var(--surface-2); }
+.pay-hist li.current { background: var(--surface-2); }
+.ph-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ph-date { font-size: 14px; font-weight: 600; }
+.ph-note { font-size: 12.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pay-hist .amount { font-weight: 600; white-space: nowrap; }
+
+/* Kart payı penceresi */
+.share-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.share-head h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-amt { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; white-space: nowrap; }
+.share-amt .amount { font-weight: 600; font-size: 15px; }
+.share-amt small { font-size: 12px; color: var(--text-3); }
+.share-amt small.in-text { color: var(--income); }
+.pay .pay-title .p-desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Hero altındaki bağlantılar: Özet'te ayın borç ödemesi, Varlıklar'da eşitlik (Borçlar'a götürür) */
+.hero-link { color: var(--text-2); text-decoration: none; }
+.hero-link:hover { color: var(--text); }
+a.hero-eq { display: block; width: fit-content; }
+.eq-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.eq-line > span { color: var(--text-3); }
+.eq-line > span:empty { display: none; }
+
+/* Varlıklar: Alacak kutusu (dokununca Alacaklarım); telefonda tam genişlik, genişte beşinci sütun */
+.asset-sym .ic { width: 15px; height: 15px; }
+.asset.receivable { grid-column: 1 / -1; }
+@media (min-width: 900px) {
+  .asset-grid:has(> .receivable) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .asset.receivable { grid-column: auto; }
+}
+
+/* Akış: ayın borç ve kredi ödemeleri, kart ödemelerinin altında */
+.month-block .panel + .panel { margin-top: 8px; }
+.debt-due-head { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0 2px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.debt-due-head .amount { font-variant-numeric: tabular-nums; }
+
+/* Girdi ve çıktılarda borç akışı: girdi yönündeki tutar gelir renginde */
+.tl-pay .amount.in { color: var(--income); }
+/* Elle ödenen kartın ekstre işaretinde durum rozeti: ödendi / ödenmedi */
+.tl-state { flex: none; padding: 0 6px; border-radius: 999px; background: var(--surface-2); font-size: 10.5px; font-weight: 600; line-height: 16px; }
+.tl-state.paid { color: var(--income); }
+.tl-state.late { color: var(--expense); }
+/* Ekstre ayrıntısında durum: gecikmiş gider, ödenmiş gelir renginde */
+.p-status.late { color: var(--expense); }
+.p-status.paid { color: var(--income); }
+
+/* Özet Kişiler: kart payı olan satır kart payı penceresini açar */
+.people-sum li.clickable { cursor: pointer; border-radius: 12px; }
+
+/* Kart formu: borç ve ekstre takibi */
+.card-track .check { align-self: flex-start; }
+.track-since { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-2); }
+.field .track-since input[type="date"] { flex: 1; min-width: 0; max-width: 220px; }
+.card-track .link { align-self: flex-start; border: none; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.card-track .link:hover { color: var(--text); }
+/* Kart formunun bağlantıları yan yana (Ekstre ödemeleri, Borçlar'da gör); ikisi de gizliyse yer kaplamaz */
+.card-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.card-links:not(:has(> :not([hidden]))) { display: none; }
