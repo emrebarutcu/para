@@ -28,7 +28,10 @@ export async function handleEmail(message, env, fetchFn = fetch) {
   }
 
   const email = parseEmail(new Uint8Array(await new Response(message.raw).arrayBuffer()));
-  const text = email.text && email.text.trim().length >= 40 ? email.text : htmlToText(email.html || email.text || "");
+  // Düz metin yeğlenir; çok kısaysa ya da HTML'deki bağlantıları taşımıyorsa (banka doğrulama e-postası) HTML kullanılır
+  const plainOk = email.text && email.text.trim().length >= 40
+    && (/https?:\/\//i.test(email.text) || !/<a\b[^>]*\bhref\s*=\s*["']?https?:/i.test(email.html || ""));
+  const text = plainOk ? email.text : htmlToText(email.html || email.text || "");
   if (!text.trim()) return;   // boş e-posta: sessizce düşür
 
   const key = env.SUPABASE_SERVICE_KEY;
@@ -171,10 +174,17 @@ function decodeWords(value) {
     });
 }
 
+// <a href="https://…">Doğrula</a> → "Doğrula (https://…)": uygulama bağlantıyı tıklanabilir gösterir
+const LINK = /<a\b[^>]*?\bhref\s*=\s*["']?(https?:[^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/a>/gi;
+function linkText(_, url, label) {
+  return label.includes(url) ? label : `${label} (${url})`;
+}
+
 // HTML → düz metin (eposta.js'teki plainText ile aynı kurallar)
 function htmlToText(s) {
   return String(s || "")
     .replace(/<(style|script|head)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(LINK, linkText)
     .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|table)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
