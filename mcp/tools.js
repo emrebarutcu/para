@@ -1190,6 +1190,12 @@ export const TOOLS = [
         const chosen = transition ? change.cards[transition] : change.card;
         const built = chosen.history ? { ...v, history: chosen.history } : v;
         const next = { ...built, ...payModeArgs(state, args, cur, built, ctx.today) };
+        // Takibi bugünden başlayan (takibe giren ya da başlangıcı bugüne alınan) kartta bugün tarihli ödeme, ödediği ekstre
+        // takipten önce kaldığı için sonraki ekstreleri kapatırdı (borc.js cardPaidToday): o gün bugünden takibe alınmaz
+        if (B.tracked(next) && next.trackSince === ctx.today && (!B.tracked(cur) || cur.trackSince !== ctx.today)
+          && B.cardPaidToday(state, cur, ctx.today)) {
+          fail(`A payment on ${cur.name} is dated today: tracking from today would apply it to later statements (the statement it paid falls before tracking). Turn tracking on tomorrow, or pass an earlier track_since.`);
+        }
         // Bu kartın düşülen ekstreleri (borc.js cardPaid): takip, günler ya da ödeme modu değişince bakiye değişir
         const deducted = c => B.cardPaid({ ...state, cards: [c] }, ctx.today);
         const before = deducted(cur);

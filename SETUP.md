@@ -281,48 +281,57 @@ sonra eklenen kart eklendiği günden. Takipteki kartın bu tarihten sonra gelen
 kişinin TL varlığından düşer (kartları ilk kişi öder; ekstreyi ayrıca çıkış olarak girmek gerekmez); kartta diğer kişilerin
 bu tarihten sonraki taksitleri alacak olur, öncekiler ödenmiş sayılır. Takip başlayınca Borçlar'da bir kez bilgi şeridi
 çıkar (`para.trackNotice`); ilk kişinin hiç TL girişi yoksa açılış bakiyesi önerilir (**Bakiye gir**).
-Kullanıcının ödemediği kart (ör. eşinin kartı) kart formunda "Ekstreler TL varlığımdan düşsün" kapatılarak takipten çıkar
+Kart formunda tek seçim vardır, **Ekstre ödemesi**: **Otomatik** (varsayılan, yukarıdaki gibi), **Ben işaretlerim**
+(elle ödeme, aşağıda) ve **Hesaba katma**. Form yeni kartta seçilenin anlamını, kayıtlı kartta yalnızca seçim değişince
+kaydın etkisini tek satırda söyler. Kullanıcının ödemediği kart (ör. eşinin kartı) **Hesaba katma** ile takipten çıkar
 (`cards.track_off`): Borçlar'da soluk ve "toplama dahil değil" görünür, düşülmüş ekstreleri (kart ödemeleri dahil) TL
-bakiyesine geri döner. Takibin başladığı tarih de aynı yerden değişir; form geçmişe etkisini önceden gösterir.
+bakiyesine geri döner. Yeniden hesaba katılan kart bugünden takibe girer; o gün karta ödeme girilmişse ertesi güne kadar
+katılmaz (ödediği ekstre takipten önce kalır, ödeme sonraki ekstreleri kapatırdı; asistanda da). Formda tarih yoktur:
+takibin geçmiş bir günden başlaması asistanla girilir (`update_card` `track_since`).
 
-**Kartın ödeme modu**: takip bloğundaki **Son ödeme günü geçince ödendi say** varsayılan işaretlidir (yukarıdaki gibi).
-Kapatılırsa (`cards.manual_since` = bugün; takip aynı kayıtta başlıyor ya da başlangıç günü değişiyorsa takibin başladığı
-gün) o günden sonraki ekstreler **Ödendi** ile kart ödemesi kaydedilene kadar borçta kalır, son ödeme günü geçince "2 gün
-gecikti" görünür; öncekiler ödenmiş kalır. Kart ödemesi (`debts.card_id`) kayıt gününde ilk kişinin TL varlığından düşer;
-yalnızca elle ödenen takipteki karta, elle modun başladığı gün ile bugün arasındaki bir tarihe girilir. Ödeme formu
-ödemesi gelmiş ekstrelerin (yoksa kesilmiş ekstrenin) tamamıyla dolu açılır, değiştirilebilir: ödemeler en eski
-ödenmemiş ekstreden başlayarak kapatır, kısmi ödemede kalan borçta (günü geçmişse gecikmiş) ve limitte kalır, fazlası
-sonraki ekstreleri önceden kapatır; kart borcunu da aşarsa **kartta artı bakiye** olur (Alacaklarım'da; varlıktır,
-Alacak'a girer). Borçlarım'da kart satırı ödenmemiş tutarı ve gecikmeyi (ya da sıradaki ekstreyi) yazar, ödemesi gelmiş
-ya da kesilmiş ekstrede satır içi **Ödendi**; ekstre ayrıntısı ödenip ödenmediğini söyler, altında da **Ödendi** vardır.
-Otomatiğe dönünce ödenmemiş geçmiş ekstreler ödenmiş sayılır (form önizlemede söyler); kaydedilmiş ödemelerin bir kısmı
-otomatikte ödenmiş sayılan önceki ekstrelerde eriyecekse (elle modun başından sonraki ön ödeme) dönülmez, form eriyecek
-tutarı söyler. Bugün tarihli kart ödemesi varken otomatikten elle moda o gün geçilmez (ödeme ikinci kez düşerdi).
-Kart ödemeleri Borçlarım'daki satırdan ya da kart formundaki "Ekstre ödemeleri"nden açılıp düzeltilir, silinir. Elle ödenen kartta Nakit
-grafiği ekstre yerine kaydedilen ödemeleri kendi gününde, ödenmemiş günü gelmiş ekstreleri bugünde düşer; Sıradaki
-ödemeler ve Bu ay ödenecek ödenmemiş ekstreleri sayar (gecikmişler "gecikti" ile en üstte), ödenmiş kısmı düşer; geciken
-ekstre `borc-vade` içgörüsünde de çıkar.
+**Kartın ödeme modu**: **Ben işaretlerim** seçilirse (`cards.manual_since` = bugün; takibe aynı kayıtta giren kartta
+takibin başladığı gün) o günden sonraki ekstreler **Ödendi** ile kart ödemesi kaydedilene kadar borçta kalır, son ödeme
+günü geçince "2 gün gecikti" görünür; öncekiler ödenmiş kalır. Kart ödemesi (`debts.card_id`) kayıt gününde ilk kişinin
+TL varlığından düşer; yalnızca elle ödenen takipteki karta, elle modun başladığı gün ile bugün arasındaki bir tarihe
+girilir. Ödeme formu ödemesi gelmiş ekstrelerin (yoksa kesilmiş ekstrenin) tamamıyla dolu açılır, değiştirilebilir:
+ödemeler en eski ödenmemiş ekstreden başlayarak kapatır, kısmi ödemede kalan borçta (günü geçmişse gecikmiş) ve limitte
+kalır, fazlası sonraki ekstreleri önceden kapatır; kart borcunu da aşarsa **kartta artı bakiye** olur (Alacaklarım'da;
+varlıktır, Alacak'a girer). Borçlarım'da kart satırı ödenmemiş tutarı ve gecikmeyi (ya da sıradaki ekstreyi) yazar,
+ödemesi gelmiş ya da kesilmiş ekstrede satır içi **Ödendi**; ekstre ayrıntısı ödenip ödenmediğini söyler, altında da
+**Ödendi** vardır. Otomatiğe dönünce ödenmemiş geçmiş ekstreler ödenmiş sayılır (form önizlemede söyler); kaydedilmiş
+ödemelerin bir kısmı otomatikte ödenmiş sayılan önceki ekstrelerde eriyecekse (elle modun başından sonraki ön ödeme)
+dönülmez: form ileriki ekstreler için ödenen tutarı söyler ("Bu kartta ileriki ekstreler için ₺X ödeme var. Otomatiğe
+geçmek için önce bu tutarı Ekstre ödemeleri'nden çıkar"); engel yalnızca bugün ödenecek ekstrenin ödemesindense
+"otomatiğe yarın geçebilirsin" der. Bugün tarihli kart ödemesi varken otomatikten elle moda o gün geçilmez (ödeme ikinci
+kez düşerdi; "elle işaretlemeye yarın geçebilirsin"). Kart ödemeleri Borçlarım'daki satırdan ya da kart formundaki
+"Ekstre ödemeleri"nden açılıp düzeltilir, silinir. Elle ödenen kartta Nakit grafiği ekstre yerine kaydedilen ödemeleri
+kendi gününde, ödenmemiş günü gelmiş ekstreleri bugünde düşer; Sıradaki ödemeler ve Bu ay ödenecek ödenmemiş ekstreleri
+sayar (gecikmişler "gecikti" ile en üstte), ödenmiş kısmı düşer; geciken ekstre `borc-vade` içgörüsünde de çıkar.
 
 **Kişiyle borç / alacak** (formda Borç aldım / Borç verdim): karşı taraf serbest metindir (kişiler listesinde olması
-gerekmez), kayıt bir kişinin varlığına aittir (varsayılan ilk kişi, tek kişide sorulmaz). Geri ödeme tek sefer (vadesiz ya
-da vadeli) ya da taksitlidir. Ödeme ve tahsilat varsayılan olarak elle kaydedilir (satır içi **Ödendi**, kısmi
+gerekmez), kayıt bir kişinin varlığına aittir (varsayılan ilk kişi, tek kişide sorulmaz). Geri ödeme tek sefer (vadesiz
+ya da vadeli) ya da taksitlidir. Ödeme ve tahsilat varsayılan olarak elle kaydedilir (satır içi **Ödendi**, kısmi
 olabilir); ödemeler taksitleri ilk taksitten başlayarak kapatır, vadesi ya da günü geçip kapanmamış tutar gecikmiştir
 ("3 gün gecikti"; geçmiş tarihli kayıtta da). Vadeli ya da taksitlide **Taksitler tarihinde ödenmiş sayılsın** seçilirse
 taksitler, kredideki gibi, tarihinde kendiliğinden ödenir; gecikme olmaz, satırda Ödendi görünmez (yalnızca formdan ara
-ödeme). **Mod kilidi**: kayıt tarihi ile bugün arasında taksiti olan borçta ve kredide bu kutu değiştirilemez, kilitlenir
-ve nedenini yazar (değiştirmek geçmiş taksitleri yeniden yorumlardı: ödenmiş sayılan gecikmiş olur ya da kaydedilen
-ödemeler ikinci kez düşer). Kapanmış borcun ödemesi silinince borç yeniden açılır; kalan sessizce silinmez. Borç alınan
-para kayıt tarihinde varlığa girer, verilen çıkar; "Para varlığıma girdi / çıktı" kapatılırsa (önceden alınmış borcu
-bakiyeyi bozmadan girmek için) yalnızca borç / alacak eklenir.
+ödeme). **Mod kilidi**: kayıt tarihi ile bugün arasında taksiti olan borçta ve kredide bu kutu değiştirilemez,
+kilitlenir ve nedenini yazar (değiştirmek geçmiş taksitleri yeniden yorumlardı: ödenmiş sayılan gecikmiş olur ya da
+kaydedilen ödemeler ikinci kez düşer). Kalanın tümü ödenince borç kendiliğinden kapanır (Kapananlar). Kalanı silmek
+(bağışlamak) için borç formunun durum satırında **Borcu kapat** vardır (onay sorar, bugünle kapatır); kapanmış kayıtta
+orada **Yeniden aç** çıkar. Formun altında kapatma ya da ödeme düğmesi yoktur (Sil ve Kaydet; geniş ekranda Vazgeç de);
+ödeme Borçlar'daki satırdan (**Ödendi**) ya da formdaki Ödemeler başlığından (**+ Ödeme**) eklenir; tamamı ödenmiş ya da
+kapanmış borca ödeme eklenmez, önceki ödemeleri düzeltilir. Kapanmış borcun ödemesi silinince borç yeniden açılır; kalan
+sessizce silinmez. Borç alınan para kayıt tarihinde varlığa girer, verilen çıkar; "Para varlığıma girdi / çıktı"
+kapatılırsa (önceden alınmış borcu bakiyeyi bozmadan girmek için) yalnızca borç / alacak eklenir.
 
 **Banka kredisi**: taksit sayısı, taksit tutarı (ya da toplam), ilk taksit tarihi ve çekilen tutar. Taksitler varsayılan
 olarak tarihinde kendiliğinden ödenir (**Taksitler tarihinde ödenmiş sayılsın** işaretli); ek ödeme sondaki taksitlerden
-düşer (ödeme günündeki taksit dahil), **Bu ödemeyle kapat** krediyi bugünle kapatır (geçmiş tarihli kapatma o günden beri
-ödenmiş taksitleri silerdi). Kutu kapatılırsa (`debts.auto_pay` false) kredi kişiyle borç gibi elle ödenir: satır içi
-**Ödendi**, ödemeler ilk taksitten başlayarak kapatır, günü geçen taksit gecikir. Çekilen tutar yalnızca ilk taksitten
-önceki bir günde girilir. Çekilen tutar varlığa girer, borç faiz dahil kalan taksitlerin toplamıdır: aradaki fark (**faiz
-ve masraf**) kredi başlarken Özvarlık'tan bir kez düşer, form aylık faizi yaklaşık gösterir. Ortasından girilen kredinin
-kayıt tarihinden önceki taksitleri (iki modda da) önceden ödenmiş sayılır, varlığa etkisi olmaz.
+düşer (ödeme günündeki taksit dahil; formda **+ Ara ödeme**), kalanın tümü ödenince kredi biter. Kutu kapatılırsa
+(`debts.auto_pay` false) kredi kişiyle borç gibi elle ödenir: satır içi **Ödendi**, ödemeler ilk taksitten başlayarak
+kapatır, günü geçen taksit gecikir. Çekilen tutar yalnızca ilk taksitten önceki bir günde girilir. Çekilen tutar varlığa
+girer, borç faiz dahil kalan taksitlerin toplamıdır: aradaki fark (**faiz ve masraf**) kredi başlarken Özvarlık'tan bir
+kez düşer, form aylık faizi yaklaşık gösterir. Ortasından girilen kredinin kayıt tarihinden önceki taksitleri (iki modda
+da) önceden ödenmiş sayılır, varlığa etkisi olmaz.
 
 **Döviz ve altın**: borç ve alacak dolar, euro ya da gram altın da olabilir. Hareketleri o varlığın bakiyesini değiştirir,
 toplamlarda güncel kurla TL'dir (kuru alınamayan varlık sayılmaz, altta yazar).

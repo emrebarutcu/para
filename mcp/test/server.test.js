@@ -1140,6 +1140,14 @@ test("elle ödenen kart: sıradaki ödemeler ekstrelerden (süresiz tekrarın il
   assert.deepEqual(world.card.tracking, { since: "2026-09-15", autoPay: false, unpaid: 600, overdue: 600, manualSince: "2026-09-15", overdueSince: "2026-10-22" });
   assert.match(world.note, /1 statement\(s\) due since 2026-09-15 \(600 TRY\) are now unpaid: they stay owed until marked paid \(overdue since 2026-10-22\)\.$/);
   assert.doesNotMatch(world.note, /Earlier statements stay paid/);
+
+  // Hesaba katılmayan kart bugün yeniden takibe alınmaz: bugünkü ödemenin ödediği ekstre takipten önce kalır, ödeme sonraki
+  // ekstreleri kapatırdı. Ertesi gün olur (o günden takipte; önceki gün ödemesi sayılmaz)
+  await d5.call("update_card", { card: "Axess", track_statements: false });
+  assert.match((await d5.call("update_card", { card: "Axess", track_statements: true })).error, /A payment on Axess is dated today.*Turn tracking on tomorrow/);
+  assert.equal(stored(sb).cards.find(x => x.id === "axess").trackOff, true);
+  const back = await d6.call("update_card", { card: "Axess", track_statements: true });
+  assert.deepEqual([back.card.tracking.since, back.card.tracking.autoPay], ["2026-11-06", true]);
 });
 
 test("elle ödenen kredi: taksit günü geçince gecikir, Ödendi ile kapanır; ödeme modu geçmiş taksit varken değişmez", async () => {

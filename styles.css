@@ -488,6 +488,7 @@ a { color: inherit; }
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
+.hero-stats.two { grid-template-columns: repeat(2, 1fr); }
 .hero-stats > div { min-width: 0; padding-right: 8px; }
 .hero-stats > div + div { padding-left: 12px; border-left: 1px solid var(--line); }
 .hero-stats dt { font-size: 12px; color: var(--text-3); margin-bottom: 3px; }
@@ -1718,11 +1719,14 @@ a.hero-eq { display: block; width: fit-content; }
 .people-sum li.clickable { cursor: pointer; border-radius: 12px; }
 
 /* Kart formu: borç ve ekstre takibi */
-.card-track .check { align-self: flex-start; }
-.track-since { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-2); }
-.field .track-since input[type="date"] { flex: 1; min-width: 0; max-width: 220px; }
+.card-track .seg label { padding: 6px 4px; line-height: 1.25; }
 .card-track .link { align-self: flex-start; border: none; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-2); }
 .card-track .link:hover { color: var(--text); }
 /* Kart formunun bağlantıları yan yana (Ekstre ödemeleri, Borçlar'da gör); ikisi de gizliyse yer kaplamaz */
 .card-links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .card-links:not(:has(> :not([hidden]))) { display: none; }
+
+/* Borç formu: durum satırında Borcu kapat / Yeniden aç, Ödemeler başlığında + Ödeme */
+.p-status .link, .debt-pays-head .link { border: none; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+.p-status:has(> .link:not([hidden])) { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.debt-pays-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
