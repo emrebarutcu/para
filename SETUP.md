@@ -186,7 +186,12 @@ Her kayıttan 1.5s sonra yalnızca değişen kişi / kart / harcama / varlık ha
 kredi ve ödemeleri tek tabloda, `debts`; ödeme borcundan önce yazılabilir, sıra önemsizdir); silinenler satırdan kalkmaz,
 `deleted_at` ile işaretlenir. Uygulama açılınca, öne gelince ve başka cihaz (ya da asistan) yazınca (Realtime)
 son okumadan beri değişen satırlar çekilir. Aynı anda farklı kayıtlar değişirse hepsi korunur; aynı kayıt iki
-cihazda değişirse sonra yazan kazanır. Hiç eşitlenmemiş cihazda buluttaki veri esastır.
+cihazda değişirse sonra yazan kazanır. Hiç eşitlenmemiş cihazda buluttaki veri esastır. Cihazdaki hesap verisi boşsa
+(yalnızca varsayılan kişi; kart, harcama, hareket, borç yok) ama eşitleme tabanı (`cashflow.v1.<kullanıcı id>.sync`)
+kayıt biliyorsa taban geçersiz sayılır (`Tablo.stale`): silme yazılmaz, cihaz hiç eşitlenmemiş gibi bütün satırları
+yeniden çeker. Yoksa yerel verisi kaybolmuş cihaz girişte hesaptaki her kaydı silinmiş sanıp silerdi (29 Ekim 2026'da
+oldu; satırlar `deleted_at`'leri temizlenerek geri getirilir). Bedeli: bütün kayıtlar tek tek silinip son silme henüz
+yazılmadan bu duruma gelinirse o son kayıt geri gelir.
 
 ## 4. Kartlar ve nakit akışı
 
