@@ -195,6 +195,9 @@ kişiler, kategoriler, aylık grafik),
 **Akış** (ödemeler ay ay, tarih + kart bazında, borç ve kredi ödemeleri her ayın altında ayrı; "Tablo" görünümü Excel'deki
 ay × kişi özeti), **Harcamalar** (mobilde "Harcama"), **Kartlar**, **Borçlar** ve **Varlıklar**. Yeni harcama
 (Varlıklar'da yeni hareket, Borçlar'da borç ya da alacak) `+` düğmesiyle eklenir; içe/dışa aktarma ve tema ayarlardadır.
+Harcamalar listesi **Sırala**'dan sıradaki ödemeye (varsayılan; bitenler son ödemeye göre), en yeniye (alış günü), en
+yüksek toplama (TL karşılığı; taksitlide toplam, tekrarlayanda bir seferlik) ya da ada göre dizilir; seçim cihazda
+kalır (`para.purchaseSort`).
 
 Özet'in üstündeki tutar yine kart ve nakit taksitleridir; borç ve kredi taksitleri altında ayrı satırdadır
 ("+ ₺5.500 borç ödemesi", dokununca Borçlar) ve sıradaki ödemelere karışır. Eski "Kalan borç"un adı **Kalan ödeme**

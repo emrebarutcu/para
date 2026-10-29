@@ -230,6 +230,17 @@
         </button>
       </div>
       <div class="chips scroll-x" id="personFilter" role="group" aria-label="Kişiye göre süz"></div>
+      <div class="list-tools" id="purchaseTools" hidden>
+        <label class="sort-pick">
+          <span>Sırala</span>
+          <select id="purchaseSort" aria-label="Harcamaları sırala">
+            <option value="next">Sıradaki ödeme</option>
+            <option value="new">En yeni</option>
+            <option value="amount">En yüksek toplam</option>
+            <option value="name">Ada göre (A–Z)</option>
+          </select>
+        </label>
+      </div>
       <div id="purchaseWrap"></div>
     </section>
 

@@ -22,7 +22,9 @@ const TIMES_PRESETS = [[0, "Süresiz"], [3, "3 kez"], [6, "6 kez"], [12, "12 kez
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // takvim pazartesiyle başlar
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates",
-  cashStart: "para.cashStart", cashMode: "para.cashMode", timelineStart: "para.timelineStart", trackNotice: "para.trackNotice" };
+  cashStart: "para.cashStart", cashMode: "para.cashMode", timelineStart: "para.timelineStart", trackNotice: "para.trackNotice",
+  purchaseSort: "para.purchaseSort" };
+const PURCHASE_SORTS = ["next", "new", "amount", "name"];   // Harcamalar sıralaması (index.html #purchaseSort)
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
 const INSIGHTS_SHOWN = 3;        // özette ilk görünen içgörü sayısı
@@ -45,6 +47,7 @@ let chartBy = readPref(PREF.chartBy) === "card" ? "card" : "person";
 let flowMode = readPref(PREF.flowMode) === "table" ? "table" : "list";
 let personFilter = "all";
 let showDone = false;
+let purchaseSort = PURCHASE_SORTS.includes(readPref(PREF.purchaseSort)) ? readPref(PREF.purchaseSort) : "next";
 let openEventKey = null;      // akışta açılan ödeme
 let focusIdx = null;          // akışta vurgulanan ay (grafikten gelince)
 let pendingScroll = null;     // render sonrası kaydırılacak öğe id'si
@@ -307,6 +310,7 @@ const els = {
   cashRange: $("cashRange"), cashStart: $("cashStart"), cashMode: $("cashMode"), cashSum: $("cashSum"), cashChart: $("cashChart"), cashEmpty: $("cashEmpty"), cashNote: $("cashNote"),
   flowMode: $("flowMode"), flowList: $("flowList"), flowTable: $("flowTable"), table: $("planTable"),
   personFilter: $("personFilter"), purchaseWrap: $("purchaseWrap"), managePeople: $("managePeople"),
+  purchaseTools: $("purchaseTools"), purchaseSort: $("purchaseSort"),
   cardGrid: $("cardGrid"), addCard: $("addCard"),
   assetLabel: $("assetLabel"), assetTotal: $("assetTotal"), ratesNote: $("ratesNote"), rateStats: $("rateStats"),
   assetEqLine: $("assetEqLine"), assetEq: $("assetEq"), assetIncl: $("assetIncl"),
@@ -1923,9 +1927,22 @@ function renderPurchases() {
     id => { personFilter = id; });
 
   const mine = all.filter(x => personFilter === "all" || x.p.personId === personFilter);
-  const active = mine.filter(x => x.left).sort((a, b) => a.next.localeCompare(b.next) || a.p.desc.localeCompare(b.p.desc, "tr"));
-  const done = mine.filter(x => !x.left).sort((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key));
+  // Sıralama: "next" devam edenlerde sıradaki ödeme, bitenlerde son ödeme (yeniden eskiye); diğerleri ikisinde de aynı.
+  // Tutar harcamanın TL karşılığıdır (taksitlide toplamı, tekrarlayanda bir seferliği); kuru bilinmeyen sona düşer.
+  const byName = (a, b) => a.p.desc.localeCompare(b.p.desc, "tr");
+  const byDate = (a, b) => (b.p.date ?? "").localeCompare(a.p.date ?? "");
+  const value = x => V.toTry(T.originalTotal(x.p), T.assetOf(x.p), rates?.rates) ?? -Infinity;
+  const order = {
+    new: (a, b) => byDate(a, b) || byName(a, b),
+    amount: (a, b) => value(b) - value(a) || byName(a, b),
+    name: (a, b) => byName(a, b) || byDate(a, b),
+  }[purchaseSort];
+  if (purchaseSort === "amount" && mine.some(x => T.assetOf(x.p) !== "TRY")) loadRates();
+  const active = mine.filter(x => x.left).sort(order ?? ((a, b) => a.next.localeCompare(b.next) || byName(a, b)));
+  const done = mine.filter(x => !x.left).sort(order ?? ((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key)));
 
+  els.purchaseSort.value = purchaseSort;
+  els.purchaseTools.hidden = mine.length < 2;
   els.purchaseWrap.replaceChildren();
   if (inbox.length) els.purchaseWrap.append(inboxPanel());
   if (!mine.length) {
@@ -2128,7 +2145,7 @@ function loadRates() {
       try { localStorage.setItem(PREF.rates, JSON.stringify(rates)); } catch {}
     })
     .catch(() => { ratesFailed = true; })
-    .finally(() => { ratesLoading = null; if (view === "varliklar" || view === "ozet" || view === "borclar") render(); });
+    .finally(() => { ratesLoading = null; if (["varliklar", "ozet", "borclar", "harcamalar"].includes(view)) render(); });
   return ratesLoading;
 }
 
@@ -5607,6 +5624,12 @@ els.timelineStart.addEventListener("change", () => {
   timelineStart = els.timelineStart.value;
   timelineDay = null;
   writePref(PREF.timelineStart, timelineStart);
+  render();
+});
+
+els.purchaseSort.addEventListener("change", () => {
+  purchaseSort = els.purchaseSort.value;
+  writePref(PREF.purchaseSort, purchaseSort);
   render();
 });
 
