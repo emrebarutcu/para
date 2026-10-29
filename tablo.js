@@ -230,6 +230,14 @@
     return base;
   }
 
+  // Ekrandaki veri boş (yalnızca varsayılan kişi; kart, harcama, hareket, borç yok) ama taban eşitlenmiş kayıt biliyorsa
+  // taban bu cihazın verisini anlatmaz (yerel veri kaybolmuş): cihaz hiç eşitlenmemiş sayılır, tablolar esastır.
+  // Yoksa changes tabandaki her kaydı silinmiş sanır, hesaptaki bütün veri silinirdi.
+  function stale(state, base) {
+    const blank = TABLES.every(t => listOf(state, t).every(x => t === "people" && x?.id === "ben"));
+    return blank && TABLES.some(t => Object.keys(base?.[t] || {}).some(id => !(t === "people" && id === "ben")));
+  }
+
   // Yazılacaklar: tablo → { upsert: [{ id, key, row }], delete: [id] }. Taban, yazma başarılınca key'lerle güncellenir.
   // Harcamanın / hareketin / borç kaydının kişisi tabloda yoksa yazılmaz; harcamanın kartı yoksa nakit yazılır (uygulamada da nakit sayılır).
   function changes(state, base) {
@@ -344,7 +352,7 @@
     return out;
   }
 
-  const api = { TABLES, FIELD, SCHEMA, keyOf, rekey, toState, baseOf, changes, merge, combine };
+  const api = { TABLES, FIELD, SCHEMA, keyOf, rekey, toState, baseOf, stale, changes, merge, combine };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Tablo = api;
 })(this);

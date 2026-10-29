@@ -345,8 +345,11 @@
   }
 
   async function pull(uid) {
-    const { TABLES, toState, baseOf, merge } = window.Tablo;
-    const meta = loadMeta(uid);
+    const { TABLES, toState, baseOf, merge, stale } = window.Tablo;
+    let meta = loadMeta(uid);
+    // Ekrandaki veri boşken taban doluysa taban geçersizdir: hiç eşitlenmemiş cihaz gibi bütün satırlar baştan çekilir
+    const current = getStateCb(uid);
+    if (meta && current && stale(current, meta.base)) meta = null;
     const rows = {};
     for (const t of TABLES) {
       const at = meta?.cursor[t];
@@ -384,6 +387,8 @@
     const meta = loadMeta(uid);
     const state = getStateCb(uid);
     if (!meta || !state) return;
+    // Boş ekran tabandaki her kaydı silinmiş gösterir: silme yazılmaz, veri tablolardan yeniden alınır (pull)
+    if (window.Tablo.stale(state, meta.base)) { await pull(uid); return; }
     const plan = changes(state, meta.base);
     const commit = (t, list, fn) => {
       const known = meta.base[t] = { ...meta.base[t] };

@@ -465,3 +465,20 @@ test("birleşmede yereldeki elle ödenen kartın modu hesaptaki otomatik karta g
   const off = combine(account, { ...local, cards: [{ ...local.cards[0], trackOff: true }] });
   assert.equal(off.cards[0].manualSince, undefined);
 });
+
+test("boş ekran + dolu taban: taban geçersiz (stale), yoksa changes hesaptaki her kaydı silerdi", () => {
+  const rows = server();
+  const base = baseOf(rows);
+  const blank = { people: [{ id: "ben", name: "Ben", color: 0 }], cards: [], installments: [], entries: [], debts: [] };
+  // Olayın kendisi: yerel veri boş okununca bütün kartlar, harcamalar ve diğer kişiler silinecek görünür
+  const plan = changes(blank, base);
+  assert.deepEqual([plan.people.delete, plan.cards.delete, plan.purchases.delete], [["ali"], ["k1"], ["p1", "p2"]]);
+  assert.equal(Tablo.stale(blank, base), true);
+  assert.equal(Tablo.stale({}, base), true);
+  // Yeni hesap (tabloda yalnızca varsayılan kişi) ya da ekranda herhangi bir kayıt varsa taban geçerlidir
+  assert.equal(Tablo.stale(blank, baseOf({ people: [person("ben", "Ben")] })), false);
+  assert.equal(Tablo.stale(blank, {}), false);
+  assert.equal(Tablo.stale({ ...blank, cards: [{ id: "k9" }] }, base), false);
+  assert.equal(Tablo.stale({ ...blank, people: [...blank.people, { id: "x", name: "X", color: 1 }] }, base), false);
+  assert.equal(Tablo.stale({ ...blank, debts: [{ id: "d" }] }, base), false);
+});
