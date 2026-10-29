@@ -423,6 +423,12 @@ test("banka e-postaları: otomatik ekleme, onay bekleyen, elle ekleme, yok sayma
   const tried = await c.call("try_bank_email", { text: "1234 ile biten kartınızdan 01.10.2026 tarihinde X işyerinde 99,90 TL tutarında harcama yapılmıştır." });
   assert.equal(tried.parsed.amount, 99.9);
   assert.equal(tried.wouldAutoAdd, true);
+
+  // Bağlantıdaki sayılar tutar, tarih ya da kart hanesi sanılmaz
+  const linked = await c.call("try_bank_email", { text: "Detay: https://banka.example/d?k=****9876&a=tl500&g=30.09.2026\n1234 ile biten kartınızdan 01.10.2026 tarihinde X işyerinde 99,90 TL tutarında harcama yapılmıştır." });
+  assert.equal(linked.parsed.amount, 99.9);
+  assert.equal(linked.parsed.cardLast4, "1234");
+  assert.equal(linked.parsed.date, "2026-10-01");
 });
 
 test("e-posta adresi ve yenileme", async () => {

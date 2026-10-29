@@ -10,10 +10,17 @@
     return s.toLocaleLowerCase("tr-TR").replace(/[ışğüöç]/g, ch => FOLD[ch]);
   }
 
+  // <a href="https://…">Doğrula</a> → "Doğrula (https://…)": bağlantı metinde kalır, uygulamada tıklanabilir
+  const LINK = /<a\b[^>]*?\bhref\s*=\s*["']?(https?:[^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/a>/gi;
+  function linkText(_, url, label) {
+    return label.includes(url) ? label : `${label} (${url})`;
+  }
+
   // HTML e-postayı düz metne çevirir
   function plainText(s) {
     return String(s ?? "")
       .replace(/<(style|script|head)\b[\s\S]*?<\/\1>/gi, " ")
+      .replace(LINK, linkText)
       .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|table)>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
       .replace(/&nbsp;/gi, " ")
@@ -119,7 +126,8 @@
 
   // { body, subject, receivedAt } → { amount, currency, last4, date, count, merchant, refund, ok, reason }
   function parse({ body, subject, receivedAt } = {}) {
-    let text = plainText([subject, body].filter(Boolean).join("\n"));
+    // Bağlantılar atılır: içlerindeki sayılar tutar, tarih ya da kart hanesi sanılmasın
+    let text = plainText([subject, body].filter(Boolean).join("\n")).replace(/https?:\/\/\S+/gi, " ");
     let f = fold(text);
     if (f.length !== text.length) text = f;   // nadir Unicode harfler: indeksler kaymasın diye katlanmış metin kullanılır
 
