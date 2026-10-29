@@ -155,6 +155,27 @@ test("düz metin çok kısaysa HTML kullanılır", async () => {
   assert.equal(f.calls[0].body.sender, "bildirim@banka.com.tr");
 });
 
+test("bağlantı yalnızca HTML'deyse HTML kullanılır ve adres metinde kalır", async () => {
+  const m = message("abc123def456@para.example", raw([
+    "From: bildirim@banka.com.tr",
+    "Subject: E-Posta Teyitleme",
+    'Content-Type: multipart/alternative; boundary="b"',
+    "",
+    "--b",
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    "E-posta adresiniz Bankamız kayıtlarına eklenmiştir.\r\nE-posta Adresimi Doğruluyorum",
+    "--b",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    '<p>E-posta adresiniz Bankamız kayıtlarına eklenmiştir.</p><p><a class="btn" href="https://banka.example/teyit?id=1&amp;t=2">E-posta Adresimi Doğruluyorum</a></p>',
+    "--b--",
+  ]));
+  const f = fakeFetch();
+  await handleEmail(m, ENV, f);
+  assert.match(f.calls[0].body.body, /E-posta Adresimi Doğruluyorum \(https:\/\/banka\.example\/teyit\?id=1&t=2\)/);
+});
+
 test("web isteğine kısa bir cevap döner", async () => {
   const { default: worker } = await import("../src/index.js");
   const res = await worker.fetch(new Request("https://para-eposta.example.workers.dev/"));
