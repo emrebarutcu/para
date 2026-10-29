@@ -59,6 +59,12 @@
     return d.party || d.desc || (d.kind === "loan" ? "Kredi" : B.side(d) === "debt" ? "Borç" : "Alacak");
   }
 
+  // Ödeme akışına giren harcamalar: hesaba katılmayan kartın (borc.js tracked değil; ör. eşinin kartı) harcamaları girmez
+  function paying(state, list = state.installments) {
+    const off = new Set(state.cards.filter(c => !B.tracked(c)).map(c => c.id));
+    return off.size ? list.filter(p => !off.has(p.cardId)) : list;
+  }
+
   function known(state) {
     const ids = new Set(state.people.map(p => p.id));
     return {
@@ -139,12 +145,13 @@
   function recurring(state, today, rates) {
     const t = T.parseDate(today).idx;
     const groups = new Map(), out = [];
-    for (const p of known(state).purchases) {
+    const own = paying(state, known(state).purchases);   // hesaba katılmayan kartın abonelikleri sayılmaz
+    for (const p of own) {
       if (!T.repeats(p) || !R.nextDate(p, today)) continue;
       const v = V.toTry(T.originalTotal(p) * R.perMonth(p), T.assetOf(p), rates);
       if (v != null) out.push({ name: p.desc, monthly: v, kind: "purchase", category: p.category ?? null });
     }
-    for (const p of known(state).purchases) {
+    for (const p of own) {
       const d = T.parseDate(p.date);
       if (!d || T.repeats(p) || T.assetOf(p) !== "TRY" || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
       const key = K.keyOf(p.desc);
@@ -182,7 +189,7 @@
   function insights(state, { today, rates = null } = {}) {
     const t = T.parseDate(today).idx;
     const { purchases, entries } = known(state);
-    const cashflow = T.buildCashflow(state.people, state.cards, state.installments, t, t + Math.max(HORIZON, PEAK_MONTHS));
+    const cashflow = T.buildCashflow(state.people, state.cards, paying(state), t, t + Math.max(HORIZON, PEAK_MONTHS));
     const out = [];
     const add = x => out.push(x);
 
@@ -248,10 +255,11 @@
       const late = due.filter(x => x.overdue).length;
       add({
         id: "borc-vade", tone: "warn",
-        title: late ? (late > 1 ? `${late} borç ödemesi gecikti` : "Borç ödemen gecikti")
+        // Tek gecikmiş kart ekstresiyse başlıkta adı (kart ekstresi "borç" başlığıyla birine borç sanılmasın)
+        title: late ? (late > 1 ? `${late} ödemen gecikti` : due[0].ref.cardId ? `${due[0].name} gecikti` : "Borç ödemen gecikti")
           : due.length > 1 ? `${due.length} borç ödemesi yaklaşıyor` : "Borç ödemesi yaklaşıyor",
         text: due.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${dueText(x.date, today, x.overdue)})`).join(", ") + "."
-          + (late ? " Ödediysen Borçlar'da işaretle." : ""),
+          + (late ? " Ödediysen Borçlar'da satırındaki “Ödendi”ye dokun." : ""),
         action: { kind: "debt", label: "Borçlar" },
         data: due.map(x => ({ ...x.ref, party: x.party ?? x.name, amount: V.round(x.amount, x.asset), asset: x.asset, date: x.date, overdue: x.overdue })),
       });
@@ -260,10 +268,10 @@
     // Limit
     for (const x of cardTiming(state, today, today)) {
       const c = x.card;
-      if (!(c.limit > 0) || x.used / c.limit < LIMIT_WARN) continue;
+      if (!B.tracked(c) || !(c.limit > 0) || x.used / c.limit < LIMIT_WARN) continue;   // hesaba katılmayan kart uyarılmaz
       add({
         id: `limit-${c.id}`, tone: "warn", title: x.full ? `${c.name} limiti doldu` : `${c.name} limiti ${pct(x.used / c.limit)} dolu`,
-        text: x.full ? `Bekleyen taksitler ${fmt(x.used)}, limit ${fmt(c.limit)}.` : `Kullanılabilir ${fmt(x.available)} kaldı.`,
+        text: x.full ? `Kart borcu ${fmt(x.used)}, limit ${fmt(c.limit)}.` : `Kullanılabilir ${fmt(x.available)} kaldı.`,
         data: { card: c.name, used: round(x.used), limit: round(c.limit) },
       });
     }
@@ -300,12 +308,12 @@
     }
 
     // Kart seçimi
-    const timing = cardTiming(state, today, today).filter(x => !x.full);
+    const timing = cardTiming(state, today, today).filter(x => !x.full && B.tracked(x.card));   // eşin kartı önerilmez
     if (timing.length >= 2 && timing[0].days - timing[timing.length - 1].days >= CARD_GAP) {
       const best = timing[0], worst = timing[timing.length - 1];
       add({
-        id: "kart", tone: "info", title: `Bugün ${best.card.name} ile öde`,
-        text: `Bugünkü alışverişin ilk ödemesi ${best.card.name} ile ${best.days} gün sonra (${T.parseDate(best.due).day} ${T.monthShort(T.parseDate(best.due).idx)}), ${worst.card.name} ile ${worst.days} gün sonra.`,
+        id: "kart", tone: "info", title: `Bugünkü alışverişi ${best.card.name} ile yap`,
+        text: `Bugün ${best.card.name} ile harcarsan son ödeme günü ${best.days} gün sonra (${T.parseDate(best.due).day} ${T.monthShort(T.parseDate(best.due).idx)}); ${worst.card.name} ile harcarsan ${worst.days} gün sonra.`,
         data: timing.map(x => ({ card: x.card.name, firstPayment: x.due, days: x.days, available: x.available == null ? null : round(x.available) })),
       });
     }
@@ -336,9 +344,9 @@
       const late = owed.filter(x => x.overdue).length;
       add({
         id: "alacak", tone: late ? "warn" : "info",
-        title: late ? (late > 1 ? `${late} alacağın gecikti` : "Alacağın gecikti") : `Ödemesi gelen alacak ${fmt(sharesDue)}`,
-        text: owed.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${x.overdue ? dueText(x.date, today, true) : "kart payı"})`).join(", ")
-          + ". Ödendiyse Alacaklarım'da işaretle" + (sharesDue > 0 ? ", kart payı için hatırlatma da gönderebilirsin." : "."),
+        title: late ? (late > 1 ? `${late} alacağın gecikti` : "Alacağın gecikti") : `Günü gelen alacağın ${fmt(sharesDue)}`,
+        text: owed.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${x.overdue ? dueText(x.date, today, true) : "kartındaki harcamaları"})`).join(", ")
+          + ". Sana ödediyse Borçlar > Alacaklarım'da “Ödendi”ye dokun" + (sharesDue > 0 ? "; oradan hatırlatma da gönderebilirsin." : "."),
         action: { kind: "debt", label: "Alacaklar" },
         data: owed.map(x => ({ ...x, amount: V.round(x.amount, x.asset) })),
       });
@@ -357,18 +365,19 @@
       });
     }
 
-    // Borcun biteceği ay (süresiz tekrarlayan TL harcaması varsa borç bitmez)
-    const endless = purchases.some(p => T.assetOf(p) === "TRY" && T.endless(p));
-    const lastIdx = endless ? -Infinity : purchases.reduce((m, p) => {
+    // Borcun biteceği ay (süresiz tekrarlayan TL harcaması varsa borç bitmez; hesaba katılmayan kart sayılmaz)
+    const own = paying(state, purchases);
+    const endless = own.some(p => T.assetOf(p) === "TRY" && T.endless(p));
+    const lastIdx = endless ? -Infinity : own.reduce((m, p) => {
       if (T.assetOf(p) !== "TRY") return m;
       const pays = T.payments(p, state.cards.find(c => c.id === p.cardId));
       return pays.length ? Math.max(m, pays[pays.length - 1].idx) : m;
     }, -Infinity);
     if (lastIdx >= t) {
-      const rest = T.buildCashflow(state.people, state.cards, state.installments, t, lastIdx).reduce((s, m) => s + m.total, 0);
+      const rest = T.buildCashflow(state.people, state.cards, paying(state), t, lastIdx).reduce((s, m) => s + m.total, 0);
       add({
         id: "bitis", tone: "good", title: `Son taksit: ${monthLong(lastIdx)}`,
-        text: `Yeni taksit eklemezsen bu ay dahil ödenecek ${fmt(rest)} kaldı, sonra kart borcun biter.`,
+        text: `Bu aydan son taksite kadar kart ve taksit ödemelerinin toplamı ${fmt(rest)}. Yeni harcama eklemezsen sonrasında kart ve taksit ödemen kalmaz.`,
         data: { lastMonth: T.monthKey(lastIdx), remaining: round(rest) },
       });
     }

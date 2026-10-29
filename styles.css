@@ -509,6 +509,8 @@ a { color: inherit; }
 .pay + .pay { border-top: 1px solid var(--line); }
 .pay.clickable { cursor: pointer; border-radius: 12px; outline: none; }
 .pay.past { opacity: .5; }
+/* Hesaba katılmayan kartın ekstresi: soluk, toplamlara girmez */
+.pay.ignored, .tl-pay.ignored { opacity: .55; }
 .date-badge {
   width: 46px; height: 50px;
   display: flex;
@@ -791,8 +793,8 @@ a { color: inherit; }
 /* Nakit · 30 gün: basamaklı bakiye çizgisi, sıfırın altı tehlike rengi */
 .cash-panel .panel-head { flex-wrap: wrap; }
 .cash-panel .month-name { min-width: 0; font-size: 13px; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
-.cash-start { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-3); }
-.cash-start select {
+.cash-start, .sort-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-3); }
+.cash-start select, .sort-pick select {
   appearance: none;
   border: none;
   border-radius: 11px;
@@ -804,7 +806,9 @@ a { color: inherit; }
   max-width: 190px;
   cursor: pointer;
 }
-.cash-start select:focus-visible { outline: 2px solid var(--text-2); outline-offset: 1px; }
+.cash-start select:focus-visible, .sort-pick select:focus-visible { outline: 2px solid var(--text-2); outline-offset: 1px; }
+/* Harcamalar: sıralama listenin sağ üstünde */
+.list-tools { display: flex; justify-content: flex-end; margin: -6px 0; }
 .cash-panel .footnote { margin-top: 10px; padding: 0; font-size: 12px; }
 .cash-chart { touch-action: pan-y; outline: none; border-radius: 8px; }
 .cash-chart:focus-visible { box-shadow: 0 0 0 3px var(--focus); }
@@ -829,7 +833,7 @@ a { color: inherit; }
 .chart-tooltip .tt-row   { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
 .chart-tooltip .tt-row + .tt-row { margin-top: 3px; }
 .chart-tooltip .tt-key   { width: 10px; height: 2px; border-radius: 1px; flex-shrink: 0; }
-.chart-tooltip strong    { font-weight: 600; }
+.chart-tooltip strong    { font-weight: 600; white-space: nowrap; }
 .chart-tooltip .tt-name  { color: var(--text-2); font-size: 12px; }
 .chart-tooltip .tt-total { display: block; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
 
@@ -1709,6 +1713,8 @@ a.hero-eq { display: block; width: fit-content; }
 .tl-pay .amount.in { color: var(--income); }
 /* Elle ödenen kartın ekstre işaretinde durum rozeti: ödendi / ödenmedi */
 .tl-state { flex: none; padding: 0 6px; border-radius: 999px; background: var(--surface-2); font-size: 10.5px; font-weight: 600; line-height: 16px; }
+/* Dar ekranda önce etiket kısalır, kart adı kırpılmaz */
+.tl-pay .tl-state { flex: 1 1 0; min-width: 0; max-width: max-content; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl-state.paid { color: var(--income); }
 .tl-state.late { color: var(--expense); }
 /* Ekstre ayrıntısında durum: gecikmiş gider, ödenmiş gelir renginde */
@@ -1719,7 +1725,10 @@ a.hero-eq { display: block; width: fit-content; }
 .people-sum li.clickable { cursor: pointer; border-radius: 12px; }
 
 /* Kart formu: borç ve ekstre takibi */
-.card-track .seg label { padding: 6px 4px; line-height: 1.25; }
+.card-track .seg label { display: flex; align-items: center; justify-content: center; padding: 6px 4px; line-height: 1.25; }
+.card-track .preview .track-change { color: var(--text); font-weight: 500; }
+/* Kartın borcu kısa satırlar hâlinde (Gecikmiş / Son gün bugün / Kart borcu / kişilerin harcamaları) */
+.card-debt, #payStatus { white-space: pre-line; }
 .card-track .link { align-self: flex-start; border: none; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-2); }
 .card-track .link:hover { color: var(--text); }
 /* Kart formunun bağlantıları yan yana (Ekstre ödemeleri, Borçlar'da gör); ikisi de gizliyse yer kaplamaz */
