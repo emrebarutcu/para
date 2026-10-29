@@ -310,7 +310,7 @@ const els = {
   cashRange: $("cashRange"), cashStart: $("cashStart"), cashMode: $("cashMode"), cashSum: $("cashSum"), cashChart: $("cashChart"), cashEmpty: $("cashEmpty"), cashNote: $("cashNote"),
   flowMode: $("flowMode"), flowList: $("flowList"), flowTable: $("flowTable"), table: $("planTable"),
   personFilter: $("personFilter"), purchaseWrap: $("purchaseWrap"), managePeople: $("managePeople"),
-  purchaseTools: $("purchaseTools"), purchaseSort: $("purchaseSort"),
+  purchaseTools: $("purchaseTools"), purchaseSort: $("purchaseSort"), inboxWrap: $("inboxWrap"),
   cardGrid: $("cardGrid"), addCard: $("addCard"),
   assetLabel: $("assetLabel"), assetTotal: $("assetTotal"), ratesNote: $("ratesNote"), rateStats: $("rateStats"),
   assetEqLine: $("assetEqLine"), assetEq: $("assetEq"), assetIncl: $("assetIncl"),
@@ -1941,10 +1941,12 @@ function renderPurchases() {
   const active = mine.filter(x => x.left).sort(order ?? ((a, b) => a.next.localeCompare(b.next) || byName(a, b)));
   const done = mine.filter(x => !x.left).sort(order ?? ((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key)));
 
+  // E-postadan gelenler sıralamanın üstünde: Sırala yalnızca altındaki listeyi dizer
+  els.inboxWrap.replaceChildren(...(inbox.length ? [inboxPanel()] : []));
+  els.inboxWrap.hidden = !inbox.length;
   els.purchaseSort.value = purchaseSort;
   els.purchaseTools.hidden = mine.length < 2;
   els.purchaseWrap.replaceChildren();
-  if (inbox.length) els.purchaseWrap.append(inboxPanel());
   if (!mine.length) {
     const btn = el("button", "btn btn-primary");
     btn.type = "button";
