@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getPrices, getFunds, searchFunds, clearMarket, handlePrices, handleFunds } from "../piyasa.js";
+import { getPrices, getFunds, searchFunds, clearMarket, handlePrices, handleFunds, getHistory, handleHistory } from "../piyasa.js";
 import V from "../../varlik.js";
 
 // Cuma 30 Ekim 2026, 13:00 Türkiye
@@ -139,4 +139,71 @@ test("/api/fiyat kodları doğrular; /api/fonlar listeyi verir", async () => {
   assert.match(res.headers.get("Cache-Control"), /max-age=120/);
   const list = await (await handleFunds(new Request("https://cashfollow.app/api/fonlar"))).json();
   assert.equal(list.funds.find(x => x.code === "AFT").price, 0.959756);
+});
+
+// Geçmiş: İş Yatırım grafik verisi (aynı anda gelen ikinci istek 503) ve TEFAS fiyat geçmişi
+function fakeHistory() {
+  const calls = [];
+  let busy = false;
+  const ms = day => Date.parse(`${day}T00:00:00+03:00`);
+  const CHART = {
+    USDTRY: [["2026-09-29", 48], ["2026-10-15", 49], ["2026-10-30", 50]],
+    GLDGR: [["2026-10-01", 6000], ["2026-10-30", 6400]],
+    THYAO: [["2026-10-29", 250]],
+  };
+  const fn = async (input, init = {}) => {
+    const url = new URL(input);
+    if (url.hostname === "www.isyatirim.com.tr") {
+      const symbol = url.searchParams.get("endeks");
+      calls.push({ host: "isyatirim", symbol, from: url.searchParams.get("from") });
+      if (busy) return new Response("", { status: 503 });
+      busy = true;
+      await new Promise(r => setTimeout(r, 5));
+      busy = false;
+      const data = CHART[symbol];
+      return new Response(data ? JSON.stringify({ data: data.map(([d, v]) => [ms(d), v]) }) : "", { status: 200 });
+    }
+    if (url.hostname === "www.tefas.gov.tr") {
+      const body = JSON.parse(init.body);
+      calls.push({ host: "tefas", code: body.fonKodu, periyod: body.periyod });
+      const rows = body.fonKodu === "AFT" ? [{ tarih: "2026-10-30", fiyat: 0.96 }, { tarih: "2026-10-02", fiyat: 0.9 }] : [];
+      return Response.json({ errorCode: null, errorMessage: null, resultList: rows });
+    }
+    throw new Error(`beklenmeyen istek ${url}`);
+  };
+  return { fetch: fn, calls };
+}
+
+test("geçmiş: döviz, altın, hisse İş Yatırım'dan sırayla; fon TEFAS'tan dönemle; bilinmeyen kod boş", async () => {
+  clearMarket();
+  const f = fakeHistory();
+  const h = await getHistory(["USD", "GAU", "BIST:THYAO", "FON:AFT", "FON:ZZZ", "BIST:NONE1", "TRY"], 30, { fetch: f.fetch, now: NOW });
+  assert.equal(h.from, "2026-09-30");
+  assert.equal(h.to, "2026-10-30");
+  assert.deepEqual(h.failed, []);
+  assert.deepEqual(h.series.USD, [["2026-10-15", 49], ["2026-10-30", 50]]);   // dönemden önceki gün atılır
+  assert.deepEqual(h.series.GAU, [["2026-10-01", 6000], ["2026-10-30", 6400]]);
+  assert.deepEqual(h.series["FON:AFT"], [["2026-10-02", 0.9], ["2026-10-30", 0.96]]);
+  assert.deepEqual(h.series["FON:ZZZ"], []);
+  assert.deepEqual(h.series["BIST:NONE1"], []);
+  assert.equal(h.series.TRY, undefined);
+  assert.equal(f.calls.find(c => c.symbol === "USDTRY").from, "20260930000000");
+  assert.deepEqual(f.calls.filter(c => c.host === "tefas").map(c => c.periyod), [1, 1]);
+  // Saklanır
+  const n = f.calls.length;
+  await getHistory(["USD", "FON:AFT"], 30, { fetch: f.fetch, now: NOW });
+  assert.equal(f.calls.length, n);
+  // Uzun dönemde fonun dönemi büyür
+  await getHistory(["FON:AFT"], 365, { fetch: f.fetch, now: NOW });
+  assert.equal(f.calls.at(-1).periyod, 12);
+});
+
+test("/api/gecmis kodları ve gün sayısını doğrular", async () => {
+  clearMarket();
+  assert.equal((await handleHistory(new Request("https://cashfollow.app/api/gecmis?kod=TRY&gun=30"))).status, 400);
+  assert.equal((await handleHistory(new Request("https://cashfollow.app/api/gecmis?kod=USD"))).status, 400);
+  await getHistory(["USD", "FON:AFT"], 90, { fetch: fakeHistory().fetch, now: Date.now });
+  const res = await handleHistory(new Request("https://cashfollow.app/api/gecmis?kod=fon:aft,usd&gun=90"));
+  assert.equal(res.status, 200);
+  assert.deepEqual(Object.keys((await res.json()).series).sort(), ["FON:AFT", "USD"]);
 });

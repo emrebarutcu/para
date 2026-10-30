@@ -303,6 +303,22 @@
         <dl class="hero-stats" id="rateStats"></dl>
       </div>
       <div class="chips scroll-x" id="entryFilter" role="group" aria-label="Kişiye göre süz"></div>
+      <!-- Varlığın seyri: her gün o günün kur ve fiyatlarıyla (Özet'teki Nakit grafiğinden ayrı) -->
+      <section class="panel asset-panel" id="assetPanel" hidden>
+        <header class="panel-head">
+          <h2>Varlığın seyri</h2>
+          <div class="seg" id="assetRange" role="group" aria-label="Dönem">
+            <button type="button" data-range="1m">1A</button>
+            <button type="button" data-range="3m">3A</button>
+            <button type="button" data-range="6m">6A</button>
+            <button type="button" data-range="1y">1Y</button>
+            <button type="button" data-range="all">Tümü</button>
+          </div>
+        </header>
+        <dl class="tl-sum" id="assetSum"></dl>
+        <svg id="assetChart" class="chart cash-chart" role="img" tabindex="0" aria-label="Varlığın seyri"></svg>
+        <p class="footnote" id="assetNote"></p>
+      </section>
       <div class="asset-grid" id="assetGrid"></div>
       <section id="holdWrap"></section>
       <div id="entryWrap"></div>

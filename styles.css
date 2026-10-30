@@ -1775,3 +1775,7 @@ a.hero-eq { display: block; width: fit-content; }
 .cash-opt-text strong { font-weight: 600; color: var(--text); }
 .cash-opt-text small { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cash-def-head { margin: 14px 0 2px; }
+
+/* ── Varlığın seyri ── */
+.asset-panel .panel-head { flex-wrap: wrap; }
+.asset-panel .panel-head h2 { white-space: nowrap; }

@@ -23,7 +23,8 @@ const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // takvim pazartesiyle başlar
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates",
   cashStart: "para.cashStart", cashMode: "para.cashMode", timelineStart: "para.timelineStart", trackNotice: "para.trackNotice",
-  purchaseSort: "para.purchaseSort", prices: "para.prices", settle: "para.settle", cashDef: "para.cashDef" };
+  purchaseSort: "para.purchaseSort", prices: "para.prices", settle: "para.settle", cashDef: "para.cashDef",
+  assetRange: "para.assetRange", history: "para.history" };
 const PURCHASE_SORTS = ["next", "new", "amount", "name"];   // Harcamalar sıralaması (index.html #purchaseSort)
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
@@ -329,6 +330,7 @@ const els = {
   assetLabel: $("assetLabel"), assetTotal: $("assetTotal"), ratesNote: $("ratesNote"), rateStats: $("rateStats"),
   assetEqLine: $("assetEqLine"), assetEq: $("assetEq"), assetIncl: $("assetIncl"),
   entryFilter: $("entryFilter"), assetGrid: $("assetGrid"), holdWrap: $("holdWrap"), entryWrap: $("entryWrap"),
+  assetPanel: $("assetPanel"), assetRange: $("assetRange"), assetSum: $("assetSum"), assetChart: $("assetChart"), assetNote: $("assetNote"),
   entrySheet: $("entrySheet"), entryForm: $("entryForm"), entryTitle: $("entryTitle"), entryDelete: $("entryDelete"),
   entryUnit: $("entryUnit"), assetChips: $("assetChips"), entryPersonChips: $("entryPersonChips"), entryPreview: $("entryPreview"),
   entryRepeat: $("entryRepeat"), entryDateLabel: $("entryDateLabel"), entryRepeatField: $("entryRepeatField"),
@@ -1638,7 +1640,7 @@ function renderCash() {
   svg.style.display = data.any ? "" : "none";
   svg.setAttribute("aria-label", `${fmtDayShort(from)} – ${fmtDayShort(to)} ${net ? "dönem net nakit hareketi" : "nakit bakiyesi"}`);
   if (!data.any) {
-    els.cashEmpty.textContent = "Varlıklar'a giriş ve çıkış ekleyince varlığının dönem dönem seyri burada görünür.";
+    els.cashEmpty.textContent = "Varlıklar'a giriş ve çıkış ekleyince nakdinin dönem dönem seyri burada görünür.";
     svg.innerHTML = "";
     return;
   }
@@ -2409,6 +2411,7 @@ function renderAssets() {
   renderPersonFilter(els.entryFilter, entryFilter, id => all.filter(ofPerson(id)).length + spends.filter(ofPerson(id)).length,
     id => { entryFilter = id; });
   els.entryFilter.hidden = state.people.length < 2;
+  renderAssetChart(entryFilter);
 
   els.assetGrid.replaceChildren(...V.ASSETS.map(a => {
     const bal = bals[a.code] ?? 0;
@@ -2463,6 +2466,271 @@ function renderAssets() {
   head.append(el("h2", "", "Hareketler"));
   els.entryWrap.append(head, panel);
 }
+
+// ---------- Varlığın seyri ----------
+// Varlıklar'daki Varlık (eldeki + alacak, B.totals) gün gün: her gün o güne kadarki kayıtlarla ve o günün kur ve
+// fiyatlarıyla (/api/gecmis: dolar, euro, gram altın ve hisseler İş Yatırım'ın, fonlar TEFAS'ın günlük kapanışları;
+// kapanışı olmayan gün öncekiyle). Bugün güncel kur ve fiyatla, üstteki toplamla aynıdır. Geçmişi alınamayan varlık
+// bugünkü fiyatla sayılır (notta yazar). Uzun dönemde birkaç günde bir nokta (en fazla ~180). Özet'teki Nakit
+// grafiğinden ayrıdır: o yalnızca nakdi gösterir.
+const ASSET_RANGES = { "1m": 30, "3m": 91, "6m": 182, "1y": 365, all: null };
+const HISTORY_TTL = 60 * 60_000;   // geçmiş fiyatlar bu kadar süre taze sayılır (/api/gecmis de bu kadar saklar)
+const MAX_HISTORY_DAYS = 1830;     // en uzun dönem (5 yıl)
+const ASSET_POINTS = 180;
+let assetRange = Object.hasOwn(ASSET_RANGES, readPref(PREF.assetRange) ?? "") ? readPref(PREF.assetRange) : "3m";
+const histories = new Map();       // gün sayısı → { days, to, series: { kod: [["YYYY-MM-DD", fiyat], …] }, failed, fetchedAt }
+let historyLoading = null;
+let historyFailed = false;
+let historyTriedAt = 0;
+let assetMemo = null;              // son hesaplanan seyir ve girdileri
+let assetHover = null;             // grafikte seçili nokta
+
+try {
+  const h = JSON.parse(localStorage.getItem(PREF.history));
+  if (h?.series && h.days) histories.set(h.days, h);
+} catch {}
+
+// Geçmişi istenen varlıklar: kayıtlarda geçen dolar, euro, altın, fon ve hisseler
+function historyCodes() {
+  const codes = new Set();
+  for (const e of knownEntries()) if (e.asset !== "TRY" && V.asset(e.asset)) codes.add(e.asset);
+  for (const p of knownPurchases()) if (T.assetOf(p) !== "TRY") codes.add(T.assetOf(p));
+  for (const d of state.debts) if (d.asset && d.asset !== "TRY" && V.asset(d.asset)) codes.add(d.asset);
+  return [...codes].sort();
+}
+
+function loadHistory(codes, days) {
+  const h = histories.get(days), now = Date.now();
+  const fresh = h && h.to === T.todayKey() && codes.every(c => c in h.series || h.failed.includes(c)) && now - h.fetchedAt < HISTORY_TTL;
+  if (!codes.length || fresh || historyLoading || (historyFailed && now - historyTriedAt < RATES_RETRY)) return;
+  historyTriedAt = now;
+  historyLoading = fetch(`/api/gecmis?kod=${codes.join(",")}&gun=${days}`)
+    .then(res => (res.ok ? res.json() : Promise.reject(new Error(`geçmiş ${res.status}`))))
+    .then(data => {
+      if (!data?.series) throw new Error("geçmiş yok");
+      const value = { days, to: data.to, series: data.series, failed: data.failed || [], fetchedAt: Date.now() };
+      histories.set(days, value);
+      historyFailed = false;
+      try { localStorage.setItem(PREF.history, JSON.stringify(value)); } catch {}
+    })
+    .catch(() => { historyFailed = true; })
+    .finally(() => { historyLoading = null; if (view === "varliklar") render(); });
+}
+
+// Kodların geçmişi: istenen dönemin verisi, yoksa elde olan en uzun dönemin
+function historyFor(days, codes) {
+  const pick = [histories.get(days), ...[...histories.values()].sort((a, b) => b.days - a.days)].filter(Boolean);
+  const series = {};
+  for (const c of codes) series[c] = pick.find(h => h.series[c]?.length)?.series[c] ?? null;
+  return { series, stamp: pick.map(h => h.fetchedAt).join() };
+}
+
+// Günün (ya da öncesinin son) kapanışı; dönem başından önceyse ilk kapanış; dizi boşsa null
+function priceAt(list, day) {
+  if (!list?.length) return null;
+  if (day < list[0][0]) return list[0][1];
+  let lo = 0, hi = list.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (list[mid][0] <= day) lo = mid; else hi = mid - 1;
+  }
+  return list[lo][1];
+}
+
+// Verinin day günü sonundaki hali: o güne kadarki hareketler, harcamalar ve borç kayıtları (tarihsiz harcama ilk ödeme
+// ayından)
+function stateAt(day) {
+  const month = day.slice(0, 7);
+  return {
+    ...state,
+    entries: state.entries.filter(e => e.date <= day),
+    installments: state.installments.filter(p => (p.date ? p.date <= day : !p.firstDue || p.firstDue <= month)),
+    debts: state.debts.filter(d => d.date <= day),
+  };
+}
+
+function firstRecordDate() {
+  const dates = [...knownEntries().map(e => e.date), ...knownPurchases().map(p => p.date), ...state.debts.map(d => d.date)]
+    .filter(d => T.parseDate(d));
+  return dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : null;
+}
+
+// → { span, codes, points: [{ date, value, parts: { lira, fx, market, receivable } }], approx, missing } ya da kayıt yoksa null
+function assetSeries(range, pid) {
+  const today = T.todayKey();
+  const first = firstRecordDate();
+  if (!first) return null;
+  const all = Math.round((T.toDate(today) - T.toDate(first)) / 864e5);
+  const span = ASSET_RANGES[range] ?? Math.min(MAX_HISTORY_DAYS, Math.max(7, all));
+  const codes = historyCodes();
+  const hist = historyFor(span, codes);
+  const cur = curRates() ?? { TRY: 1 };
+  const key = [range, pid, today, state.entries, state.entries.length, state.installments, state.installments.length, state.debts,
+    state.debts.length, state.cards, state.people, rates, prices, hist.stamp];
+  if (assetMemo && key.every((x, i) => x === assetMemo.key[i])) return assetMemo.value;
+
+  const step = Math.max(1, Math.ceil(span / ASSET_POINTS));
+  const days = [];
+  for (let i = span; i > 0; i -= step) days.push(T.addDays(today, -i));
+  days.push(today);
+  const approx = new Set();
+  let missing = [];
+  const points = days.map(day => {
+    const r = { TRY: 1 };
+    for (const c of codes) {
+      const past = day === today ? null : priceAt(hist.series[c], day);
+      if (day !== today && past == null && cur[c] != null) approx.add(c);
+      const v = past ?? cur[c];
+      if (v != null) r[c] = v;
+    }
+    const t = B.totals(stateAt(day), day, r, pid);
+    if (day === today) missing = t.missing;
+    const parts = { lira: 0, fx: 0, market: 0, receivable: t.receivable.total };
+    for (const [c, amount] of Object.entries(t.balances)) {
+      const v = V.toTry(amount, c, r);
+      if (v == null) continue;
+      if (c === "TRY") parts.lira += v; else if (V.market(c)) parts.market += v; else parts.fx += v;
+    }
+    return { date: day, value: t.assets, parts };
+  });
+  const value = { span, codes, points, approx: [...approx], missing };
+  assetMemo = { key, value };
+  return value;
+}
+
+function renderAssetChart(pid) {
+  for (const b of els.assetRange.querySelectorAll("button")) {
+    b.classList.toggle("active", b.dataset.range === assetRange);
+    b.setAttribute("aria-pressed", String(b.dataset.range === assetRange));
+  }
+  const data = assetSeries(assetRange, pid);
+  els.assetPanel.hidden = !data;
+  if (!data) return;
+  loadHistory(data.codes, data.span);
+  const { points } = data;
+  const today = T.todayKey();
+  const start = points[0], end = points[points.length - 1];
+  const diff = end.value - start.value;
+  const sign = n => (n < -EPS ? "−" : n > EPS ? "+" : "");
+  const stat = (label, text, cls) => {
+    const d = el("div");
+    d.append(el("dt", "", label), el("dd", cls, text));
+    return d;
+  };
+  const dayLabel = d => (d.slice(0, 4) === today.slice(0, 4) ? fmtDayShort(d) : fmtDay(d));
+  els.assetSum.replaceChildren(
+    stat(dayLabel(start.date), (start.value < 0 ? "−" : "") + fmt(Math.abs(start.value))),
+    stat("Bugün", (end.value < 0 ? "−" : "") + fmt(Math.abs(end.value))),
+    stat("Değişim", sign(diff) + fmt(Math.abs(diff)) + (start.value > EPS ? ` · ${fmtPct(diff / start.value)}` : ""),
+      diff > EPS ? "in-text" : diff < -EPS ? "out-text" : ""),
+  );
+  const names = list => list.map(c => V.asset(c)?.name.toLocaleLowerCase("tr-TR") ?? c).join(", ");
+  els.assetNote.textContent = "Her gün o güne kadarki kayıtlarla ve o günün kur ve fiyatlarıyla: dolar, euro, gram altın ve "
+    + "hisseler günlük kapanışla (İş Yatırım), fonlar TEFAS fiyatıyla; bugün güncel kur ve fiyatla. Alacaklar dahil. Nakdin "
+    + "seyri Özet'teki Nakit grafiğinde."
+    + (historyLoading && data.codes.length ? " Geçmiş fiyatlar alınıyor…" : "")
+    + (!historyLoading && data.approx.length ? ` Geçmiş fiyatı alınamayan ${names(data.approx)} bugünkü fiyatla sayıldı.` : "")
+    + (data.missing.length ? ` Kuru ya da fiyatı alınamayan ${names(data.missing)} dahil değil.` : "");
+
+  const svg = els.assetChart;
+  const W = Math.round(svg.getBoundingClientRect().width) || 880, H = 200;
+  const PL = 46, PR = 8, PT = 22, PB = 26;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+  const n = points.length;
+  const toX = i => PL + (n > 1 ? plotW * i / (n - 1) : plotW / 2);
+  const vals = points.map(p => p.value);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (lo < 0 && hi < 0) hi = 0;
+  const { step } = niceScale(hi - lo || Math.abs(hi) || 1000, 4);
+  const bottom = Math.floor(lo / step + 1e-9) * step, top = Math.max(Math.ceil(hi / step - 1e-9) * step, bottom + step);
+  const toY = v => PT + plotH * (top - v) / (top - bottom);
+
+  let gridSvg = "", yLblSvg = "", xLblSvg = "";
+  for (let v = bottom; v <= top + step * 0.01; v += step) {
+    const y = toY(v).toFixed(1);
+    gridSvg += `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="${Math.abs(v) < step * 1e-6 ? "var(--line-2)" : "var(--line)"}" stroke-width="1"/>`;
+    yLblSvg += `<text x="${PL - 10}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="var(--text-3)">${fmtShort(v)}</text>`;
+  }
+  // Tarih etiketleri: aralığa göre gün ya da ay; dar ekranda daha seyrek
+  const long = data.span > 200;
+  const count = Math.max(2, Math.min(5, Math.floor(plotW / 80)));
+  for (let k = 0; k < count; k++) {
+    const i = Math.round((n - 1) * k / (count - 1));
+    const d = T.parseDate(points[i].date);
+    const label = points[i].date === today ? "Bugün" : long ? `${T.monthShort(d.idx)} ${String(T.yearOf(d.idx)).slice(2)}` : fmtDayShort(points[i].date);
+    const anchor = k === 0 ? "start" : k === count - 1 ? "end" : "middle";
+    xLblSvg += `<text x="${toX(i).toFixed(1)}" y="${H - 6}" text-anchor="${anchor}" font-size="11" fill="var(--text-3)">${label}</text>`;
+  }
+  const line = points.map((p, i) => `${i ? "L" : "M"}${toX(i).toFixed(1)},${toY(p.value).toFixed(1)}`).join(" ");
+  const endY = toY(end.value);
+  const endDot = `<circle cx="${toX(n - 1).toFixed(1)}" cy="${endY.toFixed(1)}" r="4" fill="var(--text)" stroke="var(--surface)" stroke-width="2"/>`;
+  const endLbl = `<text x="${(W - PR).toFixed(1)}" y="${(endY < PT + 14 ? endY + 18 : endY - 9).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="var(--text)">${fmtShort(end.value)}</text>`;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("aria-label", `Varlığın seyri: ${dayLabel(start.date)} ${fmt(start.value)}, bugün ${fmt(end.value)}`);
+  svg.innerHTML = `${gridSvg}<path d="${line}" class="cash-line"/>${endDot}${endLbl}${yLblSvg}${xLblSvg}
+    <g class="cash-cross" visibility="hidden"><line x1="0" y1="${PT}" x2="0" y2="${PT + plotH}" stroke="var(--line-2)" stroke-width="1"/><circle r="4" fill="var(--text)" stroke="var(--surface)" stroke-width="2"/></g>`;
+
+  const cross = svg.querySelector(".cash-cross");
+  const show = (i, x, y) => {
+    assetHover = i;
+    const cx = toX(i).toFixed(1), cy = toY(points[i].value).toFixed(1);
+    cross.setAttribute("visibility", "visible");
+    cross.querySelector("line").setAttribute("x1", cx);
+    cross.querySelector("line").setAttribute("x2", cx);
+    cross.querySelector("circle").setAttribute("cx", cx);
+    cross.querySelector("circle").setAttribute("cy", cy);
+    if (x == null) {
+      const b = svg.getBoundingClientRect();
+      x = b.left + b.width * cx / W;
+      y = b.top + b.height * cy / H;
+    }
+    showAssetTooltip(points[i], x, y);
+  };
+  const hide = () => { assetHover = null; cross.setAttribute("visibility", "hidden"); hideTooltip(); };
+  const pointAt = clientX => {
+    const b = svg.getBoundingClientRect();
+    const x = (clientX - b.left) * W / b.width;
+    return n > 1 ? Math.min(n - 1, Math.max(0, Math.round((x - PL) / plotW * (n - 1)))) : 0;
+  };
+  svg.onpointermove = e => show(pointAt(e.clientX), e.clientX, e.clientY);
+  svg.onpointerleave = hide;
+  svg.onblur = hide;
+  svg.onfocus = () => show(Math.min(assetHover ?? n - 1, n - 1));
+  svg.onkeydown = e => {
+    const move = { ArrowRight: 1, ArrowLeft: -1, End: n, Home: -n }[e.key];
+    if (!move) { if (e.key === "Escape") hide(); return; }
+    e.preventDefault();
+    show(Math.min(n - 1, Math.max(0, (assetHover ?? n - 1) + move)));
+  };
+}
+
+// İpucu: gün, varlığın parçaları (TL, döviz ve altın, fon ve hisse, alacak) ve toplam
+function showAssetTooltip(p, x, y) {
+  const tt = els.tooltip;
+  const today = T.todayKey();
+  tt.replaceChildren(el("span", "tt-date", `${fmtDay(p.date)} · ${relDays(p.date, today)}`));
+  for (const [key, name] of [["lira", "TL"], ["fx", "Döviz ve altın"], ["market", "Fon ve hisse"], ["receivable", "Alacak"]]) {
+    const v = p.parts[key];
+    if (Math.abs(v) < EPS) continue;
+    const line = el("span", "tt-row");
+    line.append(el("strong", "", (v < 0 ? "−" : "") + fmt(Math.abs(v))), el("span", "tt-name", name));
+    tt.append(line);
+  }
+  tt.append(el("span", "tt-total", `Varlık ${p.value < 0 ? "−" : ""}${fmt(Math.abs(p.value))}`));
+  tt.hidden = false;
+  const w = tt.offsetWidth, h = tt.offsetHeight;
+  const left = x + 14 + w > window.innerWidth - 8 ? x - 14 - w : x + 14;
+  tt.style.left = Math.max(8, left) + "px";
+  tt.style.top = Math.max(8, y - h - 12) + "px";
+}
+
+els.assetRange.addEventListener("click", e => {
+  const range = e.target.closest("button")?.dataset.range;
+  if (!range || range === assetRange) return;
+  assetRange = range;
+  writePref(PREF.assetRange, range);
+  render();
+});
 
 // Formda en son seçilen fon / hisse pazarı (yoksa fon)
 function lastMarket() { return V.MARKETS[lastAsset] ? lastAsset : "FON"; }
@@ -6126,7 +6394,10 @@ els.flowMode.addEventListener("click", e => {
 let resizeFrame = 0;
 window.addEventListener("resize", () => {
   cancelAnimationFrame(resizeFrame);
-  resizeFrame = requestAnimationFrame(() => { if (view === "ozet") { renderChart(chartMonths); renderCash(); } });
+  resizeFrame = requestAnimationFrame(() => {
+    if (view === "ozet") { renderChart(chartMonths); renderCash(); }
+    if (view === "varliklar") renderAssetChart(entryFilter);
+  });
 });
 
 // ---------- Service Worker ----------

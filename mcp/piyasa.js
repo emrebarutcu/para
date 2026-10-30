@@ -5,6 +5,9 @@
 //   saati) geriye, hafta sonları atlanarak fiyatı olan ilk gün aranır. Liste 1 saat saklanır.
 // - Hisseler: İş Yatırım'ın piyasa verisi (Data.aspx/OneEndeks), yaklaşık 15 dakika gecikmeli son fiyat ve seansın baz
 //   fiyatı (önceki kapanış). 2 dakika saklanır.
+// - Geçmiş (Varlıklar'daki varlık grafiği): günlük kapanışlar. Dolar, euro, gram altın ve hisseler İş Yatırım'ın grafik
+//   verisinden (ChartData.aspx/IndexHistoricalAll: USDTRY, EURTRY, GLDGR, işlem kodu), fonlar TEFAS'ın fiyat geçmişinden
+//   (fonFiyatBilgiGetir; 1, 3, 6, 12, 36, 60 aylık dönemler). En fazla 5 yıl; 6 saat saklanır.
 // Varlık kodları varlik.js'teki gibidir: "FON:AFT", "BIST:THYAO". Sonuçlar Worker örneğinin belleğinde, uygulamanın
 // istekleri ayrıca Cloudflare önbelleğinde tutulur.
 import V from "../varlik.js";
@@ -17,7 +20,16 @@ const LOOKBACK = 10;               // fiyatı olan gün en fazla bu kadar geriye
 const BATCH = 40;                  // bir istekte en fazla hisse
 const MAX_CODES = 100;             // /api/fiyat'ta en fazla kod
 
+const HIST_TTL = 6 * 3600_000;
+const MAX_DAYS = 1830;             // geçmişte en fazla gün (TEFAS'ın en uzun dönemi 5 yıl)
+const MAX_HIST_CODES = 40;         // /api/gecmis'te en fazla kod
+
 const FUND_URL = "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir";
+const FUND_HISTORY_URL = "https://www.tefas.gov.tr/api/funds/fonFiyatBilgiGetir";
+const CHART_URL = "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/ChartData.aspx/IndexHistoricalAll";
+const CHART_SYMBOL = { USD: "USDTRY", EUR: "EURTRY", GAU: "GLDGR" };   // İş Yatırım'da TL karşılıkları
+// TEFAS fiyat geçmişinin dönemleri: en çok kaç gün → periyod kodu (ay)
+const FUND_PERIODS = [[31, 1], [95, 3], [190, 6], [380, 12], [1100, 36], [MAX_DAYS, 60]];
 const STOCK_URL = "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/Data.aspx/OneEndeks";
 const KINDS = ["YAT", "EMK", "BYF"];
 
@@ -123,7 +135,7 @@ export async function getStocks(tickers, { fetch: f = fetch, now = Date.now } = 
   return new Map(want.filter(t => stocks.get(t)?.value).map(t => [t, stocks.get(t).value]));
 }
 
-export function clearMarket() { funds = null; fundsLoading = null; stocks.clear(); }
+export function clearMarket() { funds = null; fundsLoading = null; stocks.clear(); histories.clear(); }
 
 // Kodların fiyatları: { prices: { "FON:AFT": { price, date, name, kind }, "BIST:THYAO": { price, prev, at, date } },
 // missing: [bulunamayan kodlar], failed: [kaynağı alınamayan pazarlar: "FON", "BIST"], updatedAt }. İki kaynak da
@@ -152,6 +164,79 @@ export async function getPrices(codes, opts = {}) {
     if (x) prices[c] = { price: x.price, prev: x.prev, at: x.at, date: x.at ? dayOf(Date.parse(x.at)) : null }; else missing.push(c);
   }
   return { prices, missing, failed, updatedAt: new Date(now()).toISOString() };
+}
+
+// ---------- Geçmiş ----------
+// Geçmişi olan kod: USD, EUR, GAU ya da fon / hisse
+const historyCode = c => !!CHART_SYMBOL[c] || !!V.market(c);
+
+let chartChain = Promise.resolve();
+function chartQueue(task) {
+  const run = chartChain.then(task, task);
+  chartChain = run.catch(() => {});
+  return run;
+}
+
+// Kodun [from, to] günlük kapanışları: [["YYYY-MM-DD", fiyat], …] (tarihe göre; işlem olmayan günler yok)
+async function historyOf(f, code, from, to) {
+  const m = V.market(code);
+  if (m?.market === "FON") {
+    const days = Math.round((Date.parse(to) - Date.parse(from)) / 864e5);
+    const periyod = FUND_PERIODS.find(([d]) => days <= d)[1];
+    const res = await f(FUND_HISTORY_URL, {
+      method: "POST",
+      signal: AbortSignal.timeout(TIMEOUT),
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ fonKodu: m.ticker, dil: "TR", periyod }),
+    });
+    if (!res.ok) throw new Error(`tefas geçmiş ${m.ticker}: ${res.status}`);
+    const d = await res.json();
+    if (!Array.isArray(d?.resultList) && d?.errorMessage) throw new Error(`tefas geçmiş ${m.ticker}: ${d.errorMessage}`);
+    return (d?.resultList || []).map(r => [String(r?.tarih ?? "").slice(0, 10), Number(r?.fiyat)])
+      .filter(([day, v]) => /^\d{4}-\d{2}-\d{2}$/.test(day) && v > 0 && day >= from && day <= to).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  }
+  const ymd = day => day.replaceAll("-", "");
+  const symbol = CHART_SYMBOL[code] ?? m.ticker;
+  const url = `${CHART_URL}?endeks=${symbol}&period=1440&from=${ymd(from)}000000&to=${ymd(to)}235959`;
+  // İş Yatırım aynı anda gelen istekleri 503 ile geri çevirir: istekler sırayla, meşgulse bir kez daha
+  const res = await chartQueue(async () => {
+    for (let i = 0; ; i++) {
+      const r = await f(url, { signal: AbortSignal.timeout(TIMEOUT), headers: { Accept: "application/json" } });
+      if (r.ok || i || ![429, 503].includes(r.status)) return r;
+      await new Promise(done => setTimeout(done, 600));
+    }
+  });
+  if (!res.ok) throw new Error(`geçmiş ${symbol}: ${res.status}`);
+  const text = await res.text();   // bilinmeyen kodda boş cevap
+  const d = text.trim() ? JSON.parse(text) : null;
+  // Zaman damgası Türkiye gününün başı
+  return (Array.isArray(d?.data) ? d.data : []).map(x => [dayOf(Number(x?.[0])), Number(x?.[1])])
+    .filter(([day, v]) => v > 0 && day >= from && day <= to).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+}
+
+const histories = new Map();   // "kod|gün|bugün" → { at, value }
+
+// Kodların son days günlük geçmişi: { from, to, series: { USD: [["2026-10-20", 49.57], …] }, failed: [alınamayanlar] }.
+// Bulunamayan kodun dizisi boştur.
+export async function getHistory(codes, days, { fetch: f = fetch, now = Date.now } = {}) {
+  const span = Math.min(MAX_DAYS, Math.max(7, Math.round(Number(days)) || 30));
+  const to = dayOf(now()), from = addDays(to, -span);
+  const want = [...new Set(codes)].filter(historyCode);
+  const results = await Promise.allSettled(want.map(async code => {
+    const key = `${code}|${span}|${to}`;
+    const hit = histories.get(key);
+    if (hit && now() - hit.at < HIST_TTL) return hit.value;
+    const value = await historyOf(f, code, from, to);
+    if (histories.size > 500) histories.clear();
+    histories.set(key, { at: now(), value });
+    return value;
+  }));
+  const series = {}, failed = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") series[want[i]] = r.value;
+    else { console.warn("geçmiş:", r.reason?.message); failed.push(want[i]); }
+  });
+  return { from, to, series, failed };
 }
 
 // Fon araması (varlik.js matchFunds) → [{ code: "FON:AFT", name, kind, price, date }]
@@ -202,6 +287,27 @@ export async function handleFunds(request, ctx) {
     } catch (err) {
       console.error("fonlar:", err);
       return json({ error: "Fon listesi şu an alınamıyor." }, 503);
+    }
+  });
+}
+
+// GET /api/gecmis?kod=USD,GAU,FON:AFT,BIST:THYAO&gun=365 → getHistory
+export async function handleHistory(request, ctx) {
+  const url = new URL(request.url);
+  const codes = [...new Set((url.searchParams.get("kod") || "").split(",").map(c => c.trim().toUpperCase()).filter(Boolean))].sort();
+  const days = Math.min(MAX_DAYS, Math.max(7, Math.round(Number(url.searchParams.get("gun"))) || 0));
+  if (!codes.length || codes.length > MAX_HIST_CODES || codes.some(c => !historyCode(c)) || !(Number(url.searchParams.get("gun")) > 0)) {
+    return json({ error: `kod: en fazla ${MAX_HIST_CODES} tane, virgülle ayrılmış USD, EUR, GAU, FON:XXX ya da BIST:XXXX; gun: gün sayısı` }, 400);
+  }
+  const key = new Request(new URL(`/api/gecmis?kod=${codes.join(",")}&gun=${days}`, request.url));
+  return cached(request, ctx, key, async () => {
+    try {
+      const out = await getHistory(codes, days);
+      if (out.failed.length === codes.length) return json({ error: "Geçmiş fiyatlar şu an alınamıyor." }, 503);
+      return json(out, 200, out.failed.length ? 0 : 3600);
+    } catch (err) {
+      console.error("geçmiş:", err);
+      return json({ error: "Geçmiş fiyatlar şu an alınamıyor." }, 503);
     }
   });
 }

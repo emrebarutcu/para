@@ -113,7 +113,7 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
 
 ### Yükseltme notları
 
-- **6.0.0** — Varlıklar'da fon ve hisse: TEFAS fonları (`FON:AFT`) ve Borsa İstanbul hisseleri (`BIST:THYAO`) adetle
+- **6.0.0** — Varlıklar'da fon ve hisse ve geçmiş fiyatlarla **Varlığın seyri** grafiği (`/api/gecmis`): TEFAS fonları (`FON:AFT`) ve Borsa İstanbul hisseleri (`BIST:THYAO`) adetle
   alınır / satılır, güncel fiyatla TL'ye çevrilir (bölüm 4 → Fon ve hisse). `entries.asset` kısıtı fon ve hisse kodlarını
   da kabul eder; yeni sütunlar `entries.price` (alış / satış günündeki birim fiyat) ve `entries.settle` (tutar TL
   bakiyesine işlenir). Yayından **önce** `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh
@@ -296,6 +296,11 @@ Fiyatlar sitenin Worker'ından gelir (`mcp/piyasa.js`), anahtar gerekmez:
   { price, prev, at, date } }, missing, failed, updatedAt }`. `missing` bulunamayan kodlar, `failed` kaynağı alınamayan
   pazarlar (`FON`, `BIST`).
 - `GET /api/fonlar` → `{ date, funds: [{ code, name, kind, price, date }] }` (formdaki arama için bütün fonlar).
+- `GET /api/gecmis?kod=USD,EUR,GAU,FON:AFT,BIST:THYAO&gun=365` → `{ from, to, series: { "USD": [["2026-10-20", 49.57],
+  …] }, failed }`: günlük kapanışlar (en fazla 1830 gün, 40 kod). Dolar, euro, gram altın ve hisseler İş Yatırım'ın
+  grafik verisinden (`ChartData.aspx/IndexHistoricalAll`: `USDTRY`, `EURTRY`, `GLDGR`, işlem kodu; aynı anda gelen
+  istekleri geri çevirdiği için sırayla sorulur), fonlar TEFAS'ın fiyat geçmişinden (`fonFiyatBilgiGetir`; 1, 3, 6, 12,
+  36, 60 aylık dönemler). 6 saat saklanır, cevap 1 saat önbellekte.
 - Fonlar: TEFAS'ın sitesinin kullandığı fon bilgisi uç noktası (`/api/funds/fonGnlBlgSiraliGetir`, belgelenmemiş). Fiyat
   günde bir kez açıklanır; bugünden geriye (hafta sonları atlanır) fiyatı olan ilk günün listesi alınır, 1 saat saklanır.
 - Hisseler: İş Yatırım'ın piyasa verisi (`Data.aspx/OneEndeks`), yaklaşık 15 dakika gecikmeli son fiyat ve seansın baz
@@ -304,6 +309,18 @@ Fiyatlar sitenin Worker'ından gelir (`mcp/piyasa.js`), anahtar gerekmez:
 Uygulama elde tutulan kodların fiyatlarını 2 dakikada bir yeniler, son fiyatları cihazda saklar (`para.prices`) ve
 çevrimdışıyken onları kullanır. Kaynaklardan biri değişir ya da kapanırsa yalnızca o pazarın fiyatları eksik kalır
 (Varlık notunda "fiyatı alınamayan var"); `mcp/piyasa.js`'teki adres ve alan adları güncellenir.
+
+### Varlığın seyri
+
+Varlıklar'daki **Varlığın seyri** grafiği üstteki Varlık toplamının (eldeki + alacak, `B.totals`; kişi seçiliyse
+onunki) son 1, 3, 6 ay, 1 yıl ya da ilk kayıttan bu yana (en fazla 5 yıl) gün gün seyridir. Her gün o güne kadarki
+kayıtlarla (o güne kadarki hareketler, harcamalar ve borç kayıtları; tarihsiz harcama ilk ödeme ayından) ve o günün kur
+ve fiyatlarıyla hesaplanır (`/api/gecmis`; kapanışı olmayan gün öncekiyle). Bugünkü nokta güncel kur ve fiyatla
+üstteki toplamla aynıdır. Geçmişi alınamayan varlık bugünkü fiyatla sayılır, altta yazar. Uzun dönemde birkaç günde bir
+nokta çizilir (en fazla ~180). Üzerine gelince (ya da odaklanıp ok tuşlarıyla) o günün TL, döviz ve altın, fon ve
+hisse, alacak dağılımı görünür. Dönem cihazda kalır (`para.assetRange`), son alınan geçmiş de (`para.history`;
+çevrimdışıyken kullanılır). Özet'teki Nakit grafiğinden ayrıdır: o yalnızca nakdi (aşağıda) bugünkü kur ve fiyatla
+gösterir.
 
 ### Kurlar
 
