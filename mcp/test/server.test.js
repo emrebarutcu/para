@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { handle } from "../server.js";
+import { clearMarket } from "../piyasa.js";
 import Tablo from "../../tablo.js";
 
 const NOW = () => new Date("2026-10-18T09:00:00Z");
@@ -9,6 +10,12 @@ const ORIGIN = "https://cashfollow.app";
 // Bellekte Supabase: auth/v1/user ve kullanılan PostgREST uçları (RLS: yalnızca token sahibinin satırları)
 const DATA = ["people", "cards", "purchases", "entries", "debts"];
 const RATES = { USD: { Selling: 40 }, EUR: { Selling: 45 }, GRA: { Selling: 4000 }, Update_Date: "2026-10-18 12:00:00" };
+// TEFAS fonları (fonGnlBlgSiraliGetir) ve İş Yatırım hisse fiyatları (OneEndeks)
+const FUNDS = {
+  YAT: [{ fonKodu: "AFT", fonUnvan: "AK PORTFÖY YENİ TEKNOLOJİLER YABANCI HİSSE SENEDİ FONU", fiyat: 2 }],
+  EMK: [{ fonKodu: "AAJ", fonUnvan: "AGESA HAYAT VE EMEKLİLİK A.Ş. OKS STANDART EMEKLİLİK YATIRIM FONU", fiyat: 0.5 }],
+};
+const STOCKS = { THYAO: { symbol: "THYAO", last: 250, basePrice: 240, dayClose: 240, updateDate: "2026-10-16T18:10:00.000+03" } };
 function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { id: "u2", email: "x@y.z" } } } = {}) {
   const db = { people: [], cards: [], purchases: [], entries: [], debts: [], inbox_messages: [], inbox_addresses: [] };
   const rates = { down: false };
@@ -31,6 +38,17 @@ function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { i
 
     if (url.hostname === "finans.truncgil.com") return rates.down ? reply({}, 503) : reply(RATES);
     if (url.hostname === "open.er-api.com" || url.hostname === "api.gold-api.com") return reply({}, 503);
+    if (url.hostname === "www.tefas.gov.tr") {
+      const kind = body.fonTipi;
+      const list = (FUNDS[kind] || []).map(r => ({ ...r, tarih: "2026-10-16" }));
+      // Cuma 16 Ekim'in fiyatları; hafta sonu ve bugün (18 Ekim pazar) fiyat yok
+      return body.basTarih === "20261016" && list.length ? reply({ errorCode: null, errorMessage: null, resultList: list })
+        : reply({ errorCode: null, errorMessage: "Index 0 out of bounds for length 0", resultList: null });
+    }
+    if (url.hostname === "www.isyatirim.com.tr") {
+      const found = url.searchParams.get("endeks").split(",").filter(t => STOCKS[t]).map(t => STOCKS[t]);
+      return reply(found.length ? found : { error: { code: "EINVAL", message: "Symbols are not allowed!" } });
+    }
     if (url.pathname === "/auth/v1/user") return user ? reply(user) : reply({ msg: "bad jwt" }, 403);
     if (!user) return reply({ message: "JWT expired" }, 401);
 
@@ -1314,4 +1332,65 @@ test("otomatiğe dönüş: son ödeme günü bugün olan ekstreye ödeme varken 
   await d25.call("add_purchase", { card: "Paraf", amount: 60, description: "Spotify", date: "2026-10-25", repeat: 0 }).then(r => assert.ok(!r.error, r.error));
   ov = await d25.call("get_overview");
   assert.deepEqual([ov.lastPaymentMonth, ov.endless, ov.remainingTotal], [null, true, 2460]);
+});
+
+test("fon ve hisse: arama, alış / satış, TL bakiyesine işleme, kâr; bilinmeyen kod ve tekrar reddedilir", async () => {
+  clearMarket();
+  const sb = fakeSupabase();
+  const c = client(sb);
+  await c.call("add_entry", { asset: "TRY", direction: "in", amount: 10000, description: "Maaş" });
+
+  const found = await c.call("search_market", { query: "ak portföy teknoloji", codes: ["bist:thyao", "BIST:XYZW", "FON:AAJ"] });
+  assert.deepEqual(found.funds.map(f => [f.asset, f.price, f.priceDate]), [["FON:AFT", 2, "2026-10-16"]]);
+  assert.deepEqual(found.prices.map(p => [p.asset, p.price]), [["BIST:THYAO", 250], ["FON:AAJ", 0.5]]);
+  assert.equal(found.prices[0].dayChangePct, 4.17);
+  assert.deepEqual(found.notFound, ["BIST:XYZW"]);
+  assert.match((await c.call("search_market", {})).error, /query/);
+
+  // Bugünkü alış: fiyat güncel fiyattır, tutar TL'den düşer
+  const buy = await c.call("add_entry", { asset: "fon:aft", direction: "in", amount: 1000 });
+  assert.equal(buy.entry.asset, "FON:AFT");
+  assert.equal(buy.entry.price, 2);
+  assert.equal(buy.entry.settledInTry, true);
+  assert.deepEqual(buy.tryBalance, { before: 10000, after: 8000 });
+  // Eski tarihli alış: fiyat verilmezse yok, TL'ye dokunmaz (eldeki hisse)
+  const old = await c.call("add_entry", { asset: "BIST:THYAO", direction: "in", amount: 10, date: "2026-01-05", description: "Eski hisseler" });
+  assert.equal(old.entry.price, null);
+  assert.equal(old.entry.settledInTry, false);
+  await c.call("add_entry", { asset: "BIST:THYAO", direction: "in", amount: 10, price: 200, settle: false, date: "2026-03-01" });
+  const sale = await c.call("add_entry", { asset: "BIST:THYAO", direction: "out", amount: 5, price: 260, date: "2026-10-16" });
+  assert.equal(sale.entry.tradeValueTry, 1300);
+  assert.deepEqual(sale.tryBalance, { before: 8000, after: 9300 });
+
+  assert.match((await c.call("add_entry", { asset: "BIST:XYZW", direction: "in", amount: 1 })).error, /No Borsa İstanbul stock/);
+  assert.match((await c.call("add_entry", { asset: "FON:ZZZ", direction: "in", amount: 1 })).error, /search_market/);
+  assert.match((await c.call("add_entry", { asset: "FON:AFTX", direction: "in", amount: 1 })).error, /not a valid code/);
+  assert.match((await c.call("add_entry", { asset: "FON:AFT", direction: "in", amount: 1, repeat: 12 })).error, /do not repeat/);
+  assert.match((await c.call("add_entry", { asset: "FON:AFT", direction: "in", amount: 1, settle: true, date: "2026-01-01" })).error, /settle needs a price/);
+  assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", price: 3 })).error, /only for funds/);
+
+  const all = await c.call("get_assets");
+  const by = Object.fromEntries(all.holdings.map(h => [h.asset, h]));
+  assert.equal(by["FON:AFT"].units, 1000);
+  assert.equal(by["FON:AFT"].tryValue, 2000);
+  assert.equal(by["FON:AFT"].profitTry, 0);
+  assert.equal(by["FON:AFT"].name, "AK PORTFÖY YENİ TEKNOLOJİLER YABANCI HİSSE SENEDİ FONU");
+  assert.equal(by["BIST:THYAO"].units, 15);
+  assert.equal(by["BIST:THYAO"].tryValue, 3750);
+  assert.equal(by["BIST:THYAO"].costTry, null);   // ilk alışın fiyatı yok
+  assert.equal(by["BIST:THYAO"].dayChangePct, 4.17);
+  assert.equal(all.assets[0].balance, 9300);
+  assert.equal(all.holdingsTry, 5750);
+  assert.equal(all.totalTry, 9300 + 5750);
+  assert.deepEqual(Object.keys(all.rates), ["TRY", "USD", "EUR", "GAU", "updatedAt", "source"]);
+
+  const list = await c.call("list_entries", { asset: "bist:thyao" });
+  assert.deepEqual(list.entries.map(e => [e.direction, e.amount, e.price]), [["out", 5, 260], ["in", 10, 200], ["in", 10, null]]);
+  // Düzenleme fiyatsız kayda güncel fiyatı eklemez
+  const upd = await c.call("update_entry", { id: old.entry.id, description: "Miras" });
+  assert.equal(upd.entry.price, null);
+  const row = sb.db.entries.find(r => r.id === buy.entry.id);
+  assert.equal(row.asset, "FON:AFT");
+  assert.equal(row.price, 2);
+  assert.equal(row.settle, true);
 });

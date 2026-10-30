@@ -69,7 +69,8 @@
     const ids = new Set(state.people.map(p => p.id));
     return {
       purchases: state.installments.filter(p => ids.has(p.personId)),
-      entries: state.entries.filter(e => ids.has(e.personId) && V.asset(e.asset)),
+      // Fon / hisse alışı ve satışı gelir ya da gider değildir (varlık değişimi), içgörülere girmez
+      entries: state.entries.filter(e => ids.has(e.personId) && V.asset(e.asset) && !V.market(e.asset)),
     };
   }
 

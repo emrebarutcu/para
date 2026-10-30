@@ -4,7 +4,7 @@
 
 1. [supabase.com](https://supabase.com) → New project oluştur
 2. **SQL Editor** → `supabase/tablolar.sql` dosyasını çalıştır. Kişiler (`people`), kartlar (`cards`),
-   harcamalar (`purchases`), varlık hareketleri (`entries`) ve borçlar (`debts`: kişiyle borç / alacak, banka kredisi
+   harcamalar (`purchases`), varlık hareketleri (`entries`; fon ve hisse alış / satışları dahil) ve borçlar (`debts`: kişiyle borç / alacak, banka kredisi
    ve bunların ödemeleri, kart ekstresi ödemeleri `card_id` ile; `kind` ile ayrılır) ayrı tablolardır; her kullanıcı
    yalnızca kendi satırlarını görür (RLS). Kartın ekstre takibi `cards.track_since` / `cards.track_off`, ödeme modu
    `cards.manual_since` sütunlarındadır (bölüm 4 → Borçlar ve alacaklar).
@@ -66,7 +66,8 @@ e-posta göndermez) kayıt yerine girişe yönlendirir.
 ## 2. Yayın (Cloudflare Workers → cashfollow.app)
 
 Site, `para` adlı bir Cloudflare Worker'dır (Workers Builds, ayarları `wrangler.jsonc`): statik dosyalar kök dizinden sunulur
-(`.assetsignore`'dakiler hariç), yalnızca MCP adresleri Worker kodundan geçer (`mcp/worker.js`).
+(`.assetsignore`'dakiler hariç), yalnızca MCP adresleri ve `/api/*` (kurlar, fon ve hisse fiyatları, kategori) Worker
+kodundan geçer (`mcp/worker.js`).
 
 1. Cloudflare → **Workers & Pages** → Create → **Import a repository** → `emrebarutcu/para`, Worker adı `para`
    (adı `wrangler.jsonc`'teki `name` ile aynı olmalı), build komutu boş, deploy komutu `npx wrangler deploy`
@@ -112,6 +113,20 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
 
 ### Yükseltme notları
 
+- **6.0.0** — Varlıklar'da fon ve hisse: TEFAS fonları (`FON:AFT`) ve Borsa İstanbul hisseleri (`BIST:THYAO`) adetle
+  alınır / satılır, güncel fiyatla TL'ye çevrilir (bölüm 4 → Fon ve hisse). `entries.asset` kısıtı fon ve hisse kodlarını
+  da kabul eder; yeni sütunlar `entries.price` (alış / satış günündeki birim fiyat) ve `entries.settle` (tutar TL
+  bakiyesine işlenir). Yayından **önce** `supabase/tablolar.sql` yeniden çalıştırılır (`sh supabase/sql.sh
+  supabase/tablolar.sql`; kısıtı yeniler, eksik sütunları ekler); yoksa yeni sürüm fon ve hisse hareketini eşitleyemez.
+  6.0'a geçen cihaz ilk eşitlemede bütün satırları yeniden çeker (SCHEMA 7). Önbellekteki 5.x sürümleri fon ve hisse
+  hareketlerini eşitlemede atlar (satır biçimleri geçersiz sayılır; silmezler, üstlerine yazmazlar), ilk kez bütün satırları
+  çeken 5.x'in Varlıklar sekmesi bu hareketlerde açılmayabilir; service worker ana sürüm değişince açık sekmeleri yeniden
+  yükler. Mevcut verinin anlamı değişmez. MCP: yeni araç `search_market` (fon arama, fon ve hisse fiyatları); `add_entry`,
+  `update_entry`, `list_entries`'te `asset` artık `FON:…` / `BIST:…` de alır (enum kalktı), isteğe bağlı `price` ve
+  `settle`; cevaplara eklenenler: `get_assets` → `holdings`, `holdingsTry`, `pricesError`; `list_entries` /
+  `add_entry` → fon ve hissede `type`, `price`, `tradeValueTry`, `settledInTry`; `add_entry` → `tryBalance`, `warning`.
+  **Uyumsuz:** `get_assets` `totalTry` (ve `totalAssetsTry`, `netWorthTry`, `list_debts` toplamları) fon ve hisselerin
+  güncel değerini içerir; TL bakiyesi TL'den ödenen alışlar kadar düşer, satışlar kadar artar.
 - **5.0.0** — Borçlar sekmesi: kişilerle borç / alacak, banka kredisi, kart borcu ve kartta diğer kişilerin payları
   (alacak); "Varlık = Özvarlık + Borç"; kart ve borçta ödeme modu (otomatik ya da elle **Ödendi**). Yeni tablo `debts`
   (kart ekstresi ödemeleri `debts.card_id` ile) ve yeni sütunlar `cards.track_since`, `cards.track_off`,
@@ -234,7 +249,7 @@ tarihiyle yeni harcama olarak açar. Kategori elle seçilmediyse kaydedince veri
 seçimi hemen, modelin önerisi kayıttan sonra (açıklama değiştiyse önceki otomatik kategori yenilenir; elle seçilen
 kategoriye dokunulmaz).
 
-### Varlıklar: TL, dolar, euro, gram altın
+### Varlıklar: TL, dolar, euro, gram altın, fon ve hisse
 
 **Varlıklar** sekmesinde tarihli girişler (maaş, döviz ya da altın alımı) ve çıkışlar tutulur. Çıkış harcamadır: tek
 form, harcama formu. Varlık formunda **Çıkış** seçilince yazılanlar harcama formuna taşınır; harcama formunda kart, taksit,
@@ -252,6 +267,42 @@ gününde düşer (ay kısaysa ayın son günü); bakiyeye yalnızca tarihi gelm
 tekrarı kendi tarihiyle ayrı bir alışveriştir (kartlıysa kendi ekstresine, taksitliyse kendi taksitleriyle); kart
 limitine yalnızca tarihi gelmiş tekrarlar girer. Süresiz tekrarı durdurmak için kaç kez, işlenen tekrar sayısına çekilir
 (hiç işlenmediyse kayıt silinir).
+
+### Fon ve hisse
+
+Varlıklar'daki **Fon ve hisse** bölümü elde tutulan TEFAS fonlarını (yatırım, emeklilik ve borsa yatırım fonları) ve
+Borsa İstanbul hisselerini gösterir: adet, güncel birim fiyat, TL karşılığı, kâr / zarar ve hissede bugünkü değişim.
+Üstteki Varlık toplamına girerler. **Ekle** ya da bir satır hareket formunu açar; varlık olarak **Fon** ya da **Hisse**
+seçilince form alış / satış formudur (`varlik.js`):
+
+- **Kod**: fonda kod ya da adın kelimeleri yazılır ("ak portföy tekno"), TEFAS listesinden öneri çıkar
+  (`GET /api/fonlar`); hissede işlem kodu (THYAO). Bulunan fonun adı ve fiyatı ya da hissenin fiyatı altta görünür,
+  bilinmeyen kod kaydedilmez (çevrimdışıyken doğrulanamaz, kaydedilir).
+- **Adet** ve **birim fiyat**: fiyat bulununca güncel fiyatla dolar, değiştirilebilir ya da silinebilir. Kâr ortalama
+  maliyetle hesaplanır (`V.positions`): alışlar adet × fiyatla maliyete eklenir, satış ortalama maliyetle düşer; fiyatı
+  girilmemiş alış ya da elde olandan fazla satış varsa kâr gösterilmez.
+- **Tutar TL bakiyemden düşülsün** (satışta "eklensin"): işaretliyse adet × fiyat kişinin TL bakiyesinden düşer (satışta
+  eklenir; `entries.settle`). Önceden elde olan fon ve hisseler işaretsiz girilir. Son seçim cihazda kalır (`para.settle`).
+- Fon ve hisse hareketi tekrarlamaz, açıklaması isteğe bağlıdır ("THYAO alışı"). Alış ve satış gelir ya da gider
+  değildir: içgörülere ve nakit grafiğine girmez; yalnızca TL bakiyesine işlenen tutar Özet'teki girdi / çıktılarda ve
+  nakit grafiğinde TL hareketi olarak görünür.
+
+Fiyatlar sitenin Worker'ından gelir (`mcp/piyasa.js`), anahtar gerekmez:
+
+- `GET /api/fiyat?kod=FON:AFT,BIST:THYAO` → `{ prices: { "FON:AFT": { price, date, name, kind }, "BIST:THYAO":
+  { price, prev, at, date } }, missing, failed, updatedAt }`. `missing` bulunamayan kodlar, `failed` kaynağı alınamayan
+  pazarlar (`FON`, `BIST`).
+- `GET /api/fonlar` → `{ date, funds: [{ code, name, kind, price, date }] }` (formdaki arama için bütün fonlar).
+- Fonlar: TEFAS'ın sitesinin kullandığı fon bilgisi uç noktası (`/api/funds/fonGnlBlgSiraliGetir`, belgelenmemiş). Fiyat
+  günde bir kez açıklanır; bugünden geriye (hafta sonları atlanır) fiyatı olan ilk günün listesi alınır, 1 saat saklanır.
+- Hisseler: İş Yatırım'ın piyasa verisi (`Data.aspx/OneEndeks`), yaklaşık 15 dakika gecikmeli son fiyat ve seansın baz
+  fiyatı (önceki kapanış); 2 dakika saklanır.
+
+Uygulama elde tutulan kodların fiyatlarını 2 dakikada bir yeniler, son fiyatları cihazda saklar (`para.prices`) ve
+çevrimdışıyken onları kullanır. Kaynaklardan biri değişir ya da kapanırsa yalnızca o pazarın fiyatları eksik kalır
+(Varlık notunda "fiyatı alınamayan var"); `mcp/piyasa.js`'teki adres ve alan adları güncellenir.
+
+### Kurlar
 
 Kurlar sitenin Worker'ından gelir: `GET /api/kur` → `{ rates: { TRY, USD, EUR, GAU }, updatedAt, source }`
 (`mcp/kur.js`). Kaynak [Truncgil](https://finans.truncgil.com) (Türkiye piyasası, gram altın dahil); erişilemezse
@@ -523,7 +574,7 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 | Harcamalar | `list_purchases`, `get_purchase` (taksit takvimi), `add_purchase` (`dry_run` ile önizleme), `update_purchase`, `delete_purchase` |
 | Kartlar | `list_cards` (kullanılan / kalan limit, ekstre takibi ve ödeme modu, sıradaki ekstre; elle ödenen kartta `unpaid`, `overdue`, kart ödemeleri), `add_card` (eklendiği günden takipte; `auto_pay` false: elle ödenir), `update_card` (takip: `track_statements`, `track_since`; ödeme modu `auto_pay`, erken ödeme varken otomatiğe dönüş hata döner; kartta bugün ödeme varsa yeniden takip ve elle mod yarın başlar), `delete_card` (kart ödemeleriyle) |
 | Kişiler | `list_people` (kart payı alacağı), `add_person`, `rename_person`, `delete_person` |
-| Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı; alacak, borç, Varlık, Özvarlık), `list_entries`, `add_entry`, `update_entry`, `delete_entry` |
+| Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı; elde tutulan fon ve hisseler `holdings`: adet, fiyat, kâr; alacak, borç, Varlık, Özvarlık), `list_entries`, `add_entry` (fon ve hisse: `asset` `FON:AFT` / `BIST:THYAO`, `price`, `settle`), `update_entry`, `delete_entry`, `search_market` (TEFAS fon arama; fon ve hisse fiyatları) |
 | Borçlar / alacaklar | `list_debts` (Eldeki / Alacak / Borç / Varlık / Özvarlık toplamları, kart borçları ve kişi payları, nakit taksitler, kart payları, borçlar), `get_debt` (ödeme planı), `add_debt` (borç aldım / verdim / kredi; tek tutar ya da taksitli; `auto_pay`: kredide varsayılan true, kişiyle borçta false; `dry_run` ile önizleme), `update_debt` (kapatma dahil; kayıt tarihi ile bugün arasında taksiti olanda `auto_pay` değişmez, hata döner), `delete_debt` (ödemeleriyle), `pay_debt` (ödeme / tahsilat; kart payı için `person`; elle ödenen kartın ekstresi için `card`: `amount` verilmezse ödemesi gelen (yoksa kesilmiş ekstre), kısmi olabilir; `close` kendiliğinden ödenen borcu bugünle kapatır), `delete_debt_payment` (kart ödemesi dahil; kapanmış borcu yeniden açar: `reopened`) |
 | Banka e-postaları | `get_inbox_address`, `renew_inbox_address`, `list_inbox`, `check_inbox`, `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
 | İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |

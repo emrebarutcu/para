@@ -163,8 +163,25 @@ test("varlık hareketleri: satıra çevrilir, geçersizler ve kişisi olmayanlar
   );
   const plan = changes(state, base);
   assert.deepEqual(plan.entries.upsert.map(x => x.row), [{ id: "e2", person_id: "ali", asset: "USD", amount: -30, description: "Tatil", date: "2026-10-19",
-    repeat_count: null, repeat_every: null, repeat_unit: null }]);
+    repeat_count: null, repeat_every: null, repeat_unit: null, price: null, settle: null }]);
   assert.deepEqual(toState({}).entries, []);
+});
+
+test("fon ve hisse hareketi: price ve settle; tekrarlamaz, settle yalnızca fiyatla, geçersiz kod yazılmaz", () => {
+  const state = { people: [{ id: "ben", name: "Ben", color: 0 }], entries: [
+    { id: "f1", personId: "ben", asset: "FON:AFT", amount: 1000, desc: "", date: "2026-10-30", price: 0.959756, settle: true, repeat: 12 },
+    { id: "h1", personId: "ben", asset: "BIST:THYAO", amount: -5, desc: "Satış", date: "2026-10-30", settle: true },
+    { id: "h2", personId: "ben", asset: "BIST:THYAO", amount: 5, desc: "", date: "2026-10-30", price: -3 },
+    { id: "kod", personId: "ben", asset: "BIST:thyao", amount: 5, desc: "", date: "2026-10-30" },
+    { id: "tl", personId: "ben", asset: "TRY", amount: 5, desc: "TL", date: "2026-10-30", price: 3, settle: true },
+  ] };
+  const rows = changes(state, {}).entries.upsert.map(x => x.row);
+  assert.deepEqual(rows.map(r => [r.id, r.price, r.settle, r.repeat_count]),
+    [["f1", 0.959756, true, null], ["h1", null, null, null], ["h2", null, null, null], ["tl", null, null, null]]);
+  // Satırdan geri: boş alanlar yazılmaz
+  const back = toState({ entries: rows.map(r => ({ ...r, user_id: "u1", created_at: at(), updated_at: at(), deleted_at: null })) });
+  assert.deepEqual(back.entries[0], { id: "f1", personId: "ben", asset: "FON:AFT", amount: 1000, desc: "", date: "2026-10-30", price: 0.959756, settle: true });
+  assert.deepEqual(back.entries[1], { id: "h1", personId: "ben", asset: "BIST:THYAO", amount: -5, desc: "Satış", date: "2026-10-30" });
 });
 
 test("tekrarlayan varlık hareketi: repeat_count ↔ repeat (0 süresiz, 1 tek seferlik sayılır)", () => {

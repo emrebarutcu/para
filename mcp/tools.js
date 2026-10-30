@@ -7,6 +7,8 @@
 //   ctx.mutate(fn)       → fn(veri) çalışır, değişen kişi / kart / harcama / hareket / borç kayıtları kaydedilir
 //   ctx.inbox            → pending(), claim(ids), release(ids), address(renew)
 //   ctx.rates()          → { rates: { TRY, USD, EUR, GAU }, updatedAt, source } (kur.js)
+//   ctx.prices(codes)    → { prices: { "BIST:THYAO": { price, … } }, missing, failed } fon ve hisse fiyatları (piyasa.js)
+//   ctx.searchFunds(q)   → [{ code: "FON:AFT", name, kind, price, date }] TEFAS fon araması (piyasa.js)
 import T from "../taksit.js";
 import E from "../eposta.js";
 import V from "../varlik.js";
@@ -105,6 +107,13 @@ const ASSET_NAMES = { tl: "TRY", try: "TRY", lira: "TRY", usd: "USD", dolar: "US
 function assetArg(v, name = "asset") {
   const code = ASSET_NAMES[T.normalize(v)];
   return code ?? fail(`${name} must be one of TRY, USD, EUR, GAU (gram gold).`);
+}
+
+// Varlık hareketinde ayrıca fon ve hisse: "FON:AFT", "bist:thyao" → "BIST:THYAO"
+function entryAssetArg(v, name = "asset") {
+  const m = /^\s*(fon|bist)\s*:\s*(\S+)\s*$/i.exec(String(v ?? ""));
+  if (!m) return ASSET_NAMES[T.normalize(v)] ?? fail(`${name} must be one of TRY, USD, EUR, GAU (gram gold), a TEFAS fund FON:XXX (e.g. FON:AFT) or a BIST stock BIST:XXXX (e.g. BIST:THYAO).`);
+  return V.marketCode(m[1], m[2]) ?? fail(`${String(v).trim()} is not a valid code: a TEFAS fund is FON: and its 3-character code (FON:AFT), a BIST stock BIST: and its ticker (BIST:THYAO).`);
 }
 
 // Kategori kimliği ya da adı ("market", "Yeme-içme", "yeme içme"…); null kategoriyi kaldırır
@@ -514,9 +523,23 @@ function emailView(x, { body = false } = {}) {
 }
 
 // ---------- Varlıklar ----------
-async function ratesOrNull(ctx) {
-  try { return await ctx.rates(); } catch (err) { console.warn("kur:", err.message); return null; }
+// Kurlar; state ya da codes verilirse içindeki fon ve hisselerin fiyatları da aynı tabloda (V.toTry):
+// { rates: { TRY, USD, EUR, GAU, "BIST:THYAO": 246.7 }, updatedAt, source, market?: { "BIST:THYAO": { price, … } },
+// marketMissing?, marketFailed? }. Kur alınamazsa yalnızca fiyatlarla; hiçbiri yoksa null.
+async function ratesOrNull(ctx, state = null, codes = []) {
+  const want = [...new Set([...(state ? knownEntries(state).map(e => e.asset) : []), ...codes])].filter(c => V.market(c));
+  const [kur, market] = await Promise.all([
+    ctx.rates().catch(err => { console.warn("kur:", err.message); return null; }),
+    want.length ? ctx.prices(want).catch(err => { console.warn("fiyat:", err.message); return { prices: {}, missing: [], failed: ["FON", "BIST"] }; }) : null,
+  ]);
+  if (!market) return kur;
+  const out = { ...(kur ?? { updatedAt: null, source: null }), rates: { TRY: 1, ...kur?.rates }, market: market.prices,
+    marketMissing: market.missing, marketFailed: market.failed };
+  for (const [c, x] of Object.entries(market.prices)) out.rates[c] = x.price;
+  return kur || Object.keys(market.prices).length ? out : null;
 }
+
+const marketType = code => (V.market(code)?.market === "FON" ? "fund" : "stock");
 
 function entryView(state, e, rates, today) {
   const value = V.toTry(e.amount, e.asset, rates?.rates);
@@ -532,6 +555,12 @@ function entryView(state, e, rates, today) {
     person: personName(state, e.personId),
     personId: e.personId,
   };
+  if (V.market(e.asset)) {
+    v.type = marketType(e.asset);
+    v.price = e.price > 0 ? e.price : null;
+    v.tradeValueTry = e.price > 0 ? Math.abs(V.tradeValue(e)) : null;
+    v.settledInTry = e.settle === true;
+  }
   if (n != null) v.repeat = repeatView(e, today);
   return v;
 }
@@ -547,9 +576,12 @@ function knownEntries(state) {
   return state.entries.filter(e => known.has(e.personId));
 }
 
-// Yeni ya da düzenlenen hareket; base verilirse belirtilmeyen alanlar ondan gelir
-function buildEntry(state, args, today, base = null) {
-  const asset = args.asset !== undefined ? assetArg(args.asset) : base?.asset ?? fail("asset is required.");
+// Yeni ya da düzenlenen hareket; base verilirse belirtilmeyen alanlar ondan gelir. Fon / hisse (market): tekrarlamaz,
+// açıklama isteğe bağlı; price birim fiyat (verilmezse ve tarih bugünse güncel fiyat: quote), settle tutarın TL bakiyesine
+// işlenmesi (fiyat varken varsayılan evet).
+function buildEntry(state, args, today, base = null, quote = null) {
+  const asset = args.asset !== undefined ? entryAssetArg(args.asset) : base?.asset ?? fail("asset is required.");
+  const market = !!V.market(asset);
   const dir = args.direction ?? (base ? (base.amount > 0 ? "in" : "out") : fail('direction is required ("in" or "out").'));
   if (!["in", "out"].includes(dir)) fail('direction must be "in" or "out".');
   let amount = base ? Math.abs(base.amount) : null;
@@ -559,16 +591,62 @@ function buildEntry(state, args, today, base = null) {
   }
   if (amount == null) fail("amount is required.");
   const desc = args.description !== undefined ? text(args.description, "description") : base?.desc ?? "";
-  if (!desc) fail("description must not be empty.");
+  if (!desc && !market) fail("description must not be empty.");
   const date = args.date ?? base?.date ?? today;
   if (!validDate(date)) fail("date must be a valid date like 2026-10-19.");
   const personId = args.person !== undefined ? findPerson(state, args.person).id : base?.personId ?? state.people[0].id;
-  return { personId, asset, amount: dir === "out" ? -amount : amount, desc, date, ...repeatArgs(args, base) };
+  const e = { personId, asset, amount: dir === "out" ? -amount : amount, desc, date };
+  if (!market) {
+    if (args.price !== undefined || args.settle !== undefined) fail("price and settle are only for funds (FON:…) and stocks (BIST:…).");
+    return { ...e, ...repeatArgs(args, base) };
+  }
+  if ((args.repeat ?? 1) !== 1 || args.repeat_every !== undefined || args.repeat_unit !== undefined) fail("Fund and stock trades do not repeat.");
+  // Düzenlemede fon / hisse aynıysa fiyat kayıttakidir (güncel fiyat kendiliğinden eklenmez)
+  const same = base?.asset === asset;
+  let price = args.price === null ? null : args.price !== undefined ? Number(args.price) : same ? (base.price > 0 ? base.price : null)
+    : date === today && quote?.price > 0 ? quote.price : null;
+  if (price != null && !(price > 0)) fail("price must be a positive number (TRY per unit), or null.");
+  const settle = args.settle !== undefined ? args.settle === true : same && base ? base.settle === true : price != null;
+  if (settle && price == null) fail("settle needs a price (TRY per unit): pass price, or settle false.");
+  return { ...e, ...(price != null && { price }), ...(settle && { settle: true }) };
+}
+
+// Fon / hisse kodu biliniyor mu (fiyat kaynağına göre); kaynak alınamadıysa doğrulanamaz, kabul edilir
+function checkMarket(code, rates) {
+  if (!V.market(code) || rates?.market?.[code]) return;
+  if (rates?.marketMissing?.includes(code)) {
+    fail(V.market(code).market === "FON" ? `No TEFAS fund with code ${V.market(code).ticker}; use search_market to find the fund's code.`
+      : `No Borsa İstanbul stock with ticker ${V.market(code).ticker}.`);
+  }
 }
 
 // Kişinin bir varlıktaki bugünkü bakiyesi (nakit harcamalar ve borç etkileri düşülmüş)
 function balanceOf(state, personId, asset, today) {
   return V.balances(knownEntries(state).filter(e => e.personId === personId), today, cashSpent(state, today, personId))[asset] ?? 0;
+}
+
+// Elde tutulan fon ve hisseler (adet sıfır değil), TL karşılığına göre: güncel fiyat, ortalama maliyet ve kâr (alış
+// fiyatları biliniyorsa, V.positions), hissede bugünkü değişim
+function holdingsView(state, bals, rates, pid) {
+  const pos = V.positions(knownEntries(state).filter(e => !pid || e.personId === pid));
+  return Object.keys(bals).filter(c => V.market(c) && Math.abs(bals[c]) > 1e-9).map(code => {
+    const x = rates?.market?.[code], p = pos[code];
+    const value = V.toTry(bals[code], code, rates?.rates);
+    const h = { asset: code, type: marketType(code), ticker: V.market(code).ticker, units: bals[code] };
+    if (x?.name) h.name = x.name;
+    h.price = x?.price ?? null;
+    if (x) h.priceDate = x.date ?? null;
+    if (x?.at) h.priceTime = x.at;
+    h.tryValue = value == null ? null : round(value);
+    if (x?.prev > 0) h.dayChangePct = Math.round((x.price / x.prev - 1) * 10000) / 100;
+    h.costTry = p?.cost ?? null;
+    if (value != null && p?.cost > 0) {
+      h.profitTry = round(value - p.cost);
+      h.profitPct = Math.round((value / p.cost - 1) * 10000) / 100;
+    }
+    if (p?.realized) h.realizedProfitTry = p.realized;
+    return h;
+  }).sort((a, b) => (b.tryValue ?? -1) - (a.tryValue ?? -1));
 }
 
 // Varlık = Özvarlık + Borç (borc.js totals), TL. Özvarlık yuvarlanmış iki değerin farkıdır: eşitlik cevapta da tutar.
@@ -945,11 +1023,14 @@ const CARD_FIELDS = {
 };
 
 const ASSET = { type: "string", enum: ["TRY", "USD", "EUR", "GAU"], description: "TRY (Turkish lira), USD, EUR or GAU (gold, in grams)." };
+const ENTRY_ASSET = { type: "string", description: "TRY (Turkish lira), USD, EUR, GAU (gold, in grams), a TEFAS fund as FON:<code> (e.g. FON:AFT; search_market finds codes by name) or a Borsa İstanbul stock as BIST:<ticker> (e.g. BIST:THYAO)." };
 const ENTRY_FIELDS = {
-  asset: ASSET,
-  direction: { type: "string", enum: ["in", "out"], description: '"in" = money / gold received or bought (giriş), "out" = spent, sold or given (çıkış).' },
-  amount: S.num("Positive amount in the asset's own unit (lira, dollars, euros or grams of gold)."),
-  description: S.str("What it is, e.g. Maaş, altın alımı."),
+  asset: ENTRY_ASSET,
+  direction: { type: "string", enum: ["in", "out"], description: '"in" = money / gold received or bought, fund / stock units bought (giriş, alış), "out" = spent, sold or given (çıkış, satış).' },
+  amount: S.num("Positive amount in the asset's own unit (lira, dollars, euros, grams of gold; for a fund or stock the number of units)."),
+  description: S.str("What it is, e.g. Maaş, altın alımı. Optional for a fund or stock trade."),
+  price: { type: ["number", "null"], description: "Fund / stock only: TRY per unit at the trade (for profit / loss). Default: the current price when date is today, otherwise none. null removes it." },
+  settle: { type: "boolean", description: "Fund / stock only: the trade amount (units × price) leaves the person's TRY balance on a buy and enters it on a sale. Default true when there is a price. false for units already held (opening a position) or paid from outside the app." },
   date: S.date("Date, YYYY-MM-DD. For a repeating entry, the date of the first time."),
   person: S.str("Person id or name."),
   ...REPEAT_FIELDS,
@@ -1376,39 +1457,81 @@ export const TOOLS = [
   {
     name: "get_assets",
     title: "Assets (Varlıklar)",
-    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries minus cash purchases paid from them, plus borrowed / loan principal and collections on money lent, minus money lent, repayments and loan installments, minus tracked cards' statements paid since tracking began (the day after the due day, or when marked paid with pay_debt card=… on a card paid by hand), plus card share payments; repeating ones only up to today), each with its value in TRY at the current market rate, and the total in TRY (totalTry). Also, as in list_debts: receivablesTry (owed to the user), debtsTry, totalAssetsTry (= totalTry + receivablesTry = netWorthTry + debtsTry), netWorthTry, untrackedCardDebtTry (debt of cards whose statements are not tracked, not in debtsTry) and which cards are tracked since when.",
+    description: "Balances of Turkish lira, US dollars, euros and grams of gold (sum of all entries minus cash purchases paid from them, plus borrowed / loan principal and collections on money lent, minus money lent, repayments and loan installments, minus tracked cards' statements paid since tracking began (the day after the due day, or when marked paid with pay_debt card=… on a card paid by hand), plus card share payments, minus fund / stock buys and plus sales settled in TRY; repeating ones only up to today), each with its value in TRY at the current market rate. holdings: TEFAS funds and BIST stocks held (units, current price — funds are priced once a day, stocks about 15 minutes delayed — value in TRY, average cost and profit when buy prices are known, today's change for stocks). totalTry is the TRY value of all of them, holdingsTry the funds' and stocks' part. Also, as in list_debts: receivablesTry (owed to the user), debtsTry, totalAssetsTry (= totalTry + receivablesTry = netWorthTry + debtsTry), netWorthTry, untrackedCardDebtTry (debt of cards whose statements are not tracked, not in debtsTry) and which cards are tracked since when.",
     inputSchema: obj({ person: S.str("Only this person's assets (id or name).") }),
     annotations: READ,
     async run(args, ctx) {
       const state = await ctx.load();
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
-      const rates = await ratesOrNull(ctx);
+      const rates = await ratesOrNull(ctx, state);
       // Bakiyeler borç etkileriyle (cashSpent → borc.js spent); Varlık = Özvarlık + Borç aynı hesaptan
       const t = B.totals(state, ctx.today, rates?.rates, person?.id);
       const bals = t.balances;
       const { cashTry, ...worth } = worthView(t);
+      const holdings = holdingsView(state, bals, rates, person?.id);
+      const kur = rates?.updatedAt ? rates : null;   // fon / hisse fiyatları geldi ama kurlar alınamadıysa yok
       return {
         person: person?.name ?? "all",
         assets: V.ASSETS.map(a => {
           const value = V.toTry(bals[a.code] ?? 0, a.code, rates?.rates);
           return { asset: a.code, name: a.name, balance: bals[a.code] ?? 0, unit: a.code === "GAU" ? "gram" : a.code, tryValue: value == null ? null : round(value) };
         }),
+        holdings,
         totalTry: cashTry,
+        holdingsTry: round(holdings.reduce((sum, h) => sum + (h.tryValue ?? 0), 0)),
         ...worth,
         cardTracking: state.cards.map(c => ({ card: c.name, cardId: c.id, since: B.tracked(c) ? B.since(c, ctx.today) : null })),
         ...(t.missing.length ? { notIncludedInTotal: t.missing } : {}),
-        rates: rates ? { ...rates.rates, updatedAt: rates.updatedAt, source: rates.source } : null,
-        ...(rates ? {} : { ratesError: "Current rates are unavailable; only TRY balances are counted in the total." }),
+        rates: kur ? { ...Object.fromEntries(V.ASSETS.map(a => [a.code, kur.rates[a.code]])), updatedAt: kur.updatedAt, source: kur.source } : null,
+        ...(kur ? {} : { ratesError: "Current rates are unavailable; only TRY balances are counted in the total." }),
+        ...(rates?.marketFailed?.length ? { pricesError: "Some fund / stock prices are unavailable right now; those holdings are not counted in the total." } : {}),
       };
+    },
+  },
+  {
+    name: "search_market",
+    title: "Funds and stocks (TEFAS, Borsa İstanbul)",
+    description: "Find TEFAS funds (investment, pension and exchange-traded funds) by name or code, and get current prices of funds and Borsa İstanbul stocks. Fund prices are published once a day (price date); stock prices are about 15 minutes delayed, with the previous close. Use the codes (FON:AFT, BIST:THYAO) as asset in add_entry.",
+    inputSchema: obj({
+      query: S.str("Words from a fund's name or its code, e.g. \"ak portföy teknoloji\" or \"AFT\"."),
+      codes: { type: "array", items: { type: "string" }, maxItems: 50, description: "Codes to price: FON:<code> or BIST:<ticker>." },
+      limit: S.int("Maximum number of funds found (default 10).", 1, 50),
+    }),
+    annotations: READ,
+    async run(args, ctx) {
+      if (!args.query && !args.codes?.length) fail("Pass query (to find funds) or codes (to price funds / stocks).");
+      const out = {};
+      if (args.query) {
+        try {
+          out.funds = (await ctx.searchFunds(text(args.query, "query"), intArg(args.limit, "limit", 1, 50, 10)))
+            .map(x => ({ asset: x.code, name: x.name, type: x.kind === "EMK" ? "pension fund" : x.kind === "BYF" ? "exchange-traded fund" : "investment fund", price: x.price, priceDate: x.date }));
+        } catch (err) {
+          console.warn("fon:", err.message);
+          fail("TEFAS fund list is unavailable right now; try again later.");
+        }
+      }
+      if (args.codes?.length) {
+        const codes = [...new Set(args.codes.map(c => entryAssetArg(c, "codes")))].filter(c => V.market(c) || fail(`codes must be fund or stock codes (FON:…, BIST:…), not ${c}.`));
+        let p;
+        try { p = await ctx.prices(codes); } catch (err) { console.warn("fiyat:", err.message); fail("Prices are unavailable right now; try again later."); }
+        out.prices = codes.filter(c => p.prices[c]).map(c => {
+          const x = p.prices[c];
+          return { asset: c, type: marketType(c), ...(x.name && { name: x.name }), price: x.price, priceDate: x.date ?? null,
+            ...(x.at && { priceTime: x.at }), ...(x.prev > 0 && { previousClose: x.prev, dayChangePct: Math.round((x.price / x.prev - 1) * 10000) / 100 }) };
+        });
+        if (p.missing.length) out.notFound = p.missing;
+        if (p.failed.length) out.unavailable = p.failed.map(m => (m === "FON" ? "TEFAS funds" : "BIST stocks"));
+      }
+      return out;
     },
   },
   {
     name: "list_entries",
     title: "List asset entries",
-    description: "Lira / foreign currency / gold inflows and outflows, newest first. A repeating entry is one item (amount per month) with its repeat details.",
+    description: "Lira / foreign currency / gold inflows and outflows and fund / stock buys and sales, newest first. A repeating entry is one item (amount per month) with its repeat details. Fund / stock trades have type, price (TRY per unit at the trade), tradeValueTry and settledInTry (the amount left / entered the TRY balance).",
     inputSchema: obj({
       person: S.str("Only this person's entries (id or name)."),
-      asset: ASSET,
+      asset: ENTRY_ASSET,
       from: S.date("Only entries on or after this date (repeating ones: still repeating on or after it)."),
       to: S.date("Only entries on or before this date (repeating ones: starting on or before it)."),
       search: S.str("Case-insensitive text to look for in the description."),
@@ -1418,7 +1541,7 @@ export const TOOLS = [
     async run(args, ctx) {
       const state = await ctx.load();
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
-      const asset = args.asset !== undefined ? assetArg(args.asset) : null;
+      const asset = args.asset !== undefined ? entryAssetArg(args.asset) : null;
       for (const k of ["from", "to"]) if (args[k] !== undefined && !validDate(args[k])) fail(`${k} must be a date like 2026-10-19.`);
       const q = args.search ? T.normalize(args.search) : "";
       const order = new Map(state.entries.map((e, i) => [e.id, i]));
@@ -1427,15 +1550,15 @@ export const TOOLS = [
         .filter(e => entryInRange(e, args.from, args.to))
         .filter(e => !q || T.normalize(e.desc).includes(q))
         .sort((a, b) => b.date.localeCompare(a.date) || order.get(b.id) - order.get(a.id));
-      const rates = all.some(e => e.asset !== "TRY") ? await ratesOrNull(ctx) : null;
       const limit = intArg(args.limit, "limit", 1, 1000, 100);
+      const rates = all.some(e => e.asset !== "TRY") ? await ratesOrNull(ctx, null, all.slice(0, limit).map(e => e.asset)) : null;
       return { count: all.length, entries: all.slice(0, limit).map(e => entryView(state, e, rates, ctx.today)) };
     },
   },
   {
     name: "add_entry",
     title: "Add asset entry",
-    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency), once or repeating every N days / weeks / months. Spending (çıkış) — in cash from an asset or on a card — goes to add_purchase (with asset and card \"nakit\"); direction \"out\" here is kept for selling or giving away.",
+    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency), once or repeating every N days / weeks / months. Spending (çıkış) — in cash from an asset or on a card — goes to add_purchase (with asset and card \"nakit\"); direction \"out\" here is kept for selling or giving away. Also buys (in) and sales (out) of TEFAS funds (asset FON:<code>; search_market finds a fund's code by name) and Borsa İstanbul stocks (BIST:<ticker>), in units: the code is checked against current prices, price defaults to the current one for today's trades, and with a price the amount leaves / enters the person's TRY balance unless settle is false (use false for units the user already had).",
     inputSchema: obj({
       ...ENTRY_FIELDS,
       date: S.date("Date, YYYY-MM-DD. Default: today."),
@@ -1443,13 +1566,18 @@ export const TOOLS = [
     }, ["asset", "direction", "amount", "description"]),
     annotations: WRITE,
     async run(args, ctx) {
-      const rates = await ratesOrNull(ctx);
+      const code = args.asset !== undefined ? entryAssetArg(args.asset) : null;
+      const rates = await ratesOrNull(ctx, null, code ? [code] : []);
+      checkMarket(code, rates);
       return ctx.mutate(state => {
-        const e = { id: uid(), ...buildEntry(state, args, ctx.today) };
+        const e = { id: uid(), ...buildEntry(state, args, ctx.today, null, rates?.market?.[code]) };
+        const tl = balanceOf(state, e.personId, "TRY", ctx.today);
         state.entries.push(e);
-        const balance = V.balances(knownEntries(state).filter(x => x.personId === e.personId), ctx.today,
-          cashSpent(state, ctx.today, e.personId))[e.asset] ?? 0;
-        return { saved: true, entry: entryView(state, e, rates, ctx.today), balance };
+        const balance = balanceOf(state, e.personId, e.asset, ctx.today);
+        const out = { saved: true, entry: entryView(state, e, rates, ctx.today), balance };
+        if (V.settled(e)) out.tryBalance = { before: tl, after: balanceOf(state, e.personId, "TRY", ctx.today) };
+        if (V.market(e.asset) && balance < 0) out.warning = `More units sold than held: the ${e.asset} balance is ${balance}.`;
+        return out;
       });
     },
   },
@@ -1460,10 +1588,12 @@ export const TOOLS = [
     inputSchema: obj({ id: S.str("Entry id."), ...ENTRY_FIELDS }, ["id"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
-      const rates = await ratesOrNull(ctx);
-      return ctx.mutate(state => {
+      return ctx.mutate(async state => {
         const cur = findEntry(state, args.id);
-        const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur) };
+        const code = args.asset !== undefined ? entryAssetArg(args.asset) : cur.asset;
+        const rates = await ratesOrNull(ctx, null, [code]);
+        if (code !== cur.asset) checkMarket(code, rates);
+        const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur, rates?.market?.[code]) };
         state.entries = state.entries.map(x => (x.id === cur.id ? next : x));
         return { saved: true, entry: entryView(state, next, rates, ctx.today) };
       });
@@ -1507,7 +1637,7 @@ export const TOOLS = [
       const q = args.search ? T.normalize(args.search) : "";
       const has = (...texts) => !q || texts.some(x => T.normalize(x).includes(q));
       const wants = st => status === "all" || (status === "closed") === (st === "closed");
-      const rates = (await ratesOrNull(ctx))?.rates;
+      const rates = (await ratesOrNull(ctx, state))?.rates;
       const t = B.totals(state, today, rates, person?.id);
       const payer = state.people[0].id;
       const debts = t.list
@@ -2020,6 +2150,7 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - A card's used limit is the sum of installments still to be paid (on a card paid by hand, also its unpaid past statements).
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
 - Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums (repeating entries count only the times up to today). get_assets values them in TRY at the current Turkish market rate.
+- Funds and stocks are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
 - Deleting a card or a person also deletes their purchases (a card also its statement payments, a person also their asset entries and debts); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.

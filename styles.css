@@ -1739,3 +1739,28 @@ a.hero-eq { display: block; width: fit-content; }
 .p-status .link, .debt-pays-head .link { border: none; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 .p-status:has(> .link:not([hidden])) { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
 .debt-pays-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+
+/* ── Fon ve hisse ── */
+.btn.btn-sm { height: 32px; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+.btn.btn-sm .ic { width: 16px; height: 16px; }
+#holdWrap:empty { display: none; }
+.hold-head { padding: 0 4px; }
+.hold-head .panel-note { margin-left: auto; font-variant-numeric: tabular-nums; }
+.hold-name { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hold .mark .ic { width: 18px; height: 18px; }
+.p-side .sub.gain { color: var(--income); font-weight: 600; }
+.p-side .sub.loss { color: var(--expense); font-weight: 600; }
+.hold-empty { padding: 14px 18px; font-size: 14px; color: var(--text-3); }
+.ticker-list { display: flex; flex-direction: column; margin-top: 6px; }
+.ticker-list:empty { display: none; }
+.ticker-opt {
+  display: flex; align-items: baseline; gap: 10px; min-width: 0;
+  padding: 9px 10px; border: none; border-radius: 10px; background: transparent;
+  font: inherit; font-size: 14px; color: var(--text-2); text-align: left; cursor: pointer; white-space: nowrap;
+}
+.ticker-opt b { flex-shrink: 0; min-width: 44px; color: var(--text); font-weight: 700; }
+.ticker-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ticker-opt:hover, .ticker-opt:focus-visible { background: var(--surface-2); outline: none; }
+.ticker-info { margin-top: 6px; font-size: 13px; color: var(--text-2); }
+.ticker-info:empty { display: none; }
+.ticker-info.warn { color: var(--danger); }
