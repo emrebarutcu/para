@@ -94,14 +94,16 @@
         ...(date ? repeatCols(p) : repeatCols({})),
       };
     },
-    // Fon / hisse: tekrarlamaz; price birim fiyat (TL), settle yalnızca fiyatla (adet × fiyat TL bakiyesine işlenir)
+    // Fon / hisse tekrarlamaz. price birim fiyat ya da kur (TL; fon, hisse, döviz ve altında, tek seferlik), settle
+    // yalnızca fiyatla (miktar × fiyat TL bakiyesine işlenir)
     entries: e => {
       const amount = num(e.amount), date = dateKey(e.date), market = MARKET.test(e.asset);
       if (!validId(e.personId) || !(ASSETS.includes(e.asset) || market) || !Number.isFinite(amount) || amount === 0 || !date) return null;
-      const price = market ? pos(e.price) : null;
+      const rep = repeatCols(market ? {} : e);
+      const price = e.asset !== "TRY" && rep.repeat_count == null ? pos(e.price) : null;
       return {
         id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date,
-        ...repeatCols(market ? {} : e), price, settle: price != null && e.settle === true ? true : null,
+        ...rep, price, settle: price != null && e.settle === true ? true : null,
       };
     },
     // Borç kaydı (borc.js): person kişiyle borç / alacak, loan kredi, payment ödeme / tahsilat (debt_id boşsa kart payı)
@@ -198,7 +200,7 @@
   const SCHEMA = 7;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
                       // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit;
                       // 5: cards.track_since / track_off (debts yeni tablo); 6: cards.manual_since, debts.card_id;
-                      // 7: entries.price / settle (fon ve hisse)
+                      // 7: entries.price / settle (fon, hisse, döviz ve altın)
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base) {

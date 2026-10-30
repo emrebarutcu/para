@@ -12,7 +12,8 @@ const DATA = ["people", "cards", "purchases", "entries", "debts"];
 const RATES = { USD: { Selling: 40 }, EUR: { Selling: 45 }, GRA: { Selling: 4000 }, Update_Date: "2026-10-18 12:00:00" };
 // TEFAS fonları (fonGnlBlgSiraliGetir) ve İş Yatırım hisse fiyatları (OneEndeks)
 const FUNDS = {
-  YAT: [{ fonKodu: "AFT", fonUnvan: "AK PORTFÖY YENİ TEKNOLOJİLER YABANCI HİSSE SENEDİ FONU", fiyat: 2 }],
+  YAT: [{ fonKodu: "AFT", fonUnvan: "AK PORTFÖY YENİ TEKNOLOJİLER YABANCI HİSSE SENEDİ FONU", fiyat: 2 },
+    { fonKodu: "ALE", fonUnvan: "AK PORTFÖY PARA PİYASASI (TL) FONU", fiyat: 10 }],
   EMK: [{ fonKodu: "AAJ", fonUnvan: "AGESA HAYAT VE EMEKLİLİK A.Ş. OKS STANDART EMEKLİLİK YATIRIM FONU", fiyat: 0.5 }],
 };
 const STOCKS = { THYAO: { symbol: "THYAO", last: 250, basePrice: 240, dayClose: 240, updateDate: "2026-10-16T18:10:00.000+03" } };
@@ -1367,7 +1368,7 @@ test("fon ve hisse: arama, alış / satış, TL bakiyesine işleme, kâr; bilinm
   assert.match((await c.call("add_entry", { asset: "FON:AFTX", direction: "in", amount: 1 })).error, /not a valid code/);
   assert.match((await c.call("add_entry", { asset: "FON:AFT", direction: "in", amount: 1, repeat: 12 })).error, /do not repeat/);
   assert.match((await c.call("add_entry", { asset: "FON:AFT", direction: "in", amount: 1, settle: true, date: "2026-01-01" })).error, /settle needs a price/);
-  assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", price: 3 })).error, /only for funds/);
+  assert.match((await c.call("add_entry", { asset: "TRY", direction: "in", amount: 1, description: "x", price: 3 })).error, /not TRY/);
 
   const all = await c.call("get_assets");
   const by = Object.fromEntries(all.holdings.map(h => [h.asset, h]));
@@ -1393,4 +1394,33 @@ test("fon ve hisse: arama, alış / satış, TL bakiyesine işleme, kâr; bilinm
   assert.equal(row.asset, "FON:AFT");
   assert.equal(row.price, 2);
   assert.equal(row.settle, true);
+});
+
+test("aktarımlar: alış / satış gelir değil; serbest nakitte para piyasası fonu nakit, hisse yatırım; ileri tarihli hareket bugün bakiyede yok", async () => {
+  clearMarket();
+  const sb = fakeSupabase();
+  const c = client(sb);
+  await c.call("add_entry", { asset: "TRY", direction: "in", amount: 50000, description: "Maaş", date: "2026-10-01" });
+  const base = (await c.call("get_insights")).insights.find(x => x.id === "serbest").data;
+  assert.deepEqual([base.income, base.invest, base.net], [50000, 0, 50000]);
+  // TL → para piyasası fonu: nakitten nakde, serbest nakit değişmez
+  await c.call("add_entry", { asset: "FON:ALE", direction: "in", amount: 100, price: 10, date: "2026-10-05" });
+  // TL → hisse: yatırıma 2.500; dolar alışı (kurla, TL'den): yatırıma 4.000, gelir değil
+  await c.call("add_entry", { asset: "BIST:THYAO", direction: "in", amount: 10, price: 250, date: "2026-10-06" });
+  const usd = await c.call("add_entry", { asset: "USD", direction: "in", amount: 100, description: "Dolar alımı", settle: true });
+  assert.equal(usd.entry.price, 40);
+  assert.equal(usd.entry.settledInTry, true);
+  const after = (await c.call("get_insights")).insights.find(x => x.id === "serbest");
+  assert.deepEqual([after.data.income, after.data.invest, after.data.net], [50000, 6500, 43500]);
+  assert.match(after.text, /yatırıma/);
+  // Bozdurma: dolar TL'ye
+  const sale = await c.call("add_entry", { asset: "USD", direction: "out", amount: 50, price: 41, settle: true });
+  assert.equal(sale.entry.tradeValueTry, 2050);
+  assert.equal(sale.tryBalance.after - sale.tryBalance.before, 2050);
+  // Tekrarlayan dövizde kur yok; dolarla verilen (TL'ye işlenmeyen) çıkış kalır
+  assert.match((await c.call("add_entry", { asset: "USD", direction: "in", amount: 10, description: "x", repeat: 0, settle: true })).error, /repeating/);
+  // İleri tarihli tek seferlik giriş bugün bakiyede değil
+  const before = (await c.call("get_assets")).totalAssetsTry;
+  await c.call("add_entry", { asset: "TRY", direction: "in", amount: 7000, description: "Prim", date: "2026-11-02" });
+  assert.equal((await c.call("get_assets")).totalAssetsTry, before);
 });

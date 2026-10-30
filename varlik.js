@@ -3,10 +3,12 @@
 // biriminde, girişte artı, çıkışta eksidir; bakiye hareketlerin toplamıdır. TL karşılığı güncel kurla hesaplanır
 // (kurlar: /api/kur; fon ve hisse fiyatları: /api/fiyat, rates'te koduyla).
 // repeat / every / unit: hareket date'ten başlayıp her N gün / hafta / ayda bir yinelenir (tekrar.js). N kez ya da
-// süresiz; yoksa tek seferliktir. Tekrarlayan hareketin yalnızca tarihi gelmiş tekrarları bakiyeye girer.
+// süresiz; yoksa tek seferliktir. Bakiyeye yalnızca tarihi gelmiş hareketler (tekrarlayanda tekrarlar) girer.
 // Fon ve hisse (piyasa varlığı): asset "FON:AFT" (TEFAS fon kodu) ya da "BIST:THYAO" (Borsa İstanbul işlem kodu), amount
 // adet; girişi alış, çıkışı satıştır, tekrarlamaz. price o günkü birim fiyat (TL; isteğe bağlı, maliyet ve kâr için),
-// settle: true ise adet × price TL bakiyesinden düşer (alış) ya da ona eklenir (satış).
+// settle: true ise adet × price TL bakiyesinden düşer (alış) ya da ona eklenir (satış). Dolar, euro ve altında da tek
+// seferlik hareket kurla TL'den alınabilir ya da TL'ye bozdurulabilir (price kur, settle). TL bakiyesine işlenen alış /
+// satış (aktarım) gelir ya da gider değildir.
 (function (root) {
   const ASSETS = [
     { code: "TRY", name: "Türk lirası", short: "TL", symbol: "₺", digits: 2 },
@@ -66,17 +68,20 @@
   // Son tekrarın tarihi; süresizse null
   function lastDate(e) { return R.lastDate(e); }
 
-  // today'e kadar (dahil) gerçekleşen tekrar sayısı. Tek seferlik hareket tarihinden bağımsız sayılır.
+  // today'e kadar (dahil) gerçekleşen tekrar sayısı; tek seferlikte tarihi geldiyse 1
   function processedCount(e, today) {
-    return repeatOf(e) == null ? 1 : R.countUntil(e, today);
+    return repeatOf(e) == null ? (e.date <= today ? 1 : 0) : R.countUntil(e, today);
   }
 
   // today'den sonraki ilk tekrarın tarihi; kalmadıysa (ya da tek seferlikse) null
   function nextDate(e, today) { return R.nextDate(e, today); }
 
-  // Fon / hisse alış ya da satışının TL tutarı (adet × birim fiyat; alışta artı, satışta eksi); fiyatı yoksa null
+  // TL'yle alınıp satılabilen: fon, hisse, döviz ve altın
+  const tradable = code => !!market(code) || (BY_CODE.has(code) && code !== "TRY");
+
+  // Alış ya da satışın TL tutarı (miktar × birim fiyat; alışta artı, satışta eksi); fiyatı yoksa null
   function tradeValue(e) {
-    return market(e?.asset) && e.price > 0 && Number.isFinite(e.amount) ? round(e.amount * e.price, "TRY") : null;
+    return tradable(e?.asset) && e.price > 0 && Number.isFinite(e.amount) ? round(e.amount * e.price, "TRY") : null;
   }
 
   // TL bakiyesine işlenen alış / satış tutarı (settle); işlenmiyorsa 0
@@ -197,7 +202,7 @@
   }
 
   const api = {
-    ASSETS, MARKETS, MAX_REPEAT, asset, market, marketCode, round, repeatOf, occurrenceDate, occurrencesIn, lastDate,
+    ASSETS, MARKETS, MAX_REPEAT, asset, market, marketCode, tradable, round, repeatOf, occurrenceDate, occurrencesIn, lastDate,
     processedCount, nextDate, tradeValue, settled, balances, positions, toTry, totalTry, matchFunds,
     MMF, CASH_DEFAULT, moneyMarket, cashDef, isCash,
   };

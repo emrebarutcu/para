@@ -67,44 +67,89 @@
 
   function known(state) {
     const ids = new Set(state.people.map(p => p.id));
+    const all = state.entries.filter(e => ids.has(e.personId) && V.asset(e.asset));
     return {
       purchases: state.installments.filter(p => ids.has(p.personId)),
-      // Fon / hisse alışı ve satışı gelir ya da gider değildir (varlık değişimi), içgörülere girmez
-      entries: state.entries.filter(e => ids.has(e.personId) && V.asset(e.asset) && !V.market(e.asset)),
+      // TL bakiyesine işlenen alış / satış (aktarım: fon, hisse, döviz, altın) gelir ya da gider değildir, ayrıdır
+      // (trades); TL'ye işlenmeyen fon / hisse hareketi hiç sayılmaz (yalnızca varlık değişimi)
+      entries: all.filter(e => !V.market(e.asset) && !V.settled(e)),
+      trades: all.filter(e => V.settled(e)),
+      // TL'ye işlenmeyen fon / hisse hareketi (önceden elde olan, dışarıda alınan): gelir değildir; fon nakitse (para
+      // piyasası fonu) nakde girer / nakitten çıkar
+      holdings: all.filter(e => V.market(e.asset) && !V.settled(e)),
     };
   }
 
   // Ayın girdi / çıktıları (TL): varlık girişleri gelir; çıkışları, döviz / altın harcamaları ve borç verilen para gider;
   // kart / nakit ödemeleri ile borç ve kredi ödemeleri ayrı (payments). inflow borç alınan para, tahsilatlar ve kart payı
-  // ödemeleridir: yalnızca bilgi içindir, net'e girmez (borç serbest nakit değildir). Kuru bilinmeyen hareket sayılmaz
-  // (missing). today borçların bugünkü durumu içindir (geciken beklenen ödeme bugüne düşer).
-  function monthFlows(state, idx, rates, months, today = T.todayKey()) {
-    const { entries, purchases } = known(state);
+  // ödemeleridir: yalnızca bilgi içindir, net'e girmez (borç serbest nakit değildir). TL bakiyesine işlenen alış / satış
+  // (aktarım) gelir ya da gider değildir. Bunlar bütün varlıklarda (income, outflow, payments: taksit / gelir oranı).
+  // Serbest nakit (net) yalnızca nakdin (cash: varlık nakit mi; uygulamanın nakit tanımı, verilmezse yalnızca TL):
+  // cashIn − cashOut − cashPayments − invest. cashIn gelirlerle birlikte gerçekleşen tahsilatları ve kart payı
+  // ödemelerini (verilen paranın dönüşü; verilen borç cashOut'tadır) içerir; borç alınan para (borrowed) serbest değildir,
+  // beklenen tahsilat (pending; henüz gelmedi) ihtiyaten sayılmaz, beklenen ödeme sayılır. invest alış / satışlarda
+  // nakitten çıkan (fona, hisseye, dövize giden) eksi nakde giren, nakitten nakde aktarım (TL → para piyasası fonu) 0.
+  // revalue: nakit sayılan varlığın (döviz, altın, para piyasası fonu) alış / satışında bugünkü değeriyle işlem tutarı
+  // arasındaki fark (Nakit grafiği nakdi bugünkü kur ve fiyatla gösterir). net + borrowed + pending Nakit grafiğinin
+  // dönem net'idir. Kuru bilinmeyen hareket sayılmaz (missing). today borçların
+  // bugünkü durumu içindir (geciken beklenen ödeme bugüne düşer).
+  function monthFlows(state, idx, rates, months, today = T.todayKey(), cash = code => code === "TRY") {
+    const { entries, trades, holdings, purchases } = known(state);
     let income = 0, outflow = 0, inflow = 0, debtPaid = 0, missing = false;
+    let cashIn = 0, cashOut = 0, cashPaid = 0, invest = 0, borrowed = 0, pending = 0, revalue = 0;
+    for (const e of trades) {
+      if (!V.occurrencesIn(e, idx).length) continue;
+      const v = V.tradeValue(e);
+      invest += (cash("TRY") ? v : 0) - (cash(e.asset) ? v : 0);
+      if (!cash(e.asset)) continue;
+      const now = V.toTry(e.amount, e.asset, rates);
+      if (now == null) missing = true; else revalue += now - v;
+    }
+    for (const e of holdings) {
+      if (!cash(e.asset) || !V.occurrencesIn(e, idx).length) continue;
+      const v = V.toTry(e.amount, e.asset, rates);
+      if (v == null) missing = true; else if (v > 0) cashIn += v; else cashOut -= v;
+    }
     for (const e of entries) {
       const n = V.occurrencesIn(e, idx).length;
       if (!n) continue;
       const v = V.toTry(e.amount * n, e.asset, rates);
       if (v == null) { missing = true; continue; }
       if (v > 0) income += v; else outflow -= v;
+      if (!cash(e.asset)) continue;
+      if (v > 0) cashIn += v; else cashOut -= v;
     }
     for (const p of purchases) {
       if (T.assetOf(p) === "TRY") continue;
       const paid = T.payments(p, null, T.dateKey(idx, 31)).filter(x => x.idx === idx).reduce((s, x) => s + x.amount, 0);
       if (!paid) continue;
       const v = V.toTry(paid, p.asset, rates);
-      if (v == null) missing = true; else outflow += v;
+      if (v == null) { missing = true; continue; }
+      outflow += v;
+      if (cash(p.asset)) cashOut += v;
     }
     // Borç akışları: gelen para inflow; borç tarafında ödenen (ödeme, taksit, beklenen ödeme) payments; verilen borç gider
     for (const f of B.allFlows(state, today, T.dateKey(idx, 1), T.dateKey(idx, 31))) {
       const v = V.toTry(f.amount, f.asset, rates);
       if (v == null) { missing = true; continue; }
-      if (v > 0) inflow += v;
-      else if (B.side(f.debt) === "debt") debtPaid -= v;
-      else outflow -= v;
+      if (v > 0) {
+        inflow += v;
+        if (!cash(f.asset)) continue;
+        if (f.debt && B.side(f.debt) === "debt") borrowed += v;   // borç alındı
+        else if (f.type === "plan") pending += v;                  // beklenen tahsilat
+        else cashIn += v;                                          // tahsilat, kart payı ödemesi
+        continue;
+      }
+      if (B.side(f.debt) === "debt") debtPaid -= v; else outflow -= v;
+      if (!cash(f.asset)) continue;
+      if (B.side(f.debt) === "debt") cashPaid -= v; else cashOut -= v;
     }
-    const payments = (months.find(m => m.idx === idx)?.total || 0) + debtPaid;
-    return { idx, income, outflow, inflow, payments, net: income - outflow - payments, missing };
+    const cards = months.find(m => m.idx === idx)?.total || 0;   // kart ve nakit taksitler (TL)
+    const payments = cards + debtPaid, cashPayments = (cash("TRY") ? cards : 0) + cashPaid;
+    return {
+      idx, income, outflow, inflow, payments, cashIn, cashOut, cashPayments, invest, borrowed, pending, revalue,
+      net: cashIn - cashOut - cashPayments - invest + revalue, missing,
+    };
   }
 
   // Harcama tarihine göre ay ay kategori toplamları (taksitli alışveriş tamamıyla alındığı aya, tekrarlayanın her
@@ -187,7 +232,18 @@
   }
 
   // İçgörüler: [{ id, tone: "warn" | "info" | "good", title, text, action?, data }] önem sırasıyla
-  function insights(state, { today, rates = null } = {}) {
+  // Alış / satışların nakde etkisi metinle: ", yatırıma ₺25.000" ya da ", satışlardan +₺9.000"
+  function investText(f) {
+    return (f.invest > 0.5 ? `, yatırıma ${fmt(f.invest)}` : f.invest < -0.5 ? `, satışlardan +${fmt(-f.invest)}` : "")
+      + (Math.abs(f.revalue) > 0.5 ? `, kur / fiyat farkı ${f.revalue > 0 ? "+" : "−"}${fmt(Math.abs(f.revalue))}` : "");
+  }
+  // Borç alınan para serbest nakde girmez: " (₺50.000 borç alınan para hariç)"
+  function borrowedText(f) {
+    return f.borrowed > 0.5 ? ` (${fmt(f.borrowed)} borç alınan para hariç)` : "";
+  }
+
+  // cash: varlık nakit mi (serbest nakitte yatırım için; monthFlows)
+  function insights(state, { today, rates = null, cash } = {}) {
     const t = T.parseDate(today).idx;
     const { purchases, entries } = known(state);
     const cashflow = T.buildCashflow(state.people, state.cards, paying(state), t, t + Math.max(HORIZON, PEAK_MONTHS));
@@ -197,22 +253,24 @@
     // Gelir: tekrarlayan bir giriş (maaş) ya da son iki ayda giriş varsa serbest nakit hesaplanır (borç alınan para
     // varlık girişi değildir, gelir sayılmaz)
     const hasIncome = entries.some(e => e.amount > 0 && (V.repeatOf(e) != null || (T.parseDate(e.date)?.idx ?? -1) >= t - 1));
-    const flows = Array.from({ length: HORIZON }, (_, i) => monthFlows(state, t + i, rates, cashflow, today));
+    const flows = Array.from({ length: HORIZON }, (_, i) => monthFlows(state, t + i, rates, cashflow, today, cash));
     if (hasIncome) {
-      const short = flows.find(f => f.net < 0);
+      // Açık: gider ve ödemeler nakde gireni aşıyor. Yatırım (alış) birikimden de yapılabilir, tek başına açık sayılmaz.
+      const short = flows.find(f => f.net + f.invest - f.revalue < 0);
       if (short) {
         add({
           id: "acik", tone: "warn",
           title: short.idx === t ? "Bu ay açık veriyorsun" : `${T.monthName(short.idx)} ayında açık var`,
-          text: `${monthLong(short.idx)}: girdi ${fmt(short.income)}, ödemeler ve giderler ${fmt(short.payments + short.outflow)} — ${fmt(-short.net)} eksik.`,
-          data: { month: T.monthKey(short.idx), income: round(short.income), payments: round(short.payments), outflow: round(short.outflow), net: round(short.net) },
+          text: `${monthLong(short.idx)}: nakde giren ${fmt(short.cashIn)}, ödemeler ve giderler ${fmt(short.cashPayments + short.cashOut)}${investText(short)} — ${fmt(-short.net)} eksik${borrowedText(short)}.`,
+          data: { month: T.monthKey(short.idx), income: round(short.cashIn), payments: round(short.cashPayments), outflow: round(short.cashOut), invest: round(short.invest), borrowed: round(short.borrowed), net: round(short.net) },
         });
       } else {
         const f = flows[0];
         add({
-          id: "serbest", tone: "good", title: "Bu ay serbest nakit",
-          text: `Girdi ${fmt(f.income)}, taksit ve giderler ${fmt(f.payments + f.outflow)}: ay sonunda ${fmt(f.net)} kalıyor.`,
-          data: { month: T.monthKey(t), income: round(f.income), payments: round(f.payments), outflow: round(f.outflow), net: round(f.net) },
+          id: "serbest", tone: f.net >= 0 ? "good" : "info", title: "Bu ay serbest nakit",
+          text: `Nakde giren ${fmt(f.cashIn)}, taksit ve giderler ${fmt(f.cashPayments + f.cashOut)}${investText(f)}: `
+            + (f.net >= 0 ? `ay sonunda ${fmt(f.net)} kalıyor` : `nakdin bu ay ${fmt(-f.net)} azalıyor`) + `${borrowedText(f)}.`,
+          data: { month: T.monthKey(t), income: round(f.cashIn), payments: round(f.cashPayments), outflow: round(f.cashOut), invest: round(f.invest), borrowed: round(f.borrowed), net: round(f.net) },
         });
       }
       const income = flows.reduce((s, f) => s + f.income, 0), paying = flows.reduce((s, f) => s + f.payments, 0);

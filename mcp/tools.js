@@ -555,8 +555,8 @@ function entryView(state, e, rates, today) {
     person: personName(state, e.personId),
     personId: e.personId,
   };
-  if (V.market(e.asset)) {
-    v.type = marketType(e.asset);
+  if (V.market(e.asset)) v.type = marketType(e.asset);
+  if (V.tradable(e.asset)) {
     v.price = e.price > 0 ? e.price : null;
     v.tradeValueTry = e.price > 0 ? Math.abs(V.tradeValue(e)) : null;
     v.settledInTry = e.settle === true;
@@ -590,24 +590,37 @@ function buildEntry(state, args, today, base = null, quote = null) {
     if (!(amount > 0)) fail("amount must be a positive number (use direction for outflows).");
   }
   if (amount == null) fail("amount is required.");
+  // Açıklama fon / hisse hareketinde ve TL'ye işlenen alış / satışta isteğe bağlıdır (uygulamadaki gibi)
   const desc = args.description !== undefined ? text(args.description, "description") : base?.desc ?? "";
-  if (!desc && !market) fail("description must not be empty.");
+  const needDesc = () => { if (!desc) fail("description must not be empty."); };
   const date = args.date ?? base?.date ?? today;
   if (!validDate(date)) fail("date must be a valid date like 2026-10-19.");
   const personId = args.person !== undefined ? findPerson(state, args.person).id : base?.personId ?? state.people[0].id;
   const e = { personId, asset, amount: dir === "out" ? -amount : amount, desc, date };
-  if (!market) {
-    if (args.price !== undefined || args.settle !== undefined) fail("price and settle are only for funds (FON:…) and stocks (BIST:…).");
+  if (asset === "TRY") {
+    if (args.price !== undefined || args.settle !== undefined) fail("price and settle are for funds, stocks, USD, EUR and gold, not TRY.");
+    needDesc();
     return { ...e, ...repeatArgs(args, base) };
   }
-  if ((args.repeat ?? 1) !== 1 || args.repeat_every !== undefined || args.repeat_unit !== undefined) fail("Fund and stock trades do not repeat.");
-  // Düzenlemede fon / hisse aynıysa fiyat kayıttakidir (güncel fiyat kendiliğinden eklenmez)
+  if (market && ((args.repeat ?? 1) !== 1 || args.repeat_every !== undefined || args.repeat_unit !== undefined)) fail("Fund and stock trades do not repeat.");
+  // Döviz / altın: tekrarlayan giriş gelirdir; kur ve TL'ye işleme yalnızca tek seferlikte
+  const rep = market ? {} : repeatArgs(args, base);
+  if (R.count(rep) != null) {
+    if (args.price != null || args.settle === true) fail("A repeating entry cannot be bought / sold for TRY (price, settle).");
+    needDesc();
+    return { ...e, ...rep };
+  }
+  // Düzenlemede varlık aynıysa fiyat kayıttakidir (güncel fiyat kendiliğinden eklenmez). quote güncel fiyat (fon / hisse:
+  // { price }) ya da kur (döviz / altın)
   const same = base?.asset === asset;
   let price = args.price === null ? null : args.price !== undefined ? Number(args.price) : same ? (base.price > 0 ? base.price : null)
-    : date === today && quote?.price > 0 ? quote.price : null;
+    : market && date === today && quote?.price > 0 ? quote.price
+    : !market && args.settle === true && date === today && quote > 0 ? quote : null;
   if (price != null && !(price > 0)) fail("price must be a positive number (TRY per unit), or null.");
-  const settle = args.settle !== undefined ? args.settle === true : same && base ? base.settle === true : price != null;
-  if (settle && price == null) fail("settle needs a price (TRY per unit): pass price, or settle false.");
+  // Fon / hissede fiyat varken varsayılan TL'ye işlenir; dövizde yalnızca istenirse (işaretsiz giriş gelirdir)
+  const settle = args.settle !== undefined ? args.settle === true : same && base ? base.settle === true : market && price != null;
+  if (settle && price == null) fail("settle needs a price (TRY per unit, or the rate for USD / EUR / gold): pass price, or settle false.");
+  if (!market && !settle) needDesc();
   return { ...e, ...(price != null && { price }), ...(settle && { settle: true }) };
 }
 
@@ -1029,8 +1042,8 @@ const ENTRY_FIELDS = {
   direction: { type: "string", enum: ["in", "out"], description: '"in" = money / gold received or bought, fund / stock units bought (giriş, alış), "out" = spent, sold or given (çıkış, satış).' },
   amount: S.num("Positive amount in the asset's own unit (lira, dollars, euros, grams of gold; for a fund or stock the number of units)."),
   description: S.str("What it is, e.g. Maaş, altın alımı. Optional for a fund or stock trade."),
-  price: { type: ["number", "null"], description: "Fund / stock only: TRY per unit at the trade (for profit / loss). Default: the current price when date is today, otherwise none. null removes it." },
-  settle: { type: "boolean", description: "Fund / stock only: the trade amount (units × price) leaves the person's TRY balance on a buy and enters it on a sale. Default true when there is a price. false for units already held (opening a position) or paid from outside the app." },
+  price: { type: ["number", "null"], description: "Fund / stock: TRY per unit at the trade (for profit / loss); default the current price when date is today. USD / EUR / gold (one-off entries): the rate in TRY when bought or sold for TRY; default the current rate with settle true and date today. null removes it." },
+  settle: { type: "boolean", description: "The trade amount (amount × price) leaves the person's TRY balance on a buy (in) and enters it on a sale (out): a transfer, not income or spending. Funds / stocks: default true when there is a price; false for units already held or paid from outside the app. USD / EUR / gold: default false (an inflow is income, e.g. a salary in dollars); true when the user bought them with lira (in) or sold them for lira (bozdurma, out)." },
   date: S.date("Date, YYYY-MM-DD. For a repeating entry, the date of the first time."),
   person: S.str("Person id or name."),
   ...REPEAT_FIELDS,
@@ -1558,7 +1571,7 @@ export const TOOLS = [
   {
     name: "add_entry",
     title: "Add asset entry",
-    description: "Record lira, dollars, euros or grams of gold coming in (salary, buying gold / currency), once or repeating every N days / weeks / months. Spending (çıkış) — in cash from an asset or on a card — goes to add_purchase (with asset and card \"nakit\"); direction \"out\" here is kept for selling or giving away. Also buys (in) and sales (out) of TEFAS funds (asset FON:<code>; search_market finds a fund's code by name) and Borsa İstanbul stocks (BIST:<ticker>), in units: the code is checked against current prices, price defaults to the current one for today's trades, and with a price the amount leaves / enters the person's TRY balance unless settle is false (use false for units the user already had).",
+    description: "Record lira, dollars, euros or grams of gold coming in (salary, a gift), once or repeating every N days / weeks / months. Buying dollars / euros / gold with lira: direction in with settle true (price = the rate; default today's rate) — the lira leaves the TRY balance and it is not income; selling them for lira (bozdurma): direction out with settle true. Spending (çıkış) — in cash from an asset or on a card — goes to add_purchase (with asset and card \"nakit\"); direction \"out\" without settle is kept for giving away. Also buys (in) and sales (out) of TEFAS funds (asset FON:<code>; search_market finds a fund's code by name) and Borsa İstanbul stocks (BIST:<ticker>), in units: the code is checked against current prices, price defaults to the current one for today's trades, and with a price the amount leaves / enters the person's TRY balance unless settle is false (use false for units the user already had).",
     inputSchema: obj({
       ...ENTRY_FIELDS,
       date: S.date("Date, YYYY-MM-DD. Default: today."),
@@ -1570,7 +1583,7 @@ export const TOOLS = [
       const rates = await ratesOrNull(ctx, null, code ? [code] : []);
       checkMarket(code, rates);
       return ctx.mutate(state => {
-        const e = { id: uid(), ...buildEntry(state, args, ctx.today, null, rates?.market?.[code]) };
+        const e = { id: uid(), ...buildEntry(state, args, ctx.today, null, V.market(code) ? rates?.market?.[code] : rates?.rates?.[code]) };
         const tl = balanceOf(state, e.personId, "TRY", ctx.today);
         state.entries.push(e);
         const balance = balanceOf(state, e.personId, e.asset, ctx.today);
@@ -1593,7 +1606,7 @@ export const TOOLS = [
         const code = args.asset !== undefined ? entryAssetArg(args.asset) : cur.asset;
         const rates = await ratesOrNull(ctx, null, [code]);
         if (code !== cur.asset) checkMarket(code, rates);
-        const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur, rates?.market?.[code]) };
+        const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur, V.market(code) ? rates?.market?.[code] : rates?.rates?.[code]) };
         state.entries = state.entries.map(x => (x.id === cur.id ? next : x));
         return { saved: true, entry: entryView(state, next, rates, ctx.today) };
       });
@@ -2022,13 +2035,15 @@ export const TOOLS = [
   {
     name: "get_insights",
     title: "Insights (İçgörüler)",
-    description: "The app's insight cards, most important first: free cash this month (income from asset entries minus card payments and outflows) or the first month that runs short, installment-to-income ratio for the next months, cards close to their limit, an upcoming jump in payments, a category spending more than usual, which card gives the latest first payment for a purchase made today, recurring payments (subscriptions, rent), debt and loan payments that are late or due within 7 days and statements of cards paid by hand that are past their due day unpaid (borc-vade), money owed to the user that is due — card shares and late receivables (alacak), other people's share this month (only when no card is tracked), the month installments end. Texts are Turkish; data has the numbers.",
+    description: "The app's insight cards, most important first: free cash this month (cash coming in — lira and money market funds: income, collections — minus card and cash installments, spending, debt payments and investments; a buy / sale for lira is a transfer, not income; borrowed money and expected collections not counted) or the first month that runs short (spending and payments over cash coming in), installment-to-income ratio for the next months, cards close to their limit, an upcoming jump in payments, a category spending more than usual, which card gives the latest first payment for a purchase made today, recurring payments (subscriptions, rent), debt and loan payments that are late or due within 7 days and statements of cards paid by hand that are past their due day unpaid (borc-vade), money owed to the user that is due — card shares and late receivables (alacak), other people's share this month (only when no card is tracked), the month installments end. Texts are Turkish; data has the numbers.",
     inputSchema: obj(),
     annotations: READ,
     async run(args, ctx) {
       const state = await ctx.load();
-      const rates = await ratesOrNull(ctx);
-      return { today: ctx.today, insights: I.insights(state, { today: ctx.today, rates: rates?.rates }), currency: "TRY" };
+      const rates = await ratesOrNull(ctx, state);
+      // Nakit: uygulamanın varsayılan tanımı (TL ve TL para piyasası fonları; fon bilgisi fiyatla gelir)
+      const cash = code => V.isCash(code, V.CASH_DEFAULT, rates?.market?.[code]);
+      return { today: ctx.today, insights: I.insights(state, { today: ctx.today, rates: rates?.rates, cash }), currency: "TRY" };
     },
   },
   {
@@ -2149,7 +2164,7 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - When a card's cutoff / due day changes, statements already cut keep their dates; update_card asks (transition) what happens to the purchases in between — ask the user, don't pick yourself.
 - A card's used limit is the sum of installments still to be paid (on a card paid by hand, also its unpaid past statements).
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
-- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums (repeating entries count only the times up to today). get_assets values them in TRY at the current Turkish market rate.
+- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums of entries dated up to today (repeating ones: the times up to today). get_assets values them in TRY at the current Turkish market rate. Buying dollars / euros / gold with lira or selling them for lira (settle true, price = the rate) is a transfer, not income or spending.
 - Funds and stocks are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
 - Deleting a card or a person also deletes their purchases (a card also its statement payments, a person also their asset entries and debts); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.

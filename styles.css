@@ -614,6 +614,8 @@ a { color: inherit; }
 .tl-amt small { font-size: 12px; color: var(--text-3); }
 .tl-item.in .amount { color: var(--income); }
 .tl-item.out .amount { color: var(--expense); }
+.tl-item.move .amount { color: var(--text-3); font-weight: 600; }
+.tl-item.move .tl-mark { --c: var(--text-3); }
 .tl-item.planned .tl-main, .tl-item.planned .amount { opacity: .7; }
 .panel-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tl-date { position: relative; }

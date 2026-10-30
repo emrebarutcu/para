@@ -337,7 +337,7 @@ const els = {
   entryInText: $("entryInText"), entryOutText: $("entryOutText"), entryTickerField: $("entryTickerField"),
   entryTickerLabel: $("entryTickerLabel"), entryTicker: $("entryTicker"), entryTickerList: $("entryTickerList"),
   entryTickerInfo: $("entryTickerInfo"), entryAmountLabel: $("entryAmountLabel"), entryPriceField: $("entryPriceField"),
-  entrySettleText: $("entrySettleText"),
+  entrySettleText: $("entrySettleText"), entrySellOpt: $("entrySellOpt"), entryPriceLabel: $("entryPriceLabel"),
   debtTotal: $("debtTotal"), debtNote: $("debtNote"), debtEq: $("debtEq"), debtStats: $("debtStats"),
   trackNote: $("trackNote"), trackNoteText: $("trackNoteText"), trackNoteOk: $("trackNoteOk"),
   balanceHint: $("balanceHint"), balanceHintText: $("balanceHintText"), balanceHintBtn: $("balanceHintBtn"),
@@ -478,7 +478,7 @@ function renderOverview(months, start, last) {
 
 // ---------- İçgörüler (icgoru.js) ----------
 function renderInsights() {
-  const list = I.insights(state, { today: T.todayKey(), rates: curRates() });
+  const list = I.insights(state, { today: T.todayKey(), rates: curRates(), cash: isCashCode });
   els.insightPanel.hidden = !list.length;
   els.insightMore.hidden = list.length <= INSIGHTS_SHOWN;
   els.insightMore.textContent = insightsOpen ? "Daha az" : `Tümü (${list.length})`;
@@ -661,7 +661,8 @@ function renderTimeline(start) {
   renderDayOptions(els.timelineStart, timelineStart);
   els.timelineRange.textContent = whole ? monthLong(start) : `${fmtDayShort(from)} – ${fmtDayShort(to)}`;
   // Tekrarlayan hareket döneme düşen tekrarlarının tarihiyle gelir; varlığı bilinmeyen hareket (içe aktarma) atlanır.
-  // Fon / hisse alışı ve satışı yalnızca TL bakiyesine işlendiyse, TL tutarıyla (alış çıktı, satış girdi).
+  // TL bakiyesine işlenen alış / satış (fon, hisse, döviz, altın) aktarımdır: borç hareketleri gibi para el değiştirir,
+  // gelir ya da gider değildir; satır olarak görünür, toplama girmez. TL'ye işlenmeyen fon / hisse hareketi yoktur.
   const entries = [];
   for (const e of knownEntries()) {
     if (!V.asset(e.asset) || (V.market(e.asset) && !V.settled(e))) continue;
@@ -693,10 +694,9 @@ function renderTimeline(start) {
   const entryRank = new Map(state.entries.map((e, i) => [e.id, i]));
   const spendRank = new Map(state.installments.map((p, i) => [p.id, state.entries.length + i]));
   const items = [
-    ...entries.map(({ e, date }) => {
-      const value = V.market(e.asset) ? -V.settled(e) : V.toTry(e.amount, e.asset, r);
-      return { kind: (V.market(e.asset) ? value : e.amount) > 0 ? "in" : "out", date, entry: e, value, rank: entryRank.get(e.id) };
-    }),
+    ...entries.map(({ e, date }) => (V.settled(e)
+      ? { kind: "move", date, entry: e, value: 0, rank: entryRank.get(e.id) }
+      : { kind: e.amount > 0 ? "in" : "out", date, entry: e, value: V.toTry(e.amount, e.asset, r), rank: entryRank.get(e.id) })),
     ...spends.map(({ p, date }) => {
       const amount = T.originalTotal(p);
       return { kind: "out", date, purchase: p, amount, value: V.toTry(-amount, T.assetOf(p), r), rank: spendRank.get(p.id) };
@@ -907,10 +907,10 @@ function timelineItem(it, today, r) {
       sub.append(who);
     }
     sub.append(el("span", "", m ? V.MARKETS[m.market].name : V.asset(e.asset).name));
-    if (m) {
-      // TL bakiyesine işlenen alış / satış: TL tutarı, altında adet
-      side.append(el("span", "amount", (it.value < 0 ? "−" : "+") + fmt(Math.abs(it.value))));
-      side.append(el("small", "", `${fmtAsset(Math.abs(e.amount), e.asset)} ${m.ticker}`));
+    if (V.settled(e)) {
+      // Aktarım (TL bakiyesine işlenen alış / satış): miktar ve TL tutarı, toplama girmez
+      side.append(el("span", "amount", m ? `${fmtAsset(e.amount, e.asset, true)} ${m.ticker}` : fmtAsset(e.amount, e.asset, true)));
+      side.append(el("small", "", `aktarım · ${fmt(Math.abs(V.settled(e)))} ${e.amount > 0 ? "TL'den" : "TL'ye"}`));
     } else {
       side.append(el("span", "amount", fmtAsset(e.amount, e.asset, true)));
       if (e.asset !== "TRY") side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
@@ -1479,9 +1479,11 @@ function cashSeries(from, to, today) {
     const value = own ? toTry(e.amount, e.asset) : 0;
     if (value == null && !settled) continue;
     const v = (value ?? 0) + settled;
+    // Nakitten nakde alış / satışta kalan bugünkü değerle işlem tutarı arasındaki farktır
+    const desc = settled && own ? `${entryTitle(e)} (fiyat farkı)` : entryTitle(e);
     if (V.repeatOf(e) == null) {
       if (e.date <= today) anchor += v;
-      if (e.date >= lo && e.date <= hi && Math.abs(v) > EPS) add(e.date, { desc: entryTitle(e), value: v });
+      if (e.date >= lo && e.date <= hi && Math.abs(v) > EPS) add(e.date, { desc, value: v });
       continue;
     }
     anchor += v * V.processedCount(e, today);
@@ -2331,10 +2333,11 @@ function cashDefText() {
 }
 
 const unitFmt = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
-// Birim fiyat: fonda TEFAS gibi 6 hane, hissede 2
+// Birim fiyat ya da kur: fonda TEFAS gibi 6 hane, hissede 2, döviz ve altında 4
 function fmtPrice(p, code) {
-  const fund = V.market(code)?.market === "FON";
-  return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", minimumFractionDigits: 2, maximumFractionDigits: fund ? 6 : 2 }).format(p);
+  const m = V.market(code)?.market;
+  const digits = m === "FON" ? 6 : m === "BIST" ? 2 : 4;
+  return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", minimumFractionDigits: 2, maximumFractionDigits: digits }).format(p);
 }
 // "%2,3"
 function fmtPct(r) {
@@ -2351,10 +2354,12 @@ function fmtAsset(amount, code, signed = false) {
   return code === "GAU" ? `${sign}${n} gr` : `${sign}${a.symbol}${n}`;
 }
 
-// Hareketin başlığı: açıklaması; fon / hissede boşsa "THYAO alışı"
+// Hareketin başlığı: açıklaması; boşsa fon / hissede "THYAO alışı", TL'yle alınan / bozdurulan dövizde "Dolar alışı"
 function entryTitle(e) {
   const m = V.market(e.asset);
-  return e.desc || (m ? `${m.ticker} ${e.amount > 0 ? "alışı" : "satışı"}` : "");
+  if (e.desc) return e.desc;
+  if (m) return `${m.ticker} ${e.amount > 0 ? "alışı" : "satışı"}`;
+  return V.settled(e) ? `${V.asset(e.asset).name} ${e.amount > 0 ? "alışı" : "bozdurma"}` : "";
 }
 
 // "bugün 13:36" ya da "18 Eki 13:36"
@@ -4482,6 +4487,8 @@ els.cardDebtLink.addEventListener("click", () => {
 // Eski sürümlerden kalan çıkış hareketi de harcama formunda açılır; kaydedilince harcamaya dönüşür.
 // Fon ve hisse bu formda alınır ve satılır (Alış / Satış): kod (fonda adla da aranır; TEFAS listesinden öneri), adet,
 // birim fiyat (bulununca güncel fiyatla dolar; kâr için) ve tutarın TL bakiyesine işlenip işlenmeyeceği. Tekrarlamaz.
+// Döviz ve altın: tek seferlik giriş kurla TL'den alınabilir ("TL bakiyemden düşülsün"; işaretsizse gelir), Bozdur
+// TL'ye çevirir (kurla, TL bakiyesine eklenir). Alış ve bozdurma aktarımdır: gelir ya da gider değildir.
 // asset: varlık kodu ("TRY", "BIST:THYAO") ya da pazar ("FON", "BIST")
 // draft: kayıtlı olmayan, önceden doldurulmuş hareket ({ desc, repeat, personId? }; içgörüdeki "Gelir ekle", Borçlar'daki
 // "Bakiye gir")
@@ -4489,7 +4496,7 @@ const ENTRY_KINDS = [...V.ASSETS.map(a => ({ code: a.code, name: a.name })), ...
 
 function openEntrySheet(e, asset, draft) {
   if (!state.people.length) { openPeopleSheet(); toast("Önce bir kişi ekle"); return; }
-  if (e && e.amount < 0 && !V.market(e.asset)) {
+  if (e && e.amount < 0 && !V.market(e.asset) && !V.settled(e)) {
     openPurchaseSheet(null, { entryId: e.id, personId: e.personId, desc: e.desc, total: -e.amount, asset: e.asset, date: e.date, ...R.fields(e) });
     return;
   }
@@ -4510,11 +4517,11 @@ function openEntrySheet(e, asset, draft) {
   els.entryPersonChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, dot(seriesVar(x)))));
 
-  f.elements.dir.value = e && e.amount < 0 ? "out" : "in";
+  f.elements.dir.value = !e || e.amount > 0 ? "in" : m ? "out" : "sell";
   f.elements.ticker.value = m?.ticker ?? "";
   f.elements.amount.value = e ? amountText(Math.abs(e.amount), V.asset(e.asset)?.digits) : "";
   f.elements.price.value = e?.price > 0 ? priceText(e.price) : "";
-  f.elements.settle.checked = e ? e.settle === true : lastSettle;
+  f.elements.settle.checked = e ? e.settle === true : !!m || V.MARKETS[kind] ? lastSettle : false;
   priceTouched = !!e;
   f.elements.desc.value = e?.desc ?? draft?.desc ?? "";
   f.elements.date.value = e?.date ?? T.todayKey();
@@ -4539,27 +4546,37 @@ function quoteState(code) {
   return prices?.prices?.[code] ?? lookups.get(code) ?? (V.market(code)?.market === "FON" && fundListLoading ? "loading" : null);
 }
 
+// Formda fiyat / kur alanı var mı: fon ve hissede hep, döviz ve altında tek seferlik giriş ve bozdurmada
+function entryPriced(f = els.entryForm.elements) {
+  if (entryMarket()) return true;
+  if (!V.tradable(f.asset.value)) return false;
+  return f.dir.value === "sell" || (f.dir.value === "in" && !f.freq?.value);
+}
+
 function collectEntry() {
   const f = els.entryForm.elements;
   const mk = entryMarket();
+  const sell = !mk && V.tradable(f.asset.value) && f.dir.value === "sell";   // döviz / altın bozdurma
+  const priced = entryPriced(f);
   const asset = mk ? mk.code ?? "" : f.asset.value;
   const amount = mk ? Math.round(parseAmount(f.amount.value) * 1e4) / 1e4 : V.round(parseAmount(f.amount.value), asset);
-  const price = mk ? parseAmount(f.price.value) : NaN;
+  const price = priced ? parseAmount(f.price.value) : NaN;
+  const settle = priced && (sell || f.settle.checked);
   const desc = f.desc.value.trim();
   const date = T.parseDate(f.date.value) ? f.date.value : "";
-  const { rep, error } = mk ? { rep: {} } : readRepeat(f);
-  const out = mk && f.dir.value === "out";
+  const { rep, error } = mk || sell ? { rep: {} } : readRepeat(f);
+  const out = (mk && f.dir.value === "out") || sell;
   const errors = [];
   if (mk && (!mk.code || quoteState(mk.code) === "missing")) errors.push("ticker");
   if (!(amount > 0)) errors.push("amount");
-  if (mk && (f.price.value.trim() ? !(price > 0) : f.settle.checked)) errors.push("price");
-  if (!desc && !mk) errors.push("desc");
+  if (priced && (f.price.value.trim() ? !(price > 0) : settle)) errors.push("price");
+  if (!desc && !mk && !settle) errors.push("desc");
   if (!date) errors.push("date");
   if (error) errors.push(error);
   if (!personById(f.person.value)) errors.push("person");
   const e = { personId: f.person.value, asset, amount: out ? -amount : amount, desc, date, ...rep };
   if (price > 0) e.price = price;
-  if (price > 0 && f.settle.checked) e.settle = true;
+  if (price > 0 && settle) e.settle = true;
   return { e, errors };
 }
 
@@ -4620,19 +4637,33 @@ function renderTicker(mk) {
 function updateEntryForm() {
   const f = els.entryForm.elements;
   const mk = entryMarket();
-  const out = mk && f.dir.value === "out";
+  const fx = !mk && V.tradable(f.asset.value);   // döviz / altın
+  if (!fx && f.dir.value === "sell") f.dir.value = "in";
+  const sell = fx && f.dir.value === "sell";
+  const out = (mk && f.dir.value === "out") || sell;
+  const priced = entryPriced(f);
   els.entryTitle.textContent = mk ? `${editingEntryId ? "" : "Yeni "}${out ? "satış" : "alış"}${editingEntryId ? "ı düzenle" : ""}`
     .replace(/^./, c => c.toLocaleUpperCase("tr-TR"))
+    : sell ? (editingEntryId ? "Bozdurmayı düzenle" : "Bozdur")
     : editingEntryId ? "Girişi düzenle" : "Yeni giriş";
   els.entryInText.textContent = mk ? "Alış" : "Giriş";
   els.entryOutText.textContent = mk ? "Satış" : "Çıkış";
+  els.entrySellOpt.hidden = !fx;
   els.entryTickerField.hidden = !mk;
-  els.entryPriceField.hidden = !mk;
-  els.entryRepeatField.hidden = !!mk;
+  els.entryPriceField.hidden = !priced;
+  els.entryRepeatField.hidden = !!mk || sell;
   els.entryAmountLabel.textContent = mk ? "Adet" : "Miktar";
-  els.entrySettleText.textContent = out ? "Tutar TL bakiyeme eklensin" : "Tutar TL bakiyemden düşülsün";
-  f.desc.placeholder = mk ? "İsteğe bağlı not" : "örn. Maaş, altın alımı";
+  els.entryPriceLabel.replaceChildren(mk ? "Birim fiyat " : f.asset.value === "GAU" ? "Gram fiyatı " : "Kur ",
+    el("small", "", mk ? "(kâr / zarar için)" : "(TL)"));
+  // Bozdurma hep TL'ye eklenir; döviz / altın girişinde işaretsizse gelir
+  f.settle.closest("label").hidden = sell;
+  els.entrySettleText.textContent = out ? "Tutar TL bakiyeme eklensin" : fx ? "TL'yle aldım: tutar TL bakiyemden düşülsün" : "Tutar TL bakiyemden düşülsün";
+  f.desc.placeholder = mk || (fx && (sell || f.settle.checked)) ? "İsteğe bağlı not" : "örn. Maaş, altın alımı";
   if (mk) renderTicker(mk);
+  // Döviz / altın: kur alanı TL'yle alış ya da bozdurmada güncel kurla dolar
+  if (fx && priced && (sell || f.settle.checked) && !priceTouched && !f.price.value && curRates()?.[f.asset.value]) {
+    f.price.value = priceText(curRates()[f.asset.value]);
+  }
 
   const { e, errors } = collectEntry();
   const a = mk ? null : V.asset(e.asset);
@@ -4659,19 +4690,21 @@ function updateEntryForm() {
     if (now != null && (trade == null || Math.abs(Math.abs(trade) - now) > 0.005)) box.append(el("div", "", `Güncel fiyatla ≈ ${fmt(now)}`));
     if (!person) return;
     const others = knownEntries().filter(x => x.personId === person.id && x.id !== editingEntryId);
-    const spent = B.spent(state, today, person.id);
-    const before = V.balances(others, today, spent), after = V.balances([...others, e], today, spent);
-    const held = before[e.asset] ?? 0, left = after[e.asset] ?? 0;
+    const before = V.balances(others, today, B.spent(state, today, person.id));
+    const when = e.date > today ? ` (${fmtDayShort(e.date)} tarihinde)` : "";   // tarihi gelmemiş hareket tarihinde işlenir
+    const held = before[e.asset] ?? 0, left = V.round(held + e.amount, e.asset);
     box.append(el("div", left < 0 ? "warn" : "", left < 0 ? `${person.name} · elinde ${fmtAsset(held, e.asset)} ${ticker} var`
-      : `${person.name} · ${ticker} ${fmtAsset(held, e.asset)} → ${fmtAsset(left, e.asset)}`));
+      : `${person.name} · ${ticker} ${fmtAsset(held, e.asset)} → ${fmtAsset(left, e.asset)}${when}`));
     if (e.settle) {
-      const tl0 = before.TRY ?? 0, tl1 = after.TRY ?? 0;
-      box.append(el("div", tl1 < 0 ? "warn" : "", `TL bakiyesi ${fmtAsset(tl0, "TRY")} → ${fmtAsset(tl1, "TRY")}`));
+      const tl0 = before.TRY ?? 0, tl1 = V.round(tl0 - V.settled(e), "TRY");
+      box.append(el("div", tl1 < 0 ? "warn" : "", `TL bakiyesi ${fmtAsset(tl0, "TRY")} → ${fmtAsset(tl1, "TRY")}${when}`));
     }
     return;
   }
   box.append(el("div", "big", fmtAsset(e.amount, e.asset, true) + (n != null ? " " + R.per(e) : "")));
-  if (e.asset !== "TRY") {
+  if (V.settled(e)) {
+    box.append(el("div", "", `${e.amount < 0 ? "Bozdurma" : "Alış"} tutarı ${fmt(Math.abs(V.tradeValue(e)))} · ${fmtAsset(Math.abs(e.amount), e.asset)} × ${fmtPrice(e.price, e.asset)}`));
+  } else if (e.asset !== "TRY") {
     const value = V.toTry(Math.abs(e.amount), e.asset, r);
     box.append(el("div", "", value == null ? "Kur alınamadı — TL karşılığı sonra hesaplanır"
       : `≈ ${fmt(value)} · ${a.code === "GAU" ? "1 gr" : `1 ${a.symbol}`} = ${fmt(r[e.asset])}`));
@@ -4684,9 +4717,16 @@ function updateEntryForm() {
   }
   if (person && !errors.some(x => x in REPEAT_ERRORS)) {
     const spent = B.spent(state, today, person.id);   // nakit harcamalar ve borç etkileri
-    const before = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId), today, spent)[e.asset] ?? 0;
-    const after = V.round(before + e.amount * (e.date ? V.processedCount(e, today) : 1), e.asset);
-    box.append(el("div", after < 0 ? "warn" : "", `${person.name} · ${a.name.toLocaleLowerCase("tr-TR")} bakiyesi ${fmtAsset(before, e.asset)} → ${fmtAsset(after, e.asset)}`));
+    const bals = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId), today, spent);
+    // Tarihi gelmemiş tek seferlik hareket bakiyeye tarihinde girer
+    const later = n == null && e.date > today;
+    const when = later ? ` (${fmtDayShort(e.date)} tarihinde)` : "";
+    const before = bals[e.asset] ?? 0, after = V.round(before + e.amount * (later || !e.date ? 1 : V.processedCount(e, today)), e.asset);
+    box.append(el("div", after < 0 ? "warn" : "", `${person.name} · ${a.name.toLocaleLowerCase("tr-TR")} bakiyesi ${fmtAsset(before, e.asset)} → ${fmtAsset(after, e.asset)}${when}`));
+    if (V.settled(e)) {
+      const tl0 = bals.TRY ?? 0, tl1 = V.round(tl0 - V.settled(e), "TRY");
+      box.append(el("div", tl1 < 0 ? "warn" : "", `TL bakiyesi ${fmtAsset(tl0, "TRY")} → ${fmtAsset(tl1, "TRY")}${when}`));
+    }
   }
 }
 
@@ -4707,6 +4747,7 @@ els.entryForm.addEventListener("input", e => {
     if (!V.MARKETS[f.asset.value] && f.dir.value === "out") f.dir.value = "in";
   }
   if (e.target.name === "price") priceTouched = true;
+  if (e.target.name === "dir" || e.target.name === "settle") syncChecked(els.entryForm);
   if (e.target.name === "dir" && e.target.value === "out" && !entryMarket()) {
     // Çıkış harcamadır: yazılanlar harcama formuna taşınır
     const { e: x } = collectEntry();
@@ -4731,7 +4772,7 @@ els.entryForm.addEventListener("submit", ev => {
       ticker: !mk?.code ? (mk?.kind === "FON" ? "Fonu seç ya da kodunu yaz." : "Hissenin işlem kodunu yaz.")
         : mk.kind === "FON" ? "TEFAS'ta bu kodla fon yok." : "Borsa İstanbul'da bu kodla hisse yok.",
       amount: mk ? "Adedi gir." : "Miktarı gir.",
-      price: f.settle.checked && !f.price.value.trim() ? "TL bakiyesine işlemek için birim fiyatı gir." : "Birim fiyatı doğru yaz.",
+      price: !f.price.value.trim() ? (mk ? "TL bakiyesine işlemek için birim fiyatı gir." : "Kuru gir.") : mk ? "Birim fiyatı doğru yaz." : "Kuru doğru yaz.",
       desc: "Açıklama yaz.", date: "Tarihi gir.", person: "Kişi seç.", ...REPEAT_ERRORS,
     }[errors[0]];
     els.entryPreview.replaceChildren(el("div", "warn", msg));
@@ -4748,7 +4789,7 @@ els.entryForm.addEventListener("submit", ev => {
   if (mk && e.price > 0) { lastSettle = e.settle === true; writePref(PREF.settle, lastSettle ? "" : "0"); }
   saveState();
   els.entrySheet.close();
-  const what = mk ? (e.amount > 0 ? "Alış" : "Satış") : "Giriş";
+  const what = mk ? (e.amount > 0 ? "Alış" : "Satış") : e.amount < 0 ? "Bozdurma" : V.settled(e) ? "Alış" : "Giriş";
   toast(editingEntryId ? `${what} güncellendi` : `${what} eklendi`);
   editingEntryId = null;
   render();
@@ -4761,7 +4802,7 @@ confirmTap(els.entryDelete, () => {
   editingEntryId = null;
   saveState();
   els.entrySheet.close();
-  toast(V.market(e.asset) ? (e.amount > 0 ? "Alış silindi" : "Satış silindi") : "Giriş silindi");
+  toast(V.market(e.asset) ? (e.amount > 0 ? "Alış silindi" : "Satış silindi") : e.amount < 0 ? "Bozdurma silindi" : "Giriş silindi");
   render();
 });
 

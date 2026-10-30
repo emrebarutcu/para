@@ -111,6 +111,15 @@ aynı sürüm yakalanır ve sürüm yeniden artırılır.
 
 Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca cihazlardaki eski dosyalar kendiliğinden yenilenir.
 
+### Yerelde çalıştırma ve tutarlılık denetimi
+
+`node scripts/yerel.mjs` siteyi Worker'ın `/api` uçlarıyla (gerçek kur, fon, hisse ve geçmiş fiyatlar) http://localhost:3100'de
+açar. `node scripts/tutarlilik.cjs` (Playwright gerekir) aynı veriden hesaplanan görünümlerin birbirini tuttuğunu
+senaryolar ve 300 rastgele veriyle denetler: Varlık = Varlığın seyri'nin bugünü, Nakit grafiğinin bugünü = nakit sayılan
+bakiyeler, serbest nakit (+ borç alınan para + beklenen tahsilat) = Nakit grafiğinin dönem net'i, Girdi ve çıktılar'ın
+Girdi'si = içgörülerdeki gelir, alış / satış (aktarım) gelir ya da Varlık değişimi değildir, kişilerin toplamı = hepsi.
+Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalıştırılır; tutarsızlık varsa çıkış kodu 1'dir.
+
 ### Yükseltme notları
 
 - **6.0.0** — Varlıklar'da fon ve hisse ve geçmiş fiyatlarla **Varlığın seyri** grafiği (`/api/gecmis`): TEFAS fonları (`FON:AFT`) ve Borsa İstanbul hisseleri (`BIST:THYAO`) adetle
@@ -121,12 +130,18 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
   6.0'a geçen cihaz ilk eşitlemede bütün satırları yeniden çeker (SCHEMA 7). Önbellekteki 5.x sürümleri fon ve hisse
   hareketlerini eşitlemede atlar (satır biçimleri geçersiz sayılır; silmezler, üstlerine yazmazlar), ilk kez bütün satırları
   çeken 5.x'in Varlıklar sekmesi bu hareketlerde açılmayabilir; service worker ana sürüm değişince açık sekmeleri yeniden
-  yükler. Mevcut verinin anlamı değişmez. Özet'teki Nakit grafiği artık yalnızca nakit sayılanları gösterir (Ayarlar →
+  yükler. **Mevcut verinin anlamı değişir:** tarihi gelmemiş tek seferlik hareket artık bakiyeye tarihinde girer (önceden
+  hemen giriyordu); serbest nakit içgörüsü nakit tanımına göredir ("Girdi" yerine "Nakde giren"; tahsilatlar dahil, alış /
+  satış yatırım). Döviz ve altında da kurla alış ve bozdurma (`entries.price`, `entries.settle`). Özet'teki Nakit grafiği artık yalnızca nakit sayılanları gösterir (Ayarlar →
   Nakit sayılanlar; varsayılan TL ve TL para piyasası fonları): dolar, euro ve altın varsayılan olarak grafikte yok,
   "Varlık" görünümünün adı "Bakiye" oldu. MCP: yeni araç `search_market` (fon arama, fon ve hisse fiyatları); `add_entry`,
   `update_entry`, `list_entries`'te `asset` artık `FON:…` / `BIST:…` de alır (enum kalktı), isteğe bağlı `price` ve
   `settle`; cevaplara eklenenler: `get_assets` → `holdings`, `holdingsTry`, `pricesError`; `list_entries` /
-  `add_entry` → fon ve hissede `type`, `price`, `tradeValueTry`, `settledInTry`; `add_entry` → `tryBalance`, `warning`.
+  `add_entry` → fon ve hissede `type`, `price`, `tradeValueTry`, `settledInTry` (dövizde de `price`, `tradeValueTry`,
+  `settledInTry`); `add_entry` → `tryBalance`, `warning`; `add_entry` / `update_entry` dolar, euro ve altında da `price`,
+  `settle` (TL'yle alış ya da bozdurma; açıklama isteğe bağlı). `get_insights` → `serbest` / `acik` verisinde `income`
+  artık nakde giren, `payments` / `outflow` nakit; yeni `invest`, `borrowed`; nakit tanımı varsayılandır (TL ve para
+  piyasası fonları). **Uyumsuz:** `get_assets` ileri tarihli tek seferlik girişleri saymaz.
   **Uyumsuz:** `get_assets` `totalTry` (ve `totalAssetsTry`, `netWorthTry`, `list_debts` toplamları) fon ve hisselerin
   güncel değerini içerir; TL bakiyesi TL'den ödenen alışlar kadar düşer, satışlar kadar artar.
 - **5.0.0** — Borçlar sekmesi: kişilerle borç / alacak, banka kredisi, kart borcu ve kartta diğer kişilerin payları
@@ -259,7 +274,15 @@ tekrar ve **Varlık** (TL, dolar, euro, gram altın) seçilir. Döviz ve altın 
 akışına girmez. Kartsız (nakit) harcamalar ödendikçe o varlığın bakiyesinden düşer ve Varlıklar'daki listede çıkış olarak
 görünür. Eski sürümlerden kalan çıkış hareketleri de harcama formunda açılır; kaydedilince harcamaya dönüşür.
 Miktar varlığın kendi birimindedir (altında gram); bakiye girişlerden nakit harcamalar düşülerek bulunur, borç
-hareketleri ve takipteki kartların ödenen ekstreleri de bakiyeye işler (aşağıda). Her varlığın ve toplamın TL karşılığı
+hareketleri ve takipteki kartların ödenen ekstreleri de bakiyeye işler (aşağıda). Her hareket bakiyeye tarihinde girer:
+tarihi gelmemiş tek seferlik giriş (ör. gelecek haftaki prim) bugünkü bakiyede yoktur, Nakit grafiğinde kendi gününde
+görünür; formun önizlemesi "(5 Kas tarihinde)" diye yazar.
+
+**Döviz ve altın alımı / bozdurma.** Dolar, euro ya da altın girişinde **TL'yle aldım: tutar TL bakiyemden düşülsün**
+işaretlenirse kur (güncel kurla dolar) × miktar TL bakiyesinden düşer; işaretsiz giriş gelirdir (dolarla maaş, hediye).
+Varlık formundaki **Bozdur** dövizi ya da altını kurla TL'ye çevirir: miktar o varlıktan düşer, TL bakiyesine eklenir.
+İkisi de tek seferliktir ve aktarımdır (`entries.price`, `entries.settle`; fon ve hissedeki gibi): gelir ya da gider
+değildir, Varlık toplamını değiştirmez (güncel kurla). Çıkış harcama olarak kalır (harcama formu). Her varlığın ve toplamın TL karşılığı
 güncel satış kuruyla gösterilir. Üstteki **Varlık** alacakları da içerir ("₺3.000 alacak dahil"; ayrıca **Alacak**
 kutusu), altındaki "= Özvarlık + Borç" satırı Borçlar'a götürür.
 
@@ -285,10 +308,11 @@ seçilince form alış / satış formudur (`varlik.js`):
   girilmemiş alış ya da elde olandan fazla satış varsa kâr gösterilmez.
 - **Tutar TL bakiyemden düşülsün** (satışta "eklensin"): işaretliyse adet × fiyat kişinin TL bakiyesinden düşer (satışta
   eklenir; `entries.settle`). Önceden elde olan fon ve hisseler işaretsiz girilir. Son seçim cihazda kalır (`para.settle`).
-- Fon ve hisse hareketi tekrarlamaz, açıklaması isteğe bağlıdır ("THYAO alışı"). Alış ve satış gelir ya da gider
-  değildir: içgörülere girmez; TL bakiyesine işlenen tutar Özet'teki girdi / çıktılarda TL hareketi olarak görünür. Nakit
-  grafiğine nakit sayılıyorsa girer (aşağıda, Nakit tanımı): TL para piyasası fonları varsayılan olarak nakittir, TL'den
-  bunlara geçiş nakdi değiştirmez.
+- Fon ve hisse hareketi tekrarlamaz, açıklaması isteğe bağlıdır ("THYAO alışı"). TL bakiyesine işlenen alış ve satış
+  (döviz ve altın alımı / bozdurmasıyla birlikte) **aktarımdır**: gelir ya da gider değildir. Özet'teki Girdi ve
+  çıktılar'da "aktarım" satırıdır, toplama girmez; içgörülerde gelir sayılmaz. Nakde etkisi nakit tanımına göredir
+  (aşağıda, Nakit tanımı): TL'den hisseye nakitten çıkar (serbest nakitte "yatırıma"), TL'den para piyasası fonuna (varsayılan
+  olarak nakit) nakdi değiştirmez.
 
 Fiyatlar sitenin Worker'ından gelir (`mcp/piyasa.js`), anahtar gerekmez:
 
@@ -471,7 +495,7 @@ kredi taksiti) düşülerek bulunur; sonraki günler hareketlerle ileri, önceki
 üzerine gelince (ya da odaklanıp ok tuşlarıyla) o günün hareketleri görünür. Seçimler cihazda saklanır
 (`para.cashStart`, `para.cashMode`).
 
-Özet'teki **Girdi ve çıktılar** bir dönemin hareketlerini liste ya da takvim olarak gösterir. **Başlangıç** ile dönem
+Özet'teki **Girdi ve çıktılar** bir dönemin gelir ve giderlerini liste ya da takvim olarak gösterir. **Başlangıç** ile dönem
 ayın 1'i yerine başka bir günden başlatılabilir: dönem o günden bir ay sonrasının bir gün öncesine kadar sürer (bu ayda
 bugünü içeren dönem); liste, takvim ve girdi / çıktı / net toplamları bu döneme göredir. Seçim cihazda saklanır
 (`para.timelineStart`).
@@ -482,16 +506,26 @@ alışveriş tamamıyla, taksit sayısıyla; tekrarlayanın her tekrarı kendi g
 hareketleri ve harcamalardandır, kart ödemeleri harcamalarla zaten sayıldığından toplama girmez. Borç hareketleri (borç
 alma / verme, ödeme, tahsilat, kredi taksiti, kart payı ödemesi) de kart ödemeleri gibi gün başlığında işarettir, dokununca
 borç açılır; para el değiştirir, gelir ya da gider değildir, toplama girmez. Toplama giren tek borç kalemi kredinin faiz ve
-masrafıdır (çekildiği gün, çıktı olarak).
+masrafıdır (çekildiği gün, çıktı olarak). Aynı nedenle TL bakiyesine işlenen alış ve satışlar (fon, hisse, döviz, altın)
+gri "aktarım" satırıdır (miktar ve TL tutarı), toplama girmez; TL'ye işlenmeyen fon / hisse hareketi listede yoktur.
+Dönemin Girdi'si içgörülerdeki gelirle aynıdır.
 
 Özet'te **İçgörüler** (`icgoru.js`, model gerekmez; MCP `get_insights` aynısını döndürür): bu ayın serbest nakdi ya da
-açık veren ilk ay (gelir ve sabit giderler varlıklardaki tekrarlayan giriş / çıkışlardan; borç ve kredi taksitleri
-ödemelere girer, borç alınan para gelir sayılmaz), önümüzdeki 6 ayın taksit / gelir oranı, dolmak üzere olan limitler,
+açık veren ilk ay, önümüzdeki 6 ayın taksit / gelir oranı (gelir bütün varlıkların girişleri; aktarım değil), önümüzdeki 6 ayın taksit / gelir oranı, dolmak üzere olan limitler,
 yaklaşan ödeme sıçraması, bir kategoride önceki 3 ayın ortalamasının üstüne çıkan harcama, bugünkü alışverişte ilk
 ödemesi en geç gelen kart, düzenli ödemeler (her ay aynı işyerine peşin ödeme, tekrarlayan çıkışlar), geciken ya da 7 gün
 içinde gelen borç ödemeleri ve elle ödenen kartların geciken ekstreleri (`borc-vade`), ödemesi gelmiş kart payları ve
 geciken alacaklar (`alacak`), diğer kişilerin bu ayki payı (`paylar`; yalnızca hiç takipte kart yoksa, varsa yerine
-`alacak` çıkar), son taksitin ayı. `borc-vade` ve `alacak`a dokununca Borçlar açılır. Altında ayın harcamaları kategoriye göre (harcama tarihine göre; taksitli alışveriş
+`alacak` çıkar), son taksitin ayı.
+
+**Serbest nakit** nakit tanımına göredir (Nakit grafiğiyle aynı hesap, `monthFlows`): nakde giren (nakit sayılan
+varlıklara gelir, gerçekleşen tahsilat ve kart payı ödemesi) − taksit ve giderler (kart ve nakit taksitler, nakit
+varlıktan harcama, borç ve kredi ödemeleri, beklenen borç ödemeleri, verilen borç) − yatırıma giden (nakitten fona,
+hisseye, nakit sayılmayan dövize; satışta nakde dönen) ± kur / fiyat farkı (nakit sayılan dövizin ya da fonun bugünkü
+değeriyle işlem tutarı arasındaki fark). Borç alınan para serbest değildir (metinde "borç alınan para hariç" yazar),
+beklenen (henüz gelmemiş) tahsilat ihtiyaten sayılmaz; bu ikisi dışında ayın serbest nakdi Nakit grafiğinin dönem
+net'idir. **Açık**: gider ve ödemelerin nakde gireni aştığı ilk ay; yatırım birikimden yapılabildiği için tek başına açık
+değildir (serbest nakit "nakdin bu ay ₺X azalıyor" der). `borc-vade` ve `alacak`a dokununca Borçlar açılır. Altında ayın harcamaları kategoriye göre (harcama tarihine göre; taksitli alışveriş
 tamamıyla alındığı aya). Kişiler listesinde diğer kişilerin yanındaki düğme o kişinin ayın taksitlerini, kart ve
 tarihleriyle paylaşım menüsüne (yoksa WhatsApp'a) metin olarak verir (kart payı varsa ödediği ve kalanıyla); kişinin alt
 satırında alacağı ve geciken kısmı yazar.

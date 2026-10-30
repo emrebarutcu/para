@@ -431,6 +431,7 @@
       <div class="sheet-body">
         <div class="seg seg-full" role="radiogroup" aria-label="Yön">
           <label><input type="radio" name="dir" value="in" checked /><span id="entryInText">Giriş</span></label>
+          <label id="entrySellOpt" hidden><input type="radio" name="dir" value="sell" /><span>Bozdur</span></label>
           <label><input type="radio" name="dir" value="out" /><span id="entryOutText">Çıkış</span></label>
         </div>
 
@@ -456,7 +457,7 @@
         </div>
 
         <div class="field" id="entryPriceField" hidden>
-          <span class="field-label">Birim fiyat <small>(kâr / zarar için)</small></span>
+          <span class="field-label" id="entryPriceLabel">Birim fiyat <small>(kâr / zarar için)</small></span>
           <label class="amount-input sm">
             <span class="cur">₺</span>
             <input name="price" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Birim fiyat" data-amount="6" />
