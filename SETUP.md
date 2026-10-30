@@ -121,7 +121,9 @@ Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca
   6.0'a geçen cihaz ilk eşitlemede bütün satırları yeniden çeker (SCHEMA 7). Önbellekteki 5.x sürümleri fon ve hisse
   hareketlerini eşitlemede atlar (satır biçimleri geçersiz sayılır; silmezler, üstlerine yazmazlar), ilk kez bütün satırları
   çeken 5.x'in Varlıklar sekmesi bu hareketlerde açılmayabilir; service worker ana sürüm değişince açık sekmeleri yeniden
-  yükler. Mevcut verinin anlamı değişmez. MCP: yeni araç `search_market` (fon arama, fon ve hisse fiyatları); `add_entry`,
+  yükler. Mevcut verinin anlamı değişmez. Özet'teki Nakit grafiği artık yalnızca nakit sayılanları gösterir (Ayarlar →
+  Nakit sayılanlar; varsayılan TL ve TL para piyasası fonları): dolar, euro ve altın varsayılan olarak grafikte yok,
+  "Varlık" görünümünün adı "Bakiye" oldu. MCP: yeni araç `search_market` (fon arama, fon ve hisse fiyatları); `add_entry`,
   `update_entry`, `list_entries`'te `asset` artık `FON:…` / `BIST:…` de alır (enum kalktı), isteğe bağlı `price` ve
   `settle`; cevaplara eklenenler: `get_assets` → `holdings`, `holdingsTry`, `pricesError`; `list_entries` /
   `add_entry` → fon ve hissede `type`, `price`, `tradeValueTry`, `settledInTry`; `add_entry` → `tryBalance`, `warning`.
@@ -284,8 +286,9 @@ seçilince form alış / satış formudur (`varlik.js`):
 - **Tutar TL bakiyemden düşülsün** (satışta "eklensin"): işaretliyse adet × fiyat kişinin TL bakiyesinden düşer (satışta
   eklenir; `entries.settle`). Önceden elde olan fon ve hisseler işaretsiz girilir. Son seçim cihazda kalır (`para.settle`).
 - Fon ve hisse hareketi tekrarlamaz, açıklaması isteğe bağlıdır ("THYAO alışı"). Alış ve satış gelir ya da gider
-  değildir: içgörülere ve nakit grafiğine girmez; yalnızca TL bakiyesine işlenen tutar Özet'teki girdi / çıktılarda ve
-  nakit grafiğinde TL hareketi olarak görünür.
+  değildir: içgörülere girmez; TL bakiyesine işlenen tutar Özet'teki girdi / çıktılarda TL hareketi olarak görünür. Nakit
+  grafiğine nakit sayılıyorsa girer (aşağıda, Nakit tanımı): TL para piyasası fonları varsayılan olarak nakittir, TL'den
+  bunlara geçiş nakdi değiştirmez.
 
 Fiyatlar sitenin Worker'ından gelir (`mcp/piyasa.js`), anahtar gerekmez:
 
@@ -431,16 +434,22 @@ aynı işyerinin sonraki harcamasına (farklı yazılışı dahil: "MIGROS TICAR
 kategori verilir. Sabit bir işyeri sözlüğü yoktur; öğrenilmemiş işyerine dil modeli kategori önerir
 (`category_by = 'ai'`, aşağıda: bulutta ya da cihazda). Kullanıcı düzeltirse düzeltmesi öğrenilir.
 
-Özet'teki **Nakit** grafiği bir dönemin toplam varlığını gün gün gösterir. Dönem, seçilen başlangıç gününden (Bugün, süren
+Özet'teki **Nakit** grafiği bir dönemin nakdini gün gün gösterir. **Nakit tanımı** Ayarlar → Nakit sayılanlar'dan (ya da
+grafiğin altındaki "Değiştir"den) seçilir, cihazda kalır (`para.cashDef`): varsayılan TL ve TL para piyasası fonları
+(TEFAS'ta adında "para piyasası" geçen yatırım fonları; aynı gün nakde döner, T+0; emeklilik fonları sayılmaz,
+`varlik.js` `moneyMarket`). Dolar, euro, gram altın ve eldeki fon ve hisseler tek tek eklenebilir; en az biri seçili
+kalır. Grafik yalnızca nakit sayılan varlıkların bakiyesini ve hareketlerini sayar; kart ekstreleri ve nakit taksitler
+TL'dir. TL'den ödenen fon / hisse alışı nakitten çıkar, satışı girer; fon nakitse (para piyasası fonu) ikisi tek
+harekettir ve nakdi yalnızca bugünkü fiyatla alış fiyatı arasındaki fark kadar değiştirir. Dönem, seçilen başlangıç gününden (Bugün, süren
 tekrarlayan bir TL girişinin günü — ör. maaş günü — ya da ayın herhangi bir günü) bir ay sonrasının bir gün öncesine kadar
 sürer; oklarla önceki / sonraki döneme geçilir, tarih aralığına dokununca bugünün dönemine dönülür. Hareketler bütün varlık
 hareketleri (tekrarlayanın her tekrarı kendi gününde, tarihi gelmemiş tek seferlik hareket de kendi gününde), kart / nakit
 ödemeleri (elle ödenen kartta ekstre yerine kaydedilen kart ödemeleri; ödenmemiş günü gelmiş ekstreler bugünde),
 döviz / altın harcamaları ve borç hareketleridir (borç alma / verme, ödeme, tahsilat, kredi taksiti, kart payı ödemesi;
-elle ödenecek borcun beklenen ödemesi kendi gününde, gecikmişse bugün); döviz ve altın güncel kurla TL'ye çevrilir, kuru
-alınamayan varlık sayılmaz (altta yazar). **Varlık** görünümü bugüne bağlıdır: bugünün sonu, bugüne kadarki toplam
-varlıktan (Varlıklar'daki bakiyeler) bugün ödenecekler (kart ekstresi, ödenmemiş ekstre, kredi taksiti) düşülerek
-bulunur; sonraki günler hareketlerle ileri, önceki günler geri taşınır.
+elle ödenecek borcun beklenen ödemesi kendi gününde, gecikmişse bugün); döviz, altın ve fonlar güncel kur ve fiyatla TL'ye
+çevrilir, kuru ya da fiyatı alınamayan varlık sayılmaz (altta yazar). **Bakiye** görünümü bugüne bağlıdır: bugünün sonu,
+bugüne kadarki nakitten (Varlıklar'daki nakit sayılan bakiyeler) bugün ödenecekler (kart ekstresi, ödenmemiş ekstre,
+kredi taksiti) düşülerek bulunur; sonraki günler hareketlerle ileri, önceki günler geri taşınır.
 **Dönem net** görünümü dönem başında sıfırdan başlar, girdi / çıktı / net toplamlarını gösterir. Sıfırın altı kırmızıdır;
 üzerine gelince (ya da odaklanıp ok tuşlarıyla) o günün hareketleri görünür. Seçimler cihazda saklanır
 (`para.cashStart`, `para.cashMode`).

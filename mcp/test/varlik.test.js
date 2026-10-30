@@ -59,3 +59,25 @@ test("pozisyon: ortalama maliyet, gerçekleşen kâr; fiyatsız alış ya da faz
   assert.equal(q["FON:AFT"].cost, 100);
   assert.equal(q["FON:AFT"].realized, null);
 });
+
+test("nakit tanımı: varsayılan TL ve para piyasası fonları (emeklilik hariç); geçersiz ögeler atılır", () => {
+  const ppf = { name: "AK PORTFÖY PARA PİYASASI (TL) FONU", kind: "YAT" };
+  assert.ok(V.moneyMarket(ppf));
+  assert.ok(V.moneyMarket({ name: "İSTANBUL PORTFÖY BİRİNCİ PARA PİYASASI SERBEST (TL) FON", kind: "YAT" }));
+  assert.ok(!V.moneyMarket({ name: "AGESA HAYAT VE EMEKLİLİK A.Ş. PARA PİYASASI EMEKLİLİK YATIRIM FONU", kind: "EMK" }));
+  assert.ok(!V.moneyMarket({ name: "AK PORTFÖY KISA VADELİ BORÇLANMA ARAÇLARI (TL) FONU", kind: "YAT" }));
+  assert.ok(!V.moneyMarket(null));
+
+  assert.ok(V.isCash("TRY"));
+  assert.ok(!V.isCash("USD"));
+  assert.ok(V.isCash("FON:ALE", undefined, ppf));
+  assert.ok(!V.isCash("FON:ALE"));                              // fon bilgisi yoksa bilinmez
+  assert.ok(!V.isCash("BIST:THYAO", undefined, ppf));
+  assert.ok(!V.isCash("FON:ALE", ["TRY"], ppf));
+  assert.ok(V.isCash("FON:AFT", ["TRY", "FON:AFT"]));
+  assert.ok(V.isCash("USD", ["USD"]));
+
+  assert.deepEqual(V.cashDef(null), ["TRY", "MMF"]);
+  assert.deepEqual(V.cashDef(["TRY", "TRY", "BTC", "USD", "FON:AFT", "fon:aft", 3]), ["TRY", "USD", "FON:AFT"]);
+  assert.deepEqual(V.cashDef([]), []);
+});

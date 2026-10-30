@@ -120,7 +120,7 @@
               <select id="cashStart" aria-label="Dönemin başladığı gün"></select>
             </label>
             <div class="seg" id="cashMode" role="group" aria-label="Grafikte gösterilen">
-              <button type="button" data-mode="balance">Varlık</button>
+              <button type="button" data-mode="balance">Bakiye</button>
               <button type="button" data-mode="net">Dönem net</button>
             </div>
           </div>
@@ -806,6 +806,13 @@
           </div>
         </div>
         <div class="settings-group">
+          <span class="group-label">Nakit</span>
+          <button type="button" class="row-btn" id="cashDefBtn">
+            <svg class="ic"><use href="#i-cash"/></svg>
+            <span class="row-text"><strong>Nakit sayılanlar</strong><small id="cashDefText">TL ve para piyasası fonları</small></span>
+          </button>
+        </div>
+        <div class="settings-group">
           <span class="group-label">Hesap</span>
           <div class="row-btn row-static">
             <svg class="ic"><use href="#i-cloud"/></svg>
@@ -842,6 +849,26 @@
   </dialog>
 
   <!-- ── Banka e-postaları ──────────────────────────────── -->
+  <!-- ── Nakit tanımı ───────────────────────────────────── -->
+  <dialog class="sheet" id="cashDefSheet" aria-labelledby="cashDefTitle">
+    <div class="sheet-form">
+      <header class="sheet-head">
+        <h2 id="cashDefTitle">Nakit sayılanlar</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <p class="hint">Özet'teki Nakit grafiği yalnızca bunları sayar: bakiyeleri ve hareketleri. Hemen harcayabileceğin
+          parayı seç; varsayılan TL ve aynı gün nakde dönen (T+0) TL para piyasası fonları.</p>
+        <div class="cash-def" id="cashDefList"></div>
+      </div>
+      <footer class="sheet-foot">
+        <button type="button" class="btn btn-ghost" id="cashDefReset">Varsayılana dön</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" data-close>Tamam</button>
+      </footer>
+    </div>
+  </dialog>
+
   <dialog class="sheet" id="inboxSheet" aria-labelledby="inboxTitle">
     <div class="sheet-form">
       <header class="sheet-head">

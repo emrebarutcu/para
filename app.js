@@ -23,7 +23,7 @@ const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // takvim pazartesiyle başlar
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates",
   cashStart: "para.cashStart", cashMode: "para.cashMode", timelineStart: "para.timelineStart", trackNotice: "para.trackNotice",
-  purchaseSort: "para.purchaseSort", prices: "para.prices", settle: "para.settle" };
+  purchaseSort: "para.purchaseSort", prices: "para.prices", settle: "para.settle", cashDef: "para.cashDef" };
 const PURCHASE_SORTS = ["next", "new", "amount", "name"];   // Harcamalar sıralaması (index.html #purchaseSort)
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
@@ -38,6 +38,9 @@ function readPref(key) {
 }
 function writePref(key, value) {
   try { value ? localStorage.setItem(key, value) : localStorage.removeItem(key); } catch {}
+}
+function readCashDef() {
+  try { return V.cashDef(JSON.parse(readPref(PREF.cashDef))); } catch { return [...V.CASH_DEFAULT]; }
 }
 
 let stateOwner = null;         // state'in ait olduğu kullanıcı (girişsizse null)
@@ -70,6 +73,7 @@ let timelineDay = null;       // takvimde seçili gün
 let timelineStart = /^([1-9]|[12]\d|3[01])$/.test(readPref(PREF.timelineStart) ?? "") ? readPref(PREF.timelineStart) : "1";   // takvim dönemi: ayın günü
 let cashStart = /^([1-9]|[12]\d|3[01])$/.test(readPref(PREF.cashStart) ?? "") ? readPref(PREF.cashStart) : "today";   // nakit dönemi: "today" | ayın günü
 let cashMode = readPref(PREF.cashMode) === "net" ? "net" : "balance";
+let cashDef = readCashDef();  // nakit sayılan varlıklar (varlik.js cashDef; varsayılan TL ve para piyasası fonları)
 let cashShift = 0;            // nakit grafiğinde bugünün döneminden kaç dönem uzakta
 let editingEntryId = null;    // düzenlenen varlık hareketi
 let debtSide = "debt";        // Borçlar'da gösterilen: debt (Borçlarım) | receivable (Alacaklarım)
@@ -372,6 +376,8 @@ const els = {
   eventItems: $("eventItems"), eventToFlow: $("eventToFlow"), eventState: $("eventState"), eventOk: $("eventOk"), eventPay: $("eventPay"),
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
+  cashDefBtn: $("cashDefBtn"), cashDefText: $("cashDefText"), cashDefSheet: $("cashDefSheet"), cashDefList: $("cashDefList"),
+  cashDefReset: $("cashDefReset"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
   inboxAddress: $("inboxAddress"),
   aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"),
@@ -1455,36 +1461,37 @@ function cashSeries(from, to, today) {
     if (v == null) missing.add(code);
     return v;
   };
-  let anchor = 0, any = false;   // anchor: bugüne kadarki toplam varlık, TL (bugünkü hareketler dahil)
+  // Yalnızca nakit sayılan varlıklar (Ayarlar → Nakit: varsayılan TL ve para piyasası fonları); kart ekstreleri ve
+  // nakit taksitler TL'dir
+  const cash = code => isCashCode(code);
+  const lira = cash("TRY");
+  let anchor = 0, any = false;   // anchor: bugüne kadarki nakit, TL (bugünkü hareketler dahil)
   for (const e of knownEntries()) {
     if (!V.asset(e.asset) || !Number.isFinite(e.amount)) continue;
-    if (V.market(e.asset)) {
-      // Fon ve hisse nakit sayılmaz; TL bakiyesine işlenen alışı / satışı kendi gününde TL hareketidir
-      const cash = -V.settled(e);
-      if (!cash) continue;
-      any = true;
-      if (e.date <= today) anchor += cash;
-      if (e.date >= lo && e.date <= hi) add(e.date, { desc: entryTitle(e), value: cash });
-      continue;
-    }
+    // TL bakiyesine işlenen fon / hisse alışı ya da satışı TL hareketidir. Fon da nakitse (para piyasası fonu) ikisi tek
+    // harekettir: TL'den nakit fona geçiş nakdi yalnızca bugünkü fiyatla alış fiyatı arasındaki fark kadar değiştirir.
+    const settled = lira ? -V.settled(e) : 0;
+    const own = cash(e.asset);
+    if (!own && !settled) continue;
     any = true;
-    const value = toTry(e.amount, e.asset);
-    if (value == null) continue;
+    const value = own ? toTry(e.amount, e.asset) : 0;
+    if (value == null && !settled) continue;
+    const v = (value ?? 0) + settled;
     if (V.repeatOf(e) == null) {
-      if (e.date <= today) anchor += value;
-      if (e.date >= lo && e.date <= hi) add(e.date, { desc: e.desc, value });
+      if (e.date <= today) anchor += v;
+      if (e.date >= lo && e.date <= hi && Math.abs(v) > EPS) add(e.date, { desc: entryTitle(e), value: v });
       continue;
     }
-    anchor += value * V.processedCount(e, today);
-    for (const { date } of R.between(e, lo, hi)) add(date, { desc: e.desc, value });
+    anchor += v * V.processedCount(e, today);
+    for (const { date } of R.between(e, lo, hi)) add(date, { desc: e.desc, value: v });
   }
   // Kartsız harcamalar ödendikçe varlıktan düşmüştür (bugünkü dahil); kart ödemesi bugün henüz ödenmedi sayılır
-  for (const [code, amount] of Object.entries(T.cashSpent(knownPurchases(), state.cards, today))) anchor -= toTry(amount, code) ?? 0;
+  for (const [code, amount] of Object.entries(T.cashSpent(knownPurchases(), state.cards, today))) if (cash(code)) anchor -= toTry(amount, code) ?? 0;
   // Borç etkileri de düşmüştür (takipteki kartların ödenen ekstreleri dahil: aşağıdaki kart hareketleri o günlerin
   // hareketidir, ikinci kez düşülmez)
-  for (const [code, amount] of Object.entries(B.debtSpent(state, today))) anchor -= toTry(amount, code) ?? 0;
+  for (const [code, amount] of Object.entries(B.debtSpent(state, today))) if (cash(code)) anchor -= toTry(amount, code) ?? 0;
   const since = new Map(state.cards.filter(B.tracked).map(c => [c.id, B.since(c, today)]));
-  for (const m of cashflow(loIdx, hiIdx)) {
+  for (const m of lira ? cashflow(loIdx, hiIdx) : []) {
     for (const ev of m.events) {
       // Hesaba katılmayan kartın ekstresi TL bakiyesinden düşmez
       if (ev.ignored || ev.date < lo || ev.date > hi || (since.has(ev.cardId) && ev.date >= since.get(ev.cardId))) continue;
@@ -1493,7 +1500,7 @@ function cashSeries(from, to, today) {
     }
   }
   // Bugünkü planlı kart hareketi (bugün ödenecek ya da ödenmemiş ekstre) henüz düşmedi: gün sonunda düşer
-  for (const mv of B.cardMoves(state, today, lo, hi, hi)) {
+  for (const mv of lira ? B.cardMoves(state, today, lo, hi, hi) : []) {
     const c = cardById(mv.cardId);
     if (mv.planned && mv.date === today) anchor += mv.amount;
     const desc = mv.type === "payment" ? `${c.name} · kart ödemen` : mv.type === "prepay" ? `${c.name} · erken ödeme`
@@ -1503,6 +1510,7 @@ function cashSeries(from, to, today) {
   }
   // Borç akışları kendi günlerinde; bugünkü kredi taksiti ve beklenen ödemeler kart ekstresi gibi gün sonunda düşer
   for (const f of B.allFlows(state, today, lo, hi)) {
+    if (!cash(f.asset)) continue;
     any = true;
     if (f.type === "plan" && !f.paid && f.date === today && f.amount > 0) continue;   // gecikmiş / bugünkü tahsilat henüz yok
     const value = toTry(f.amount, f.asset);
@@ -1513,14 +1521,14 @@ function cashSeries(from, to, today) {
   // Döviz / altın harcamaları TL akışında yok: kendi varlıklarından düşer
   for (const p of knownPurchases()) {
     const code = T.assetOf(p);
-    if (code === "TRY") continue;
+    if (code === "TRY" || !cash(code)) continue;
     for (const x of paymentsOf(p, hi)) {
       if (x.key < lo || x.key > hi) continue;
       const value = toTry(-x.amount, code);
       if (value != null) add(x.key, { desc: p.desc, value });
     }
   }
-  if (missing.size || knownEntries().some(e => e.asset !== "TRY" && !V.market(e.asset))) loadRates();
+  if (missing.size || knownEntries().some(e => e.asset !== "TRY")) loadRates();   // fon bilgisi de (para piyasası fonu mu)
 
   const sum = date => (moves.get(date) || []).reduce((s, m) => s + m.value, 0);
   const r2 = v => Math.round(v * 100) / 100;
@@ -1619,12 +1627,16 @@ function renderCash() {
   hideTooltip();
   els.cashEmpty.hidden = data.any;
   els.cashNote.hidden = !data.any;
-  els.cashNote.textContent = "Grafikte girdiler ve çıktılar (tekrarlayanlar dahil), kart ekstreleri, nakit taksitler, borç ve "
-    + "alacak ödemeleri var. Ekstreler son ödeme gününde görünür; ödemediğin geçmiş ekstreler bugünde gösterilir. Hesaba "
-    + "katılmayan kartlar grafikte yok. Döviz ve altın bugünkü kurla TL'ye çevrilir."
-    + (data.missing.length ? ` Kuru alınamayan ${data.missing.map(c => V.asset(c).name.toLocaleLowerCase("tr-TR")).join(", ")} dahil değil.` : "");
+  const change = el("button", "link", "Değiştir");
+  change.type = "button";
+  change.addEventListener("click", openCashDefSheet);
+  els.cashNote.replaceChildren(`Nakit: ${cashDefText()}. `, change, " · Grafikte nakdin girdileri ve çıktıları (tekrarlayanlar "
+    + "dahil), kart ekstreleri, nakit taksitler, borç ve alacak ödemeleri var. Ekstreler son ödeme gününde görünür; ödemediğin "
+    + "geçmiş ekstreler bugünde gösterilir. Hesaba katılmayan kartlar grafikte yok."
+    + (cashDef.some(c => c !== "TRY") ? " Döviz, altın ve fonlar bugünkü kur ve fiyatla TL'ye çevrilir." : "")
+    + (data.missing.length ? ` Kuru ya da fiyatı alınamayan ${data.missing.map(c => V.asset(c).name.toLocaleLowerCase("tr-TR")).join(", ")} dahil değil.` : ""));
   svg.style.display = data.any ? "" : "none";
-  svg.setAttribute("aria-label", `${fmtDayShort(from)} – ${fmtDayShort(to)} ${net ? "dönem net varlık hareketi" : "toplam varlık"}`);
+  svg.setAttribute("aria-label", `${fmtDayShort(from)} – ${fmtDayShort(to)} ${net ? "dönem net nakit hareketi" : "nakit bakiyesi"}`);
   if (!data.any) {
     els.cashEmpty.textContent = "Varlıklar'a giriş ve çıkış ekleyince varlığının dönem dönem seyri burada görünür.";
     svg.innerHTML = "";
@@ -2301,6 +2313,21 @@ function marketName(code) {
   return name ? fundName(name) : V.MARKETS[m?.market]?.name ?? "";
 }
 
+// Varlık nakit mi (ayarlardaki nakit tanımı); para piyasası fonu olduğu fonun fiyatla gelen bilgisinden anlaşılır
+function isCashCode(code) {
+  const m = V.market(code);
+  const fund = m?.market === "FON" ? prices?.prices?.[code] ?? fundList?.find(f => f.code === m.ticker) : null;
+  return V.isCash(code, cashDef, fund);
+}
+
+// Nakit tanımı metinle: "TL ve para piyasası fonları"
+const CASH_NAMES = { TRY: "TL", USD: "dolar", EUR: "euro", GAU: "gram altın", [V.MMF]: "para piyasası fonları" };
+function cashDefText() {
+  const names = cashDef.map(c => CASH_NAMES[c] ?? V.market(c)?.ticker ?? c);
+  if (!names.length) return "hiçbiri";
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} ve ${names[names.length - 1]}`;
+}
+
 const unitFmt = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 4 });
 // Birim fiyat: fonda TEFAS gibi 6 hane, hissede 2
 function fmtPrice(p, code) {
@@ -2477,6 +2504,7 @@ function holdingRow(code, units, pos, r) {
   const meta = el("div", "p-meta");
   meta.append(el("span", "", fmtAsset(units, code)));
   if (x) meta.append(el("span", "", fmtPrice(x.price, code)));
+  if (isCashCode(code)) meta.append(el("span", "", "nakit"));
   main.append(meta);
 
   const side = el("div", "p-side");
@@ -5793,7 +5821,61 @@ els.themeSeg.addEventListener("click", e => {
   renderThemeSeg();
 });
 
-els.settingsBtn.addEventListener("click", () => { renderThemeSeg(); openSheet(els.settingsSheet); });
+els.settingsBtn.addEventListener("click", () => {
+  renderThemeSeg();
+  els.cashDefText.textContent = cashDefText().replace(/^./, c => c.toLocaleUpperCase("tr-TR"));
+  openSheet(els.settingsSheet);
+});
+
+// ---------- Nakit tanımı ----------
+// Nakit grafiğinin saydığı varlıklar: TL, TL para piyasası fonları (hepsi), döviz, altın ve eldeki (ya da önceden
+// seçilmiş) diğer fon ve hisseler tek tek. Değişiklik hemen uygulanır, cihazda kalır (para.cashDef); en az biri seçili.
+function openCashDefSheet() {
+  els.settingsSheet.close();
+  renderCashDef();
+  openSheet(els.cashDefSheet);
+}
+
+function renderCashDef() {
+  const opt = (value, title, sub) => {
+    const row = el("label", "check cash-opt");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = value;
+    input.checked = cashDef.includes(value);
+    const text = el("span", "cash-opt-text");
+    text.append(el("strong", "", title));
+    if (sub) text.append(el("small", "", sub));
+    row.append(input, text);
+    return row;
+  };
+  const codes = [...new Set([...marketCodes(), ...cashDef.filter(c => V.market(c))])];
+  const funds = codes.filter(c => V.moneyMarket(prices?.prices?.[c]));
+  const others = codes.filter(c => !funds.includes(c));
+  els.cashDefList.replaceChildren(
+    opt("TRY", "Türk lirası", "Ana para birimi"),
+    opt(V.MMF, "TL para piyasası fonları", funds.length ? `Elindekiler: ${funds.map(c => V.market(c).ticker).join(", ")}`
+      : "TEFAS'taki para piyasası fonları; aynı gün nakde döner (T+0)"),
+    ...V.ASSETS.filter(a => a.code !== "TRY").map(a => opt(a.code, a.name)),
+    ...(others.length ? [el("span", "group-label cash-def-head", "Elindeki diğer fon ve hisseler")] : []),
+    ...others.map(c => opt(c, V.market(c).ticker, marketName(c))),
+  );
+}
+
+function setCashDef(list) {
+  cashDef = V.cashDef(list);
+  const same = cashDef.length === V.CASH_DEFAULT.length && V.CASH_DEFAULT.every(c => cashDef.includes(c));
+  writePref(PREF.cashDef, same ? "" : JSON.stringify(cashDef));
+  render();
+}
+
+els.cashDefList.addEventListener("change", e => {
+  const picked = [...els.cashDefList.querySelectorAll("input:checked")].map(x => x.value);
+  if (!picked.length) { e.target.checked = true; toast("En az birini seç"); return; }
+  setCashDef(picked);
+});
+els.cashDefReset.addEventListener("click", () => { setCashDef(null); renderCashDef(); toast("Nakit: TL ve para piyasası fonları"); });
+els.cashDefBtn.addEventListener("click", openCashDefSheet);
 if (window.APP_VERSION) $("appVersion").textContent = `CashFollow v${window.APP_VERSION}`;
 // Giriş penceresi (sync.js) ayarların üstünde açılsın diye önce ayarları kapat
 els.authBtn.addEventListener("click", () => els.settingsSheet.close());

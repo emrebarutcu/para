@@ -173,9 +173,33 @@
     return out.sort((a, b) => b.rank - a.rank || (a.x.code < b.x.code ? -1 : 1)).slice(0, limit).map(o => o.x);
   }
 
+  // ---------- Nakit ----------
+  // Nakit tanımı (Özet'teki Nakit grafiği): nakit sayılan varlıkların listesi. Varlık kodları ("TRY", "USD", "FON:ALE",
+  // "BIST:THYAO") ve "MMF": ana para biriminin (TL) bütün para piyasası fonları. Varsayılan TL ve para piyasası fonları.
+  const MMF = "MMF";
+  const CASH_DEFAULT = ["TRY", MMF];
+
+  // Para piyasası fonu: TEFAS'ta adında "para piyasası" geçen yatırım fonu (aynı gün nakde döner, T+0). Hepsi TL'dir;
+  // emeklilik fonları (BES) nakit sayılmaz. fund: { name, kind } (fiyatla gelir: /api/fiyat, /api/fonlar)
+  function moneyMarket(fund) {
+    return fund?.kind === "YAT" && /(^|[^a-z])para piyasasi([^a-z]|$)/.test(fold(fund.name));
+  }
+
+  // Kayıtlı tanım → geçerli liste (geçersiz ögeler atılır); liste değilse varsayılan
+  function cashDef(list) {
+    if (!Array.isArray(list)) return [...CASH_DEFAULT];
+    return [...new Set(list.filter(c => c === MMF || BY_CODE.has(c) || market(c)))];
+  }
+
+  // Varlık nakit mi; fund fonun TEFAS bilgisi (para piyasası fonu mu diye)
+  function isCash(code, def = CASH_DEFAULT, fund = null) {
+    return def.includes(code) || (def.includes(MMF) && market(code)?.market === "FON" && moneyMarket(fund));
+  }
+
   const api = {
     ASSETS, MARKETS, MAX_REPEAT, asset, market, marketCode, round, repeatOf, occurrenceDate, occurrencesIn, lastDate,
     processedCount, nextDate, tradeValue, settled, balances, positions, toTry, totalTry, matchFunds,
+    MMF, CASH_DEFAULT, moneyMarket, cashDef, isCash,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Varlik = api;

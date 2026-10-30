@@ -1764,3 +1764,14 @@ a.hero-eq { display: block; width: fit-content; }
 .ticker-info { margin-top: 6px; font-size: 13px; color: var(--text-2); }
 .ticker-info:empty { display: none; }
 .ticker-info.warn { color: var(--danger); }
+
+/* ── Nakit tanımı ── */
+.footnote .link { border: none; background: none; padding: 0; font: inherit; color: var(--text-2); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.cash-def { display: flex; flex-direction: column; }
+.cash-def .cash-opt { align-items: flex-start; gap: 12px; padding: 10px 2px; }
+.cash-def .cash-opt + .cash-opt { border-top: 1px solid var(--line); }
+.cash-opt input { margin-top: 2px; flex-shrink: 0; }
+.cash-opt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cash-opt-text strong { font-weight: 600; color: var(--text); }
+.cash-opt-text small { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cash-def-head { margin: 14px 0 2px; }
