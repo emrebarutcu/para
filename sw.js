@@ -1,6 +1,9 @@
+// Sürüm 6.0.2 — scripts/surum.sh yazar: dosyanın kendisi her sürümde değişir, tarayıcılar (Safari dahil) yeni service
+// worker'ı yalnızca içe aktarılan version.js'e bakmadan da hemen fark eder
 importScripts('/version.js');
 const CACHE = 'cashfollow-' + self.APP_VERSION;
-const ASSETS = ['/', '/index.html', '/version.js', '/styles.css', '/app.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/borc.js', '/sync.js', '/kategori.js', '/icgoru.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg'];
+// /index.html önbelleğe alınmaz: Cloudflare onu /'a yönlendirir (307), sayfa / adresinden gelir
+const ASSETS = ['/', '/version.js', '/styles.css', '/app.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/borc.js', '/sync.js', '/kategori.js', '/icgoru.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

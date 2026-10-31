@@ -6444,6 +6444,16 @@ window.addEventListener("resize", () => {
 
 // ---------- Service Worker ----------
 if ('serviceWorker' in navigator) {
+  // Yeni sürümün service worker'ı denetimi alınca sayfa bir kez yenilenir, açık form varsa kapanınca (sw.js ana sürümde
+  // sayfayı kendisi de yeniler, ama Safari'de bu her zaman çalışmıyor). İlk kurulumda yenilenmez.
+  const updating = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!updating || reloading) return;
+    reloading = true;
+    const go = () => (document.querySelector('dialog[open]') ? setTimeout(go, 1000) : location.reload());
+    go();
+  });
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
