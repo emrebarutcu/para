@@ -17,9 +17,15 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
 
-# Supabase SQL dosyaları yayınlanmaz (Cloudflare için .assetsignore)
+# Supabase SQL dosyaları ve iOS uygulamasının kaynağı yayınlanmaz (Cloudflare için .assetsignore)
 [[redirects]]
   from = "/supabase/*"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/ios/*"
   to = "/404"
   status = 404
   force = true

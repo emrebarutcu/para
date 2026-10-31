@@ -25,6 +25,10 @@ jobs:
             echo "::error file=sw.js::sw.js'teki sürüm satırı version.js ile aynı değil ($head). scripts/surum.sh ikisini birlikte yazar."
             exit 1
           fi
+          if grep "MARKETING_VERSION = " ios/CashFollow.xcodeproj/project.pbxproj | grep -qv "MARKETING_VERSION = $head;"; then
+            echo "::error file=ios/CashFollow.xcodeproj/project.pbxproj::iOS MARKETING_VERSION version.js ile aynı değil ($head). scripts/surum.sh ikisini birlikte yazar."
+            exit 1
+          fi
           if [ -n "$base" ] && { [ "$head" = "$base" ] || [ "$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)" != "$head" ]; }; then
             echo "::error file=version.js::Sürüm artırılmalı (main: $base, bu PR: $head). scripts/surum.sh [patch|minor|major] çalıştır."
             exit 1
