@@ -1,6 +1,6 @@
 # iOS uygulamasını App Store Connect'e (TestFlight) yükler. Mac gerekmez: App Store Connect API anahtarıyla her çalışmada
-# geçici bir dağıtım sertifikası ve App Store profili oluşturulur, elle imzalanır, iş bitince ikisi de silinir
-# (ios/scripts/asc_imza.py; Xcode'un bulut sertifikası neden kullanılmıyor orada yazılı). Kurulum: SETUP.md → TestFlight.
+# geçici bir dağıtım sertifikası ve App Store profili oluşturulur, arşiv imzasız alınıp codesign ile elle imzalanır, iş
+# bitince sertifika ve profil silinir (ios/scripts/asc_imza.py; Xcode'un imzası neden kullanılmıyor orada yazılı). Kurulum: SETUP.md → TestFlight.
 # Elle (Actions → TestFlight → Run workflow; dosya main'de olmalı) ya da testflight-* etiketiyle (her dalda) çalışır.
 # macOS 26 makinesinde en yeni Xcode ile. Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
 name: TestFlight
@@ -58,56 +58,59 @@ jobs:
           security set-keychain-settings -lut 21600 "$KC"
           security unlock-keychain -p "$KCPASS" "$KC"
           curl -fsSL -o "$RUNNER_TEMP/wwdr.cer" https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer \
-            && security import "$RUNNER_TEMP/wwdr.cer" -k "$KC" -T /usr/bin/codesign || true
-          security import "$RUNNER_TEMP/imza/sertifika.p12" -k "$KC" -P "$P12_PASSWORD" -f pkcs12 -T /usr/bin/codesign -T /usr/bin/security
+            && security import "$RUNNER_TEMP/wwdr.cer" -k "$KC" || true
+          security import "$RUNNER_TEMP/imza/anahtar.pem" -k "$KC" -t priv -f openssl -T /usr/bin/codesign -T /usr/bin/security
+          security import "$RUNNER_TEMP/imza/sertifika.cer" -k "$KC" -t cert -f x509
+          rm "$RUNNER_TEMP/imza/anahtar.pem"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPASS" "$KC" > /dev/null
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           security find-identity -v -p codesigning "$KC"
-          for d in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
-            mkdir -p "$d" && cp "$RUNNER_TEMP/imza/profil.mobileprovision" "$d/$PROFILE_UUID.mobileprovision"
-          done
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+
+      - name: Arşivle (imzasız)
+        run: |
+          xcodebuild archive -project ios/CashFollow.xcodeproj -scheme CashFollow -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/CashFollow.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" -quiet
+
+      - name: İmzala ve paketle
+        run: |
+          W="$RUNNER_TEMP/ipa"
+          rm -rf "$W" && mkdir -p "$W/Payload"
+          cp -R "$RUNNER_TEMP/CashFollow.xcarchive/Products/Applications/CashFollow.app" "$W/Payload/"
+          APP="$W/Payload/CashFollow.app"
+          test -f "$APP/js/tools.js"
+          cp "$RUNNER_TEMP/imza/profil.mobileprovision" "$APP/embedded.mobileprovision"
+          # App Store yetkileri (Xcode'un App Store dışa aktarmasındakiyle aynı)
+          cat > "$RUNNER_TEMP/yetkiler.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>export</string>
-            <key>teamID</key><string>$TEAM_ID</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>signingCertificate</key><string>$SIGN_IDENTITY</string>
-            <key>provisioningProfiles</key><dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
-            <key>manageAppVersionAndBuildNumber</key><false/>
-            <key>uploadSymbols</key><true/>
+            <key>application-identifier</key><string>$TEAM_ID.$BUNDLE_ID</string>
+            <key>com.apple.developer.team-identifier</key><string>$TEAM_ID</string>
+            <key>beta-reports-active</key><true/>
+            <key>get-task-allow</key><false/>
           </dict>
           </plist>
           PLIST
-
-      - name: Arşivle
-        run: |
-          xcodebuild archive -project ios/CashFollow.xcodeproj -scheme CashFollow -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/CashFollow.xcarchive" \
-            DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$SIGN_IDENTITY" PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" -quiet
-
-      - name: Dışa aktar
-        run: |
-          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/CashFollow.xcarchive" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export"
-          # İmza kendi gereksinimini karşılamalı (App Store Connect ITMS-90035), js/ dahil bütün dosyaları kapsamalı
-          cd "$RUNNER_TEMP" && rm -rf ipa && mkdir ipa && cd ipa && unzip -q ../export/CashFollow.ipa
-          APP=Payload/CashFollow.app
-          test -f "$APP/js/tools.js"
-          codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier=" || true
+          # Gereksinim addan değil takım kimliğinden: addaki "ç" imzayı geçersiz kılıyordu (ITMS-90035)
+          printf 'designated => anchor apple generic and identifier "%s" and certificate leaf[subject.OU] = "%s" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */\n' \
+            "$BUNDLE_ID" "$TEAM_ID" > "$RUNNER_TEMP/gereksinim.txt"
+          codesign --force --sign "$CERT_SHA1" --keychain "$KEYCHAIN" --entitlements "$RUNNER_TEMP/yetkiler.plist" \
+            --requirements "$RUNNER_TEMP/gereksinim.txt" --generate-entitlement-der --timestamp=none "$APP"
+          codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier=|Sealed" || true
           codesign -d -r- "$APP" 2>&1 | grep designated || true
+          codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -p - || true
           codesign --verify --deep --strict --verbose=2 "$APP"
+          cd "$W" && zip -qry "$RUNNER_TEMP/CashFollow.ipa" Payload
+          ls -la "$RUNNER_TEMP/CashFollow.ipa"
 
       - name: TestFlight'a yükle
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           cp "$KEY_PATH" ~/.appstoreconnect/private_keys/
-          xcrun altool --upload-app -f "$RUNNER_TEMP/export/CashFollow.ipa" -t ios \
+          xcrun altool --upload-app -f "$RUNNER_TEMP/CashFollow.ipa" -t ios \
             --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" --output-format normal
           echo "Yüklendi: sürüm $(sed -n "s/^self.APP_VERSION = '\(.*\)';/\1/p" version.js), build $BUILD. App Store Connect birkaç dakika işler, sonra TestFlight'ta görünür."
 

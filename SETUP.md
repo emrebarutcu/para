@@ -238,8 +238,9 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
 
 `.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS 26 makinesinde, kurulu en yeni (beta olmayan) Xcode ile arşivler ve
 App Store Connect'e yükler. İmza için her çalışmada API ile geçici bir dağıtım sertifikası ve App Store profili oluşturulur,
-iş bitince silinir (`ios/scripts/asc_imza.py`): Xcode'un bulut sertifikasının adı hesap sahibinin adıdır ve "ç" gibi harfler
-imzayı geçersiz kılar (ITMS-90035). Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
+arşiv imzasız alınıp `codesign` ile elle imzalanır, iş bitince sertifika ve profil silinir (`ios/scripts/asc_imza.py`).
+Dağıtım sertifikasının adı hesap sahibinin adıdır; Xcode'un imzasında addaki "ç" imzayı geçersiz kılıyordu (ITMS-90035),
+elle imzada imza gereksinimi takım kimliğinden kurulur. Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
 
 1. **Team ID:** [developer.apple.com/account](https://developer.apple.com/account) → Membership details → Team ID (10 karakter).
 2. **Uygulama kaydı:** [App Store Connect](https://appstoreconnect.apple.com) → Uygulamalar → **+** → Yeni Uygulama: platform iOS,
