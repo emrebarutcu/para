@@ -6,11 +6,12 @@
 //   toplamlarını değiştirmez, nakitten nakde aktarım nakdi değiştirmez; ileri tarihli hareket bugünkü bakiyede yok;
 //   kişilerin Varlık'ları toplamı = hepsi; birikimden yatırım açık değildir; geçmiş kapanışla alış seyirde sıçramaz;
 //   formdan dolar alışı ve bozdurma aktarım olarak saklanır.
-// node scripts/yerel.mjs &  ve  node scripts/tutarlilik.cjs [-v]   (Playwright ve internet gerekir: gerçek kur ve fiyatlar)
+// node scripts/yerel.mjs &  ve  node scripts/tutarlilik.cjs [-v]   (Playwright ve internet gerekir: gerçek kur ve fiyatlar;
+// SEED=… rastgele verilerin başlangıç değeri)
 const { chromium } = require("playwright");
 
 // Sayfada çalışan kısım: senaryoları kurar, her görünümün sayılarını toplar, kuralları denetler
-async function inPage() {
+async function inPage(start) {
   const today = T.todayKey();
   const idx = T.parseDate(today).idx;
   const monthFrom = T.dateKey(idx, 1), monthTo = T.dateKey(idx, 31);
@@ -165,7 +166,7 @@ async function inPage() {
   const ba = views(S.buyukAlis);
   check("buyukAlis · yatırım açık sayılmaz", !ba.insIds.includes("acik") && /azalıyor/.test(ba.insText), `${ba.insIds} · ${ba.insText}`);
   // 13. Rastgele veriler: kurallar 1, 2, 3, Girdi = gelir, kişiler toplamı
-  let seed = 1234567;
+  let seed = start;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const pick = a => a[Math.floor(rnd() * a.length)];
   const assets = ["TRY", "TRY", "USD", "EUR", "GAU", "FON:ALE", "FON:AFT", "BIST:THYAO", "BIST:ASELS"];
@@ -261,7 +262,7 @@ async function formFlow(p) {
   await p.addInitScript(d => { localStorage.clear(); localStorage.setItem("para.offline", "1"); localStorage.setItem("cashflow.v1", JSON.stringify(d)); }, seed);
   await p.goto(`${process.env.CF_URL || "http://localhost:3100"}/#varliklar`);
   await p.waitForFunction(() => prices?.prices?.["FON:ALE"] && prices?.prices?.["BIST:THYAO"] && rates?.rates?.USD, null, { timeout: 30000 });
-  const out = await p.evaluate(inPage);
+  const out = await p.evaluate(inPage, Number(process.env.SEED) || 1234567);
   out.fails.push(...await formFlow(p));
   if (process.argv.includes("-v")) for (const [k, v] of Object.entries(out.all)) console.log(k.padEnd(13), JSON.stringify(v));
   console.log(out.fails.length ? `TUTARSIZ (${out.fails.length}):\n- ` + out.fails.join("\n- ") : "Tutarsızlık yok");
