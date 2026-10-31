@@ -236,8 +236,10 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
 
 #### TestFlight (Mac gerekmez)
 
-`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS 26 makinesinde, kurulu en yeni (beta olmayan) Xcode ile arşivler, Apple'ın bulut sertifikasıyla imzalar ve
-App Store Connect'e yükler. Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
+`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS 26 makinesinde, kurulu en yeni (beta olmayan) Xcode ile arşivler ve
+App Store Connect'e yükler. İmza için her çalışmada API ile geçici bir dağıtım sertifikası ve App Store profili oluşturulur,
+iş bitince silinir (`ios/scripts/asc_imza.py`): Xcode'un bulut sertifikasının adı hesap sahibinin adıdır ve "ç" gibi harfler
+imzayı geçersiz kılar (ITMS-90035). Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
 
 1. **Team ID:** [developer.apple.com/account](https://developer.apple.com/account) → Membership details → Team ID (10 karakter).
 2. **Uygulama kaydı:** [App Store Connect](https://appstoreconnect.apple.com) → Uygulamalar → **+** → Yeni Uygulama: platform iOS,
@@ -245,7 +247,7 @@ App Store Connect'e yükler. Bir kez yapılacaklar (Apple Developer Program üye
    (listede yoksa önce [Identifiers](https://developer.apple.com/account/resources/identifiers/list)'ta **+** → App IDs →
    Explicit `app.cashfollow.ios` ile kaydedilir), SKU `cashfollow-ios`.
 3. **API anahtarı:** App Store Connect → Kullanıcılar ve Erişim → Entegrasyonlar → App Store Connect API → Takım Anahtarları →
-   **+**, erişim **Admin** (bulut imza sertifikası için gerekli). Issuer ID ve Key ID'yi not et, `.p8` dosyasını indir
+   **+**, erişim **Admin** (geçici sertifika ve profil oluşturmak için gerekli). Issuer ID ve Key ID'yi not et, `.p8` dosyasını indir
    (yalnızca bir kez indirilebilir).
 4. **GitHub → Settings → Secrets and variables → Actions → New repository secret:** `APPLE_TEAM_ID`, `ASC_ISSUER_ID`,
    `ASC_KEY_ID`, `ASC_KEY_P8` (`.p8` dosyasının bütün içeriği, `-----BEGIN PRIVATE KEY-----` satırları dahil).

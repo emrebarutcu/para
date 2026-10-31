@@ -1,5 +1,6 @@
-# iOS uygulamasını App Store Connect'e (TestFlight) yükler. Mac gerekmez: imza Apple'ın bulut sertifikasıyla, App Store
-# Connect API anahtarıyla yapılır (Xcode otomatik imzalama, -allowProvisioningUpdates). Kurulum: SETUP.md → TestFlight.
+# iOS uygulamasını App Store Connect'e (TestFlight) yükler. Mac gerekmez: App Store Connect API anahtarıyla her çalışmada
+# geçici bir dağıtım sertifikası ve App Store profili oluşturulur, elle imzalanır, iş bitince ikisi de silinir
+# (ios/scripts/asc_imza.py; Xcode'un bulut sertifikası neden kullanılmıyor orada yazılı). Kurulum: SETUP.md → TestFlight.
 # Elle (Actions → TestFlight → Run workflow; dosya main'de olmalı) ya da testflight-* etiketiyle (her dalda) çalışır.
 # macOS 26 makinesinde en yeni Xcode ile. Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
 name: TestFlight
@@ -19,6 +20,7 @@ jobs:
       ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       KEY_P8: ${{ secrets.ASC_KEY_P8 }}
       BUILD: ${{ github.run_number }}
+      BUNDLE_ID: app.cashfollow.ios
     steps:
       - uses: actions/checkout@v4
 
@@ -42,15 +44,39 @@ jobs:
           KEY="$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
           printf '%s\n' "$KEY_P8" > "$KEY"
           echo "KEY_PATH=$KEY" >> "$GITHUB_ENV"
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -q pyjwt cryptography
+
+      - name: Geçici sertifika ve profil
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" ios/scripts/asc_imza.py olustur "$RUNNER_TEMP/imza"
+          KC="$RUNNER_TEMP/imza.keychain-db"
+          KCPASS=$(uuidgen)
+          echo "::add-mask::$KCPASS"
+          echo "KEYCHAIN=$KC" >> "$GITHUB_ENV"
+          security create-keychain -p "$KCPASS" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPASS" "$KC"
+          curl -fsSL -o "$RUNNER_TEMP/wwdr.cer" https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer \
+            && security import "$RUNNER_TEMP/wwdr.cer" -k "$KC" -T /usr/bin/codesign || true
+          security import "$RUNNER_TEMP/imza/sertifika.p12" -k "$KC" -P "$P12_PASSWORD" -f pkcs12 -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPASS" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KC"
+          for d in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$d" && cp "$RUNNER_TEMP/imza/profil.mobileprovision" "$d/$PROFILE_UUID.mobileprovision"
+          done
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
+            <key>destination</key><string>export</string>
             <key>teamID</key><string>$TEAM_ID</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>$SIGN_IDENTITY</string>
+            <key>provisioningProfiles</key><dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
             <key>manageAppVersionAndBuildNumber</key><false/>
             <key>uploadSymbols</key><true/>
           </dict>
@@ -59,43 +85,23 @@ jobs:
 
       - name: Arşivle
         run: |
-          xcodebuild -version
           xcodebuild archive -project ios/CashFollow.xcodeproj -scheme CashFollow -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/CashFollow.xcarchive" \
-            DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" \
-            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" \
-            -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID" -quiet
-          # İmza paketin bütün dosyalarını (js/ dahil) kapsıyor mu; kopyalama imzadan sonra olursa burada yakalanır
-          APP="$RUNNER_TEMP/CashFollow.xcarchive/Products/Applications/CashFollow.app"
-          test -f "$APP/js/tools.js"
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier=" || true
+            DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$SIGN_IDENTITY" PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" -quiet
 
-      - name: Dışa aktar (App Store imzası)
+      - name: Dışa aktar
         run: |
-          sed -i '' 's|<string>upload</string>|<string>export</string>|' "$RUNNER_TEMP/ExportOptions.plist"
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/CashFollow.xcarchive" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" \
-            -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID"
-          # Yüklenecek paketin imzası: dağıtım sertifikası (Apple Distribution) ve App Store profili olmalı
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export"
+          # İmza kendi gereksinimini karşılamalı (App Store Connect ITMS-90035), js/ dahil bütün dosyaları kapsamalı
           cd "$RUNNER_TEMP" && rm -rf ipa && mkdir ipa && cd ipa && unzip -q ../export/CashFollow.ipa
           APP=Payload/CashFollow.app
-          echo "== imza"; codesign -dvvvv "$APP" 2>&1 | grep -vE "^(Hash|CandidateCDHash|CMSDigest)" || true
-          echo "== gereksinim (DR)"; codesign -d -r- "$APP" 2>&1 || true
-          echo "== yetkiler"; codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -p - || true
-          echo "== profil"; security cms -D -i "$APP/embedded.mobileprovision" > profil.plist && plutil -p profil.plist | grep -vE "DeveloperCertificates|^\s+[0-9]+ => \{length" | head -40 || true
-          echo "== sertifika zinciri"; codesign -d --extract-certificates=sert "$APP" && for c in sert*; do openssl x509 -inform der -in "$c" -noout -subject -issuer -dates; done || true
-          echo "== dosyalar"; find "$APP" -type f | grep -v "/js/" | head -40
-          echo "== doğrulama"; codesign --verify --deep --strict --verbose=4 "$APP"
-
-      - name: Hata kaydı
-        if: failure()
-        run: |
-          for d in $(find "${TMPDIR:-/tmp}" /var/folders -name "*.xcdistributionlogs" -maxdepth 6 2>/dev/null); do
-            echo "== $d"; ls "$d"
-            grep -ihE "certif|cloud|codesign|signing identity|profile|error" "$d"/IDEDistribution.verbose.log 2>/dev/null | grep -v IDEDistributionContext | tail -80 || true
-          done
+          test -f "$APP/js/tools.js"
+          codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier=" || true
+          codesign -d -r- "$APP" 2>&1 | grep designated || true
+          codesign --verify --deep --strict --verbose=2 "$APP"
 
       - name: TestFlight'a yükle
         run: |
@@ -105,6 +111,9 @@ jobs:
             --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" --output-format normal
           echo "Yüklendi: sürüm $(sed -n "s/^self.APP_VERSION = '\(.*\)';/\1/p" version.js), build $BUILD. App Store Connect birkaç dakika işler, sonra TestFlight'ta görünür."
 
-      - name: Anahtarı sil
+      - name: Temizlik
         if: always()
-        run: rm -rf "$KEY_PATH" ~/.appstoreconnect/private_keys
+        run: |
+          if [ -n "$CERT_ID$PROFILE_ID" ]; then "$RUNNER_TEMP/venv/bin/python" ios/scripts/asc_imza.py sil "$CERT_ID" "$PROFILE_ID" || true; fi
+          [ -n "$KEYCHAIN" ] && security delete-keychain "$KEYCHAIN" || true
+          rm -rf "$KEY_PATH" ~/.appstoreconnect/private_keys "$RUNNER_TEMP/imza"
