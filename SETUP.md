@@ -234,6 +234,28 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
   yüklenir, araçlar çağrılır, cevaplar Swift görünümlerine çözülür). Web modülleri ya da `mcp/tools.js` değişince de çalışır;
   araç cevabının alanı değişirse `Cekirdek/Gorunumler.swift` de güncellenir.
 
+#### TestFlight (Mac gerekmez)
+
+`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS makinesinde arşivler, Apple'ın bulut sertifikasıyla imzalar ve
+App Store Connect'e yükler. Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
+
+1. **Team ID:** [developer.apple.com/account](https://developer.apple.com/account) → Membership details → Team ID (10 karakter).
+2. **Uygulama kaydı:** [App Store Connect](https://appstoreconnect.apple.com) → Uygulamalar → **+** → Yeni Uygulama: platform iOS,
+   ad CashFollow (alınmışsa ör. "CashFollow – Taksit Takibi"), birincil dil Türkçe, bundle ID **`app.cashfollow.ios`**
+   (listede yoksa önce [Identifiers](https://developer.apple.com/account/resources/identifiers/list)'ta **+** → App IDs →
+   Explicit `app.cashfollow.ios` ile kaydedilir), SKU `cashfollow-ios`.
+3. **API anahtarı:** App Store Connect → Kullanıcılar ve Erişim → Entegrasyonlar → App Store Connect API → Takım Anahtarları →
+   **+**, erişim **Admin** (bulut imza sertifikası için gerekli). Issuer ID ve Key ID'yi not et, `.p8` dosyasını indir
+   (yalnızca bir kez indirilebilir).
+4. **GitHub → Settings → Secrets and variables → Actions → New repository secret:** `APPLE_TEAM_ID`, `ASC_ISSUER_ID`,
+   `ASC_KEY_ID`, `ASC_KEY_P8` (`.p8` dosyasının bütün içeriği, `-----BEGIN PRIVATE KEY-----` satırları dahil).
+
+Yüklemek için: Actions → **TestFlight** → Run workflow (iş akışı `main`'de olmalı) ya da herhangi bir dalda
+`git tag testflight-6.1.0-1 && git push origin testflight-6.1.0-1`. Build birkaç dakika işlenir, sonra App Store Connect →
+uygulama → TestFlight'ta görünür. **Dahili test** grubuna kendini ekle (Apple incelemesi gerekmez), iPhone'a **TestFlight**
+uygulamasını kur, davetle yükle. Build 90 gün geçerlidir. Şifreleme sorusu sorulmaz (`ITSAppUsesNonExemptEncryption = NO`:
+yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; aynı sürümle yeniden yüklemek için yeniden çalıştırmak yeter.
+
 ---
 
 Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.
