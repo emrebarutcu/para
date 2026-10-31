@@ -75,12 +75,19 @@ test("fiyatı olmayan gün (hafta sonu, tatil) atlanır, son fiyat günü bulunu
   assert.deepEqual(f.calls.filter(c => c.kind === "EMK").map(c => c.day), ["20261030"]);
 });
 
-test("emeklilik fonları alınamazsa yatırım fonları yine gelir, liste kısa süre sonra yenilenir", async () => {
+test("emeklilik fonları alınamazsa yatırım fonları yine gelir, bulunamayan fon yok sayılmaz, liste kısa süre sonra yenilenir", async () => {
   clearMarket();
   const f = fake({ down: { tefas: ["EMK"] } });
-  const { funds } = await getFunds({ fetch: f.fetch, now: NOW });
+  const { funds, partial } = await getFunds({ fetch: f.fetch, now: NOW });
   assert.ok(funds.has("AFT"));
   assert.ok(!funds.has("AAJ"));
+  assert.deepEqual(partial, ["EMK"]);
+  // Meşgul cevapta bir kez daha denendi
+  assert.equal(f.calls.filter(c => c.kind === "EMK").length, 2);
+  const out = await getPrices(["FON:AFT", "FON:AAJ"], { fetch: f.fetch, now: NOW });
+  assert.ok(out.prices["FON:AFT"]);
+  assert.deepEqual(out.missing, []);
+  assert.deepEqual(out.failed, ["FON"]);
   const n = f.calls.length;
   await getFunds({ fetch: f.fetch, now: () => NOW() + 6 * 60_000 });
   assert.ok(f.calls.length > n);

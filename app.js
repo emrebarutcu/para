@@ -94,6 +94,7 @@ let pricesTriedAt = 0;
 let pricesLoading = null;
 const lookups = new Map();    // formda sorulan, elde olmayan kod → "loading" | "missing" | "error"
 let fundList = null;          // TEFAS fon listesi (formdaki arama): [{ code: "AFT", name, kind, price, date }]
+let fundListPartial = false;  // listede bir fon türü eksik (alınamadı): bulunamayan fon "yok" sayılmaz
 let fundListLoading = null;
 let lastSettle = readPref(PREF.settle) !== "0";   // fon / hisse alışı TL bakiyesine işlensin (formda son seçilen)
 let priceTouched = false;     // formdaki birim fiyatı kullanıcı yazdı (güncel fiyatla doldurulmaz)
@@ -2267,9 +2268,9 @@ function lookupPrice(code) {
   if (!m || prices?.prices?.[code] || lookups.has(code)) return;
   if (m.market === "FON") {
     const x = fundList?.find(f => f.code === m.ticker);
-    if (x) setPrice(code, { price: x.price, date: x.date, name: x.name, kind: x.kind });
-    else if (fundList) lookups.set(code, "missing");
-    return;
+    if (x) { setPrice(code, { price: x.price, date: x.date, name: x.name, kind: x.kind }); return; }
+    if (fundList && !fundListPartial) { lookups.set(code, "missing"); return; }
+    if (fundListLoading) return;   // liste gelince yeniden bakılır; alınamadıysa tek tek sorulur
   }
   lookups.set(code, "loading");
   fetch(`/api/fiyat?kod=${code}`)
@@ -2287,7 +2288,7 @@ function loadFundList() {
   if (fundList || fundListLoading) return;
   fundListLoading = fetch("/api/fonlar")
     .then(res => (res.ok ? res.json() : Promise.reject(new Error(`fonlar ${res.status}`))))
-    .then(data => { if (Array.isArray(data?.funds)) fundList = data.funds; })
+    .then(data => { if (Array.isArray(data?.funds)) { fundList = data.funds; fundListPartial = !!data.partial?.length; } })
     .catch(() => {})
     .finally(() => {
       fundListLoading = null;
