@@ -16,6 +16,7 @@ const FUND_TTL = 60 * 60_000;
 const FUND_RETRY = 5 * 60_000;     // fon türlerinden biri alınamadıysa liste bu kadar sonra yeniden denenir
 const STOCK_TTL = 2 * 60_000;
 const TIMEOUT = 8000;
+const RETRY_WAIT = 1500;           // kaynak meşgulse yeniden denemeden önce
 const LOOKBACK = 10;               // fiyatı olan gün en fazla bu kadar geriye aranır (bayram tatilleri)
 const BATCH = 40;                  // bir istekte en fazla hisse
 const MAX_CODES = 100;             // /api/fiyat'ta en fazla kod
@@ -41,12 +42,18 @@ const weekend = day => [0, 6].includes(new Date(`${day}T12:00:00Z`).getUTCDay())
 // Tek fon türünün bir gündeki fiyatları; o gün fiyat yoksa (tatil, henüz açıklanmadı) boş liste
 async function fundsOn(f, kind, day) {
   const ymd = day.replaceAll("-", "");
-  const res = await f(FUND_URL, {
-    method: "POST",
-    signal: AbortSignal.timeout(TIMEOUT),
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ fonTipi: kind, fonKodu: null, basTarih: ymd, bitTarih: ymd, basSira: 1, bitSira: 100000, dil: "TR" }),
-  });
+  // TEFAS art arda gelen istekleri bazen meşgul diye geri çevirir (429 / 503): bir kez daha
+  let res;
+  for (let i = 0; i < 2; i++) {
+    res = await f(FUND_URL, {
+      method: "POST",
+      signal: AbortSignal.timeout(TIMEOUT),
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ fonTipi: kind, fonKodu: null, basTarih: ymd, bitTarih: ymd, basSira: 1, bitSira: 100000, dil: "TR" }),
+    });
+    if (res.ok || i || ![429, 503].includes(res.status)) break;
+    await new Promise(done => setTimeout(done, RETRY_WAIT));
+  }
   if (!res.ok) throw new Error(`tefas ${kind} ${day}: ${res.status}`);
   const d = await res.json();
   const list = Array.isArray(d?.resultList) ? d.resultList : [];
@@ -76,8 +83,9 @@ function fundOf(r, kind) {
 let funds = null;        // { at, ttl, value: { date, funds: Map(kod → fon) } }
 let fundsLoading = null;
 
-// Bütün fonlar: { date, funds: Map("AFT" → { code, name, kind, price, date }) }. Yatırım fonu listesi alınamazsa hata;
-// önceden alınmış liste varsa o döner.
+// Bütün fonlar: { date, funds: Map("AFT" → { code, name, kind, price, date }), partial: [alınamayan fon türleri] }.
+// Yatırım fonu listesi alınamazsa hata; önceden alınmış liste varsa o döner. Eksik listede bulunamayan fon "yok"
+// sayılmaz (getPrices failed).
 export async function getFunds({ fetch: f = fetch, now = Date.now } = {}) {
   if (funds && now() - funds.at < funds.ttl) return funds.value;
   fundsLoading ??= (async () => {
@@ -92,7 +100,7 @@ export async function getFunds({ fetch: f = fetch, now = Date.now } = {}) {
         if (res.status === "rejected") { console.warn("fon:", res.reason?.message); return; }
         for (const r of res.value.list) { const x = fundOf(r, KINDS[i + 1]); if (x && !map.has(x.code)) map.set(x.code, x); }
       });
-      const value = { date: yat.day, funds: map };
+      const value = { date: yat.day, funds: map, partial: KINDS.slice(1).filter((k, i) => rest[i].status === "rejected") };
       funds = { at: now(), ttl: rest.some(r => r.status === "rejected") ? FUND_RETRY : FUND_TTL, value };
       return value;
     } catch (err) {
@@ -156,7 +164,9 @@ export async function getPrices(codes, opts = {}) {
   for (const c of fundCodes) {
     if (fl.status !== "fulfilled") continue;
     const x = fl.value.funds.get(V.market(c).ticker);
-    if (x) prices[c] = { price: x.price, date: x.date, name: x.name, kind: x.kind }; else missing.push(c);
+    if (x) prices[c] = { price: x.price, date: x.date, name: x.name, kind: x.kind };
+    else if (fl.value.partial?.length) { if (!failed.includes("FON")) failed.push("FON"); }   // eksik listede bilinmez
+    else missing.push(c);
   }
   for (const c of stockCodes) {
     if (sq.status !== "fulfilled") continue;
@@ -277,13 +287,14 @@ export async function handlePrices(request, ctx) {
   });
 }
 
-// GET /api/fonlar → { date, funds: [{ code: "AFT", name, kind, price, date }] } (aramada kullanılır)
+// GET /api/fonlar → { date, funds: [{ code: "AFT", name, kind, price, date }], partial?: [alınamayan türler] } (aramada)
 export async function handleFunds(request, ctx) {
   const key = new Request(new URL("/api/fonlar", request.url));
   return cached(request, ctx, key, async () => {
     try {
-      const { date, funds: all } = await getFunds();
-      return json({ date, funds: [...all.values()] }, 200, FUND_TTL / 1000);
+      const { date, funds: all, partial } = await getFunds();
+      // Eksik liste (bir fon türü alınamadı) kısa saklanır: Worker 5 dakika sonra yeniden dener
+      return json({ date, funds: [...all.values()], ...(partial?.length && { partial }) }, 200, partial?.length ? FUND_RETRY / 1000 : FUND_TTL / 1000);
     } catch (err) {
       console.error("fonlar:", err);
       return json({ error: "Fon listesi şu an alınamıyor." }, 503);
