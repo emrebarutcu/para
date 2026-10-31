@@ -110,6 +110,9 @@ birleşebilir (aynı satırdaki aynı değişiklik git'te çakışma sayılmaz);
 aynı sürüm yakalanır ve sürüm yeniden artırılır.
 
 Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca cihazlardaki eski dosyalar kendiliğinden yenilenir.
+`scripts/surum.sh` sürümü `sw.js`'in ilk satırına da yazar ("// Sürüm 6.0.2 …"; Sürüm denetimi ikisinin aynı olduğuna
+bakar): dosyanın kendisi her sürümde değişir, tarayıcılar (Safari dahil) yeni service worker'ı içe aktarılan `version.js`'e
+bakmadan da fark eder. Yeni service worker denetimi alınca açık sayfa bir kez yenilenir (açık form varsa kapanınca).
 
 ### Yerelde çalıştırma ve tutarlılık denetimi
 

@@ -21,6 +21,10 @@ jobs:
           base=$(git show "origin/$BASE:version.js" 2>/dev/null | ver || true)
           echo "main: ${base:-yok}, bu PR: $head"
           if [ -z "$head" ]; then echo "::error file=version.js::Sürüm okunamadı"; exit 1; fi
+          if ! grep -q "^// Sürüm $head " sw.js; then
+            echo "::error file=sw.js::sw.js'teki sürüm satırı version.js ile aynı değil ($head). scripts/surum.sh ikisini birlikte yazar."
+            exit 1
+          fi
           if [ -n "$base" ] && { [ "$head" = "$base" ] || [ "$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)" != "$head" ]; }; then
             echo "::error file=version.js::Sürüm artırılmalı (main: $base, bu PR: $head). scripts/surum.sh [patch|minor|major] çalıştır."
             exit 1
