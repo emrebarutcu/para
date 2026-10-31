@@ -71,14 +71,37 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
           codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier=" || true
 
-      - name: TestFlight'a yükle
+      - name: Dışa aktar (App Store imzası)
         run: |
+          sed -i '' 's|<string>upload</string>|<string>export</string>|' "$RUNNER_TEMP/ExportOptions.plist"
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/CashFollow.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
             -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" \
             -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID"
+          # Yüklenecek paketin imzası: dağıtım sertifikası (Apple Distribution) ve App Store profili olmalı
+          cd "$RUNNER_TEMP" && rm -rf ipa && mkdir ipa && cd ipa && unzip -q ../export/CashFollow.ipa
+          APP=Payload/CashFollow.app
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier=|Format|CodeDirectory"
+          codesign -d --entitlements - "$APP" 2>&1 | head -40
+          security cms -D -i "$APP/embedded.mobileprovision" | grep -A1 -E "<key>(Name|ProvisionsAllDevices|get-task-allow|aps-environment)</key>" || true
+          find "$APP" -type f | grep -v "/js/\|Assets.car\|_CodeSignature" | head -40
+
+      - name: Hata kaydı
+        if: failure()
+        run: |
+          for d in $(find "${TMPDIR:-/tmp}" /var/folders -name "*.xcdistributionlogs" -maxdepth 6 2>/dev/null); do
+            echo "== $d"; ls "$d"; tail -80 "$d/IDEDistribution.standard.log" 2>/dev/null || true
+          done
+
+      - name: TestFlight'a yükle
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          cp "$KEY_PATH" ~/.appstoreconnect/private_keys/
+          xcrun altool --upload-app -f "$RUNNER_TEMP/export/CashFollow.ipa" -t ios \
+            --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" --output-format normal
           echo "Yüklendi: sürüm $(sed -n "s/^self.APP_VERSION = '\(.*\)';/\1/p" version.js), build $BUILD. App Store Connect birkaç dakika işler, sonra TestFlight'ta görünür."
 
       - name: Anahtarı sil
         if: always()
-        run: rm -f "$KEY_PATH"
+        run: rm -rf "$KEY_PATH" ~/.appstoreconnect/private_keys
