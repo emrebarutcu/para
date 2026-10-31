@@ -22,6 +22,8 @@
     <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5.5 3h13v18l-3.25-2-3.25 2-3.25-2-3.25 2z"/><path d="M9 8h6M9 12h6"/></symbol>
     <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></symbol>
     <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24"><path d="m3.5 16.5 5.5-5.5 4 4 7.5-7.5"/><path d="M15 7.5h5.5V13"/></symbol>
+    <symbol id="i-pie" viewBox="0 0 24 24"><path d="M11 4a8 8 0 1 0 9 9h-9z"/><path d="M14.5 3.3a8 8 0 0 1 6.2 6.2h-6.2z"/></symbol>
     <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="9" cy="7" rx="5.5" ry="2.5"/><path d="M3.5 7v4c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5V7M3.5 11v4c0 1.4 2.5 2.5 5.5 2.5 1 0 2-.1 2.8-.4"/><ellipse cx="16" cy="14" rx="4.5" ry="2"/><path d="M11.5 14v3.5c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V14"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
@@ -118,7 +120,7 @@
               <select id="cashStart" aria-label="Dönemin başladığı gün"></select>
             </label>
             <div class="seg" id="cashMode" role="group" aria-label="Grafikte gösterilen">
-              <button type="button" data-mode="balance">Varlık</button>
+              <button type="button" data-mode="balance">Bakiye</button>
               <button type="button" data-mode="net">Dönem net</button>
             </div>
           </div>
@@ -301,10 +303,29 @@
         <dl class="hero-stats" id="rateStats"></dl>
       </div>
       <div class="chips scroll-x" id="entryFilter" role="group" aria-label="Kişiye göre süz"></div>
+      <!-- Varlığın seyri: her gün o günün kur ve fiyatlarıyla (Özet'teki Nakit grafiğinden ayrı) -->
+      <section class="panel asset-panel" id="assetPanel" hidden>
+        <header class="panel-head">
+          <h2>Varlığın seyri</h2>
+          <div class="seg" id="assetRange" role="group" aria-label="Dönem">
+            <button type="button" data-range="1m">1A</button>
+            <button type="button" data-range="3m">3A</button>
+            <button type="button" data-range="6m">6A</button>
+            <button type="button" data-range="1y">1Y</button>
+            <button type="button" data-range="all">Tümü</button>
+          </div>
+        </header>
+        <dl class="tl-sum" id="assetSum"></dl>
+        <svg id="assetChart" class="chart cash-chart" role="img" tabindex="0" aria-label="Varlığın seyri"></svg>
+        <p class="footnote" id="assetNote"></p>
+      </section>
       <div class="asset-grid" id="assetGrid"></div>
+      <section id="holdWrap"></section>
       <div id="entryWrap"></div>
-      <p class="footnote">TL karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Kurlar internet varken
-        birkaç dakikada bir yenilenir; çevrimdışıyken son alınan kur kullanılır. Bakiyelere borç ve alacak ödemeleri de
+      <p class="footnote">TL karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Fon fiyatları TEFAS'tan
+        gelir ve günde bir kez açıklanır; hisse fiyatları Borsa İstanbul'dan yaklaşık 15 dakika gecikmelidir. Kâr, alışlarda
+        girdiğin birim fiyatlara göre ortalama maliyetle hesaplanır. Kurlar ve fiyatlar internet varken
+        birkaç dakikada bir yenilenir; çevrimdışıyken son alınanlar kullanılır. Bakiyelere borç ve alacak ödemeleri de
         girer. Kart ekstreleri TL bakiyenden düşer: “Otomatik” kartlarda son ödeme gününün ertesi günü, “Ben işaretlerim”
         kartlarında “Ödendi”ye dokunduğunda. “Hesaba katılmasın” seçtiğin kartlar bakiyeni etkilemez.</p>
     </section>
@@ -409,8 +430,9 @@
       </header>
       <div class="sheet-body">
         <div class="seg seg-full" role="radiogroup" aria-label="Yön">
-          <label><input type="radio" name="dir" value="in" checked /><span>Giriş</span></label>
-          <label><input type="radio" name="dir" value="out" /><span>Çıkış</span></label>
+          <label><input type="radio" name="dir" value="in" checked /><span id="entryInText">Giriş</span></label>
+          <label id="entrySellOpt" hidden><input type="radio" name="dir" value="sell" /><span>Bozdur</span></label>
+          <label><input type="radio" name="dir" value="out" /><span id="entryOutText">Çıkış</span></label>
         </div>
 
         <div class="field">
@@ -418,12 +440,29 @@
           <div class="chips" id="assetChips" role="radiogroup" aria-label="Varlık"></div>
         </div>
 
+        <!-- Fon ya da hisse: kod (fonda adla da aranır), öneriler, bulunan fon / hisse -->
+        <div class="field" id="entryTickerField" hidden>
+          <label class="field-label" for="entryTicker" id="entryTickerLabel">Fon</label>
+          <input id="entryTicker" name="ticker" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <div class="ticker-list" id="entryTickerList"></div>
+          <p class="ticker-info" id="entryTickerInfo" aria-live="polite"></p>
+        </div>
+
         <div class="field">
-          <span class="field-label">Miktar</span>
+          <span class="field-label" id="entryAmountLabel">Miktar</span>
           <label class="amount-input">
             <span class="cur" id="entryUnit">₺</span>
             <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Miktar" data-amount />
           </label>
+        </div>
+
+        <div class="field" id="entryPriceField" hidden>
+          <span class="field-label" id="entryPriceLabel">Birim fiyat <small>(kâr / zarar için)</small></span>
+          <label class="amount-input sm">
+            <span class="cur">₺</span>
+            <input name="price" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Birim fiyat" data-amount="6" />
+          </label>
+          <label class="check"><input type="checkbox" name="settle" /><span id="entrySettleText">Tutar TL bakiyemden düşülsün</span></label>
         </div>
 
         <label class="field">
@@ -436,7 +475,7 @@
           <input name="date" type="date" required />
         </label>
 
-        <div class="field">
+        <div class="field" id="entryRepeatField">
           <span class="field-label">Tekrar</span>
           <div id="entryRepeat"></div>
         </div>
@@ -784,6 +823,13 @@
           </div>
         </div>
         <div class="settings-group">
+          <span class="group-label">Nakit</span>
+          <button type="button" class="row-btn" id="cashDefBtn">
+            <svg class="ic"><use href="#i-cash"/></svg>
+            <span class="row-text"><strong>Nakit sayılanlar</strong><small id="cashDefText">TL ve para piyasası fonları</small></span>
+          </button>
+        </div>
+        <div class="settings-group">
           <span class="group-label">Hesap</span>
           <div class="row-btn row-static">
             <svg class="ic"><use href="#i-cloud"/></svg>
@@ -820,6 +866,26 @@
   </dialog>
 
   <!-- ── Banka e-postaları ──────────────────────────────── -->
+  <!-- ── Nakit tanımı ───────────────────────────────────── -->
+  <dialog class="sheet" id="cashDefSheet" aria-labelledby="cashDefTitle">
+    <div class="sheet-form">
+      <header class="sheet-head">
+        <h2 id="cashDefTitle">Nakit sayılanlar</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <p class="hint">Özet'teki Nakit grafiği yalnızca bunları sayar: bakiyeleri ve hareketleri. Hemen harcayabileceğin
+          parayı seç; varsayılan TL ve aynı gün nakde dönen (T+0) TL para piyasası fonları.</p>
+        <div class="cash-def" id="cashDefList"></div>
+      </div>
+      <footer class="sheet-foot">
+        <button type="button" class="btn btn-ghost" id="cashDefReset">Varsayılana dön</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" data-close>Tamam</button>
+      </footer>
+    </div>
+  </dialog>
+
   <dialog class="sheet" id="inboxSheet" aria-labelledby="inboxTitle">
     <div class="sheet-form">
       <header class="sheet-head">

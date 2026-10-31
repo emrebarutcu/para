@@ -8,6 +8,8 @@
   const TABLES = ["people", "cards", "purchases", "entries", "debts"];
   const FIELD = { people: "people", cards: "cards", purchases: "installments", entries: "entries", debts: "debts" };
   const ASSETS = ["TRY", "USD", "EUR", "GAU"];   // varlik.js
+  // Fon ve hisse (varlik.js market): yalnızca varlık hareketlerinde
+  const MARKET = /^(FON:[A-Z0-9]{3}|BIST:[A-Z][A-Z0-9]{2,5})$/;
   const DEBT_KINDS = ["person", "loan", "payment"], DEBT_SIDES = ["debt", "receivable"];   // borc.js
 
   const num = v => (typeof v === "number" ? v : Number(v));
@@ -92,10 +94,17 @@
         ...(date ? repeatCols(p) : repeatCols({})),
       };
     },
+    // Fon / hisse tekrarlamaz. price birim fiyat ya da kur (TL; fon, hisse, döviz ve altında, tek seferlik), settle
+    // yalnızca fiyatla (miktar × fiyat TL bakiyesine işlenir)
     entries: e => {
-      const amount = num(e.amount), date = dateKey(e.date);
-      if (!validId(e.personId) || !ASSETS.includes(e.asset) || !Number.isFinite(amount) || amount === 0 || !date) return null;
-      return { id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date, ...repeatCols(e) };
+      const amount = num(e.amount), date = dateKey(e.date), market = MARKET.test(e.asset);
+      if (!validId(e.personId) || !(ASSETS.includes(e.asset) || market) || !Number.isFinite(amount) || amount === 0 || !date) return null;
+      const rep = repeatCols(market ? {} : e);
+      const price = e.asset !== "TRY" && rep.repeat_count == null ? pos(e.price) : null;
+      return {
+        id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date,
+        ...rep, price, settle: price != null && e.settle === true ? true : null,
+      };
     },
     // Borç kaydı (borc.js): person kişiyle borç / alacak, loan kredi, payment ödeme / tahsilat (debt_id boşsa kart payı)
     debts: d => {
@@ -157,6 +166,8 @@
     entries: r => {
       const e = { id: r.id, personId: r.person_id, asset: r.asset, amount: Number(r.amount), desc: r.description, date: r.date };
       repeatFields(r, e);
+      if (r.price != null) e.price = Number(r.price);
+      if (r.settle === true) e.settle = true;
       return e;
     },
     debts: r => {
@@ -186,9 +197,10 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 6;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
+  const SCHEMA = 7;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
                       // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit;
-                      // 5: cards.track_since / track_off (debts yeni tablo); 6: cards.manual_since, debts.card_id
+                      // 5: cards.track_since / track_off (debts yeni tablo); 6: cards.manual_since, debts.card_id;
+                      // 7: entries.price / settle (fon, hisse, döviz ve altın)
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base) {

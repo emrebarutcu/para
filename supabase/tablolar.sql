@@ -61,13 +61,14 @@ create table if not exists purchases (
   check (date is not null or first_due is not null)
 );
 
--- Varlık hareketleri: TL, dolar, euro ve gram altın giriş / çıkışları. amount varlığın kendi biriminde (GAU: gram),
--- girişte artı, çıkışta eksidir; bakiye toplamdır. TL karşılığı uygulamada güncel kurla hesaplanır (/api/kur).
+-- Varlık hareketleri: TL, dolar, euro, gram altın, fon ve hisse giriş / çıkışları. amount varlığın kendi biriminde
+-- (GAU: gram; fon ve hissede adet), girişte artı, çıkışta eksidir; bakiye toplamdır. TL karşılığı uygulamada güncel
+-- kurla (/api/kur), fon ve hissede güncel fiyatla (/api/fiyat) hesaplanır.
 create table if not exists entries (
   user_id     uuid not null default auth.uid() references auth.users on delete cascade,
   id          text not null check (length(id) between 1 and 100),
   person_id   text not null,
-  asset       text not null check (asset in ('TRY', 'USD', 'EUR', 'GAU')),
+  asset       text not null check (asset in ('TRY', 'USD', 'EUR', 'GAU') or asset ~ '^(FON:[A-Z0-9]{3}|BIST:[A-Z][A-Z0-9]{2,5})$'),
   amount      numeric not null check (amount <> 0),
   description text not null,
   date        date not null,
@@ -98,6 +99,21 @@ alter table purchases add column if not exists repeat_count integer
   check (repeat_count = 0 or repeat_count between 2 and 600);
 alter table purchases add column if not exists repeat_every smallint check (repeat_every between 1 and 99);
 alter table purchases add column if not exists repeat_unit text check (repeat_unit in ('day', 'week', 'month'));
+
+-- Fon ve hisse (5.x'te yoktu; var olan tabloya eklenir, varlik.js): asset 'FON:AFT' (TEFAS fon kodu) ya da
+-- 'BIST:THYAO' (Borsa İstanbul işlem kodu), amount adet; tekrarlamaz. price alış / satış günündeki birim fiyat (TL;
+-- boşsa bilinmiyor), settle true ise adet × price sahibinin TL bakiyesinden düşer (alış) ya da ona eklenir (satış).
+alter table entries drop constraint if exists entries_asset_check;
+alter table entries add constraint entries_asset_check
+  check (asset in ('TRY', 'USD', 'EUR', 'GAU') or asset ~ '^(FON:[A-Z0-9]{3}|BIST:[A-Z][A-Z0-9]{2,5})$');
+alter table entries add column if not exists price numeric check (price > 0);
+alter table entries add column if not exists settle boolean;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'entries_settle_check') then
+    alter table entries add constraint entries_settle_check check (settle is null or price is not null);
+  end if;
+end $$;
 
 -- Kartın ekstre takibi (4.x'te yoktu; var olan tabloya eklenir, borc.js): track_since'tan sonra son ödeme günü geçen
 -- ekstreler ilk kişinin TL varlığından düşer, kartta diğer kişilerin o günden sonraki taksitleri onlardan alacaktır.

@@ -6,6 +6,7 @@
 import { TOOLS, INSTRUCTIONS, ToolError, todayKey } from "./tools.js";
 import { createStore, getUser } from "./supabase.js";
 import { getRates } from "./kur.js";
+import { getPrices, searchFunds } from "./piyasa.js";
 
 // config.js ile aynı (herkese açık değerler); Worker → Settings → Variables ile değiştirilebilir
 const DEFAULTS = {
@@ -145,6 +146,8 @@ export async function handle(request, env = {}, { fetch: f = fetch, now = () => 
     mutate: store.mutate,
     inbox: { ...store.inbox, address: renew => store.inbox.address(renew, cfg.domain) },
     rates: () => getRates({ fetch: f }),
+    prices: codes => getPrices(codes, { fetch: f, now: () => now().getTime() }),
+    searchFunds: (q, limit) => searchFunds(q, { limit, fetch: f, now: () => now().getTime() }),
   };
 
   const batch = Array.isArray(body);
