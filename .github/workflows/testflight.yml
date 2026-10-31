@@ -1,7 +1,7 @@
 # iOS uygulamasını App Store Connect'e (TestFlight) yükler. Mac gerekmez: imza Apple'ın bulut sertifikasıyla, App Store
 # Connect API anahtarıyla yapılır (Xcode otomatik imzalama, -allowProvisioningUpdates). Kurulum: SETUP.md → TestFlight.
 # Elle (Actions → TestFlight → Run workflow; dosya main'de olmalı) ya da testflight-* etiketiyle (her dalda) çalışır.
-# Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
+# macOS 26 makinesinde en yeni Xcode ile. Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
 name: TestFlight
 
 on:
@@ -11,7 +11,7 @@ on:
 
 jobs:
   yukle:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     env:
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -22,11 +22,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Xcode
+        # App Store Connect yalnızca güncel SDK ile yapılmış build'i kabul eder (Ekim 2026: iOS 26 SDK, Xcode 26): kurulu en yeni Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -viE "beta|rc" | sort -V | tail -1)   # beta Xcode ile yüklenen build reddedilir
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos
+
       - name: Anahtarlar
         run: |
           for v in TEAM_ID KEY_ID ISSUER_ID KEY_P8; do
             if [ -z "$(printenv $v)" ]; then
-              echo "::error::GitHub → Settings → Secrets and variables → Actions'ta APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID ve ASC_KEY_P8 olmalı (SETUP.md → TestFlight)"
+              echo "::error::$v boş: GitHub → Settings → Secrets and variables → Actions'ta APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID ve ASC_KEY_P8 olmalı (SETUP.md → TestFlight)"
               exit 1
             fi
           done
@@ -56,6 +65,11 @@ jobs:
             DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" \
             -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" \
             -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID" -quiet
+          # İmza paketin bütün dosyalarını (js/ dahil) kapsıyor mu; kopyalama imzadan sonra olursa burada yakalanır
+          APP="$RUNNER_TEMP/CashFollow.xcarchive/Products/Applications/CashFollow.app"
+          test -f "$APP/js/tools.js"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier=" || true
 
       - name: TestFlight'a yükle
         run: |

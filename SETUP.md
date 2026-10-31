@@ -216,7 +216,7 @@ araçları (`mcp/tools.js`) JavaScriptCore'da çalışır (`ios/js/kopru.js`); e
 gelir; bir kural değişince iOS bir sonraki derlemede onu kullanır (Xcode'un "Web modülleri" adımı, `ios/scripts/js-kopyala.sh`,
 dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iOS aynı PR'da değişir.
 
-- **Açmak:** Xcode 16+ ile `ios/CashFollow.xcodeproj` → hedef CashFollow → Signing & Capabilities'te kendi ekibini seç
+- **Açmak:** Xcode 26+ ile (App Store Connect eski SDK ile yapılmış build'i kabul etmez) `ios/CashFollow.xcodeproj` → hedef CashFollow → Signing & Capabilities'te kendi ekibini seç
   (bundle id `app.cashfollow.ios`) → çalıştır. iOS 17+, yalnızca iPhone.
 - **Veri:** Girişsiz kullanımın verisi `veri.json`'da, hesabınki `veri.<kullanıcı id>.json`'da (Application Support), biçim
   web'deki localStorage ile aynıdır. Oturum Anahtar Zinciri'ndedir. Eşitleme `sync.js`'in Swift karşılığıdır
@@ -236,7 +236,7 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
 
 #### TestFlight (Mac gerekmez)
 
-`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS makinesinde arşivler, Apple'ın bulut sertifikasıyla imzalar ve
+`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS 26 makinesinde, kurulu en yeni (beta olmayan) Xcode ile arşivler, Apple'ın bulut sertifikasıyla imzalar ve
 App Store Connect'e yükler. Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
 
 1. **Team ID:** [developer.apple.com/account](https://developer.apple.com/account) → Membership details → Team ID (10 karakter).
