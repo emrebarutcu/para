@@ -81,17 +81,20 @@ jobs:
           # Yüklenecek paketin imzası: dağıtım sertifikası (Apple Distribution) ve App Store profili olmalı
           cd "$RUNNER_TEMP" && rm -rf ipa && mkdir ipa && cd ipa && unzip -q ../export/CashFollow.ipa
           APP=Payload/CashFollow.app
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier=|Format|CodeDirectory"
-          codesign -d --entitlements - "$APP" 2>&1 | head -40
-          security cms -D -i "$APP/embedded.mobileprovision" | grep -A1 -E "<key>(Name|ProvisionsAllDevices|get-task-allow|aps-environment)</key>" || true
-          find "$APP" -type f | grep -v "/js/\|Assets.car\|_CodeSignature" | head -40
+          echo "== imza"; codesign -dvvvv "$APP" 2>&1 | grep -vE "^(Hash|CandidateCDHash|CMSDigest)" || true
+          echo "== gereksinim (DR)"; codesign -d -r- "$APP" 2>&1 || true
+          echo "== yetkiler"; codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -p - || true
+          echo "== profil"; security cms -D -i "$APP/embedded.mobileprovision" > profil.plist && plutil -p profil.plist | grep -vE "DeveloperCertificates|^\s+[0-9]+ => \{length" | head -40 || true
+          echo "== sertifika zinciri"; codesign -d --extract-certificates=sert "$APP" && for c in sert*; do openssl x509 -inform der -in "$c" -noout -subject -issuer -dates; done || true
+          echo "== dosyalar"; find "$APP" -type f | grep -v "/js/" | head -40
+          echo "== doğrulama"; codesign --verify --deep --strict --verbose=4 "$APP"
 
       - name: Hata kaydı
         if: failure()
         run: |
           for d in $(find "${TMPDIR:-/tmp}" /var/folders -name "*.xcdistributionlogs" -maxdepth 6 2>/dev/null); do
-            echo "== $d"; ls "$d"; tail -80 "$d/IDEDistribution.standard.log" 2>/dev/null || true
+            echo "== $d"; ls "$d"
+            grep -ihE "certif|cloud|codesign|signing identity|profile|error" "$d"/IDEDistribution.verbose.log 2>/dev/null | grep -v IDEDistributionContext | tail -80 || true
           done
 
       - name: TestFlight'a yükle
