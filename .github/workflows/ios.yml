@@ -1,0 +1,48 @@
+# iOS uygulaması (ios/): köprü Node'da denenir, uygulama macOS'ta simülatör için derlenir ve simülatörde öz denetimle
+# (-oz-denetim) açılır: web modülleri ve mcp/tools.js JavaScriptCore'da yüklenir, araçların cevapları Swift'e çözülür.
+# Web'in hesap modülleri ya da araçlar değişince de çalışır (iOS onları olduğu gibi kullanır).
+name: iOS
+
+on:
+  push:
+    branches-ignore: [main]
+    paths: ["ios/**", "*.js", "mcp/tools.js", ".github/workflows/ios.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["ios/**", "*.js", "mcp/tools.js", ".github/workflows/ios.yml"]
+
+jobs:
+  kopru:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test ios/test/*.test.mjs
+
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derle
+        run: |
+          xcodebuild -version
+          xcodebuild -project ios/CashFollow.xcodeproj -scheme CashFollow -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO build -quiet
+      - name: Simülatörde öz denetim
+        run: |
+          APP=build/Build/Products/Debug-iphonesimulator/CashFollow.app
+          test -f "$APP/js/tools.js"
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)["devices"]
+          ids = [x["udid"] for rt, xs in sorted(d.items(), reverse=True) if "iOS" in rt for x in xs if x["name"].startswith("iPhone")]
+          print(ids[0])')
+          xcrun simctl boot "$UDID"
+          xcrun simctl install "$UDID" "$APP"
+          OUT=$(xcrun simctl launch --console-pty "$UDID" app.cashfollow.ios -oz-denetim 2>&1 || true)
+          echo "$OUT"
+          echo "$OUT" | grep -q "OZ-DENETIM TAMAM"

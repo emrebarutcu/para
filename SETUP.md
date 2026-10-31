@@ -207,6 +207,55 @@ Paylaş butonu → "Ana Ekrana Ekle"
 **Android (Chrome):**  
 Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
 
+### iOS uygulaması (`ios/`, Swift)
+
+Yerel SwiftUI uygulaması aynı depodadır: aynı Supabase tablolarını kullanır ve hesap kurallarını yeniden yazmaz. Web'in
+DOM'dan bağımsız modülleri (`tekrar`, `taksit`, `varlik`, `borc`, `kategori`, `eposta`, `icgoru`, `tablo`) ve asistan
+araçları (`mcp/tools.js`) JavaScriptCore'da çalışır (`ios/js/kopru.js`); ekranlar araçları çağırır (`get_overview`,
+`list_cards`, `add_purchase`…). Kesim / son ödeme, taksit, bakiye ve borç hesabı web, asistan ve iPhone'da tek koddan
+gelir; bir kural değişince iOS bir sonraki derlemede onu kullanır (Xcode'un "Web modülleri" adımı, `ios/scripts/js-kopyala.sh`,
+dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iOS aynı PR'da değişir.
+
+- **Açmak:** Xcode 16+ ile `ios/CashFollow.xcodeproj` → hedef CashFollow → Signing & Capabilities'te kendi ekibini seç
+  (bundle id `app.cashfollow.ios`) → çalıştır. iOS 17+, yalnızca iPhone.
+- **Veri:** Girişsiz kullanımın verisi `veri.json`'da, hesabınki `veri.<kullanıcı id>.json`'da (Application Support), biçim
+  web'deki localStorage ile aynıdır. Oturum Anahtar Zinciri'ndedir. Eşitleme `sync.js`'in Swift karşılığıdır
+  (`Cekirdek/Senkron.swift`, PostgREST): yalnızca değişen satırlar yazılır, uygulama açılınca / öne gelince / aşağı çekince
+  ve her kayıttan 1.5 sn sonra. Realtime yok. Girişsiz girilen veri girişte hesaba taşınabilir (`Tablo.combine`).
+- **Kurlar ve fiyatlar** `cashfollow.app/api/kur` ve `/api/fiyat`'tan gelir, çevrimdışı için saklanır.
+- **Bu sürümde:** Özet, harcamalar (ekleme önizlemeli, silme, taksit planı), kartlar (ekleme, ad / limit / son 4 hane,
+  silme), varlıklar ve hareketler (TL, döviz, altın, fon, hisse), kişiler, giriş / kayıt / şifre sıfırlama bağlantısı.
+  Borç / kredi, kart günlerinin değişmesi (`transition`), içe aktarma ve banka e-postaları web'de. Araçların doğrulama
+  hataları asistanlar için İngilizcedir; formlar çoğunu önceden engeller.
+- **Sürüm:** mağaza sürümü web sürümüdür; `scripts/surum.sh` `MARKETING_VERSION`'ı da yazar, Sürüm denetimi ikisinin aynı
+  olduğuna bakar. `CURRENT_PROJECT_VERSION` (build numarası) her TestFlight yüklemesinde elle artırılır.
+- **Denetim** (`.github/workflows/ios.yml`, iOS): `node --test ios/test/*.test.mjs` köprüyü JavaScriptCore'a benzer ortamda
+  dener; macOS'ta uygulama simülatör için derlenir ve `-oz-denetim` ile açılır (`Uygulama/OzDenetim.swift`: modüller
+  yüklenir, araçlar çağrılır, cevaplar Swift görünümlerine çözülür). Web modülleri ya da `mcp/tools.js` değişince de çalışır;
+  araç cevabının alanı değişirse `Cekirdek/Gorunumler.swift` de güncellenir.
+
+#### TestFlight (Mac gerekmez)
+
+`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS makinesinde arşivler, Apple'ın bulut sertifikasıyla imzalar ve
+App Store Connect'e yükler. Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
+
+1. **Team ID:** [developer.apple.com/account](https://developer.apple.com/account) → Membership details → Team ID (10 karakter).
+2. **Uygulama kaydı:** [App Store Connect](https://appstoreconnect.apple.com) → Uygulamalar → **+** → Yeni Uygulama: platform iOS,
+   ad CashFollow (alınmışsa ör. "CashFollow – Taksit Takibi"), birincil dil Türkçe, bundle ID **`app.cashfollow.ios`**
+   (listede yoksa önce [Identifiers](https://developer.apple.com/account/resources/identifiers/list)'ta **+** → App IDs →
+   Explicit `app.cashfollow.ios` ile kaydedilir), SKU `cashfollow-ios`.
+3. **API anahtarı:** App Store Connect → Kullanıcılar ve Erişim → Entegrasyonlar → App Store Connect API → Takım Anahtarları →
+   **+**, erişim **Admin** (bulut imza sertifikası için gerekli). Issuer ID ve Key ID'yi not et, `.p8` dosyasını indir
+   (yalnızca bir kez indirilebilir).
+4. **GitHub → Settings → Secrets and variables → Actions → New repository secret:** `APPLE_TEAM_ID`, `ASC_ISSUER_ID`,
+   `ASC_KEY_ID`, `ASC_KEY_P8` (`.p8` dosyasının bütün içeriği, `-----BEGIN PRIVATE KEY-----` satırları dahil).
+
+Yüklemek için: Actions → **TestFlight** → Run workflow (iş akışı `main`'de olmalı) ya da herhangi bir dalda
+`git tag testflight-6.1.0-1 && git push origin testflight-6.1.0-1`. Build birkaç dakika işlenir, sonra App Store Connect →
+uygulama → TestFlight'ta görünür. **Dahili test** grubuna kendini ekle (Apple incelemesi gerekmez), iPhone'a **TestFlight**
+uygulamasını kur, davetle yükle. Build 90 gün geçerlidir. Şifreleme sorusu sorulmaz (`ITSAppUsesNonExemptEncryption = NO`:
+yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; aynı sürümle yeniden yüklemek için yeniden çalıştırmak yeter.
+
 ---
 
 Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.

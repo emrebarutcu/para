@@ -13,4 +13,8 @@ sed -i.bak "s/'$cur'/'$next'/" version.js && rm version.js.bak
 # sw.js de her sürümde değişsin (tarayıcılar yeni service worker'ı dosyanın kendisinden fark eder)
 sed -i.bak "s|^// Sürüm $cur |// Sürüm $next |" sw.js && rm sw.js.bak
 grep -q "^// Sürüm $next " sw.js || { echo "sw.js'teki sürüm satırı güncellenemedi" >&2; exit 1; }
+# iOS uygulamasının mağaza sürümü (CFBundleShortVersionString) web sürümüdür
+pbx=ios/CashFollow.xcodeproj/project.pbxproj
+sed -i.bak "s/MARKETING_VERSION = $cur;/MARKETING_VERSION = $next;/" "$pbx" && rm "$pbx.bak"
+grep -q "MARKETING_VERSION = $next;" "$pbx" || { echo "$pbx'teki MARKETING_VERSION güncellenemedi" >&2; exit 1; }
 echo "$cur → $next"

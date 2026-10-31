@@ -1,0 +1,70 @@
+# iOS uygulamasını App Store Connect'e (TestFlight) yükler. Mac gerekmez: imza Apple'ın bulut sertifikasıyla, App Store
+# Connect API anahtarıyla yapılır (Xcode otomatik imzalama, -allowProvisioningUpdates). Kurulum: SETUP.md → TestFlight.
+# Elle (Actions → TestFlight → Run workflow; dosya main'de olmalı) ya da testflight-* etiketiyle (her dalda) çalışır.
+# Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
+name: TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["testflight-*"]
+
+jobs:
+  yukle:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      BUILD: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Anahtarlar
+        run: |
+          for v in TEAM_ID KEY_ID ISSUER_ID KEY_P8; do
+            if [ -z "$(printenv $v)" ]; then
+              echo "::error::GitHub → Settings → Secrets and variables → Actions'ta APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID ve ASC_KEY_P8 olmalı (SETUP.md → TestFlight)"
+              exit 1
+            fi
+          done
+          KEY="$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
+          printf '%s\n' "$KEY_P8" > "$KEY"
+          echo "KEY_PATH=$KEY" >> "$GITHUB_ENV"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Arşivle
+        run: |
+          xcodebuild -version
+          xcodebuild archive -project ios/CashFollow.xcodeproj -scheme CashFollow -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/CashFollow.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" \
+            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID" -quiet
+
+      - name: TestFlight'a yükle
+        run: |
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/CashFollow.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID"
+          echo "Yüklendi: sürüm $(sed -n "s/^self.APP_VERSION = '\(.*\)';/\1/p" version.js), build $BUILD. App Store Connect birkaç dakika işler, sonra TestFlight'ta görünür."
+
+      - name: Anahtarı sil
+        if: always()
+        run: rm -f "$KEY_PATH"
