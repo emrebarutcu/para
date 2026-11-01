@@ -54,9 +54,9 @@ struct OzetEkrani: View {
                         }
                     }
 
-                    Section("Bu ay kategoriler") {
-                        Okunan(tool: "spending_by_category") { (k: KategoriHarcamasi) in
-                            if let ay = k.months.last { KategoriKarti(ay: ay) }
+                    Section("Kategoriler") {
+                        Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
+                            KategoriKarti(months: k.months)
                         }
                     }
 

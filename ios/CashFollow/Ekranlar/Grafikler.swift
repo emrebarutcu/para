@@ -94,35 +94,63 @@ struct NakitKarti: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private struct Nokta { let d: Date; let v: Double }
+
     private func deger(_ g: NakitSerisi.Gun) -> Double { mode == "net" ? g.net : g.balance }
 
     private func grafik(_ s: NakitSerisi) -> some View {
+        let gunler = s.days.compactMap { g in Bicim.date(g.date).map { Nokta(d: $0, v: deger(g)) } }
+        let alan = yAlani(gunler.map(\.v), sifirDahil: mode == "net")
+        let bas = Bicim.date(s.from) ?? gunler.first?.d ?? Date()
+        let son = Bicim.date(s.to) ?? gunler.last?.d ?? bas
         let today = Bicim.date(s.today)
         return Chart {
-            ForEach(s.days) { g in
-                if let d = Bicim.date(g.date) {
-                    AreaMark(x: .value("Gün", d, unit: .day), y: .value("Tutar", deger(g)))
-                        .foregroundStyle(LinearGradient(colors: [Renk.vurgu.opacity(0.35), Renk.vurgu.opacity(0.02)], startPoint: .top, endPoint: .bottom))
-                        .interpolationMethod(.stepEnd)
-                    LineMark(x: .value("Gün", d, unit: .day), y: .value("Tutar", deger(g)))
-                        .foregroundStyle(Renk.vurgu)
-                        .interpolationMethod(.stepEnd)
-                }
+            ForEach(gunler, id: \.d) { g in
+                AreaMark(x: .value("Gün", g.d), yStart: .value("Taban", alan.lowerBound), yEnd: .value("Tutar", g.v))
+                    .foregroundStyle(LinearGradient(colors: [Renk.vurgu.opacity(0.35), Renk.vurgu.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.stepEnd)
+                LineMark(x: .value("Gün", g.d), y: .value("Tutar", g.v))
+                    .foregroundStyle(Renk.vurgu)
+                    .interpolationMethod(.stepEnd)
             }
-            if let today, s.days.contains(where: { $0.date == s.today }) {
-                RuleMark(x: .value("Bugün", today, unit: .day))
+            if mode == "net", alan.lowerBound < 0 {
+                RuleMark(y: .value("Sıfır", 0)).foregroundStyle(.secondary.opacity(0.5))
+            }
+            // Bugün dönemin içindeyse kesikli çizgi (dönem bugünden başlıyorsa sol kenar zaten bugündür)
+            if let today, today > bas, today <= son {
+                RuleMark(x: .value("Bugün", today))
                     .foregroundStyle(.secondary.opacity(0.6))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .annotation(position: .top, alignment: .leading) { Text("bugün").font(.caption2).foregroundStyle(.secondary) }
             }
             if let secili {
-                RuleMark(x: .value("Seçili", secili, unit: .day)).foregroundStyle(.primary.opacity(0.3))
+                RuleMark(x: .value("Seçili", secili)).foregroundStyle(.primary.opacity(0.3))
             }
         }
         .chartXSelection(value: $secili)
-        .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
-        .chartXAxis { AxisMarks(values: .stride(by: .day, count: 7)) { _ in AxisGridLine(); AxisValueLabel(format: .dateTime.day().month(.abbreviated).locale(Bicim.locale)) } }
+        .chartXScale(domain: bas...max(son, bas.addingTimeInterval(86_400)))
+        .chartYScale(domain: alan)
+        .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
+        .chartXAxis {
+            AxisMarks(values: haftalik(bas, son)) { v in
+                AxisGridLine()
+                AxisValueLabel(anchor: v.index == 0 ? .topLeading : .top) {
+                    if let d = v.as(Date.self) { Text(d, format: .dateTime.day().month(.abbreviated).locale(Bicim.locale)) }
+                }
+            }
+        }
         .frame(height: 200)
+    }
+
+    // Dönem başından haftada bir; sona 3 günden yakın olan yazılmaz (kesilmesin)
+    private func haftalik(_ bas: Date, _ son: Date) -> [Date] {
+        var out: [Date] = [], d = bas
+        let cal = Calendar(identifier: .gregorian)
+        while d <= son.addingTimeInterval(-3 * 86_400) || out.isEmpty {
+            out.append(d)
+            guard let n = cal.date(byAdding: .day, value: 7, to: d) else { break }
+            d = n
+        }
+        return out
     }
 
     private func seciliGun(_ s: NakitSerisi) -> NakitSerisi.Gun? {
@@ -161,6 +189,17 @@ func kisa(_ v: Double) -> String {
     return s + a.formatted(.number.locale(Bicim.locale).precision(.fractionLength(0)))
 }
 
+// Y ekseni: değerlerin çevresine biraz pay; bakiye sıfırdan uzaksa eksen sıfırdan başlamaz (değişim görünsün)
+func yAlani(_ vals: [Double], sifirDahil: Bool = false) -> ClosedRange<Double> {
+    guard var lo = vals.min(), var hi = vals.max() else { return 0...1 }
+    if sifirDahil { lo = min(lo, 0); hi = max(hi, 0) }
+    let pay = max((hi - lo) * 0.12, max(abs(hi), abs(lo)) * 0.03, 1)
+    var a = lo - pay
+    if lo >= 0, a < 0 { a = 0 }                               // pozitif seride negatif eksen olmasın
+    if !sifirDahil, lo >= 0, lo < (hi - lo) * 0.5 { a = 0 }   // sıfıra yakın seri sıfırdan başlasın
+    return a...(hi + pay)
+}
+
 // ── Aylık ödemeler (Özet ve Akış) ─────────────────────────────────────────────
 
 struct AylikOdemeGrafigi: View {
@@ -183,6 +222,9 @@ struct AylikOdemeGrafigi: View {
         return out
     }
 
+    // Etiketler sığsın: en çok ~6 ay adı
+    private var adim: Int { max(1, Int((Double(months.count) / 6).rounded(.up))) }
+
     var body: some View {
         let parcalar = self.parcalar, adlar = self.adlar
         VStack(alignment: .leading, spacing: 10) {
@@ -201,8 +243,14 @@ struct AylikOdemeGrafigi: View {
                 .chartForegroundStyleScale(domain: adlar, range: seriRenkleri(adlar))
                 .chartLegend(position: .bottom)
                 .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
-                .chartXAxis { AxisMarks(values: .stride(by: .month)) { _ in AxisValueLabel(format: .dateTime.month(.narrow).locale(Bicim.locale)) } }
-                .frame(height: 200)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .month, count: adim)) { _ in
+                        AxisValueLabel(format: months.count > 12
+                                       ? .dateTime.month(.abbreviated).year(.twoDigits).locale(Bicim.locale)
+                                       : .dateTime.month(.abbreviated).locale(Bicim.locale), centered: true)
+                    }
+                }
+                .frame(height: 220)
             }
         }
     }
@@ -211,14 +259,34 @@ struct AylikOdemeGrafigi: View {
 // ── Kategoriler (Özet) ────────────────────────────────────────────────────────
 
 struct KategoriKarti: View {
-    let ay: KategoriHarcamasi.Ay
+    let months: [KategoriHarcamasi.Ay]
+    @State private var secim: String?
 
     var body: some View {
+        let ay = months.first { $0.month == secim } ?? months.last
+        VStack(alignment: .leading, spacing: 10) {
+            if months.count > 1 {
+                Picker("Ay", selection: Binding(get: { ay?.month ?? "" }, set: { secim = $0 })) {
+                    ForEach(months) { m in Text(ayAdi(m.month)).tag(m.month) }
+                }
+                .pickerStyle(.segmented)
+            }
+            if let ay { pasta(ay) }
+        }
+    }
+
+    // "Kasım"; yıl yalnızca bu yıl değilse
+    private func ayAdi(_ ym: String) -> String {
+        let tam = Bicim.month(ym)
+        return ym.hasPrefix(String(Bicim.key(Date()).prefix(4))) ? String(tam.split(separator: " ").first ?? Substring(tam)) : tam
+    }
+
+    private func pasta(_ ay: KategoriHarcamasi.Ay) -> some View {
         let liste = ay.categories.filter { $0.amount > 0 }
         let adlar = liste.map(\.name)
-        VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 10) {
             if liste.isEmpty {
-                Text("Bu ay kategorili harcama yok.").font(.footnote).foregroundStyle(.secondary)
+                Text("Bu ayda kategorili harcama yok.").font(.footnote).foregroundStyle(.secondary)
             } else {
                 HStack(alignment: .center, spacing: 16) {
                     Chart(liste, id: \.name) { k in
@@ -243,6 +311,9 @@ struct KategoriKarti: View {
                                 Spacer()
                                 Text("%\(Int((k.share * 100).rounded()))").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                             }
+                        }
+                        if liste.count > 6 {
+                            Text("+\(liste.count - 6) kategori daha").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -280,10 +351,11 @@ struct VarlikSeyriKarti: View {
                     Spacer()
                     if let n = nokta(s) { Text(Bicim.day(n.date)).font(.caption).foregroundStyle(.secondary) }
                 }
+                let alan = yAlani(s.points.map(\.value))
                 Chart {
                     ForEach(s.points) { p in
                         if let d = Bicim.date(p.date) {
-                            AreaMark(x: .value("Gün", d, unit: .day), y: .value("Varlık", p.value))
+                            AreaMark(x: .value("Gün", d, unit: .day), yStart: .value("Taban", alan.lowerBound), yEnd: .value("Varlık", p.value))
                                 .foregroundStyle(LinearGradient(colors: [Renk.vurgu.opacity(0.35), Renk.vurgu.opacity(0.02)], startPoint: .top, endPoint: .bottom))
                             LineMark(x: .value("Gün", d, unit: .day), y: .value("Varlık", p.value))
                                 .foregroundStyle(Renk.vurgu)
@@ -294,9 +366,9 @@ struct VarlikSeyriKarti: View {
                     }
                 }
                 .chartXSelection(value: $secili)
-                .chartYScale(domain: .automatic(includesZero: false))
-                .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
-                .chartXAxis { AxisMarks { _ in AxisGridLine(); AxisValueLabel(format: .dateTime.day().month(.abbreviated).locale(Bicim.locale)) } }
+                .chartYScale(domain: alan)
+                .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
+                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisGridLine(); AxisValueLabel(format: .dateTime.day().month(.abbreviated).locale(Bicim.locale)) } }
                 .frame(height: 200)
                 if let n = nokta(s) {
                     HStack {

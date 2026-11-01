@@ -2,8 +2,8 @@ import Foundation
 import SwiftUI
 
 // Örnek veriyle açılış (CI'da ekran görüntüleri: .github/workflows/ekran.yml). "-ornek" ile girişsiz, örnek veriyle açılır;
-// "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve aylık ödemeler,
-// 2: kategoriler ve Varlığın seyri). Gerçek kullanımda hiçbiri yoktur.
+// "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
+// 2: aylık ödemeler ve Varlığın seyri). Gerçek kullanımda hiçbiri yoktur.
 enum Ornek {
     private static func deger(_ ad: String) -> Int? {
         let a = CommandLine.arguments
@@ -82,18 +82,19 @@ struct GrafikGalerisi: View {
             List {
                 if sayfa == 1 {
                     Section("Nakit") { NakitKarti() }
-                    Section("Aylık ödemeler") {
-                        Okunan(tool: "get_cashflow", args: ["months": 12, "include_items": false]) { (a: Akis) in AylikOdemeGrafigi(months: a.months) }
+                    Section("Kategoriler") {
+                        Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
+                            KategoriKarti(months: k.months)
+                        }
                     }
                 } else {
-                    Section("Kategoriler") {
-                        Okunan(tool: "spending_by_category", args: ["months": 2]) { (k: KategoriHarcamasi) in
-                            if let ay = k.months.last(where: { !$0.categories.isEmpty }) ?? k.months.last { KategoriKarti(ay: ay) }
-                        }
+                    Section("Aylık ödemeler") {
+                        Okunan(tool: "get_cashflow", args: ["months": 12, "include_items": false]) { (a: Akis) in AylikOdemeGrafigi(months: a.months) }
                     }
                     Section("Varlığın seyri") { VarlikSeyriKarti() }
                 }
             }
+            .listSectionSpacing(.compact)
             .navigationTitle("Grafikler")
         }
     }
