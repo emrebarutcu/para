@@ -1,11 +1,11 @@
 # iOS ekran görüntüleri: simülatörde örnek veriyle (Uygulama/Ornek.swift) her sekme ve grafikler, açık ve koyu temada.
-# Görüntüler ekran-goruntuleri dalına yazılır (her çalışmada yeniden). claude/grafik* dallarına itilince ya da elle çalışır.
+# Görüntüler ekran-goruntuleri dalına yazılır (her çalışmada yeniden). claude/grafik* ve claude/abd* dallarına itilince ya da elle çalışır.
 name: Ekran görüntüleri
 
 on:
   workflow_dispatch:
   push:
-    branches: ["claude/grafik*"]
+    branches: ["claude/grafik*", "claude/abd*"]
     paths: ["ios/**", "*.js", "dil/**", ".github/workflows/ekran.yml"]
 
 permissions:
