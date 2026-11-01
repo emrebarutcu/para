@@ -268,6 +268,23 @@ final class Model: ObservableObject {
         applyCountry()
     }
 
+    // Hesabı ve bütün verisini siler (buluttan ve bu cihazdan); sonra uygulama girişsiz, boş açılır
+    func deleteAccount() async throws {
+        pushTimer?.cancel()
+        guard var s = session else { return }
+        s.accessToken = try await token()
+        try await Auth.deleteAccount(s)
+        Auth.store(nil)
+        Depo.remove(Depo.stateFile(s.userId))
+        Depo.remove(Depo.metaFile(s.userId))
+        UserDefaults.standard.removeObject(forKey: "para.tz.\(s.userId)")
+        session = nil
+        syncError = nil
+        lastSync = nil
+        open(nil)
+        applyCountry()
+    }
+
     // ── Ülke ve ana para birimi ────────────────────────────────────────────────
 
     // Hesabın (ya da girişsiz kullanımın) ülkesi: veri, kurlar, araçlar ve biçimler o ülkenin para birimiyle

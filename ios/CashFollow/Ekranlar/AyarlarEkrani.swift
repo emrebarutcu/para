@@ -6,6 +6,9 @@ struct AyarlarEkrani: View {
     @Environment(\.dismiss) private var dismiss
     @State private var login = false
     @State private var confirmLogout = false
+    @State private var hesapSil = false
+    @State private var siliniyor = false
+    @State private var silmeHatasi: String?
     @State private var newPerson = ""
     @State private var addingPerson = false
     @State private var renaming: Kisi?
@@ -29,7 +32,8 @@ struct AyarlarEkrani: View {
                         }
                         Button(model.syncing ? "Eşitleniyor…" : "Şimdi eşitle") { Task { await model.refresh() } }
                             .disabled(model.syncing)
-                        Button("Çıkış yap", role: .destructive) { confirmLogout = true }
+                        Button("Çıkış yap") { confirmLogout = true }
+                        Button("Hesabı sil", role: .destructive) { hesapSil = true }
                     } else {
                         Text("Veriler yalnızca bu telefonda. Giriş yapınca yedeklenir; web'de (cashfollow.app) ve diğer cihazlarında da görürsün.")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -97,6 +101,22 @@ struct AyarlarEkrani: View {
             .navigationTitle("Ayarlar")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Bitti") { dismiss() } } }
             .sheet(isPresented: $login) { GirisEkrani(welcome: false) }
+            .confirmationDialog("Hesabın ve bütün verilerin silinsin mi?", isPresented: $hesapSil, titleVisibility: .visible) {
+                Button("Hesabı kalıcı olarak sil", role: .destructive) {
+                    siliniyor = true
+                    Task {
+                        do { try await model.deleteAccount(); dismiss() }
+                        catch { silmeHatasi = (error as? AuthHatasi)?.turkish ?? error.localizedDescription }
+                        siliniyor = false
+                    }
+                }
+            } message: {
+                Text("Kartlar, harcamalar, varlıklar, borçlar ve hesabın buluttan ve bu cihazdan silinir. Geri alınamaz.")
+            }
+            .alert("Hesap silinemedi", isPresented: Binding(get: { silmeHatasi != nil }, set: { if !$0 { silmeHatasi = nil } })) {
+                Button("Tamam", role: .cancel) {}
+            } message: { Text(silmeHatasi ?? "") }
+            .overlay { if siliniyor { ProgressView().controlSize(.large) } }
             .confirmationDialog("Çıkış yapılsın mı?", isPresented: $confirmLogout, titleVisibility: .visible) {
                 Button("Çıkış yap", role: .destructive) { Task { await model.signOut() } }
             } message: {

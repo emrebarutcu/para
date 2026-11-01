@@ -110,6 +110,11 @@ enum Auth {
         return next
     }
 
+    // Hesabı ve bütün verisini kalıcı olarak siler (supabase: delete_my_account; tablolar hesaba "on delete cascade" bağlı)
+    static func deleteAccount(_ s: Oturum) async throws {
+        _ = try await post(URL(string: Yapilandirma.supabaseURL.absoluteString + "/rest/v1/rpc/delete_my_account")!, [:], token: s.accessToken)
+    }
+
     // Cihazın saat dilimi (user_metadata.tz): asistan "bugün"ü kullanıcının saatine göre hesaplar
     static func updateZone(_ s: Oturum, _ tz: String) async throws {
         _ = try await post(endpoint("user"), ["data": ["tz": tz]], token: s.accessToken, method: "PUT")

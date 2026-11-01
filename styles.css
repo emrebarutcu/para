@@ -1781,3 +1781,6 @@ a.hero-eq { display: block; width: fit-content; }
 /* ── Varlığın seyri ── */
 .asset-panel .panel-head { flex-wrap: wrap; }
 .asset-panel .panel-head h2 { white-space: nowrap; }
+
+/* Hesabı sil: çıkışın altında, kırmızı yazı */
+.auth-delete { color: var(--danger); margin-top: 8px; }

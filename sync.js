@@ -597,5 +597,25 @@
       await db?.auth.signOut();
       closeModal();
     });
+
+    // Hesabı sil: hesap ve bütün verisi buluttan (delete_my_account; tablolar hesaba "on delete cascade" bağlı) ve bu
+    // tarayıcıdan silinir
+    document.getElementById('authDeleteBtn')?.addEventListener('click', async () => {
+      if (!db || !user) return;
+      if (!confirm('Hesabın ve bütün verilerin (kartlar, harcamalar, varlıklar, borçlar) kalıcı olarak silinsin mi? Geri alınamaz.')) return;
+      const msg = document.getElementById('authDeleteMsg');
+      const uid = user.id;
+      const { error } = await db.rpc('delete_my_account');
+      if (error) {
+        if (msg) { msg.hidden = false; msg.style.color = 'var(--expense)'; msg.textContent = 'Hesap silinemedi: ' + error.message; }
+        return;
+      }
+      try {
+        localStorage.removeItem(metaKey(uid));
+        localStorage.removeItem('cashflow.v1.' + uid);
+      } catch {}
+      await db.auth.signOut({ scope: 'local' });
+      closeModal();
+    });
   });
 })();
