@@ -12,6 +12,13 @@ enum Ornek {
     }
     static var sekme: Int { deger("-sekme") ?? 0 }
     static var galeri: Int? { deger("-galeri") }
+    // "-tur galeri1,sekme0,…": ekran görüntüsü turu — tek açılışta ekranlar sırayla gösterilir (TurEkrani)
+    static var tur: [String]? {
+        let a = CommandLine.arguments
+        guard let i = a.firstIndex(of: "-tur"), i + 1 < a.count else { return nil }
+        return a[i + 1].split(separator: ",").map(String.init)
+    }
+
     // "-ulke US": örnek veri ABD'de (dolar; tutarlar dolar ölçeğinde)
     static var ulke: String {
         let a = CommandLine.arguments
@@ -164,5 +171,42 @@ struct GrafikGalerisi: View {
             }
             .navigationTitle(L("Grafikler"))
         }
+    }
+}
+
+// Ekran görüntüsü turu (ekran.yml): her adımda ekranı gösterir, çizilince Documents/tur-hazir dosyasına adını yazar;
+// iş akışı görüntüyü alıp dosyayı silince sonraki adıma geçer. Uygulama bir kez açılır, sabit bekleme yoktur.
+struct TurEkrani: View {
+    let adimlar: [String]
+    @State private var i = 0
+    @State private var sekme = 0
+
+    private static let isaret: URL = {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return docs.appendingPathComponent("tur-hazir")
+    }()
+
+    var body: some View {
+        let ad = adimlar[min(i, adimlar.count - 1)]
+        Group {
+            if ad.hasPrefix("galeri"), let n = Int(ad.dropFirst(6)) {
+                GrafikGalerisi(sayfa: n)
+            } else {
+                Sekmeler(sekme: $sekme)
+            }
+        }
+        .id(ad.hasPrefix("galeri") ? ad : "sekmeler")
+        .task(id: i) { await adim(ad) }
+    }
+
+    private func adim(_ ad: String) async {
+        if ad.hasPrefix("sekme"), let n = Int(ad.dropFirst(5)) { sekme = n }
+        // Çizilsin, veriler (araçlar, grafikler) yüklensin; ilk adımda soğuk başlangıç için biraz daha
+        try? await Task.sleep(for: .milliseconds(i == 0 ? 2500 : 1200))
+        try? ad.write(to: Self.isaret, atomically: true, encoding: .utf8)
+        while FileManager.default.fileExists(atPath: Self.isaret.path) {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        if i + 1 < adimlar.count { i += 1 }
     }
 }

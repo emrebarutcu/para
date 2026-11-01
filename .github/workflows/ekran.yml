@@ -1,9 +1,15 @@
-# iOS ekran görüntüleri: simülatörde örnek veriyle (Uygulama/Ornek.swift) her sekme ve grafikler, açık ve koyu temada.
+# iOS ekran görüntüleri: simülatörde örnek veriyle (Uygulama/Ornek.swift) her sekme, grafikler ve formlar; Türkçe ve
+# İngilizce (ABD), açık tema (koyu tema elle çalıştırınca seçilirse).
 # Görüntüler ekran-goruntuleri dalına yazılır (her çalışmada yeniden). claude/grafik* ve claude/abd* dallarına itilince ya da elle çalışır.
 name: Ekran görüntüleri
 
 on:
   workflow_dispatch:
+    inputs:
+      koyu:
+        description: "Koyu tema görüntüleri de"
+        type: boolean
+        default: false
   push:
     branches: ["claude/grafik*", "claude/abd*"]
     paths: ["ios/**", "*.js", "dil/**", ".github/workflows/ekran.yml"]
@@ -38,35 +44,34 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl status_bar "$UDID" override --time 9:41 --batteryLevel 100 --cellularBars 4 || true
           xcrun simctl install "$UDID" "$APP"
-          mkdir -p out
-          shot() {  # ad, tema, argümanlar…
-            name=$1; theme=$2; shift 2
+          DATA=$(xcrun simctl get_app_container "$UDID" app.cashfollow.ios data)
+          ISARET="$DATA/Documents/tur-hazir"
+          mkdir -p out "$DATA/Documents"
+          # Tur: uygulama bir kez açılır, ekranları sırayla gösterir (Ornek.swift TurEkrani); her ekran hazır olunca
+          # tur-hazir dosyasına adını yazar, görüntü alınıp dosya silinince sonrakine geçer. Sabit bekleme yok.
+          tur() {  # önek, tema, adımlar (virgülle), uygulama argümanları…
+            onek=$1; theme=$2; adimlar=$3; shift 3
             xcrun simctl ui "$UDID" appearance "$theme"
             xcrun simctl terminate "$UDID" app.cashfollow.ios 2>/dev/null || true
-            # Dil verilmezse Türkçe (simülatör İngilizce açılır)
-            case "$*" in *AppleLanguages*) dil="" ;; *) dil='-AppleLanguages (tr) -AppleLocale tr_TR' ;; esac
-            xcrun simctl launch "$UDID" app.cashfollow.ios -ornek "$@" $dil
-            sleep 12
-            xcrun simctl io "$UDID" screenshot "out/$name-$theme.png"
+            rm -f "$ISARET"
+            xcrun simctl launch "$UDID" app.cashfollow.ios -ornek -tur "$adimlar" "$@"
+            for ad in $(echo "$adimlar" | tr ',' ' '); do
+              for t in $(seq 1 600); do [ -f "$ISARET" ] && break; sleep 0.1; done
+              [ -f "$ISARET" ] || { echo "zaman aşımı: $onek$ad"; return 1; }
+              xcrun simctl io "$UDID" screenshot "out/$onek$(cat "$ISARET")-$theme.png" >/dev/null
+              rm -f "$ISARET"
+            done
           }
-          # İlk açılış (soğuk başlangıç, sistem bildirimleri) görüntüye girmesin
-          xcrun simctl launch "$UDID" app.cashfollow.ios -ornek
-          sleep 30
-          for theme in light dark; do
-            shot galeri1 $theme -galeri 1
-            shot galeri2 $theme -galeri 2
-            shot galeri3 $theme -galeri 3
-            shot galeri4 $theme -galeri 4
-            shot galeri5 $theme -galeri 5
-            shot galeri6 $theme -galeri 6
-            shot bos $theme -bos -sekme 0
-            for i in 0 1 2 3 4; do shot sekme$i $theme -sekme $i; done
-          done
-          # İngilizce, ABD (dolar): telefonun dili İngilizce, ülke ABD
-          for i in 0 1 2 3 4; do shot en-sekme$i light -sekme $i -ulke US -AppleLanguages "(en)" -AppleLocale en_US; done
-          shot en-galeri3 light -galeri 3 -ulke US -AppleLanguages "(en)" -AppleLocale en_US
-          shot en-bos light -bos -sekme 0 -ulke US -AppleLanguages "(en)" -AppleLocale en_US
-          ls -la out
+          TR='-AppleLanguages (tr) -AppleLocale tr_TR'
+          EN='-AppleLanguages (en) -AppleLocale en_US'
+          HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,sekme0,sekme1,sekme2,sekme3,sekme4
+          tur "" light "$HEPSI" $TR
+          tur bos- light sekme0 -bos $TR                 # verisi olmayan yeni kullanıcı (Başlarken)
+          tur en- light sekme0,sekme1,sekme2,sekme3,sekme4,galeri3 -ulke US $EN
+          tur en-bos- light sekme0 -bos -ulke US $EN
+          # Koyu tema yalnızca elle çalıştırınca istenirse (Actions → Ekran görüntüleri → koyu)
+          if [ "${{ inputs.koyu }}" = "true" ]; then tur "" dark "$HEPSI" $TR; fi
+          ls out
       - name: Görüntüleri yaz
         run: |
           git config user.name "github-actions"

@@ -35,20 +35,12 @@ struct AnaEkran: View {
         Group {
             if let error = model.startupError {
                 ContentUnavailableView(L("Uygulama açılamadı"), systemImage: "exclamationmark.triangle", description: Text(error))
+            } else if let tur = Ornek.tur {
+                TurEkrani(adimlar: tur)
             } else if let g = Ornek.galeri {
                 GrafikGalerisi(sayfa: g)
             } else {
-                // iPhone'da en fazla 5 sekme: borç ve krediler Kartlar'da, Ayarlar Özet'teki dişlide
-                TabView(selection: $sekme) {
-                    OzetEkrani().tabItem { Label(L("Özet"), systemImage: "house") }.tag(0)
-                    AkisEkrani().tabItem { Label(L("Akış"), systemImage: "calendar") }.tag(1)
-                    HarcamalarEkrani().tabItem { Label(L("Harcamalar"), systemImage: "list.bullet.rectangle") }.tag(2)
-                    BorclarEkrani().tabItem { Label(L("Kartlar"), systemImage: "creditcard") }.tag(3)
-                    VarliklarEkrani().tabItem { Label(L("Varlıklar"), systemImage: "banknote") }.tag(4)
-                }
-                .onChange(of: sekme) { _, yeni in
-                    Analitik.olay("tab_viewed", ["tab": ["overview", "cash_flow", "purchases", "cards", "assets"][min(max(yeni, 0), 4)]])
-                }
+                Sekmeler(sekme: $sekme)
             }
         }
         .fullScreenCover(isPresented: $model.showWelcome) {
@@ -60,6 +52,24 @@ struct AnaEkran: View {
             Button(L("Sonra karar ver"), role: .cancel) {}
         } message: {
             Text(L("Taşırsan aynı adlı kişiler ve aynı kartlar birleşir. Seçene kadar cihazdaki veri silinmez."))
+        }
+    }
+}
+
+// iPhone'da en fazla 5 sekme: borç ve krediler Kartlar'da, Ayarlar Özet'teki dişlide
+struct Sekmeler: View {
+    @Binding var sekme: Int
+
+    var body: some View {
+        TabView(selection: $sekme) {
+            OzetEkrani().tabItem { Label(L("Özet"), systemImage: "house") }.tag(0)
+            AkisEkrani().tabItem { Label(L("Akış"), systemImage: "calendar") }.tag(1)
+            HarcamalarEkrani().tabItem { Label(L("Harcamalar"), systemImage: "list.bullet.rectangle") }.tag(2)
+            BorclarEkrani().tabItem { Label(L("Kartlar"), systemImage: "creditcard") }.tag(3)
+            VarliklarEkrani().tabItem { Label(L("Varlıklar"), systemImage: "banknote") }.tag(4)
+        }
+        .onChange(of: sekme) { _, yeni in
+            Analitik.olay("tab_viewed", ["tab": ["overview", "cash_flow", "purchases", "cards", "assets"][min(max(yeni, 0), 4)]])
         }
     }
 }
