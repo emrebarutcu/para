@@ -25,9 +25,10 @@ jobs:
           EVENT: ${{ github.event_name }}
           DOSYA: ${{ inputs.dosya }}
         run: |
+          # Anahtar yoksa çalıştırılmaz (geçiş elle de çalıştırılabilir: SUPABASE_ACCESS_TOKEN=… sh supabase/sql.sh dosya)
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
-            echo "::error::SUPABASE_ACCESS_TOKEN secret'ı yok: supabase.com/dashboard/account/tokens → Generate new token, GitHub → Settings → Secrets and variables → Actions'a ekle"
-            exit 1
+            echo "::warning::SUPABASE_ACCESS_TOKEN secret'ı yok, SQL çalıştırılmadı: supabase.com/dashboard/account/tokens → Generate new token, GitHub → Settings → Secrets and variables → Actions'a ekle"
+            exit 0
           fi
           if [ "$EVENT" = "workflow_dispatch" ]; then files="$DOSYA"; else files=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'supabase/gecis/*.sql'); fi
           [ -n "$files" ] || { echo "Çalıştırılacak dosya yok"; exit 0; }

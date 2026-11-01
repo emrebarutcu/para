@@ -132,7 +132,8 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
   karşılığını verir, `para.js homeRates`). Veride `state.home`; harcamada boş varlık ana para birimidir. Fon ve hisse şimdilik
   yalnızca Türkiye'de. Ülke Ayarlar'dan değişir; tutarlar çevrilmez. Ülkesi olmayan (eski) hesaplar Türkiye sayılır: TL
   kullanıcıları için hiçbir hesap değişmedi (tutarlılık denetimi aynı).
-  **Yayından önce** `supabase/tablolar.sql` yeniden çalıştırılır (yalnızca son bölüm yeni): `entries`, `purchases` ve
+  **Yayından önce** `supabase/gecis/7.0.0.sql` çalıştırılır (1 Kasım 2026'da çalıştırıldı; aynısı `tablolar.sql`'in son
+  bölümünde): `entries`, `purchases` ve
   `debts`'te `asset` kısıtı her üç harfli para birimi kodunu kabul eder; yoksa TL / dolar / euro / altın dışındaki kayıtlar
   yazılamaz. Eski sürümler yeni para birimli satırları "kullanamayacağı satır" sayıp atlar, silmez.
   MCP: araçların cevaplarında `currency` hesabın para birimidir; `*Try` adlı alanlar (`tryValue`, `totalTry`…) o para
@@ -220,6 +221,9 @@ Paylaş butonu → "Ana Ekrana Ekle"
 Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
 
 ### Ülke ve para birimi
+
+Veritabanı geçişleri `supabase/gecis/`'tedir; `sh supabase/sql.sh supabase/gecis/<sürüm>.sql` (SUPABASE_ACCESS_TOKEN ile)
+ya da GitHub'da "Supabase SQL" iş akışı (secret tanımlıysa yeni geçiş dosyası itilince kendiliğinden) çalıştırır.
 
 Kayıtta (web ve iPhone) ülke seçilir; hesabın bilgisi olarak saklanır (`user_metadata.country`), web, iPhone ve asistan aynı
 para birimini kullanır. Girişsiz kullanımda ülke cihazdadır (web: `para.ulke`, iPhone: Ayarlar). Ülkeler ve para birimleri
