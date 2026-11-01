@@ -48,6 +48,13 @@
     { id: "diger", name: "Diğer", hint: "hiçbirine uymayan", words: [
       "noter", "vergi", "bağış", "hediye", "avukat", "harç", "ceza", "sigorta", "kargo"] },
   ];
+  // Ad ve ipucu uygulamanın dilinde (dil.js; Türkçede olduğu gibi)
+  const D = typeof module === "object" && module.exports ? require("./dil.js") : root.Dil;
+  for (const c of CATEGORIES) {
+    const name = c.name, hint = c.hint;
+    Object.defineProperty(c, "name", { get: () => D.t(name), enumerable: true });
+    Object.defineProperty(c, "hint", { get: () => D.t(hint), enumerable: true });
+  }
   const BY_ID = new Map(CATEGORIES.map(c => [c.id, c]));
   const OTHER = "diger";
   const PREFIX = "query: ";   // e5 modelleri metnin önünde bunu bekler

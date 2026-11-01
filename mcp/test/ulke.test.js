@@ -3,7 +3,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import T from "../../taksit.js";
-import { TOOLS } from "../tools.js";
+import { TOOLS, todayKey } from "../tools.js";
+import { getUser } from "../supabase.js";
 
 // Bellekte veri; kurlar kur.js gibi TL karşılıkları
 function ctxFor(home, today = "2026-11-01") {
@@ -69,4 +70,21 @@ test("Türkiye hesabı eskisi gibi", async () => {
   assert.equal(a.currency, "TRY");
   assert.deepEqual(a.assets.map(x => x.asset), ["TRY", "USD", "EUR", "GAU"]);
   assert.equal(a.totalTry, 1500);
+});
+
+// ── Saat dilimi: "bugün" kullanıcının saatinde ───────────────────────────────
+
+test("todayKey: aynı an New York'ta bir gün geride", () => {
+  const an = new Date("2026-11-02T03:30:00Z");   // İstanbul 06:30 (2 Kasım), New York 22:30 (1 Kasım)
+  assert.equal(todayKey(an, "Europe/Istanbul"), "2026-11-02");
+  assert.equal(todayKey(an, "America/New_York"), "2026-11-01");
+});
+
+test("getUser: saat dilimi hesaptan, yoksa ya da geçersizse ülkenin saat dilimi", async () => {
+  const user = meta => async () => new Response(JSON.stringify({ id: "u1", email: "a@b.c", user_metadata: meta }), { status: 200 });
+  const args = { url: "https://x.supabase.co", key: "k", token: "t" };
+  assert.equal((await getUser({ ...args, fetch: user({ country: "US", tz: "America/Chicago" }) })).tz, "America/Chicago");
+  assert.equal((await getUser({ ...args, fetch: user({ country: "US" }) })).tz, "America/New_York");
+  assert.equal((await getUser({ ...args, fetch: user({ country: "US", tz: "Mars/Olympus" }) })).tz, "America/New_York");
+  assert.equal((await getUser({ ...args, fetch: user({}) })).tz, "Europe/Istanbul");
 });

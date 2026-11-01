@@ -29,7 +29,7 @@ enum OzDenetim {
             try check(assets.assets.first { $0.asset == "USD" }?.tryValue == 4000, "dolar: \(assets.assets)")
             let _: HareketListesi = try m.run("list_entries")
             let people: KisiListesi = try m.run("list_people")
-            try check(people.people.map(\.name) == ["Ben", "Ayşe"], "kişiler: \(people.people)")
+            try check(people.people.map(\.name) == [L("Ben"), "Ayşe"], "kişiler: \(people.people)")   // ilk kişi telefonun dilinde (İngilizcede "Me")
             do {
                 try m.runJSON("add_purchase", ["description": "x", "amount": -1])
                 try check(false, "geçersiz tutar kabul edildi")

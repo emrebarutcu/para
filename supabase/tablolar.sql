@@ -384,3 +384,20 @@ select d.user_id,
        (select count(*) from debts b where b.user_id = d.user_id and b.deleted_at is null) as debts
 from cashflow_data d;
 */
+
+-- ── Hesap silme (8.x) ─────────────────────────────────────────────────────────
+create or replace function public.delete_my_account() returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in' using errcode = '42501';
+  end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;

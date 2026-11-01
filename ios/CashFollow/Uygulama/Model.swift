@@ -75,7 +75,7 @@ final class Model: ObservableObject {
     func kartRengi(_ key: String) -> Color { key == "Nakit" ? Tema.nakit : Tema.seri(renkler.cards[key] ?? 0) }
 
     private func engine() throws -> Motor {
-        guard let motor else { throw AracHatasi(message: startupError ?? "Uygulama çekirdeği açılamadı", user: false) }
+        guard let motor else { throw AracHatasi(message: startupError ?? L("Uygulama çekirdeği açılamadı"), user: false) }
         return motor
     }
 
@@ -128,6 +128,16 @@ final class Model: ObservableObject {
         async let market: Void = refreshMarket()
         await run { try await $0.pull(); try await $0.push() }
         await market
+        await sendZone()
+    }
+
+    // Cihazın saat dilimi değiştiyse hesaba yazılır (asistan "bugün"ü buna göre hesaplar)
+    private func sendZone() async {
+        let tz = TimeZone.current.identifier
+        guard let uid = session?.userId, UserDefaults.standard.string(forKey: "para.tz.\(uid)") != tz,
+              let t = try? await token(), var s = session, s.userId == uid else { return }
+        s.accessToken = t
+        if (try? await Auth.updateZone(s, tz)) != nil { UserDefaults.standard.set(tz, forKey: "para.tz.\(uid)") }
     }
 
     func schedulePush() {
@@ -186,13 +196,13 @@ final class Model: ObservableObject {
 
     // Süresi dolmak üzereyse yenilenir; yenileme reddedilirse (oturum kapatılmış) yeniden giriş gerekir
     private func token() async throws -> String {
-        guard var s = session else { throw AuthHatasi(status: 401, code: nil, message: "Giriş yapılmadı") }
+        guard var s = session else { throw AuthHatasi(status: 401, code: nil, message: L("Giriş yapılmadı")) }
         if s.expiresAt.timeIntervalSinceNow < 60 {
             do {
                 s = try await Auth.refresh(s)
             } catch let e as AuthHatasi where (400..<500).contains(e.status) {
                 expire()
-                throw AuthHatasi(status: 401, code: nil, message: "Oturumun süresi doldu, yeniden giriş yap.")
+                throw AuthHatasi(status: 401, code: nil, message: L("Oturumun süresi doldu, yeniden giriş yap."))
             }
             guard session?.userId == s.userId else { throw CancellationError() }
             session = s
@@ -210,6 +220,8 @@ final class Model: ObservableObject {
     }
 
     func signedIn(_ s: Oturum) {
+        Analitik.girisYapti(s.userId)
+        Analitik.olay("signed_in")
         Auth.store(s)
         session = s
         showWelcome = false
@@ -228,7 +240,7 @@ final class Model: ObservableObject {
         guard let motor, let local = Depo.read(file), let uid = session?.userId else { return }
         await run { try await $0.pull() }
         guard senkron?.pulled == true, session?.userId == uid else {
-            syncError = "Hesaptaki veri alınamadı; cihazdaki veri taşınmadı. Bağlantı gelince yeniden dene."
+            syncError = L("Hesaptaki veri alınamadı; cihazdaki veri taşınmadı. Bağlantı gelince yeniden dene.")
             askMove = true
             return
         }
@@ -243,6 +255,8 @@ final class Model: ObservableObject {
     }
 
     func signOut() async {
+        Analitik.olay("signed_out")
+        defer { Analitik.cikisYapti() }
         pushTimer?.cancel()
         await run { try await $0.push() }   // bekleyen değişiklikler yazılsın
         guard let s = session else { return }
@@ -258,12 +272,32 @@ final class Model: ObservableObject {
         applyCountry()
     }
 
+    // Hesabı ve bütün verisini siler (buluttan ve bu cihazdan); sonra uygulama girişsiz, boş açılır
+    func deleteAccount() async throws {
+        pushTimer?.cancel()
+        guard var s = session else { return }
+        s.accessToken = try await token()
+        try await Auth.deleteAccount(s)
+        Analitik.olay("account_deleted")
+        Analitik.cikisYapti()
+        Auth.store(nil)
+        Depo.remove(Depo.stateFile(s.userId))
+        Depo.remove(Depo.metaFile(s.userId))
+        UserDefaults.standard.removeObject(forKey: "para.tz.\(s.userId)")
+        session = nil
+        syncError = nil
+        lastSync = nil
+        open(nil)
+        applyCountry()
+    }
+
     // ── Ülke ve ana para birimi ────────────────────────────────────────────────
 
     // Hesabın (ya da girişsiz kullanımın) ülkesi: veri, kurlar, araçlar ve biçimler o ülkenin para birimiyle
     private func applyCountry() {
         let code = session.map { $0.country ?? "TR" } ?? Depo.offlineCountry ?? "TR"
         country = code
+        Analitik.ulkeAyarla(code)
         guard let motor else { return }
         let home = motor.homeOf(country: code)
         motor.setHome(home)
@@ -272,7 +306,8 @@ final class Model: ObservableObject {
         let c = constants?.currencies.first { $0.code == home }
         Bicim.home = home
         Bicim.homeSymbol = c?.symbol ?? home
-        Bicim.homeShort = c?.short ?? home
+        // Kısa ad metinlerde ("TL bakiyemden"): İngilizcede para birimi kodu (USD), TL hariç
+        Bicim.homeShort = Dil.ingilizce ? (home == "TRY" ? "TL" : home) : (c?.short ?? home)
         revision += 1
     }
 
@@ -303,6 +338,7 @@ final class Model: ObservableObject {
     }
 
     func continueOffline(country: String) {
+        Analitik.olay("started_without_account", ["country": country])
         Depo.offlineCountry = country
         applyCountry()
         Depo.offlineChosen = true

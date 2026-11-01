@@ -17,7 +17,12 @@ struct CashFollowApp: App {
                 .tint(Tema.metin)
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refresh() } }
+            if phase == .active {
+                Task { await model.refresh() }
+                Analitik.olay("app_opened", ["signed_in": model.session != nil])
+                Task { await Analitik.bayraklariYukle() }
+            }
+            if phase == .background { Analitik.gonder() }
         }
     }
 }
@@ -29,29 +34,42 @@ struct AnaEkran: View {
     var body: some View {
         Group {
             if let error = model.startupError {
-                ContentUnavailableView("Uygulama açılamadı", systemImage: "exclamationmark.triangle", description: Text(error))
+                ContentUnavailableView(L("Uygulama açılamadı"), systemImage: "exclamationmark.triangle", description: Text(error))
+            } else if let tur = Ornek.tur {
+                TurEkrani(adimlar: tur)
             } else if let g = Ornek.galeri {
                 GrafikGalerisi(sayfa: g)
             } else {
-                // iPhone'da en fazla 5 sekme: borç ve krediler Kartlar'da, Ayarlar Özet'teki dişlide
-                TabView(selection: $sekme) {
-                    OzetEkrani().tabItem { Label("Özet", systemImage: "house") }.tag(0)
-                    AkisEkrani().tabItem { Label("Akış", systemImage: "calendar") }.tag(1)
-                    HarcamalarEkrani().tabItem { Label("Harcamalar", systemImage: "list.bullet.rectangle") }.tag(2)
-                    BorclarEkrani().tabItem { Label("Kartlar", systemImage: "creditcard") }.tag(3)
-                    VarliklarEkrani().tabItem { Label("Varlıklar", systemImage: "banknote") }.tag(4)
-                }
+                Sekmeler(sekme: $sekme)
             }
         }
         .fullScreenCover(isPresented: $model.showWelcome) {
             GirisEkrani(welcome: true)
         }
-        .confirmationDialog("Bu cihazda girişsiz girilen veriler var", isPresented: $model.askMove, titleVisibility: .visible) {
-            Button("Hesabıma taşı") { Task { await model.moveLocal(true) } }
-            Button("Sil, hesabımdakilerle devam et", role: .destructive) { Task { await model.moveLocal(false) } }
-            Button("Sonra karar ver", role: .cancel) {}
+        .confirmationDialog(L("Bu cihazda girişsiz girilen veriler var"), isPresented: $model.askMove, titleVisibility: .visible) {
+            Button(L("Hesabıma taşı")) { Task { await model.moveLocal(true) } }
+            Button(L("Sil, hesabımdakilerle devam et"), role: .destructive) { Task { await model.moveLocal(false) } }
+            Button(L("Sonra karar ver"), role: .cancel) {}
         } message: {
-            Text("Taşırsan aynı adlı kişiler ve aynı kartlar birleşir. Seçene kadar cihazdaki veri silinmez.")
+            Text(L("Taşırsan aynı adlı kişiler ve aynı kartlar birleşir. Seçene kadar cihazdaki veri silinmez."))
+        }
+    }
+}
+
+// iPhone'da en fazla 5 sekme: borç ve krediler Kartlar'da, Ayarlar Özet'teki dişlide
+struct Sekmeler: View {
+    @Binding var sekme: Int
+
+    var body: some View {
+        TabView(selection: $sekme) {
+            OzetEkrani().tabItem { Label(L("Özet"), systemImage: "house") }.tag(0)
+            AkisEkrani().tabItem { Label(L("Akış"), systemImage: "calendar") }.tag(1)
+            HarcamalarEkrani().tabItem { Label(L("Harcamalar"), systemImage: "list.bullet.rectangle") }.tag(2)
+            BorclarEkrani().tabItem { Label(L("Kartlar"), systemImage: "creditcard") }.tag(3)
+            VarliklarEkrani().tabItem { Label(L("Varlıklar"), systemImage: "banknote") }.tag(4)
+        }
+        .onChange(of: sekme) { _, yeni in
+            Analitik.olay("tab_viewed", ["tab": ["overview", "cash_flow", "purchases", "cards", "assets"][min(max(yeni, 0), 4)]])
         }
     }
 }

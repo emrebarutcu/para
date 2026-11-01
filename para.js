@@ -36,6 +36,20 @@
   ].map(([code, name, currency]) => ({ code, name, currency }));
   const BY_COUNTRY = new Map(COUNTRIES.map(c => [c.code, c]));
 
+  // Ülkenin başlıca saat dilimi: hesabın saat dilimi bilinmiyorsa "bugün" bununla hesaplanır (asistan sunucusu).
+  // Uygulama ve web cihazın saat dilimini kullanır ve hesaba yazar (user_metadata.tz).
+  const ZONES = {
+    TR: "Europe/Istanbul", US: "America/New_York", GB: "Europe/London", DE: "Europe/Berlin", FR: "Europe/Paris",
+    NL: "Europe/Amsterdam", IT: "Europe/Rome", ES: "Europe/Madrid", CA: "America/Toronto", AU: "Australia/Sydney",
+    AZ: "Asia/Baku", AE: "Asia/Dubai", JP: "Asia/Tokyo", CN: "Asia/Shanghai", RU: "Europe/Moscow", NZ: "Pacific/Auckland",
+  };
+  const zoneOfCountry = code => ZONES[String(code ?? "").toUpperCase()] ?? "UTC";
+  // Geçerli IANA saat dilimi mi (ör. "America/Chicago")
+  function isZone(z) {
+    if (typeof z !== "string" || !z) return false;
+    try { new Intl.DateTimeFormat("en-US", { timeZone: z }); return true; } catch { return false; }
+  }
+
   const DEFAULT_COUNTRY = "TR";
   const DEFAULT_HOME = "TRY";
 
@@ -65,7 +79,7 @@
     return out;
   }
 
-  const api = { CURRENCIES, COUNTRIES, DEFAULT_COUNTRY, DEFAULT_HOME, currency, isCurrency, country, homeOfCountry, homeOf, marketsFor, commonForeign, homeRates };
+  const api = { CURRENCIES, COUNTRIES, DEFAULT_COUNTRY, DEFAULT_HOME, currency, isCurrency, country, homeOfCountry, homeOf, marketsFor, commonForeign, homeRates, zoneOfCountry, isZone };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Para = api;
 })(this);

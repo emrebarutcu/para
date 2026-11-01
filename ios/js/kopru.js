@@ -38,7 +38,7 @@
 
   // mcp/tools.js bir ES modülüdür (import / export); JavaScriptCore'un düz betiğine çevrilir. İçe aktardığı modüller
   // yukarıda yüklenmiş genel nesnelerdir.
-  const GLOBALS = { para: "Para", taksit: "Taksit", eposta: "Eposta", varlik: "Varlik", tekrar: "Tekrar", kategori: "Kategori", icgoru: "Icgoru", borc: "Borc", tablo: "Tablo" };
+  const GLOBALS = { dil: "Dil", para: "Para", taksit: "Taksit", eposta: "Eposta", varlik: "Varlik", tekrar: "Tekrar", kategori: "Kategori", icgoru: "Icgoru", borc: "Borc", tablo: "Tablo" };
   function toScript(src) {
     const body = String(src)
       .replace(/^import\s+(\w+)\s+from\s+"\.\.\/(\w+)\.js";?\s*$/gm, (line, name, file) => {
@@ -117,7 +117,7 @@
       if (!tool) throw new Error(`bilinmeyen araç: ${name}`);
       const args = argsJson ? JSON.parse(argsJson) : {};
       Promise.resolve()
-        .then(() => tool.run(args, ctxFor(today || tools.todayKey())))
+        .then(() => tool.run(args, ctxFor(today || T.todayKey())))
         .then(
           out => finish(JSON.stringify(out ?? null), null),
           err => finish(null, { message: String(err?.message || err), user: err instanceof tools.ToolError || err?.userFacing === true }),
@@ -146,7 +146,7 @@
     const fund = V.market(code)?.market === "FON" ? prices[code] : null;
     return V.isCash(code, cashDef ?? V.cashDefault(home), fund);
   }
-  const todayOf = () => tools.todayKey();
+  const todayOf = () => T.todayKey();   // cihazın saat diliminde (JavaScriptCore yerel saati)
 
   // Nakit grafiği: start "today" ya da ayın günü ("1"…"31"), shift dönem kaydırır
   function cash(start, shift) {

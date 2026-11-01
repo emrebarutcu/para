@@ -6190,6 +6190,7 @@ window.addEventListener("hashchange", () => {
   const next = viewFromHash();
   if (next !== view) {
     view = next;
+    window.Analitik?.event("tab_viewed", { tab: view });
     if (view !== "akis") focusIdx = null;
     if (!pendingScroll) window.scrollTo(0, 0);
   }
@@ -6378,5 +6379,7 @@ document.addEventListener("visibilitychange", () => {
 // Girişsiz veride kartlar açılışta takibe girer (oturum açıksa hesabın verisi eşitlemeden sonra, onSynced'de)
 if (!stateOwner) ensureCardTracking();
 render();
+window.Analitik?.event("app_opened", { signed_in: !!window.CF_USER_ID });
+window.Analitik?.loadFlags();
 // Açılışta: kullanıcının daha önce verdiği kategoriler ve (açıksa) cihazdaki modelle kategorisizler
 setTimeout(() => backfillCategories(), 4000);

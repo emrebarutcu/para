@@ -23,16 +23,16 @@ struct NakitKarti: View {
     var body: some View {
         Kart {
             HStack(spacing: 6) {
-                Text("Nakit").font(.system(size: 17, weight: .semibold))
+                Text(L("Nakit")).font(.system(size: 17, weight: .semibold))
                 Spacer()
                 Button { shift -= 1 } label: { Image(systemName: "chevron.left").frame(width: 28, height: 28) }
-                    .accessibilityLabel("Önceki dönem")
+                    .accessibilityLabel(L("Önceki dönem"))
                 Button { shift = 0 } label: {
                     Text(seri.map { "\(Bicim.day($0.from)) – \(Bicim.day($0.to))" } ?? "…")
                         .font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
                 }
                 Button { shift += 1 } label: { Image(systemName: "chevron.right").frame(width: 28, height: 28) }
-                    .accessibilityLabel("Sonraki dönem")
+                    .accessibilityLabel(L("Sonraki dönem"))
             }
             .buttonStyle(.plain)
             .foregroundStyle(Tema.metin2)
@@ -40,15 +40,15 @@ struct NakitKarti: View {
             if let s = seri {
                 HStack(alignment: .top, spacing: 8) {
                     if mode == "net" {
-                        Kutucuk(etiket: "Giren", deger: Bicim.tl(s.inSum), renk: Tema.iyi)
-                        Kutucuk(etiket: "Çıkan", deger: Bicim.tl(-s.outSum), renk: Tema.tehlike)
-                        Kutucuk(etiket: "Net", deger: Bicim.tl(s.days.last?.net ?? 0))
+                        Kutucuk(etiket: L("Giren"), deger: Bicim.tl(s.inSum), renk: Tema.iyi)
+                        Kutucuk(etiket: L("Çıkan"), deger: Bicim.tl(-s.outSum), renk: Tema.tehlike)
+                        Kutucuk(etiket: L("Net"), deger: Bicim.tl(s.days.last?.net ?? 0))
                     } else {
                         let bugun = s.days.first { $0.date == s.today } ?? s.days.first
                         let enDusuk = s.days.min { $0.balance < $1.balance }
-                        Kutucuk(etiket: bugun?.date == s.today ? "Bugün" : Bicim.day(bugun?.date), deger: Bicim.tl(bugun?.balance ?? 0))
-                        Kutucuk(etiket: "\(Bicim.day(s.to)) sonunda", deger: Bicim.tl(s.days.last?.balance ?? 0))
-                        Kutucuk(etiket: "En düşük · \(Bicim.day(enDusuk?.date))", deger: Bicim.tl(enDusuk?.balance ?? 0),
+                        Kutucuk(etiket: bugun?.date == s.today ? L("Bugün") : Bicim.day(bugun?.date), deger: Bicim.tl(bugun?.balance ?? 0))
+                        Kutucuk(etiket: L("{0} sonunda", Bicim.day(s.to)), deger: Bicim.tl(s.days.last?.balance ?? 0))
+                        Kutucuk(etiket: L("En düşük · {0}", Bicim.day(enDusuk?.date)), deger: Bicim.tl(enDusuk?.balance ?? 0),
                                 renk: (enDusuk?.balance ?? 0) < 0 ? Tema.tehlike : Tema.metin)
                     }
                 }
@@ -56,11 +56,11 @@ struct NakitKarti: View {
                     grafik(s)
                     if let gun = seciliGun(s) { hareketler(gun) }
                 } else {
-                    Text("Nakit hareketi yok. Varlıklar'dan maaş gibi bir giriş ekleyince burada görünür.")
+                    Text(L("Nakit hareketi yok. Varlıklar'dan maaş gibi bir giriş ekleyince burada görünür."))
                         .font(.footnote).foregroundStyle(Tema.metin3)
                 }
                 if !s.missing.isEmpty {
-                    Text("Kuru alınamayan varlıklar sayılmadı: \(s.missing.joined(separator: ", "))")
+                    Text(L("Kuru alınamayan varlıklar sayılmadı: {0}", s.missing.joined(separator: ", ")))
                         .font(.caption).foregroundStyle(Tema.uyari)
                 }
             } else if let hata {
@@ -155,9 +155,9 @@ struct NakitKarti: View {
             HStack {
                 Text(Bicim.day(g.date)).font(.caption.weight(.semibold))
                 Spacer()
-                Text("\(mode == "net" ? "Net" : "Bakiye") \(Bicim.tl(deger(g)))").font(.caption).monospacedDigit()
+                Text(L("Bakiye {0}", Bicim.tl(deger(g)))).font(.caption).monospacedDigit()
             }
-            if g.moves.isEmpty { Text("Hareket yok").font(.caption).foregroundStyle(Tema.metin3) }
+            if g.moves.isEmpty { Text(L("Hareket yok")).font(.caption).foregroundStyle(Tema.metin3) }
             ForEach(Array(g.moves.enumerated()), id: \.offset) { _, m in
                 HStack {
                     Text(m.desc).font(.caption).lineLimit(1)
@@ -187,11 +187,12 @@ extension View {
     }
 }
 
-// Eksen için kısa tutar: 12,5 B, 1,2 Mn
+// Eksen için kısa tutar: 12,5 B, 1,2 Mn (İngilizcede 12.5K, 1.2M)
 func kisa(_ v: Double) -> String {
     let a = abs(v), s = v < 0 ? "−" : ""
-    if a >= 1_000_000 { return s + (a / 1_000_000).formatted(.number.locale(Bicim.locale).precision(.fractionLength(0...1))) + " Mn" }
-    if a >= 1_000 { return s + (a / 1_000).formatted(.number.locale(Bicim.locale).precision(.fractionLength(0...1))) + " B" }
+    let (mn, b) = Dil.ingilizce ? ("M", "K") : (" Mn", " B")
+    if a >= 1_000_000 { return s + (a / 1_000_000).formatted(.number.locale(Bicim.locale).precision(.fractionLength(0...1))) + mn }
+    if a >= 1_000 { return s + (a / 1_000).formatted(.number.locale(Bicim.locale).precision(.fractionLength(0...1))) + b }
     return s + a.formatted(.number.locale(Bicim.locale).precision(.fractionLength(0)))
 }
 
@@ -211,7 +212,7 @@ func yAlani(_ vals: [Double], sifirDahil: Bool = false) -> ClosedRange<Double> {
 struct AylikOdemeGrafigi: View {
     @EnvironmentObject private var model: Model
     let months: [Akis.Ay]
-    var baslik = "Aylık ödemeler"
+    var baslik = L("Aylık ödemeler")
     @AppStorage("grafik.grup") private var by = "person"
 
     // x ekseni ay anahtarına göre (kategorik): her ay bir bant, etiket kendi çubuğunun altında
@@ -250,13 +251,13 @@ struct AylikOdemeGrafigi: View {
             HStack {
                 Text(baslik).font(.system(size: 17, weight: .semibold))
                 Spacer()
-                Secici(secim: $by, ogeler: [("person", "Kişi"), ("card", "Kart")], tamGenislik: false)
+                Secici(secim: $by, ogeler: [("person", L("Kişi")), ("card", L("Kart"))], tamGenislik: false)
             }
             if parcalar.isEmpty {
-                Text("Önümüzdeki aylarda ödenecek taksit yok.").font(.footnote).foregroundStyle(Tema.metin3)
+                Text(L("Önümüzdeki aylarda ödenecek taksit yok.")).font(.footnote).foregroundStyle(Tema.metin3)
             } else {
                 if adlar.count > 1 {
-                    Akan { ForEach(adlar, id: \.self) { RenkliAd(ad: $0, renk: renk($0)) } }
+                    Akan { ForEach(adlar, id: \.self) { RenkliAd(ad: Bicim.kartAdi($0), renk: renk($0)) } }
                 }
                 Chart(parcalar) { p in
                     BarMark(x: .value("Ay", p.ay), y: .value("Tutar", p.tutar), width: .ratio(0.62))
@@ -293,13 +294,13 @@ struct KategoriKarti: View {
         Kart {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(sec == nil ? "Harcamalar · kategoriye göre" : "Kategoriler").font(.system(size: 17, weight: .semibold))
+                    Text(sec == nil ? L("Harcamalar · kategoriye göre") : L("Kategoriler")).font(.system(size: 17, weight: .semibold))
                     HStack(spacing: 4) {
                         Button { if i > 0 { secim = months[i - 1].month } } label: { Image(systemName: "chevron.left") }
-                            .disabled(i <= 0).accessibilityLabel("Önceki ay")
+                            .disabled(i <= 0).accessibilityLabel(L("Önceki ay"))
                         Text(Bicim.month(ay?.month)).font(.subheadline).foregroundStyle(Tema.metin3)
                         Button { if i < months.count - 1 { secim = months[i + 1].month } } label: { Image(systemName: "chevron.right") }
-                            .disabled(i >= months.count - 1).accessibilityLabel("Sonraki ay")
+                            .disabled(i >= months.count - 1).accessibilityLabel(L("Sonraki ay"))
                     }
                     .buttonStyle(.plain)
                     .font(.footnote.weight(.semibold))
@@ -311,7 +312,7 @@ struct KategoriKarti: View {
             if let ay {
                 let liste = ay.categories.filter { $0.amount > 0 }
                 if liste.isEmpty {
-                    Text("Bu ayda kategorili harcama yok.").font(.footnote).foregroundStyle(Tema.metin3)
+                    Text(L("Bu ayda kategorili harcama yok.")).font(.footnote).foregroundStyle(Tema.metin3)
                 }
                 ForEach(liste, id: \.self) { k in
                     if let sec {
@@ -322,7 +323,7 @@ struct KategoriKarti: View {
                         satir(k)
                     }
                 }
-                Text(sec == nil ? "Taksitli alışveriş tamamıyla alındığı aya yazılır." : "Kategoriye dokununca harcamalar süzülür. Taksitli alışveriş tamamıyla alındığı aya yazılır.")
+                Text(sec == nil ? L("Taksitli alışveriş tamamıyla alındığı aya yazılır.") : L("Kategoriye dokununca o kategorinin harcamaları listelenir. Taksitli alışveriş tamamıyla alındığı aya yazılır."))
                     .font(.footnote).foregroundStyle(Tema.metin3)
             }
         }
@@ -343,11 +344,11 @@ struct KategoriKarti: View {
             }
             .frame(height: 6)
             HStack(spacing: 6) {
-                Text("%\(Int((k.share * 100).rounded()))").foregroundStyle(Tema.metin3)
+                Text(Bicim.yuzde(Int((k.share * 100).rounded()))).foregroundStyle(Tema.metin3)
                 if let ort = k.previous3MonthAverage, ort > 0.004 {
                     let fark = (k.amount - ort) / ort
                     if abs(fark) >= 0.05 {
-                        Text("\(fark > 0 ? "↑" : "↓") 3 ay ortalamasından %\(Int((abs(fark) * 100).rounded())) \(fark > 0 ? "fazla" : "az")")
+                        Text(fark > 0 ? L("↑ 3 ay ortalamasından {0} fazla", Bicim.yuzde(Int((abs(fark) * 100).rounded()))) : L("↓ 3 ay ortalamasından {0} az", Bicim.yuzde(Int((abs(fark) * 100).rounded()))))
                             .foregroundStyle(fark > 0 ? Tema.tehlike : Tema.iyi)
                     }
                 }
@@ -369,16 +370,16 @@ struct VarlikSeyriKarti: View {
 
     var body: some View {
         Kart {
-            Text("Varlığın seyri").font(.system(size: 17, weight: .semibold))
-            Secici(secim: $range, ogeler: [("1m", "1A"), ("3m", "3A"), ("6m", "6A"), ("1y", "1Y"), ("all", "Tümü")])
+            Text(L("Varlığın seyri")).font(.system(size: 17, weight: .semibold))
+            Secici(secim: $range, ogeler: [("1m", L("1A")), ("3m", L("3A")), ("6m", L("6A")), ("1y", L("1Y")), ("all", L("Tümü"))])
             if let s = seri, let ilk = s.points.first, let son = s.points.last {
                 let n = nokta(s)
                 let simdi = n ?? son
                 let fark = simdi.value - ilk.value
                 HStack(alignment: .top, spacing: 8) {
                     Kutucuk(etiket: Bicim.day(ilk.date), deger: Bicim.tl(ilk.value))
-                    Kutucuk(etiket: n == nil ? "Bugün" : Bicim.day(simdi.date), deger: Bicim.tl(simdi.value))
-                    Kutucuk(etiket: "Değişim", deger: (fark >= 0 ? "+" : "") + Bicim.tl(fark, fraction: false),
+                    Kutucuk(etiket: n == nil ? L("Bugün") : Bicim.day(simdi.date), deger: Bicim.tl(simdi.value))
+                    Kutucuk(etiket: L("Değişim"), deger: (fark >= 0 ? "+" : "") + Bicim.tl(fark, fraction: false),
                             renk: fark >= 0 ? Tema.iyi : Tema.tehlike)
                 }
                 let alan = yAlani(s.points.map(\.value))
@@ -416,11 +417,11 @@ struct VarlikSeyriKarti: View {
                 .frame(height: 190)
                 .grafikTakvimi()
                 if !s.approx.isEmpty {
-                    Text("Geçmiş fiyatı alınamayanlar bugünkü fiyatla: \(s.approx.joined(separator: ", "))")
+                    Text(L("Geçmiş fiyatı alınamayanlar bugünkü fiyatla: {0}", s.approx.joined(separator: ", ")))
                         .font(.footnote).foregroundStyle(Tema.metin3)
                 }
             } else if yok {
-                Text("Henüz kayıt yok.").font(.footnote).foregroundStyle(Tema.metin3)
+                Text(L("Henüz kayıt yok.")).font(.footnote).foregroundStyle(Tema.metin3)
             } else if let hata {
                 HataMetni(text: hata)
             } else {

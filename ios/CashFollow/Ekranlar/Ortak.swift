@@ -17,7 +17,7 @@ struct Okunan<T: Decodable, Content: View>: View {
             if let value {
                 content(value)
             } else if let error {
-                ContentUnavailableView("Okunamadı", systemImage: "exclamationmark.triangle", description: Text(error))
+                ContentUnavailableView(L("Okunamadı"), systemImage: "exclamationmark.triangle", description: Text(error))
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 80)
             }
@@ -67,7 +67,7 @@ struct Doluluk: View {
         }
         .frame(height: 6)
         .accessibilityElement()
-        .accessibilityLabel("Limitin yüzde \(Int((ratio * 100).rounded())) kullanıldı")
+        .accessibilityLabel(L("Limitin yüzde {0} kullanıldı", Int((ratio * 100).rounded())))
     }
 }
 
@@ -81,11 +81,11 @@ struct CevrimdisiNotu: View {
             HStack(alignment: .center, spacing: 12) {
                 Image(systemName: "icloud.slash").font(.system(size: 18)).foregroundStyle(Tema.uyari)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Verilerin yalnızca bu telefonda").font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
-                    Text("Yedeklemek ve web'de de görmek için giriş yap.").font(.footnote).foregroundStyle(Tema.metin2)
+                    Text(L("Verilerin yalnızca bu telefonda")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                    Text(L("Yedeklemek ve web'de de görmek için giriş yap.")).font(.footnote).foregroundStyle(Tema.metin2)
                 }
                 Spacer(minLength: 4)
-                KucukDugme(ad: "Giriş yap") { login = true }
+                KucukDugme(ad: L("Giriş yap")) { login = true }
             }
             .padding(14)
             .background(Tema.uyari.opacity(0.1), in: RoundedRectangle(cornerRadius: 20, style: .continuous))

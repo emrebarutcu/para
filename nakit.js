@@ -10,6 +10,7 @@
   const R = node ? require("./tekrar.js") : root.Tekrar;
   const B = node ? require("./borc.js") : root.Borc;
   const P = node ? require("./para.js") : root.Para;   // ana para birimi (state.home); aşağıda "TL" odur
+  const L = (node ? require("./dil.js") : root.Dil).t;   // görünen metinler
 
   const EPS = 0.005;   // kuruştan küçük fark yok sayılır (borc.js ile aynı)
 
@@ -24,13 +25,13 @@
   function entryTitle(e) {
     const m = V.market(e.asset);
     if (e.desc) return e.desc;
-    if (m) return `${m.ticker} ${e.amount > 0 ? "alışı" : "satışı"}`;
-    return V.settled(e) ? `${V.asset(e.asset).name} ${e.amount > 0 ? "alışı" : "bozdurma"}` : "";
+    if (m) return e.amount > 0 ? L("{0} alışı", m.ticker) : L("{0} satışı", m.ticker);
+    return V.settled(e) ? (e.amount > 0 ? L("{0} alışı", L(V.asset(e.asset).name)) : L("{0} bozdurma", L(V.asset(e.asset).name))) : "";
   }
 
   // Borç akışının başlığı
   function flowLabel(state, f) {
-    return f.type === "share" ? `${personName(state, f.payment.personId)} · sana ödedi` : B.flowText(f, state);
+    return f.type === "share" ? L("{0} · sana ödedi", personName(state, f.payment.personId)) : B.flowText(f, state);
   }
 
   // Elle ödenen kart (ekstresini kullanıcı Ödendi ile kapatır) bugün elle modda mı
@@ -110,7 +111,7 @@
       if (value == null && !settled) continue;
       const v = (value ?? 0) + settled;
       // Nakitten nakde alış / satışta kalan bugünkü değerle işlem tutarı arasındaki farktır
-      const desc = settled && own ? `${entryTitle(e)} (fiyat farkı)` : entryTitle(e);
+      const desc = settled && own ? L("{0} (fiyat farkı)", entryTitle(e)) : entryTitle(e);
       if (V.repeatOf(e) == null) {
         if (e.date <= today) anchor += v;
         if (e.date >= lo && e.date <= hi && Math.abs(v) > EPS) add(e.date, { desc, value: v });
@@ -130,16 +131,16 @@
         // Hesaba katılmayan kartın ekstresi TL bakiyesinden düşmez
         if (ev.ignored || ev.date < lo || ev.date > hi || (since.has(ev.cardId) && ev.date >= since.get(ev.cardId))) continue;
         if (ev.date === today && ev.cardId) anchor -= ev.total;
-        add(ev.date, { desc: ev.cardId ? `${cardName(state, ev.cardId)} ekstresi` : "Nakit ödemeler", value: -ev.total });
+        add(ev.date, { desc: ev.cardId ? L("{0} ekstresi", cardName(state, ev.cardId)) : L("Nakit ödemeler"), value: -ev.total });
       }
     }
     // Bugünkü planlı kart hareketi (bugün ödenecek ya da ödenmemiş ekstre) henüz düşmedi: gün sonunda düşer
     for (const mv of lira ? B.cardMoves(state, today, lo, hi, hi) : []) {
       const c = cardById(state, mv.cardId);
       if (mv.planned && mv.date === today) anchor += mv.amount;
-      const desc = mv.type === "payment" ? `${c.name} · kart ödemen` : mv.type === "prepay" ? `${c.name} · erken ödeme`
+      const desc = mv.type === "payment" ? L("{0} · kart ödemen", c.name) : mv.type === "prepay" ? L("{0} · erken ödeme", c.name)
         : mv.type === "unpaid" && manualCard(c, today)
-          ? `${c.name} · ödenmemiş ekstre${B.cardDebt(state, c, today).overdue > EPS ? " (gecikti)" : ""}` : `${c.name} ekstresi`;
+          ? L("{0} · ödenmemiş ekstre", c.name) + (B.cardDebt(state, c, today).overdue > EPS ? " " + L("(gecikti)") : "") : L("{0} ekstresi", c.name);
       add(mv.date, { desc, value: mv.amount });
     }
     // Borç akışları kendi günlerinde; bugünkü kredi taksiti ve beklenen ödemeler kart ekstresi gibi gün sonunda düşer

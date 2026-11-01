@@ -26,12 +26,12 @@ struct AuthHatasi: LocalizedError {
     // Kullanıcıya Türkçe (web'deki iletiler)
     var turkish: String {
         if code == "email_not_confirmed" || message == "Email not confirmed" {
-            return "E-posta adresin henüz doğrulanmadı. E-postana gelen bağlantıya tıkla."
+            return L("E-posta adresin henüz doğrulanmadı. E-postana gelen bağlantıya tıkla.")
         }
-        if code == "invalid_credentials" || message == "Invalid login credentials" { return "E-posta veya şifre hatalı." }
-        if status == 429 || code == "over_email_send_rate_limit" { return "Biraz bekleyip yeniden dene." }
-        if code == "weak_password" { return "Şifre çok zayıf: en az 6 karakter olmalı." }
-        if code == "validation_failed" || code == "email_address_invalid" { return "E-posta adresi geçersiz." }
+        if code == "invalid_credentials" || message == "Invalid login credentials" { return L("E-posta veya şifre hatalı.") }
+        if status == 429 || code == "over_email_send_rate_limit" { return L("Biraz bekleyip yeniden dene.") }
+        if code == "weak_password" { return L("Şifre çok zayıf: en az 6 karakter olmalı.") }
+        if code == "validation_failed" || code == "email_address_invalid" { return L("E-posta adresi geçersiz.") }
         return message
     }
     var unconfirmed: Bool { code == "email_not_confirmed" || message == "Email not confirmed" }
@@ -58,7 +58,7 @@ enum Auth {
         guard (200..<300).contains(status) else {
             let code = json["error_code"] as? String ?? json["error"] as? String
             let msg = json["msg"] as? String ?? json["error_description"] as? String ?? json["message"] as? String
-                ?? "Sunucu hatası (\(status))"
+                ?? L("Sunucu hatası ({0})", status)
             throw AuthHatasi(status: status, code: code, message: msg)
         }
         return json
@@ -76,7 +76,7 @@ enum Auth {
 
     static func signIn(email: String, password: String) async throws -> Oturum {
         let json = try await post(endpoint("token?grant_type=password"), ["email": email, "password": password])
-        guard let s = session(json) else { throw AuthHatasi(status: 0, code: nil, message: "Oturum açılamadı") }
+        guard let s = session(json) else { throw AuthHatasi(status: 0, code: nil, message: L("Oturum açılamadı")) }
         return s
     }
 
@@ -98,7 +98,7 @@ enum Auth {
 
     static func refresh(_ s: Oturum) async throws -> Oturum {
         let json = try await post(endpoint("token?grant_type=refresh_token"), ["refresh_token": s.refreshToken])
-        guard let next = session(json) else { throw AuthHatasi(status: 0, code: nil, message: "Oturum yenilenemedi") }
+        guard let next = session(json) else { throw AuthHatasi(status: 0, code: nil, message: L("Oturum yenilenemedi")) }
         return next
     }
 
@@ -108,6 +108,16 @@ enum Auth {
         var next = s
         next.country = (user["user_metadata"] as? [String: Any])?["country"] as? String ?? country
         return next
+    }
+
+    // Hesabı ve bütün verisini kalıcı olarak siler (supabase: delete_my_account; tablolar hesaba "on delete cascade" bağlı)
+    static func deleteAccount(_ s: Oturum) async throws {
+        _ = try await post(URL(string: Yapilandirma.supabaseURL.absoluteString + "/rest/v1/rpc/delete_my_account")!, [:], token: s.accessToken)
+    }
+
+    // Cihazın saat dilimi (user_metadata.tz): asistan "bugün"ü kullanıcının saatine göre hesaplar
+    static func updateZone(_ s: Oturum, _ tz: String) async throws {
+        _ = try await post(endpoint("user"), ["data": ["tz": tz]], token: s.accessToken, method: "PUT")
     }
 
     static func signOut(_ s: Oturum) async {

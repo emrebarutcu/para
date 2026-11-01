@@ -61,6 +61,7 @@
   let authModeNow = 'login';
   function showCountry() {
     document.getElementById('authCountry')?.toggleAttribute('hidden', !(welcome || authModeNow === 'register'));
+    document.getElementById('authLegal')?.toggleAttribute('hidden', authModeNow !== 'register');
   }
 
   // Giriş yapılmamış ve çevrimdışı devam seçilmemişse giriş / kayıt penceresi açılır
@@ -146,10 +147,15 @@
           refresh();
           watchInbox();
           watchData();
+          syncZone();
+          window.Analitik?.identify(user.id);
+          window.Analitik?.event('signed_in');
         }
       }
       if (event === 'SIGNED_OUT') {
         loginFor = null;
+        window.Analitik?.event('signed_out');
+        window.Analitik?.reset();
         unwatchInbox();
         unwatchData();
         if (typeof window.onAuthLogout === 'function') window.onAuthLogout();
@@ -171,6 +177,17 @@
   };
 
   window.syncGetUser = function () { return user; };
+
+  // Cihazın saat dilimi hesaba yazılır (user_metadata.tz): asistan "bugün"ü kullanıcının saatine göre hesaplar
+  async function syncZone() {
+    let tz = null;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
+    if (!db || !user || !tz || user.user_metadata?.tz === tz) return;
+    try {
+      const { data } = await db.auth.updateUser({ data: { tz } });
+      if (data?.user) user = data.user;
+    } catch {}
+  }
 
   // Hesabın ülkesi (user_metadata.country): web, iPhone ve asistan aynı para birimini kullanır
   window.syncSetCountry = async function (country) {
@@ -518,6 +535,7 @@
       btn.disabled = false;
       btn.textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
       showResend(null);
+      if (authMode !== 'login' && !error) window.Analitik?.event('account_created', { country: document.getElementById('authCountry')?.value || 'TR' });
 
       if (error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
         authMessage('E-posta adresin henüz doğrulanmadı. E-postana gelen bağlantıya tıkla.', false);
@@ -583,6 +601,26 @@
     // Çıkış
     document.getElementById('authLogoutBtn')?.addEventListener('click', async () => {
       await db?.auth.signOut();
+      closeModal();
+    });
+
+    // Hesabı sil: hesap ve bütün verisi buluttan (delete_my_account; tablolar hesaba "on delete cascade" bağlı) ve bu
+    // tarayıcıdan silinir
+    document.getElementById('authDeleteBtn')?.addEventListener('click', async () => {
+      if (!db || !user) return;
+      if (!confirm('Hesabın ve bütün verilerin (kartlar, harcamalar, varlıklar, borçlar) kalıcı olarak silinsin mi? Geri alınamaz.')) return;
+      const msg = document.getElementById('authDeleteMsg');
+      const uid = user.id;
+      const { error } = await db.rpc('delete_my_account');
+      if (error) {
+        if (msg) { msg.hidden = false; msg.style.color = 'var(--expense)'; msg.textContent = 'Hesap silinemedi: ' + error.message; }
+        return;
+      }
+      try {
+        localStorage.removeItem(metaKey(uid));
+        localStorage.removeItem('cashflow.v1.' + uid);
+      } catch {}
+      await db.auth.signOut({ scope: 'local' });
       closeModal();
     });
   });

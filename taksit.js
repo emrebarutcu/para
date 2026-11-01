@@ -5,6 +5,7 @@
 (function (root) {
   const R = typeof module === "object" && module.exports ? require("./tekrar.js") : root.Tekrar;
   const P = typeof module === "object" && module.exports ? require("./para.js") : root.Para;
+  const D = typeof module === "object" && module.exports ? require("./dil.js") : root.Dil;   // ay adlarının dili
   const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
   const MONTHS_SHORT = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
   const CASH = "nakit";   // kartsız harcamaların seri / grup anahtarı
@@ -17,8 +18,9 @@
   function monthKey(idx) {
     return `${Math.floor(idx / 12)}-${String(idx % 12 + 1).padStart(2, "0")}`;
   }
-  function monthName(idx) { return MONTHS[idx % 12]; }
-  function monthShort(idx) { return MONTHS_SHORT[idx % 12]; }
+  const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  function monthName(idx) { return (D.lang === "en" ? MONTHS_EN : MONTHS)[idx % 12]; }
+  function monthShort(idx) { return D.lang === "en" ? MONTHS_EN[idx % 12].slice(0, 3) : MONTHS_SHORT[idx % 12]; }
   function yearOf(idx) { return Math.floor(idx / 12); }
   function daysInMonth(idx) { return new Date(yearOf(idx), idx % 12 + 1, 0).getDate(); }
 
@@ -295,7 +297,7 @@
 
   function defaultState() {
     return {
-      people: [{ id: "ben", name: "Ben", color: 0 }],
+      people: [{ id: "ben", name: D.t("Ben"), color: 0 }],   // İngilizcede "Me" (dil.js)
       cards: [],              // { id, name, limit, cutoffDay, dueDay, color, last4?, history?, trackSince?, trackOff? }
       installments: [],       // harcamalar
       entries: [],            // TL / döviz / altın giriş ve çıkışları

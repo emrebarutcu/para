@@ -91,6 +91,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				tr,
+				en,
 				Base,
 			);
 			mainGroup = CF0000000000000000000004;
@@ -124,6 +125,8 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/../dil.js",
+				"$(SRCROOT)/../dil/en.json",
 				"$(SRCROOT)/../para.js",
 				"$(SRCROOT)/../tekrar.js",
 				"$(SRCROOT)/../taksit.js",
@@ -142,6 +145,8 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/dil.js",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/en.json",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/para.js",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/tekrar.js",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/taksit.js",
@@ -252,7 +257,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 7.2.0;
+				MARKETING_VERSION = 8.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.cashfollow.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -282,7 +287,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 7.2.0;
+				MARKETING_VERSION = 8.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.cashfollow.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
