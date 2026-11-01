@@ -58,7 +58,7 @@ struct HarcamalarEkrani: View {
             .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
             .searchable(text: $search, prompt: "Ara")
             .yenilenebilir(model)
-            .ekleDugmesi()
+            .ekleDugmesi(.harcama)
             .confirmationDialog(silinecek.map { "\($0.description) ve bütün taksitleri silinsin mi?" } ?? "",
                                 isPresented: Binding(get: { silinecek != nil }, set: { if !$0 { silinecek = nil } }), titleVisibility: .visible) {
                 Button("Sil", role: .destructive) {

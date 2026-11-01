@@ -23,7 +23,7 @@ struct OzetEkrani: View {
             .navigationTitle("Özet")
             .sayfaZemini()
             .yenilenebilir(model)
-            .ekleDugmesi()
+            .ekleDugmesi(.harcama)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { EsitlemeDurumu() }
                 ToolbarItem(placement: .primaryAction) {

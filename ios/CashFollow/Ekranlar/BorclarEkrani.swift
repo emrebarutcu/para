@@ -92,7 +92,7 @@ struct BorclarEkrani: View {
             .navigationTitle("Borçlar")
             .sayfaZemini()
             .yenilenebilir(model)
-            .ekleDugmesi()
+            .ekleDugmesi(.borc)
             .sheet(isPresented: $kartEkle) { KartFormu(card: nil) }
             .sheet(item: $kartDuzenle) { KartFormu(card: $0) }
             .sheet(item: $kartDetay) { c in

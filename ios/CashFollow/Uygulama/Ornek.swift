@@ -3,7 +3,7 @@ import SwiftUI
 
 // Örnek veriyle açılış (CI'da ekran görüntüleri: .github/workflows/ekran.yml). "-ornek" ile girişsiz, örnek veriyle açılır;
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
-// 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: + seçicisi). Gerçek kullanımda hiçbiri yoktur.
+// 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?"). Gerçek kullanımda hiçbiri yoktur.
 enum Ornek {
     private static func deger(_ ad: String) -> Int? {
         let a = CommandLine.arguments
@@ -85,8 +85,6 @@ struct GrafikGalerisi: View {
     var body: some View {
         if sayfa == 3 {
             HarcamaFormu(ornek: ("36000", "Buzdolabı", 6))
-        } else if sayfa == 4 {
-            EkleSecici { _ in }
         } else {
             galeri
         }

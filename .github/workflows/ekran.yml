@@ -54,7 +54,6 @@ jobs:
             shot galeri1 $theme -galeri 1
             shot galeri2 $theme -galeri 2
             shot galeri3 $theme -galeri 3
-            shot galeri4 $theme -galeri 4
             for i in 0 1 2 3 4; do shot sekme$i $theme -sekme $i; done
           done
           ls -la out

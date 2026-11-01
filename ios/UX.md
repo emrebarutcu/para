@@ -43,9 +43,10 @@ Puan: 1 (yapılamıyor / çok zor) … 5 (hızlı ve açık). "Önce" 7.1.0, "So
 
 ## Eklenenler
 
-- **Her sekmede aynı + düğmesi**: "Ne eklemek istiyorsun?" — Harcama (en üstte, büyük), Para (Gelir, Döviz / altın,
-  Fon / hisse), Borç (Borç verdim, Borç aldım, Kredi), Kart. Seçilen iş aynı pencerede formuna dönüşür; Vazgeç hepsini
-  kapatır. Nakit harcama ayrı seçenek değil, Harcama'da "Nakit" seçilir (aynı işi yapan iki yol kafa karıştırıyordu).
+- **+ düğmesi bulunduğun ekranın işini doğrudan açar** (ara seçici ekranı denendi, bir adım fazlaydı):
+  Özet, Akış, Harcamalar'da dokununca Harcama formu, basılı tutunca diğer eklemeler; Varlıklar'da dokununca
+  Gelir / Döviz-altın / Fon-hisse menüsü; Borçlar'da Borç verdim / Borç aldım / Kredi / Kredi kartı menüsü. Menülerin
+  altında "Diğer" ile her ekleme her sekmeden yapılabilir. Nakit harcama ayrı seçenek değil, Harcama'da "Nakit".
   Ödeme kaydı (ekstre, borç taksiti, kişi payı) bağlamında kalır: ilgili satırdaki "Ödendi".
 - **Harcama formu baştan**: tutar en üstte ve büyük; taksit çipleri (Peşin, 2, 3, 6, 9, 12, diğer); kartlar renkli çipler,
   son kullanılan kart seçili gelir; "Her ay tekrarlar" anahtarı (abonelik, kira).

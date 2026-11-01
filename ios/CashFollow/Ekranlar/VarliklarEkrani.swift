@@ -39,7 +39,7 @@ struct VarliklarEkrani: View {
             .navigationTitle("Varlıklar")
             .sayfaZemini()
             .yenilenebilir(model)
-            .ekleDugmesi()
+            .ekleDugmesi(.varlik)
         }
     }
 

@@ -23,7 +23,7 @@ struct AkisEkrani: View {
             .navigationTitle("Nakit akışı")
             .sayfaZemini()
             .yenilenebilir(model)
-            .ekleDugmesi()
+            .ekleDugmesi(.harcama)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
