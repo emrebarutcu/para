@@ -8,6 +8,11 @@ const I = window.Icgoru;
 const YZ = window.YZ;
 const B = window.Borc;
 const N = window.Nakit;   // Nakit grafiği ve Varlığın seyri (nakit.js)
+const P = window.Para;    // ülkeler ve para birimleri (para.js)
+
+// Hesabın ana para birimi: ülkesinden (girişliyse hesabın user_metadata.country, girişsizse cihazda; para.js). Kartlar,
+// nakit harcamalar, toplamlar ve "TL" yazan her yer ondadır; state.home'a da yazılır (hesap modülleri oradan okur).
+let HOME = "TRY";
 const STORAGE_KEY_BASE = "cashflow.v1";
 function getStorageKey() {
   return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
@@ -25,7 +30,7 @@ const CAL_WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];   // ta
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates",
   cashStart: "para.cashStart", cashMode: "para.cashMode", timelineStart: "para.timelineStart", trackNotice: "para.trackNotice",
   purchaseSort: "para.purchaseSort", prices: "para.prices", settle: "para.settle", cashDef: "para.cashDef",
-  assetRange: "para.assetRange", history: "para.history" };
+  assetRange: "para.assetRange", history: "para.history", country: "para.ulke" };
 const PURCHASE_SORTS = ["next", "new", "amount", "name"];   // Harcamalar sıralaması (index.html #purchaseSort)
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
@@ -42,7 +47,7 @@ function writePref(key, value) {
   try { value ? localStorage.setItem(key, value) : localStorage.removeItem(key); } catch {}
 }
 function readCashDef() {
-  try { return V.cashDef(JSON.parse(readPref(PREF.cashDef))); } catch { return [...V.CASH_DEFAULT]; }
+  try { return V.cashDef(JSON.parse(readPref(PREF.cashDef)), HOME); } catch { return [...V.cashDefault(HOME)]; }
 }
 
 let stateOwner = null;         // state'in ait olduğu kullanıcı (girişsizse null)
@@ -84,7 +89,7 @@ let editingDebtId = null;     // düzenlenen borç / alacak / kredi
 let payTarget = null;         // ödeme formunun hedefi: { debtId } ya da kart payı için { personId }
 let editingPayId = null;      // ödeme formunda düzenlenen ödeme
 let sharePid = null;          // kart payı penceresindeki kişi
-let lastAsset = "TRY";
+let lastAsset = HOME;
 let rates = readRates();      // son alınan kurlar: { rates: { TRY, USD, EUR, GAU }, updatedAt, fetchedAt }
 let ratesFailed = false;
 let ratesTriedAt = 0;
@@ -111,9 +116,9 @@ function loadState() {
   stateOwner = window.CF_USER_ID || null;
   try {
     const raw = localStorage.getItem(getStorageKey());
-    if (!raw) return defaultState();
-    return hydrate(JSON.parse(raw));
-  } catch { return defaultState(); }
+    if (!raw) return { ...defaultState(), home: HOME };
+    return hydrate({ ...JSON.parse(raw), home: HOME });
+  } catch { return { ...defaultState(), home: HOME }; }
 }
 
 function saveState() {
@@ -143,6 +148,7 @@ function resetView() {
 // Auth callbacks — sync.js tarafından çağrılır
 window.onAuthLogin = function (userId) {
   window.CF_USER_ID = userId;
+  applyHome();
   state = loadState();   // kullanıcıya özel local storage'a geç
   resetView();
   render();
@@ -152,7 +158,8 @@ window.onAuthLogout = function () {
   window.CF_USER_ID = null;
   els.moveModal.hidden = true;
   stateOwner = null;
-  state = defaultState();  // temiz slate — hesap verisi ekranda kalmasın
+  applyHome();
+  state = { ...defaultState(), home: HOME };  // temiz slate — hesap verisi ekranda kalmasın
   resetView();
   render();
 };
@@ -175,7 +182,7 @@ function viewFromHash() {
   return VIEWS.includes(v) ? v : "ozet";
 }
 
-const moneyFmt = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let moneyFmt = new Intl.NumberFormat("tr-TR", { style: "currency", currency: HOME, minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const numFmt = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function fmt(n) { return moneyFmt.format(n || 0); }
 function fmtNum(n) { return numFmt.format(n || 0); }
@@ -235,7 +242,7 @@ function paymentsOf(p, until) { return T.payments(p, cardById(p.cardId), until);
 // Tekrarlayan harcamada sıradaki tekrarın ödemeleri de (henüz gelmemiş olsa da) sayılır: liste ve durum için
 function upcomingPayments(p, today) { return paymentsOf(p, T.repeats(p) ? R.nextDate(p, today) ?? today : undefined); }
 // Tutar harcamanın / hareketin varlığında: TL ise "₺1.250,00", değilse "$100,00", "12,5 gr"
-function money(n, code = "TRY") { return code === "TRY" ? fmt(n) : fmtAsset(n, code); }
+function money(n, code = HOME) { return code === HOME ? fmt(n) : fmtAsset(n, code); }
 
 function dot(color) {
   const d = el("i", "dot");
@@ -286,7 +293,7 @@ function knownPurchases() { return N.knownPurchases(state); }
 function lastPaymentIndex() {
   let last = -Infinity;
   for (const p of knownPurchases()) {
-    if (T.assetOf(p) !== "TRY") continue;
+    if (T.assetOf(p, HOME) !== HOME) continue;
     const card = cardById(p.cardId);
     if (card && !B.tracked(card)) continue;   // hesaba katılmayan kart ödeme penceresini uzatmaz
     const list = paymentsOf(p);
@@ -377,6 +384,7 @@ const els = {
   eventItems: $("eventItems"), eventToFlow: $("eventToFlow"), eventState: $("eventState"), eventOk: $("eventOk"), eventPay: $("eventPay"),
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
+  countrySelect: $("countrySelect"), authCountry: $("authCountry"),
   cashDefBtn: $("cashDefBtn"), cashDefText: $("cashDefText"), cashDefSheet: $("cashDefSheet"), cashDefList: $("cashDefList"),
   cashDefReset: $("cashDefReset"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
@@ -439,7 +447,7 @@ function renderOverview(months, start, last) {
   els.nextTotal.textContent = fmt(at(start + 1)?.total || 0);
   els.remaining.textContent = fmt(months.reduce((s, m) => s + m.total, 0));
   // Son taksit: ödenecek bir şey kalan son ay; süresiz tekrarlayan (hesaba katılan) harcama varsa bitmez
-  const endless = knownPurchases().some(p => T.assetOf(p) === "TRY" && T.endless(p) && !(cardById(p.cardId) && !B.tracked(cardById(p.cardId))));
+  const endless = knownPurchases().some(p => T.assetOf(p, HOME) === HOME && T.endless(p) && !(cardById(p.cardId) && !B.tracked(cardById(p.cardId))));
   const lastDue = [...months].reverse().find(m => m.total > EPS);
   els.endLabel.textContent = endless ? "Süresiz" : lastDue ? `${T.monthShort(lastDue.idx)} ${T.yearOf(lastDue.idx)}` : "—";
   // Ayın borç ve kredi ödemeleri ayrı satırda (yukarıdaki tutar yalnızca kart ve nakit ödemeleri); dokununca Borçlar
@@ -484,7 +492,7 @@ function insightItem(x) {
 }
 
 function insightAction(x) {
-  if (x.action.kind === "entry") openEntrySheet(null, "TRY", { desc: "Maaş", repeat: 0 });
+  if (x.action.kind === "entry") openEntrySheet(null, HOME, { desc: "Maaş", repeat: 0 });
   else if (x.action.kind === "ai") openAiSheet();
   else if (x.action.kind === "share") {
     const person = x.data.length === 1 ? personById(x.data[0].personId) : null;
@@ -648,7 +656,7 @@ function renderTimeline(start) {
   // gelir ya da gider değildir; satır olarak görünür, toplama girmez. TL'ye işlenmeyen fon / hisse hareketi yoktur.
   const entries = [];
   for (const e of knownEntries()) {
-    if (!V.asset(e.asset) || (V.market(e.asset) && !V.settled(e))) continue;
+    if (!V.asset(e.asset) || (V.market(e.asset) && !V.settled(e, HOME))) continue;
     for (const { date } of R.between(e, from, to)) entries.push({ e, date });
   }
   // Tarihi bilinmeyen (içe aktarılmış) harcama yalnızca kart ödemesinin içinde görünür
@@ -671,22 +679,22 @@ function renderTimeline(start) {
   for (const f of flows) mark(f.date, { flow: f });
   // Faiz ve masraf: çekilen tutarla geri ödenecek arasındaki fark (borçta çıktı, alacakta girdi)
   const costs = B.known(state).items.filter(d => d.principal > 0 && Math.abs(d.amount - d.principal) > EPS && inPeriod(d.date));
-  if (entries.some(x => x.e.asset !== "TRY") || spends.some(x => T.assetOf(x.p) !== "TRY")
-    || flows.some(f => f.asset !== "TRY") || costs.some(d => d.asset !== "TRY")) loadRates();
+  if (entries.some(x => x.e.asset !== HOME) || spends.some(x => T.assetOf(x.p, HOME) !== HOME)
+    || flows.some(f => f.asset !== HOME) || costs.some(d => d.asset !== HOME)) loadRates();
 
   const entryRank = new Map(state.entries.map((e, i) => [e.id, i]));
   const spendRank = new Map(state.installments.map((p, i) => [p.id, state.entries.length + i]));
   const items = [
-    ...entries.map(({ e, date }) => (V.settled(e)
+    ...entries.map(({ e, date }) => (V.settled(e, HOME)
       ? { kind: "move", date, entry: e, value: 0, rank: entryRank.get(e.id) }
-      : { kind: e.amount > 0 ? "in" : "out", date, entry: e, value: V.toTry(e.amount, e.asset, r), rank: entryRank.get(e.id) })),
+      : { kind: e.amount > 0 ? "in" : "out", date, entry: e, value: V.toTry(e.amount, e.asset, r, HOME), rank: entryRank.get(e.id) })),
     ...spends.map(({ p, date }) => {
       const amount = T.originalTotal(p);
-      return { kind: "out", date, purchase: p, amount, value: V.toTry(-amount, T.assetOf(p), r), rank: spendRank.get(p.id) };
+      return { kind: "out", date, purchase: p, amount, value: V.toTry(-amount, T.assetOf(p, HOME), r, HOME), rank: spendRank.get(p.id) };
     }),
     ...costs.map((d, i) => {
       const amount = -B.sign(d) * (d.amount - d.principal);   // işaretli, borcun varlığında
-      return { kind: amount < 0 ? "out" : "in", date: d.date, debt: d, amount, value: V.toTry(amount, d.asset, r),
+      return { kind: amount < 0 ? "out" : "in", date: d.date, debt: d, amount, value: V.toTry(amount, d.asset, r, HOME),
         rank: state.entries.length + state.installments.length + i };
     }),
   ].sort((a, b) => a.date.localeCompare(b.date) || a.rank - b.rank);
@@ -890,13 +898,13 @@ function timelineItem(it, today, r) {
       sub.append(who);
     }
     sub.append(el("span", "", m ? V.MARKETS[m.market].name : V.asset(e.asset).name));
-    if (V.settled(e)) {
+    if (V.settled(e, HOME)) {
       // Aktarım (TL bakiyesine işlenen alış / satış): miktar ve TL tutarı, toplama girmez
       side.append(el("span", "amount", m ? `${fmtAsset(e.amount, e.asset, true)} ${m.ticker}` : fmtAsset(e.amount, e.asset, true)));
-      side.append(el("small", "", `aktarım · ${fmt(Math.abs(V.settled(e)))} ${e.amount > 0 ? "TL'den" : "TL'ye"}`));
+      side.append(el("small", "", `aktarım · ${fmt(Math.abs(V.settled(e, HOME)))} ${e.amount > 0 ? homeEk("den") : homeEk("ye")}`));
     } else {
       side.append(el("span", "amount", fmtAsset(e.amount, e.asset, true)));
-      if (e.asset !== "TRY") side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
+      if (e.asset !== HOME) side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
     }
     open = () => openEntrySheet(e);
   } else if (it.debt) {
@@ -911,12 +919,12 @@ function timelineItem(it, today, r) {
     }
     sub.append(el("span", "", B.side(d) === "debt" ? "faiz ve masraf" : "faiz"));
     side.append(el("span", "amount", (it.amount < 0 ? "−" : "+") + money(Math.abs(it.amount), d.asset)));
-    if (d.asset !== "TRY") side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
+    if (d.asset !== HOME) side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
     open = () => openDebtSheet(d);
   } else {
     // Harcama alındığı gün: kartı (ya da nakit / döviz / altın), taksitliyse taksit sayısı
     const p = it.purchase;
-    const code = T.assetOf(p);
+    const code = T.assetOf(p, HOME);
     const person = personById(p.personId);
     title.textContent = p.desc;
     if (state.people.length > 1) {
@@ -926,11 +934,11 @@ function timelineItem(it, today, r) {
     }
     const card = cardById(p.cardId);
     const how = el("span", "who");
-    how.append(cardMark(p.cardId), document.createTextNode(card ? card.name : code === "TRY" ? "Nakit" : V.asset(code).name));
+    how.append(cardMark(p.cardId), document.createTextNode(card ? card.name : code === HOME ? "Nakit" : V.asset(code).name));
     sub.append(how);
     if (T.planLength(p) > 1) sub.append(el("span", "", `${T.planLength(p)} taksit`));
     side.append(el("span", "amount", "−" + money(it.amount, code)));
-    if (code !== "TRY") side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
+    if (code !== HOME) side.append(el("small", "", it.value == null ? "kur yok" : `≈ ${fmt(Math.abs(it.value))}`));
     open = () => openPurchaseSheet(p);
   }
 
@@ -984,8 +992,8 @@ let sheetEvent = null;
 // sayıldığı ya da sayılacağı, hesaba katılmayan kartta ve takipten önceki ekstrede bakiyeyi etkilemediği. Nakitte boş.
 function eventStatus(card, ev, today) {
   if (!card) return { text: "" };
-  if (!B.tracked(card)) return { text: "Bu kart hesaba katılmıyor: ekstre TL bakiyeni etkilemez." };
-  if (ev.date < B.since(card, today)) return { text: "Kart hesaba katılmadan önceki ekstre: TL bakiyeni etkilemez." };
+  if (!B.tracked(card)) return { text: `Bu kart hesaba katılmıyor: ekstre ${homeShort()} bakiyeni etkilemez.` };
+  if (ev.date < B.since(card, today)) return { text: `Kart hesaba katılmadan önceki ekstre: ${homeShort()} bakiyeni etkilemez.` };
   const x = manualCard(card, today)
     ? B.cardState(state, card, today, undefined, ev.date).statements.find(y => y.key === ev.date && !y.auto) : null;
   if (x) {
@@ -1002,9 +1010,9 @@ function eventStatus(card, ev, today) {
       + `son ödeme ${fmtDayShort(ev.date)}. Ödeyince “Ödendi”ye dokun.` };
   }
   const paidOn = T.addDays(ev.date, 1);
-  return { text: ev.date < today ? `Ödenmiş sayıldı: ${fmtDayShort(paidOn)} günü TL bakiyenden düştü.`
-    : ev.date === today ? "Son gün bugün. Yarın ödenmiş sayılır ve TL bakiyenden düşer."
-    : `Son ödeme ${fmtDayShort(ev.date)}. ${fmtDayShort(paidOn)} günü ödenmiş sayılır ve TL bakiyenden düşer.` };
+  return { text: ev.date < today ? `Ödenmiş sayıldı: ${fmtDayShort(paidOn)} günü ${homeShort()} bakiyenden düştü.`
+    : ev.date === today ? `Son gün bugün. Yarın ödenmiş sayılır ve ${homeShort()} bakiyenden düşer.`
+    : `Son ödeme ${fmtDayShort(ev.date)}. ${fmtDayShort(paidOn)} günü ödenmiş sayılır ve ${homeShort()} bakiyenden düşer.` };
 }
 
 function openEventSheet(ev) {
@@ -1423,7 +1431,7 @@ function cashPeriod(today, start, shift) { return N.cashPeriod(today, start, shi
 
 function cashSeries(from, to, today) {
   const out = N.cashSeries(state, from, to, today, { rates: curRates(), isCash: isCashCode });
-  if (out.missing.length || knownEntries().some(e => e.asset !== "TRY")) loadRates();   // fon bilgisi de (para piyasası fonu mu)
+  if (out.missing.length || knownEntries().some(e => e.asset !== HOME)) loadRates();   // fon bilgisi de (para piyasası fonu mu)
   return out;
 }
 
@@ -1437,7 +1445,7 @@ function dayWithSuffix(n) {
 // Başlangıç seçenekleri: bugün, süren tekrarlayan TL girişlerinin günleri (en büyük 3), ayın her günü
 function renderCashStart(today) {
   const incomes = knownEntries()
-    .filter(e => e.asset === "TRY" && e.amount > 0 && V.repeatOf(e) != null && R.unit(e) === "month" && V.nextDate(e, today))
+    .filter(e => e.asset === HOME && e.amount > 0 && V.repeatOf(e) != null && R.unit(e) === "month" && V.nextDate(e, today))
     .sort((a, b) => b.amount - a.amount);
   const seen = new Set(), opts = [];
   for (const e of incomes) {
@@ -1510,7 +1518,7 @@ function renderCash() {
   els.cashNote.replaceChildren(`Nakit: ${cashDefText()}. `, change, " · Grafikte nakdin girdileri ve çıktıları (tekrarlayanlar "
     + "dahil), kart ekstreleri, nakit taksitler, borç ve alacak ödemeleri var. Ekstreler son ödeme gününde görünür; ödemediğin "
     + "geçmiş ekstreler bugünde gösterilir. Hesaba katılmayan kartlar grafikte yok."
-    + (cashDef.some(c => c !== "TRY") ? " Döviz, altın ve fonlar bugünkü kur ve fiyatla TL'ye çevrilir." : "")
+    + (cashDef.some(c => c !== HOME) ? ` Döviz, altın ve fonlar bugünkü kur ve fiyatla ${homeEk("ye")} çevrilir.` : "")
     + (data.missing.length ? ` Kuru ya da fiyatı alınamayan ${data.missing.map(c => V.asset(c).name.toLocaleLowerCase("tr-TR")).join(", ")} dahil değil.` : ""));
   svg.style.display = data.any ? "" : "none";
   svg.setAttribute("aria-label", `${fmtDayShort(from)} – ${fmtDayShort(to)} ${net ? "dönem net nakit hareketi" : "nakit bakiyesi"}`);
@@ -1855,13 +1863,13 @@ function renderPurchases() {
   // Tutar harcamanın TL karşılığıdır (taksitlide toplamı, tekrarlayanda bir seferliği); kuru bilinmeyen sona düşer.
   const byName = (a, b) => a.p.desc.localeCompare(b.p.desc, "tr");
   const byDate = (a, b) => (b.p.date ?? "").localeCompare(a.p.date ?? "");
-  const value = x => V.toTry(T.originalTotal(x.p), T.assetOf(x.p), curRates()) ?? -Infinity;
+  const value = x => V.toTry(T.originalTotal(x.p), T.assetOf(x.p, HOME), curRates(), HOME) ?? -Infinity;
   const order = {
     new: (a, b) => byDate(a, b) || byName(a, b),
     amount: (a, b) => value(b) - value(a) || byName(a, b),
     name: (a, b) => byName(a, b) || byDate(a, b),
   }[purchaseSort];
-  if (purchaseSort === "amount" && mine.some(x => T.assetOf(x.p) !== "TRY")) loadRates();
+  if (purchaseSort === "amount" && mine.some(x => T.assetOf(x.p, HOME) !== HOME)) loadRates();
   const active = mine.filter(x => x.left).sort(order ?? ((a, b) => a.next.localeCompare(b.next) || byName(a, b)));
   const done = mine.filter(x => !x.left).sort(order ?? ((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key)));
 
@@ -1906,7 +1914,7 @@ function purchaseList(items, today) {
 function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   const person = personById(p.personId);
   const per = T.perInstallment(p);
-  const code = T.assetOf(p);
+  const code = T.assetOf(p, HOME);
   const rule = T.repeats(p) ? R.rule(p) : null;
   const row = el("div", "purchase" + (left ? "" : " done"));
   row.tabIndex = 0;
@@ -1919,7 +1927,7 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   tag.append(cardMark(p.cardId), document.createTextNode(cardName(p.cardId)));
   meta.append(tag);
   if (p.date) meta.append(el("span", "", fmtDayShort(p.date) + " " + T.yearOf(T.parseDate(p.date).idx)));
-  if (code !== "TRY") meta.append(el("span", "", V.asset(code).name));
+  if (code !== HOME) meta.append(el("span", "", V.asset(code).name));
   if (plan > 1 || !rule) meta.append(el("span", "", plan > 1 ? `${plan} taksit` : "Peşin"));
   if (rule) meta.append(el("span", "", R.label(p) + (rule.n ? ` · ${rule.n} kez` : "")));
   if (K.valid(p.category)) meta.append(el("span", "cat-tag" + (p.categoryBy === "user" ? "" : " ai"), K.category(p.category).name));
@@ -1952,7 +1960,7 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
     const amount = el("span", "amount", fmt(per));
     amount.append(el("small", "", "/ay"));
     side.append(amount, el("span", "sub", left ? `kalan ${fmt(left * per)}` : "bitti"));
-  } else if (code !== "TRY") {
+  } else if (code !== HOME) {
     side.append(el("span", "amount", money(p.total, code)), el("span", "sub", next ? relDays(next, today).toLocaleLowerCase("tr-TR") : "ödendi"));
   } else {
     side.append(el("span", "amount", fmt(p.total)), el("span", "sub", next ? `${relDays(next, today).toLocaleLowerCase("tr-TR")} ödenecek` : "ödendi"));
@@ -2092,10 +2100,11 @@ function savePrices() {
 // Kurlar ve fon / hisse fiyatları tek tabloda (V.toTry): { TRY, USD, EUR, GAU, "BIST:THYAO": 246.7, … }
 function curRates() {
   const list = Object.entries(prices?.prices || {});
-  if (!list.length) return rates && rates.rates;
-  const out = { TRY: 1, ...(rates && rates.rates) };
-  for (const [code, x] of list) out[code] = x.price;
-  return out;
+  if (!rates && !list.length) return undefined;
+  // Kurlar ve fon / hisse fiyatları TL'dir; hesabın ana para birimine çevrilir (para.js)
+  const lira = { TRY: 1, ...(rates && rates.rates) };
+  for (const [code, x] of list) lira[code] = x.price;
+  return P.homeRates(lira, HOME) ?? undefined;
 }
 
 // Hareketlerdeki fon ve hisse kodları
@@ -2199,8 +2208,9 @@ function isCashCode(code) {
 
 // Nakit tanımı metinle: "TL ve para piyasası fonları"
 const CASH_NAMES = { TRY: "TL", USD: "dolar", EUR: "euro", GAU: "gram altın", [V.MMF]: "para piyasası fonları" };
+const cashName = code => CASH_NAMES[code] ?? P.currency(code)?.short ?? code;
 function cashDefText() {
-  const names = cashDef.map(c => CASH_NAMES[c] ?? V.market(c)?.ticker ?? c);
+  const names = cashDef.map(c => V.market(c)?.ticker ?? cashName(c));
   if (!names.length) return "hiçbiri";
   return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} ve ${names[names.length - 1]}`;
 }
@@ -2269,12 +2279,15 @@ function renderAssets() {
   const stale = !rates || ratesFailed || t.missing.length;
   const noPrice = t.missing.some(c => V.market(c));   // fiyatı alınamayan fon / hisse toplamda yok
   els.ratesNote.classList.toggle("warn-text", !!stale);
-  els.ratesNote.textContent = !rates ? (ratesLoading ? "Kurlar alınıyor…" : "Kur alınamadı · yalnızca TL")
+  els.ratesNote.textContent = !rates ? (ratesLoading ? "Kurlar alınıyor…" : `Kur alınamadı · yalnızca ${homeShort()}`)
     : `Kur ${fmtTime(rates.updatedAt)}${ratesFailed ? " · güncellenemedi" : ""}`
       + (noPrice ? (pricesLoading ? " · fiyatlar alınıyor…" : " · fiyatı alınamayan var") : "");
-  els.rateStats.replaceChildren(...V.ASSETS.filter(a => a.code !== "TRY").map(a => {
+  els.rateStats.replaceChildren(...V.assetsFor(HOME).filter(a => a.code !== HOME).map(a => {
     const d = el("div");
-    d.append(el("dt", "", a.name), el("dd", "", r?.[a.code] ? fmt(r[a.code]) : "—"));
+    // 1'in altındaki kurlar (ör. euro hesabında TL) daha çok haneyle
+    const v = r?.[a.code];
+    const text = !v ? "—" : v >= 1 ? fmt(v) : new Intl.NumberFormat("tr-TR", { style: "currency", currency: HOME, maximumSignificantDigits: 4 }).format(v);
+    d.append(el("dt", "", a.name), el("dd", "", text));
     return d;
   }));
 
@@ -2283,16 +2296,16 @@ function renderAssets() {
   els.entryFilter.hidden = state.people.length < 2;
   renderAssetChart(entryFilter);
 
-  els.assetGrid.replaceChildren(...V.ASSETS.map(a => {
+  els.assetGrid.replaceChildren(...V.assetsFor(HOME).map(a => {
     const bal = bals[a.code] ?? 0;
     const tile = el("button", "asset" + (a.code in bals ? "" : " empty-asset"));
     tile.type = "button";
     tile.setAttribute("aria-label", `${a.name} girişi ekle`);
     const name = el("div", "asset-name");
     name.append(el("span", "asset-sym", a.symbol), document.createTextNode(a.name));
-    const value = V.toTry(bal, a.code, r);
+    const value = V.toTry(bal, a.code, r, HOME);
     tile.append(name, el("div", "asset-bal" + (bal < 0 ? " neg" : ""), fmtAsset(bal, a.code)),
-      el("div", "asset-try", a.code === "TRY" ? "\u00a0" : value == null ? "kur yok" : `≈ ${fmt(value)}`));
+      el("div", "asset-try", a.code === HOME ? "\u00a0" : value == null ? "kur yok" : `≈ ${fmt(value)}`));
     tile.addEventListener("click", () => openEntrySheet(null, a.code));
     return tile;
   }));
@@ -2321,7 +2334,7 @@ function renderAssets() {
     btn.append(icon("plus"), document.createTextNode("Hareket ekle"));
     btn.addEventListener("click", () => openEntrySheet());
     els.entryWrap.append(emptyState("coins", "Henüz hareket yok",
-      "TL, dolar, euro ya da gram altın girişlerini ve çıkışlarını, fon ve hisse alışlarını ekle; bakiyeni güncel kur ve fiyatla TL olarak gösteririm.", btn));
+      `${homeShort()}, döviz ya da gram altın girişlerini ve çıkışlarını, fon ve hisse alışlarını ekle; bakiyeni güncel kur ve fiyatla ${homeShort()} olarak gösteririm.`, btn));
     return;
   }
   // Tekrarlayan hareket son işlenen tekrarının tarihiyle sıralanır (henüz işlenmediyse başlangıcıyla); nakit
@@ -2403,7 +2416,7 @@ function assetSeries(range, pid) {
   if (span == null) return null;
   const codes = historyCodes();
   const hist = historyFor(span, codes);
-  const cur = curRates() ?? { TRY: 1 };
+  const cur = curRates() ?? { [HOME]: 1 };
   const key = [range, pid, today, state.entries, state.entries.length, state.installments, state.installments.length, state.debts,
     state.debts.length, state.cards, state.people, rates, prices, hist.stamp];
   if (assetMemo && key.every((x, i) => x === assetMemo.key[i])) return assetMemo.value;
@@ -2523,7 +2536,7 @@ function showAssetTooltip(p, x, y) {
   const tt = els.tooltip;
   const today = T.todayKey();
   tt.replaceChildren(el("span", "tt-date", `${fmtDay(p.date)} · ${relDays(p.date, today)}`));
-  for (const [key, name] of [["lira", "TL"], ["fx", "Döviz ve altın"], ["market", "Fon ve hisse"], ["receivable", "Alacak"]]) {
+  for (const [key, name] of [["lira", homeShort()], ["fx", "Döviz ve altın"], ["market", "Fon ve hisse"], ["receivable", "Alacak"]]) {
     const v = p.parts[key];
     if (Math.abs(v) < EPS) continue;
     const line = el("span", "tt-row");
@@ -2553,8 +2566,8 @@ function lastMarket() { return V.MARKETS[lastAsset] ? lastAsset : "FON"; }
 // maliyetle, V.positions) ve hissede günlük değişim. Dokununca o fon / hisse için yeni alış ya da satış.
 function renderHoldings(mine, bals, r) {
   const traded = mine.some(e => V.market(e.asset));
-  const pos = V.positions(mine);
-  const value = c => V.toTry(bals[c], c, r);
+  const pos = V.positions(mine, HOME);
+  const value = c => V.toTry(bals[c], c, r, HOME);
   const codes = Object.keys(bals).filter(c => V.market(c) && Math.abs(bals[c]) > 1e-9)
     .sort((a, b) => (value(b) ?? -1) - (value(a) ?? -1) || (a < b ? -1 : 1));
   const head = el("header", "panel-head hold-head");
@@ -2568,7 +2581,7 @@ function renderHoldings(mine, bals, r) {
   const panel = el("div", "panel list-panel");
   if (codes.length) panel.append(...codes.map(c => holdingRow(c, bals[c], pos[c], r)));
   else panel.append(el("p", "hold-empty", traded ? "Elinde fon ya da hisse kalmadı."
-    : "TEFAS fonlarını ve Borsa İstanbul hisselerini adetiyle ekle; güncel fiyatla TL karşılığını ve kârını gösteririm."));
+    : `TEFAS fonlarını ve Borsa İstanbul hisselerini adetiyle ekle; güncel fiyatla ${homeShort()} karşılığını ve kârını gösteririm.`));
   els.holdWrap.replaceChildren(head, panel);
 }
 
@@ -2590,7 +2603,7 @@ function holdingRow(code, units, pos, r) {
   main.append(meta);
 
   const side = el("div", "p-side");
-  const v = V.toTry(units, code, r);
+  const v = V.toTry(units, code, r, HOME);
   side.append(el("span", "amount" + (units < 0 ? " out" : ""), v == null ? "fiyat yok" : fmt(v)));
   // Kâr / zarar: güncel değer − elde kalanın ortalama maliyeti
   if (v != null && pos?.cost > 0) {
@@ -2640,12 +2653,12 @@ function entryRow(e, r, today) {
   const amount = el("span", "amount " + (e.amount > 0 ? "in" : "out"), fmtAsset(e.amount, e.asset, true));
   if (n != null) amount.append(el("small", "", R.per(e)));
   side.append(amount);
-  const value = V.toTry(e.amount, e.asset, r), trade = V.tradeValue(e);
+  const value = V.toTry(e.amount, e.asset, r, HOME), trade = V.tradeValue(e, HOME);
   // Fon / hisse: alış ya da satış tutarı (fiyatı girildiyse) ve TL bakiyesine işlendiyse
   if (trade != null) {
     side.append(el("span", "sub", fmt(Math.abs(trade))));
-    if (e.settle === true) side.append(el("span", "sub", e.amount > 0 ? "TL'den ödendi" : "TL'ye eklendi"));
-  } else if (e.asset !== "TRY") side.append(el("span", "sub", value == null ? (a.market ? "fiyat yok" : "kur yok") : `≈ ${fmt(Math.abs(value))}`));
+    if (e.settle === true) side.append(el("span", "sub", e.amount > 0 ? `${homeEk("den")} ödendi` : `${homeEk("ye")} eklendi`));
+  } else if (e.asset !== HOME) side.append(el("span", "sub", value == null ? (a.market ? "fiyat yok" : "kur yok") : `≈ ${fmt(Math.abs(value))}`));
   if (n != null) side.append(el("span", "sub", next ? `sonraki ${fmtDayShort(next)}` : "bitti"));
 
   row.append(avatar(personById(e.personId)), main, side);
@@ -2656,7 +2669,7 @@ function entryRow(e, r, today) {
 
 // Varlıktan ödenen harcama: çıkış olarak, dokununca harcama formu
 function spendRow(p, r, today) {
-  const code = T.assetOf(p);
+  const code = T.assetOf(p, HOME);
   const rule = T.repeats(p) ? R.rule(p) : null;
   const left = upcomingPayments(p, today).filter(x => x.key > today);
   // Tek seferlik çıkış girişler gibi hep belirgin; tekrarlayan ya da taksitli bitince soluklaşır
@@ -2679,8 +2692,8 @@ function spendRow(p, r, today) {
   const amount = el("span", "amount out", fmtAsset(-total, code, true));
   if (rule) amount.append(el("small", "", R.per(p)));
   side.append(amount);
-  const value = V.toTry(total, code, r);
-  if (code !== "TRY") side.append(el("span", "sub", value == null ? "kur yok" : `≈ ${fmt(value)}`));
+  const value = V.toTry(total, code, r, HOME);
+  if (code !== HOME) side.append(el("span", "sub", value == null ? "kur yok" : `≈ ${fmt(value)}`));
   if (left.length) side.append(el("span", "sub", `sonraki ${fmtDayShort(left[0].key)}`));
 
   row.append(avatar(personById(p.personId)), main, side);
@@ -2772,13 +2785,13 @@ function manualStatements(today, until) {
 
 // Döviz / altın tutarının TL karşılığı satırın altında: "≈ ₺4.000,00" ya da "kur yok"
 function tryNote(amount, code, r) {
-  if (code === "TRY") return null;
-  const v = V.toTry(amount, code, r);
+  if (code === HOME) return null;
+  const v = V.toTry(amount, code, r, HOME);
   return v == null ? "kur yok" : `≈ ${fmt(v)}`;
 }
 
 // Kuruşsuz tutar (eşitlik satırı, istatistikler): "₺89.000"
-const wholeMoney = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
+let wholeMoney = new Intl.NumberFormat("tr-TR", { style: "currency", currency: HOME, maximumFractionDigits: 0 });
 function fmtWhole(n) {
   const v = Math.round(n || 0) || 0;
   return (v < 0 ? "−" : "") + wholeMoney.format(Math.abs(v));   // eksi işareti uygulamanın geri kalanı gibi
@@ -2809,7 +2822,7 @@ function openFlow(f) {
   else openDebtSheet(f.debt);
 }
 // Ödenecek borç akışlarının (B.paymentsDue) TL toplamı; kuru olmayan varlık sayılmaz
-function dueSum(flows, r) { return flows.reduce((s, f) => s + (V.toTry(-f.amount, f.asset, r) ?? 0), 0); }
+function dueSum(flows, r) { return flows.reduce((s, f) => s + (V.toTry(-f.amount, f.asset, r, HOME) ?? 0), 0); }
 
 // Borç / kredi ödemesi satırı (ödeme satırı düzeninde): tarih rozeti, borcun adı, taksit ya da beklenen ödeme (gecikmişse
 // işaretli), birden çok kişide sahibi; tutar borcun varlığında. relative: alt satırda kalan gün (Sıradaki ödemeler).
@@ -2864,7 +2877,7 @@ function dueThisMonth(today, r) {
   for (const cs of manual.values()) {
     for (const x of cs.statements) if (!x.auto && x.key <= end) total += x.amount - x.covered;
   }
-  for (const f of B.paymentsDue(state, today, today, end)) if (!f.paid) total += V.toTry(-f.amount, f.asset, r) ?? 0;
+  for (const f of B.paymentsDue(state, today, today, end)) if (!f.paid) total += V.toTry(-f.amount, f.asset, r, HOME) ?? 0;
   return total;
 }
 
@@ -2893,16 +2906,16 @@ function renderDebts() {
   const notice = !!payer && tracked.length > 0 && !readPref(PREF.trackNotice);
   els.trackNote.hidden = !notice;
   if (notice) {
-    els.trackNoteText.textContent = `Kart ekstreleri ${when} TL bakiyenden düşer. Bunu her kart için Kartlar'da kartı açıp `
+    els.trackNoteText.textContent = `Kart ekstreleri ${when} ${homeShort()} bakiyenden düşer. Bunu her kart için Kartlar'da kartı açıp `
       + "“Ekstre ödemesi”nden değiştirebilirsin. Kartındaki başkalarının harcamaları, onlar sana ödeyene kadar Alacaklarım'da görünür.";
   }
-  const noLira = !!payer && tracked.length > 0 && !knownEntries().some(e => e.personId === payer.id && e.asset === "TRY");
+  const noLira = !!payer && tracked.length > 0 && !knownEntries().some(e => e.personId === payer.id && e.asset === HOME);
   els.balanceHint.hidden = !noLira;
   if (noLira) {
-    const own = B.totals(state, today, r, payer.id).balances.TRY ?? 0;
-    els.balanceHintText.textContent = `Kart ekstreleri TL bakiyenden düşüyor ama henüz hiç TL girişi (maaş, bankadaki para gibi) `
-      + `eklemedin; bu yüzden TL bakiyen ${fmt(own)} görünüyor. Bankadaki parayla aynı olsun diye aradaki farkı bir kez giriş `
-      + "olarak ekle (ör. bankada ₺10.000 var, burada −₺2.000 görünüyorsa ₺12.000 gir).";
+    const own = B.totals(state, today, r, payer.id).balances[HOME] ?? 0;
+    els.balanceHintText.textContent = `Kart ekstreleri ${homeShort()} bakiyenden düşüyor ama henüz hiç ${homeShort()} girişi (maaş, bankadaki para gibi) `
+      + `eklemedin; bu yüzden ${homeShort()} bakiyen ${fmt(own)} görünüyor. Bankadaki parayla aynı olsun diye aradaki farkı bir kez giriş `
+      + `olarak ekle (ör. bankada ${wholeMoney.format(10000)} var, burada ${wholeMoney.format(-2000)} görünüyorsa ${wholeMoney.format(12000)} gir).`;
   }
 
   for (const b of els.debtSideSeg.querySelectorAll("button")) {
@@ -2968,10 +2981,10 @@ function renderDebts() {
   els.debtWrap.append(box);
 
   const manualLoan = t.list.some(x => x.debt.kind === "loan" && !x.status.auto);
-  els.debtFoot.textContent = (payer ? `Hesaba katılan kartların ekstreleri ${when} TL bakiyenden düşer; kartındaki `
+  els.debtFoot.textContent = (payer ? `Hesaba katılan kartların ekstreleri ${when} ${homeShort()} bakiyenden düşer; kartındaki `
     + "başkalarının harcamaları, onlar sana ödeyene kadar Alacaklarım'da görünür. " : "")
     + `Kredi taksitleri taksit gününün ertesi günü ödenmiş sayılır${manualLoan ? "; otomatik ödenmeyen kredide sen “Ödendi”ye dokununca" : ""}. `
-    + "Döviz ve altın bugünkü kurla TL'ye çevrilir.";
+    + `Döviz ve altın bugünkü kurla ${homeEk("ye")} çevrilir.`;
 }
 
 // Açık borçlar: gecikenler önce, sonra sıradaki ödeme tarihi, vadesizler en sonda
@@ -3116,12 +3129,12 @@ function cashDebtRow(today, r) {
   if (!codes.length) return null;
   let total = 0, missing = false;
   for (const code of codes) {
-    const v = V.toTry(cash[code], code, r);
+    const v = V.toTry(cash[code], code, r, HOME);
     if (v == null) missing = true; else total += v;
   }
   return debtRow({
     id: "debt-cash", mark: markOf(cardMark("")), title: "Nakit taksitler",
-    meta: codes.length > 1 || codes[0] !== "TRY" ? codes.map(code => money(cash[code], code)) : ["kartsız taksitli harcamalar"],
+    meta: codes.length > 1 || codes[0] !== HOME ? codes.map(code => money(cash[code], code)) : ["kartsız taksitli harcamalar"],
     amount: fmt(total), sub: missing ? "kur yok" : null, popup: false, open: () => { location.hash = "#harcamalar"; },
   });
 }
@@ -3202,7 +3215,7 @@ els.debtSideSeg.addEventListener("click", e => {
 els.trackNoteOk.addEventListener("click", () => { writePref(PREF.trackNotice, "1"); render(); });
 // Özet'teki borç ödemesi satırı ve Varlıklar'daki eşitlik satırı Borçlarım'a götürür (bağlantı: #borclar)
 for (const a of [els.heroDebt, els.assetEq]) a.addEventListener("click", () => { debtSide = "debt"; debtClosedOpen = false; });
-els.balanceHintBtn.addEventListener("click", () => openEntrySheet(null, "TRY", { desc: "Açılış bakiyesi", personId: state.people[0]?.id }));
+els.balanceHintBtn.addEventListener("click", () => openEntrySheet(null, HOME, { desc: "Açılış bakiyesi", personId: state.people[0]?.id }));
 
 // ---------- Sheets ----------
 function openSheet(dialog) {
@@ -3411,8 +3424,8 @@ function openPurchaseSheet(p, draft) {
   els.personField.hidden = state.people.length < 2;
   for (const d of [els.dateRow, els.repeatRow, els.categoryRow, els.personField, els.assetRow]) d.open = false;
 
-  const code = T.assetOf(src);
-  els.purchaseAssetChips.replaceChildren(...V.ASSETS.map(a => radioChip("asset", a.code, a.name, a.code === code)));
+  const code = T.assetOf(src, HOME);
+  els.purchaseAssetChips.replaceChildren(...V.assetsFor(HOME).map(a => radioChip("asset", a.code, a.name, a.code === code)));
   renderRepeat(els.purchaseRepeat, src);
 
   f.elements.desc.value = src?.desc ?? "";
@@ -3501,7 +3514,7 @@ function renderPurchaseStatus(p) {
   const pays = paymentsOf(p), plan = T.planLength(p);
   const left = pays.filter(x => x.key >= today);
   const parts = plan > 1
-    ? [`${plan - left.length}/${plan} taksit ödendi`, left.length ? `kalan ${money(left.reduce((s, x) => s + x.amount, 0), T.assetOf(p))}` : "bitti"]
+    ? [`${plan - left.length}/${plan} taksit ödendi`, left.length ? `kalan ${money(left.reduce((s, x) => s + x.amount, 0), T.assetOf(p, HOME))}` : "bitti"]
     : [left.length ? "Ödenmedi" : "Ödendi"];
   if (left[0]) parts.push(`sonraki ${fmtDay(left[0].key)}`);
   els.purchaseStatus.textContent = parts.join(" · ");
@@ -3520,15 +3533,15 @@ function countTile(value, checked) {
   return tile;
 }
 
-const tileMoney = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
+let tileMoney = new Intl.NumberFormat("tr-TR", { style: "currency", currency: HOME, maximumFractionDigits: 0 });
 
 // Kutulardaki tutar: yazılan toplamsa taksit başına düşen, "Taksit başına"ysa toplam. Diğer seçiliyken yazılan sayı.
 // Harcama formunda; borç formu kendi formunu, kutularını, sınırını, varlığını ve kısaltma eşiğini (5 dar kutu) verir.
-function renderCountTiles(f = els.purchaseForm.elements, grid = els.countChips, { max = 60, code = "TRY", compact = 1e5 } = {}) {
+function renderCountTiles(f = els.purchaseForm.elements, grid = els.countChips, { max = 60, code = HOME, compact = 1e5 } = {}) {
   const amount = parseAmount(f.amount.value);
   const per = f.per.value === "1";
   const custom = Math.round(Number(f.count.value));
-  const short = v => (code === "TRY" ? (v >= compact ? "₺" + fmtShort(v) : tileMoney.format(v))
+  const short = v => (code === HOME ? (v >= compact ? homeSymbol() + fmtShort(v) : tileMoney.format(v))
     : code === "GAU" ? `${fmtShort(v)} gr` : V.asset(code).symbol + fmtShort(v));
   for (const tile of grid.children) {
     const v = tile.querySelector("input").value;
@@ -3634,8 +3647,8 @@ async function classifyAfterSave(id) {
 function collectPurchase() {
   const f = els.purchaseForm.elements;
   const editing = editingId ? state.installments.find(x => x.id === editingId) : null;
-  const asset = V.asset(f.asset.value) ? f.asset.value : "TRY";
-  const foreign = asset !== "TRY";   // döviz / altın: kartsız, peşin
+  const asset = V.asset(f.asset.value) ? f.asset.value : HOME;
+  const foreign = asset !== HOME;   // döviz / altın: kartsız, peşin
   const desc = f.desc.value.trim();
   const amount = V.round(parseAmount(f.amount.value), asset);
   const count = foreign ? 1 : Math.round(Number(f.count.value || 1));
@@ -3672,7 +3685,7 @@ function firstOccurrence(p) {
 
 function updatePurchasePreview() {
   const { p, personId, errors } = collectPurchase();
-  const code = T.assetOf(p), a = V.asset(code), rule = R.rule(p);
+  const code = T.assetOf(p, HOME), a = V.asset(code), rule = R.rule(p);
   const box = els.purchasePreview;
   box.replaceChildren();
   els.purchaseSum.replaceChildren();
@@ -3680,7 +3693,7 @@ function updatePurchasePreview() {
   for (const b of els.dateChips.querySelectorAll("[data-day]")) {
     b.classList.toggle("on", els.purchaseForm.elements.date.value === T.addDays(today, Number(b.dataset.day)));
   }
-  els.countField.hidden = els.cardField.hidden = code !== "TRY";
+  els.countField.hidden = els.cardField.hidden = code !== HOME;
   els.purchaseForm.querySelector(".amount-input .cur").textContent = a.symbol;
   els.purchaseForm.elements.amount.dataset.amount = a.digits;
   els.perRow.hidden = !(p.count > 1);
@@ -3697,9 +3710,9 @@ function updatePurchasePreview() {
   if (rule && p.date && !errors.some(e => e in REPEAT_ERRORS)) {
     box.append(el("div", "", `${R.label(p)} · ` + (rule.n ? `${rule.n} kez, son ${fmtDay(R.lastDate(p))}` : "bitiş tarihi yok")));
   }
-  if (code !== "TRY") {
-    const value = V.toTry(p.total, code, curRates());
-    box.append(el("div", "", value == null ? "Kur alınamadı — TL karşılığı sonra hesaplanır"
+  if (code !== HOME) {
+    const value = V.toTry(p.total, code, curRates(), HOME);
+    box.append(el("div", "", value == null ? `Kur alınamadı — ${homeShort()} karşılığı sonra hesaplanır`
       : `≈ ${fmt(value)} · ${code === "GAU" ? "1 gr" : `1 ${a.symbol}`} = ${fmt(rates.rates[code])}`));
   }
   // Kartsız harcama varlıktan ödenir: kişinin o varlıkta hareketi varsa bakiyesi önce / sonra
@@ -3707,15 +3720,15 @@ function updatePurchasePreview() {
   if (!card && p.date && person) {
     const own = x => x.personId === person.id;
     const entries = knownEntries().filter(e => own(e) && e.asset === code && e.id !== convertingEntryId);
-    if (entries.length || code !== "TRY") {
+    if (entries.length || code !== HOME) {
       const others = cashPurchases().filter(x => own(x) && x.id !== editingId);
-      const spent = B.addSpent(T.cashSpent(others, state.cards, today), B.debtSpent(state, today, person.id));
-      const before = V.balances(entries, today, spent)[code] ?? 0;
-      const after = V.balances([], today, T.cashSpent([p], [], today))[code] ?? 0;
+      const spent = B.addSpent(T.cashSpent(others, state.cards, today, HOME), B.debtSpent(state, today, person.id));
+      const before = V.balances(entries, today, spent, HOME)[code] ?? 0;
+      const after = V.balances([], today, T.cashSpent([p], [], today, HOME), HOME)[code] ?? 0;
       const total = V.round(before + after, code);
       box.append(el("div", total < 0 ? "warn" : "", `${person.name} · ${a.name.toLocaleLowerCase("tr-TR")} bakiyesi ${fmtAsset(before, code)} → ${fmtAsset(total, code)}`));
     } else {
-      box.append(el("div", "", "Nakit · TL bakiyesinden düşer"));
+      box.append(el("div", "", `Nakit · ${homeShort()} bakiyesinden düşer`));
     }
   }
 
@@ -3740,7 +3753,7 @@ function updatePurchasePreview() {
     const sum = list => list.reduce((s, x) => s + x.amount, 0);
     if (past.length) {
       box.append(el("div", "", `Bu harcamanın ${fmt(sum(past))} kadarı, son ödeme günü geçmiş ${new Set(past.map(x => x.key)).size} `
-        + "ekstreye giriyor. Bu kısım ödenmiş sayılır ve TL bakiyenden düşer."));
+        + `ekstreye giriyor. Bu kısım ödenmiş sayılır ve ${homeShort()} bakiyenden düşer.`));
     }
     if (unpaid.length) {
       box.append(el("div", "", `Bu harcamanın ${fmt(sum(unpaid))} kadarı, son ödeme günü geçmiş ${new Set(unpaid.map(x => x.key)).size} `
@@ -4017,14 +4030,14 @@ function trackEffect(card, today) {
 }
 
 // Seçili ekstre ödemesinin anlamı (kart formunda her zaman görünür)
-const PAY_MODE_TEXT = {
-  auto: "Ekstre, son ödeme gününün ertesi günü ödenmiş sayılır ve TL bakiyenden düşer. Bankaya ödemeyi yine sen "
+const payModeText = () => ({
+  auto: `Ekstre, son ödeme gününün ertesi günü ödenmiş sayılır ve ${homeShort()} bakiyenden düşer. Bankaya ödemeyi yine sen `
     + "yaparsın; uygulamada bir şeye dokunman gerekmez.",
-  manual: "Ekstreyi ödeyince Borçlar'da “Ödendi”ye dokun; tutar o zaman TL bakiyenden düşer. Son ödeme günü geçer de "
+  manual: `Ekstreyi ödeyince Borçlar'da “Ödendi”ye dokun; tutar o zaman ${homeShort()} bakiyenden düşer. Son ödeme günü geçer de `
     + "dokunmazsan ekstre “gecikti” görünür.",
-  off: "Bu kartın borcu toplam borcuna girmez, ekstreleri TL bakiyeni etkilemez. Ödemesini senin yapmadığın kartlar "
+  off: `Bu kartın borcu toplam borcuna girmez, ekstreleri ${homeShort()} bakiyeni etkilemez. Ödemesini senin yapmadığın kartlar `
     + "için (ör. eşinin kartı).",
-};
+});
 
 // Sıradaki ekstre: kesildiyse tutarı ve son ödeme günü, kesilmediyse şimdiye kadarki harcamalar ve kesim günü
 function nextStatementText(cd) {
@@ -4060,7 +4073,7 @@ function renderCardTrack(existing) {
   els.cardPaysLink.hidden = !(manualCard(existing) && cardPayments(existing.id).length);
   if (cd) els.cardDebt.textContent = cardDebtLines(existing, cd, today).join("\n");
   const change = trackChange(existing, readTrack(existing, today), today);
-  els.trackPreview.replaceChildren(el("div", "", PAY_MODE_TEXT[els.cardForm.elements.payMode.value]),
+  els.trackPreview.replaceChildren(el("div", "", payModeText()[els.cardForm.elements.payMode.value]),
     ...(change ? [el("div", change.warn ? "warn" : "track-change", change.text)] : []));
 }
 
@@ -4078,14 +4091,14 @@ function trackChange(card, track, today) {
   const paidToday = "Bu karta bugün ödeme girdiğin için ";
   if (!track.on) {
     return { text: "Kaydedince: kartın borcu toplam borcundan çıkar"
-      + (b.D > EPS ? `; bu kart için şimdiye kadar TL bakiyenden düşen ${fmt(b.D)} geri eklenir` : "")
+      + (b.D > EPS ? `; bu kart için şimdiye kadar ${homeShort()} bakiyenden düşen ${fmt(b.D)} geri eklenir` : "")
       + (others ? "; kartını kullananların harcamaları Alacaklarım'dan çıkar" : "") + "." };
   }
   if (!tracked) {
     const total = B.cardDebt(state, after, today).total;
     const later = track.since > today;
     return { text: (later ? `${paidToday}kart yarından itibaren hesaba katılır. ` : "")
-      + `Kaydedince: son ödeme günü ${later ? "yarın" : "bugün"} ya da sonra olan ekstreler TL bakiyenden düşer, eskiler etkilemez`
+      + `Kaydedince: son ödeme günü ${later ? "yarın" : "bugün"} ya da sonra olan ekstreler ${homeShort()} bakiyenden düşer, eskiler etkilemez`
       + (total > EPS ? `; kartın ${fmt(total)} borcu toplam borcuna eklenir` : "")
       + (others ? "; kartını kullananların harcamaları Alacaklarım'a girer" : "") + "." };
   }
@@ -4095,7 +4108,7 @@ function trackChange(card, track, today) {
   }
   if (!b.late.length) return null;
   const late = b.late.reduce((s, x) => s + x.amount - x.covered, 0);
-  return { text: `Kaydedince: “Ödendi” demediğin ${b.late.length} ekstre (${fmt(late)}) ödenmiş sayılır ve TL bakiyenden `
+  return { text: `Kaydedince: “Ödendi” demediğin ${b.late.length} ekstre (${fmt(late)}) ödenmiş sayılır ve ${homeShort()} bakiyenden `
     + "düşer. Gerçekten ödemediysen “Ben işaretlerim”de kal." };
 }
 
@@ -4114,13 +4127,13 @@ function prepaidText(card, since, today, lost) {
   const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((s, x) => s + x.amount, 0);
   if (!(ahead > EPS)) {
     return "“Otomatik”e bugün geçilemiyor: son ödeme günü bugün olan ekstre “Otomatik”te ancak yarın ödenmiş sayılır; bugün "
-      + `geçersen ona yaptığın ödeme yüzünden TL bakiyen bugünlük ${fmt(lost)} yüksek görünür. Yarın geçebilirsin.`;
+      + `geçersen ona yaptığın ödeme yüzünden ${homeShort()} bakiyen bugünlük ${fmt(lost)} yüksek görünür. Yarın geçebilirsin.`;
   }
   // Erken ödemenin kapattığı son ileriki ekstre: onun son ödeme günü geçince engel kendiliğinden kalkar (kart borcunu da
   // aşan ödemede bu gün yok). lost erken ödemeden büyükse son ödeme günü bugün olan ekstreye yapılan ödeme de bugün sayılmaz.
   const last = cs.prepaid > EPS ? null : cs.statements.filter(x => x.key > today && x.covered > EPS).at(-1);
   return `“Otomatik”e geçilemiyor: bu karta, son ödeme günü gelmemiş ekstreler için ${fmt(ahead)} erken ödeme kaydettin; `
-    + `“Otomatik”te ödemelerinin ${fmt(lost)} kadarı ${last ? `${fmtDayShort(last.key)} gününe kadar ` : ""}sayılmaz, TL bakiyen o `
+    + `“Otomatik”te ödemelerinin ${fmt(lost)} kadarı ${last ? `${fmtDayShort(last.key)} gününe kadar ` : ""}sayılmaz, ${homeShort()} bakiyen o `
     + "kadar yüksek görünür. " + (last ? `${fmtDayShort(T.addDays(last.key, 1))} günü “Otomatik”e geçebilirsin; hemen geçmek için `
       : "Geçmek için önce ") + `“Kart ödemelerin”den bu ödemeyi sil ya da ${fmt(ahead)} kadar azalt`
     + (lost > ahead + EPS ? " (son ödeme günü bugün olan ekstre yüzünden en erken yarın)." : ".");
@@ -4160,7 +4173,7 @@ function updateTermChoices(existing, v) {
     new: ["Yeni günler hemen başlasın", open.count
       ? `Kesilmiş ekstreler değişmez; henüz kesilmemiş harcamalar ${fmtDay(next.cut)} tarihinde kesilecek ekstreye girer, son ödeme ${fmtDay(next.due)}`
       : "Kesilmiş ekstreler olduğu gibi kalır; bundan sonrakiler yeni günlerle"],
-    fix: ["Günleri yanlış girmiştim", "Geçmiş ekstreler dahil hepsi yeni günlerle yeniden hesaplanır. Bu kartın günlerini daha önce değiştirdiysen o değişiklikler olduğu gibi kalır. Geçmiş ekstrelerin tutarı ve TL bakiyen değişebilir."],
+    fix: ["Günleri yanlış girmiştim", `Geçmiş ekstreler dahil hepsi yeni günlerle yeniden hesaplanır. Bu kartın günlerini daha önce değiştirdiysen o değişiklikler olduğu gibi kalır. Geçmiş ekstrelerin tutarı ve ${homeShort()} bakiyen değişebilir.`],
   };
   els.termChoices.replaceChildren(...r.choices.map(k => {
     const label = el("label", "choice");
@@ -4251,7 +4264,7 @@ els.cardDelete.addEventListener("click", () => {
   const k = state.debts.filter(isPay).length;
   // Takipteki kartın düşülen ekstreleri (kart ödemeleri dahil) kartla birlikte geri gelir
   const eff = trackEffect(c, T.todayKey());
-  const back = eff.D > EPS ? `\nBu kart için ${fmtDay(eff.from)} tarihinden beri TL bakiyenden düşen ${fmt(eff.D)} geri eklenir.` : "";
+  const back = eff.D > EPS ? `\nBu kart için ${fmtDay(eff.from)} tarihinden beri ${homeShort()} bakiyenden düşen ${fmt(eff.D)} geri eklenir.` : "";
   const owned = [n && `${n} harcama`, k && `${k} kart ödemesi`].filter(Boolean).join(" ve ");
   if (!confirm(`“${c.name}” kartı silinsin mi?` + (owned ? ` Karttaki ${owned} ${k ? "de" : "da"} silinir.` : "") + back)) return;
   state.cards = state.cards.filter(x => x.id !== c.id);
@@ -4295,11 +4308,13 @@ els.cardDebtLink.addEventListener("click", () => {
 // asset: varlık kodu ("TRY", "BIST:THYAO") ya da pazar ("FON", "BIST")
 // draft: kayıtlı olmayan, önceden doldurulmuş hareket ({ desc, repeat, personId? }; içgörüdeki "Gelir ekle", Borçlar'daki
 // "Bakiye gir")
-const ENTRY_KINDS = [...V.ASSETS.map(a => ({ code: a.code, name: a.name })), ...Object.entries(V.MARKETS).map(([code, m]) => ({ code, name: m.name }))];
+// Hareket formundaki varlıklar: ana para birimi, sık kullanılan yabancılar, altın; fon ve hisse yalnızca Türkiye'de
+const entryKinds = () => [...V.assetsFor(HOME).map(a => ({ code: a.code, name: a.name })),
+  ...(P.marketsFor(HOME) ? Object.entries(V.MARKETS).map(([code, m]) => ({ code, name: m.name })) : [])];
 
 function openEntrySheet(e, asset, draft) {
   if (!state.people.length) { openPeopleSheet(); toast("Önce bir kişi ekle"); return; }
-  if (e && e.amount < 0 && !V.market(e.asset) && !V.settled(e)) {
+  if (e && e.amount < 0 && !V.market(e.asset) && !V.settled(e, HOME)) {
     openPurchaseSheet(null, { entryId: e.id, personId: e.personId, desc: e.desc, total: -e.amount, asset: e.asset, date: e.date, ...R.fields(e) });
     return;
   }
@@ -4311,8 +4326,8 @@ function openEntrySheet(e, asset, draft) {
 
   const code = e?.asset ?? asset ?? lastAsset;
   const m = V.market(code);
-  const kind = m ? m.market : V.MARKETS[code] || V.asset(code) ? code : "TRY";
-  els.assetChips.replaceChildren(...ENTRY_KINDS.map(a => radioChip("asset", a.code, a.name, a.code === kind)));
+  const kind = m ? m.market : V.MARKETS[code] || V.asset(code) ? code : HOME;
+  els.assetChips.replaceChildren(...entryKinds().map(a => radioChip("asset", a.code, a.name, a.code === kind)));
   const personId = e ? e.personId
     : personById(draft?.personId) ? draft.personId
     : entryFilter !== "all" ? entryFilter
@@ -4352,14 +4367,14 @@ function quoteState(code) {
 // Formda fiyat / kur alanı var mı: fon ve hissede hep, döviz ve altında tek seferlik giriş ve bozdurmada
 function entryPriced(f = els.entryForm.elements) {
   if (entryMarket()) return true;
-  if (!V.tradable(f.asset.value)) return false;
+  if (!V.tradable(f.asset.value, HOME)) return false;
   return f.dir.value === "sell" || (f.dir.value === "in" && !f.freq?.value);
 }
 
 function collectEntry() {
   const f = els.entryForm.elements;
   const mk = entryMarket();
-  const sell = !mk && V.tradable(f.asset.value) && f.dir.value === "sell";   // döviz / altın bozdurma
+  const sell = !mk && V.tradable(f.asset.value, HOME) && f.dir.value === "sell";   // döviz / altın bozdurma
   const priced = entryPriced(f);
   const asset = mk ? mk.code ?? "" : f.asset.value;
   const amount = mk ? Math.round(parseAmount(f.amount.value) * 1e4) / 1e4 : V.round(parseAmount(f.amount.value), asset);
@@ -4440,7 +4455,7 @@ function renderTicker(mk) {
 function updateEntryForm() {
   const f = els.entryForm.elements;
   const mk = entryMarket();
-  const fx = !mk && V.tradable(f.asset.value);   // döviz / altın
+  const fx = !mk && V.tradable(f.asset.value, HOME);   // döviz / altın
   if (!fx && f.dir.value === "sell") f.dir.value = "in";
   const sell = fx && f.dir.value === "sell";
   const out = (mk && f.dir.value === "out") || sell;
@@ -4457,10 +4472,10 @@ function updateEntryForm() {
   els.entryRepeatField.hidden = !!mk || sell;
   els.entryAmountLabel.textContent = mk ? "Adet" : "Miktar";
   els.entryPriceLabel.replaceChildren(mk ? "Birim fiyat " : f.asset.value === "GAU" ? "Gram fiyatı " : "Kur ",
-    el("small", "", mk ? "(kâr / zarar için)" : "(TL)"));
+    el("small", "", mk ? "(kâr / zarar için)" : `(${homeShort()})`));
   // Bozdurma hep TL'ye eklenir; döviz / altın girişinde işaretsizse gelir
   f.settle.closest("label").hidden = sell;
-  els.entrySettleText.textContent = out ? "Tutar TL bakiyeme eklensin" : fx ? "TL'yle aldım: tutar TL bakiyemden düşülsün" : "Tutar TL bakiyemden düşülsün";
+  els.entrySettleText.textContent = out ? `Tutar ${homeShort()} bakiyeme eklensin` : fx ? `${homeEk("yle")} aldım: tutar ${homeShort()} bakiyemden düşülsün` : `Tutar ${homeShort()} bakiyemden düşülsün`;
   f.desc.placeholder = mk || (fx && (sell || f.settle.checked)) ? "İsteğe bağlı not" : "örn. Maaş, altın alımı";
   if (mk) renderTicker(mk);
   // Döviz / altın: kur alanı TL'yle alış ya da bozdurmada güncel kurla dolar
@@ -4488,28 +4503,28 @@ function updateEntryForm() {
     if (!mk.code) return;
     const ticker = V.market(mk.code).ticker;
     box.append(el("div", "big", `${fmtAsset(e.amount, e.asset, true)} ${ticker}`));
-    const trade = V.tradeValue(e), now = V.toTry(Math.abs(e.amount), e.asset, r);
+    const trade = V.tradeValue(e, HOME), now = V.toTry(Math.abs(e.amount), e.asset, r, HOME);
     if (trade != null) box.append(el("div", "", `${out ? "Satış" : "Alış"} tutarı ${fmt(Math.abs(trade))} · ${unitFmt.format(Math.abs(e.amount))} × ${fmtPrice(e.price, e.asset)}`));
     if (now != null && (trade == null || Math.abs(Math.abs(trade) - now) > 0.005)) box.append(el("div", "", `Güncel fiyatla ≈ ${fmt(now)}`));
     if (!person) return;
     const others = knownEntries().filter(x => x.personId === person.id && x.id !== editingEntryId);
-    const before = V.balances(others, today, B.spent(state, today, person.id));
+    const before = V.balances(others, today, B.spent(state, today, person.id), HOME);
     const when = e.date > today ? ` (${fmtDayShort(e.date)} tarihinde)` : "";   // tarihi gelmemiş hareket tarihinde işlenir
     const held = before[e.asset] ?? 0, left = V.round(held + e.amount, e.asset);
     box.append(el("div", left < 0 ? "warn" : "", left < 0 ? `${person.name} · elinde ${fmtAsset(held, e.asset)} ${ticker} var`
       : `${person.name} · ${ticker} ${fmtAsset(held, e.asset)} → ${fmtAsset(left, e.asset)}${when}`));
     if (e.settle) {
-      const tl0 = before.TRY ?? 0, tl1 = V.round(tl0 - V.settled(e), "TRY");
-      box.append(el("div", tl1 < 0 ? "warn" : "", `TL bakiyesi ${fmtAsset(tl0, "TRY")} → ${fmtAsset(tl1, "TRY")}${when}`));
+      const tl0 = before[HOME] ?? 0, tl1 = V.round(tl0 - V.settled(e, HOME), HOME);
+      box.append(el("div", tl1 < 0 ? "warn" : "", `${homeShort()} bakiyesi ${fmtAsset(tl0, HOME)} → ${fmtAsset(tl1, HOME)}${when}`));
     }
     return;
   }
   box.append(el("div", "big", fmtAsset(e.amount, e.asset, true) + (n != null ? " " + R.per(e) : "")));
-  if (V.settled(e)) {
-    box.append(el("div", "", `${e.amount < 0 ? "Bozdurma" : "Alış"} tutarı ${fmt(Math.abs(V.tradeValue(e)))} · ${fmtAsset(Math.abs(e.amount), e.asset)} × ${fmtPrice(e.price, e.asset)}`));
-  } else if (e.asset !== "TRY") {
-    const value = V.toTry(Math.abs(e.amount), e.asset, r);
-    box.append(el("div", "", value == null ? "Kur alınamadı — TL karşılığı sonra hesaplanır"
+  if (V.settled(e, HOME)) {
+    box.append(el("div", "", `${e.amount < 0 ? "Bozdurma" : "Alış"} tutarı ${fmt(Math.abs(V.tradeValue(e, HOME)))} · ${fmtAsset(Math.abs(e.amount), e.asset)} × ${fmtPrice(e.price, e.asset)}`));
+  } else if (e.asset !== HOME) {
+    const value = V.toTry(Math.abs(e.amount), e.asset, r, HOME);
+    box.append(el("div", "", value == null ? `Kur alınamadı — ${homeShort()} karşılığı sonra hesaplanır`
       : `≈ ${fmt(value)} · ${a.code === "GAU" ? "1 gr" : `1 ${a.symbol}`} = ${fmt(r[e.asset])}`));
   }
   if (n != null && e.date) {
@@ -4520,15 +4535,15 @@ function updateEntryForm() {
   }
   if (person && !errors.some(x => x in REPEAT_ERRORS)) {
     const spent = B.spent(state, today, person.id);   // nakit harcamalar ve borç etkileri
-    const bals = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId), today, spent);
+    const bals = V.balances(state.entries.filter(x => x.personId === person.id && x.id !== editingEntryId), today, spent, HOME);
     // Tarihi gelmemiş tek seferlik hareket bakiyeye tarihinde girer
     const later = n == null && e.date > today;
     const when = later ? ` (${fmtDayShort(e.date)} tarihinde)` : "";
     const before = bals[e.asset] ?? 0, after = V.round(before + e.amount * (later || !e.date ? 1 : V.processedCount(e, today)), e.asset);
     box.append(el("div", after < 0 ? "warn" : "", `${person.name} · ${a.name.toLocaleLowerCase("tr-TR")} bakiyesi ${fmtAsset(before, e.asset)} → ${fmtAsset(after, e.asset)}${when}`));
-    if (V.settled(e)) {
-      const tl0 = bals.TRY ?? 0, tl1 = V.round(tl0 - V.settled(e), "TRY");
-      box.append(el("div", tl1 < 0 ? "warn" : "", `TL bakiyesi ${fmtAsset(tl0, "TRY")} → ${fmtAsset(tl1, "TRY")}${when}`));
+    if (V.settled(e, HOME)) {
+      const tl0 = bals[HOME] ?? 0, tl1 = V.round(tl0 - V.settled(e, HOME), HOME);
+      box.append(el("div", tl1 < 0 ? "warn" : "", `${homeShort()} bakiyesi ${fmtAsset(tl0, HOME)} → ${fmtAsset(tl1, HOME)}${when}`));
     }
   }
 }
@@ -4575,7 +4590,7 @@ els.entryForm.addEventListener("submit", ev => {
       ticker: !mk?.code ? (mk?.kind === "FON" ? "Fonu seç ya da kodunu yaz." : "Hissenin işlem kodunu yaz.")
         : mk.kind === "FON" ? "TEFAS'ta bu kodla fon yok." : "Borsa İstanbul'da bu kodla hisse yok.",
       amount: mk ? "Adedi gir." : "Miktarı gir.",
-      price: !f.price.value.trim() ? (mk ? "TL bakiyesine işlemek için birim fiyatı gir." : "Kuru gir.") : mk ? "Birim fiyatı doğru yaz." : "Kuru doğru yaz.",
+      price: !f.price.value.trim() ? (mk ? `${homeShort()} bakiyesine işlemek için birim fiyatı gir.` : "Kuru gir.") : mk ? "Birim fiyatı doğru yaz." : "Kuru doğru yaz.",
       desc: "Açıklama yaz.", date: "Tarihi gir.", person: "Kişi seç.", ...REPEAT_ERRORS,
     }[errors[0]];
     els.entryPreview.replaceChildren(el("div", "warn", msg));
@@ -4592,7 +4607,7 @@ els.entryForm.addEventListener("submit", ev => {
   if (mk && e.price > 0) { lastSettle = e.settle === true; writePref(PREF.settle, lastSettle ? "" : "0"); }
   saveState();
   els.entrySheet.close();
-  const what = mk ? (e.amount > 0 ? "Alış" : "Satış") : e.amount < 0 ? "Bozdurma" : V.settled(e) ? "Alış" : "Giriş";
+  const what = mk ? (e.amount > 0 ? "Alış" : "Satış") : e.amount < 0 ? "Bozdurma" : V.settled(e, HOME) ? "Alış" : "Giriş";
   toast(editingEntryId ? `${what} güncellendi` : `${what} eklendi`);
   editingEntryId = null;
   render();
@@ -4644,7 +4659,7 @@ function openDebtSheet(d, draft = {}) {
   const loan = type === "loan";
   const plan = d ? d.kind === "loan" || d.count > 1 : loan;
   const count = d && plan && d.count >= 1 ? d.count : loan ? 12 : 3;
-  const code = d?.asset ?? (V.asset(draft.asset) ? draft.asset : "TRY");
+  const code = d?.asset ?? (V.asset(draft.asset) ? draft.asset : HOME);
   const digits = V.asset(code).digits;
   // Kredide yazılan taksit tutarıdır; toplamı taksite tam bölünmeyen kredi (asistanla girilmiş) toplamıyla açılır
   const per = loan && (!d || V.round(V.round(d.amount / d.count, code) * d.count, code) === d.amount);
@@ -4662,7 +4677,7 @@ function openDebtSheet(d, draft = {}) {
   f.elements.principal.value = loan && d?.principal > 0 ? amountText(d.principal, digits) : "";
   renderDebtTiles(loan, count);
 
-  els.debtAssetChips.replaceChildren(...V.ASSETS.map(a => radioChip("asset", a.code, a.name, a.code === code)));
+  els.debtAssetChips.replaceChildren(...V.assetsFor(HOME).map(a => radioChip("asset", a.code, a.name, a.code === code)));
   const personId = personById(d?.personId) ? d.personId : personById(draft.personId) ? draft.personId : state.people[0].id;
   els.debtPersonChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, dot(seriesVar(x)))));
@@ -4751,7 +4766,7 @@ function collectDebt() {
   const editing = editingDebtId ? state.debts.find(x => x.id === editingDebtId) : null;
   const type = ["borrowed", "lent", "loan"].includes(f.type.value) ? f.type.value : "borrowed";
   const loan = type === "loan";
-  const asset = V.asset(f.asset.value) ? f.asset.value : "TRY";
+  const asset = V.asset(f.asset.value) ? f.asset.value : HOME;
   const plan = loan || f.mode.value === "plan";
   const per = plan && f.per.value === "1";
   const amount = V.round(parseAmount(f.amount.value), asset);
@@ -4907,15 +4922,15 @@ function updateDebtForm() {
   const person = personById(d.personId);
   if (person) {
     const entries = knownEntries().filter(e => e.personId === person.id);
-    const bal = s => V.balances(entries, today, B.spent(s, today, person.id))[d.asset] ?? 0;
+    const bal = s => V.balances(entries, today, B.spent(s, today, person.id), HOME)[d.asset] ?? 0;
     const b0 = bal(state), b1 = bal(after);
-    const label = `${person.name} · ${a.short === "TL" ? "TL" : a.name.toLocaleLowerCase("tr-TR")} bakiyesi`;
+    const label = `${person.name} · ${a.code === HOME ? a.short : a.name.toLocaleLowerCase("tr-TR")} bakiyesi`;
     box.append(Math.abs(b1 - b0) > EPS
       ? el("div", b1 < 0 ? "warn" : "", `${label} ${fmtAsset(b0, d.asset)} → ${fmtAsset(b1, d.asset)}`)
       : el("div", "", `${label} değişmez (${fmtAsset(b0, d.asset)})`));
   }
   const t0 = B.totals(state, today, r), t1 = B.totals(after, today, r);
-  if (t1.missing.includes(d.asset)) box.append(el("div", "", "Kur alınamadı — TL karşılığı sonra hesaplanır"));
+  if (t1.missing.includes(d.asset)) box.append(el("div", "", `Kur alınamadı — ${homeShort()} karşılığı sonra hesaplanır`));
   else if (lent) box.append(el("div", "", `Toplam alacak ${fmt(t0.receivable.total)} → ${fmt(t1.receivable.total)}`));
   else box.append(el("div", "", `Toplam borç ${fmt(t0.debt.total)} → ${fmt(t1.debt.total)}`));
 
@@ -5142,7 +5157,7 @@ function payInfo(target, today, base = state) {
   const s = B.shares(base, today).get(person.id);
   const remaining = s?.remaining ?? 0, dueNow = s?.dueNow ?? 0;
   return {
-    person, code: "TRY", owner: base.people[0].id, remaining, min: "", pay: { personId: person.id },
+    person, code: HOME, owner: base.people[0].id, remaining, min: "", pay: { personId: person.id },
     prefill: dueNow > EPS ? dueNow : Math.max(remaining, 0),
     chips: payChipList([["Günü gelen", dueNow], ["Kalanın tümü", remaining]]),
     title: `${nameWith(person.name, "den")} ödeme`,
@@ -5174,7 +5189,7 @@ function cardPayInfo(target, today, base) {
     .map(s => s.person.name);
   const names = others.length > 1 ? `${others.slice(0, -1).join(", ")} ve ${others[others.length - 1]}` : others[0];
   return {
-    card: c, cd, code: "TRY", owner: payer.id, remaining: cd.total, min: cd.manualFrom ?? "",
+    card: c, cd, code: HOME, owner: payer.id, remaining: cd.total, min: cd.manualFrom ?? "",
     pay: { personId: payer.id, cardId: c.id },
     prefill: owed,
     chips: payChipList([[cur ? `Ekstre · son ödeme ${fmtDayShort(cur.key)}` : "Ekstre", cur ? openOf(cur) : 0], ["Günü gelen", cd.unpaid]]),
@@ -5330,11 +5345,11 @@ function updatePayForm() {
   const owner = personById(info.owner);
   if (owner) {
     const entries = knownEntries().filter(e => e.personId === owner.id);
-    const bal = s => V.balances(entries, today, B.spent(s, today, owner.id))[info.code] ?? 0;
+    const bal = s => V.balances(entries, today, B.spent(s, today, owner.id), HOME)[info.code] ?? 0;
     const a = V.asset(info.code);
     // İlk kişi (kullanıcı) için ikinci tekil: "TL bakiyen"; başkasına ait borçta adıyla
-    const unit = a.short === "TL" ? "TL" : a.name.toLocaleLowerCase("tr-TR");
-    box.append(el("div", "", (owner.id === state.people[0]?.id ? `${a.short === "TL" ? "TL" : a.name} bakiyen ` : `${nameWith(owner.name, "in")} ${unit} bakiyesi `)
+    const unit = a.code === HOME ? a.short : a.name.toLocaleLowerCase("tr-TR");
+    box.append(el("div", "", (owner.id === state.people[0]?.id ? `${a.code === HOME ? a.short : a.name} bakiyen ` : `${nameWith(owner.name, "in")} ${unit} bakiyesi `)
       + `${fmtAsset(bal(base), info.code)} → ${fmtAsset(bal(after), info.code)}`));
   }
   const over = info.d || info.cd ? amount - Math.max(info.remaining, 0) : -left;
@@ -5360,7 +5375,7 @@ els.payChips.addEventListener("click", e => {
   const b = e.target.closest("[data-amount]");
   if (!b) return;
   const f = els.payForm.elements;
-  const code = payInfo(payTarget, T.todayKey(), payBase())?.code ?? "TRY";
+  const code = payInfo(payTarget, T.todayKey(), payBase())?.code ?? HOME;
   f.amount.value = amountText(Number(b.dataset.amount), V.asset(code).digits);
   updatePayForm();
 });
@@ -5427,7 +5442,7 @@ function renderShareSheet() {
   els.shareItems.replaceChildren(...(items.length ? items.map(x => shareItemRow(x, today)) : [el("li", "empty", "Hesaba katılan kartlarında harcaması yok")]));
   const pays = [...sharePayments(sharePid)].reverse();
   els.sharePaysBox.hidden = !pays.length;
-  els.sharePays.replaceChildren(...pays.map(x => payHistRow(x, "TRY", () => {
+  els.sharePays.replaceChildren(...pays.map(x => payHistRow(x, HOME, () => {
     els.shareSheet.close();
     openPaySheet({ personId: sharePid }, x);
   })));
@@ -5602,7 +5617,7 @@ function inboxPanel() {
     main.append(el("div", "p-title", parsed.merchant || row.subject || "Banka e-postası"));
     const meta = el("div", "p-meta");
     if (parsed.amount != null) {
-      meta.append(el("span", "", parsed.currency === "TRY" ? fmt(parsed.amount) : `${fmtNum(parsed.amount)} ${parsed.currency}`));
+      meta.append(el("span", "", parsed.currency === HOME ? fmt(parsed.amount) : `${fmtNum(parsed.amount)} ${parsed.currency}`));
     }
     if (parsed.date) meta.append(el("span", "", fmtDayShort(parsed.date)));
     if (parsed.count > 1) meta.append(el("span", "", `${parsed.count} taksit`));
@@ -5689,7 +5704,7 @@ function renderInboxTry() {
   const card = emailCard(parsed);
   const line = (label, value) => el("div", "", `${label}: ${value ?? "okunamadı"}`);
   box.append(
-    el("div", "big", parsed.amount != null ? (parsed.currency === "TRY" ? fmt(parsed.amount) : `${fmtNum(parsed.amount)} ${parsed.currency}`) : "Tutar okunamadı"),
+    el("div", "big", parsed.amount != null ? (parsed.currency === HOME ? fmt(parsed.amount) : `${fmtNum(parsed.amount)} ${parsed.currency}`) : "Tutar okunamadı"),
     line("İşyeri", parsed.merchant),
     line("Tarih", parsed.date && fmtDay(parsed.date)),
     line("Taksit", parsed.count > 1 ? `${parsed.count} taksit` : "Peşin"),
@@ -5933,7 +5948,31 @@ els.themeSeg.addEventListener("click", e => {
   renderThemeSeg();
 });
 
+// Ülke seçimi: "Almanya · Euro"
+function fillCountries(select, selected) {
+  select.replaceChildren(...P.COUNTRIES.map(c => {
+    const o = el("option", "", `${c.name} · ${P.currency(c.currency)?.short ?? c.currency}`);
+    o.value = c.code;
+    return o;
+  }));
+  select.value = selected;
+}
+fillCountries(els.countrySelect, currentCountry());
+fillCountries(els.authCountry, guessCountry());
+els.countrySelect.addEventListener("change", async () => {
+  const code = els.countrySelect.value;
+  try {
+    await setCountry(code);
+    toast(`Ülke: ${P.country(code).name} · ${homeShort()}`);
+  } catch (err) {
+    els.countrySelect.value = currentCountry();
+    toast(`Ülke değiştirilemedi: ${err?.message || err}`);
+  }
+});
+window.setCountry = setCountry;
+
 els.settingsBtn.addEventListener("click", () => {
+  els.countrySelect.value = currentCountry();
   renderThemeSeg();
   els.cashDefText.textContent = cashDefText().replace(/^./, c => c.toLocaleUpperCase("tr-TR"));
   openSheet(els.settingsSheet);
@@ -5965,18 +6004,18 @@ function renderCashDef() {
   const funds = codes.filter(c => V.moneyMarket(prices?.prices?.[c]));
   const others = codes.filter(c => !funds.includes(c));
   els.cashDefList.replaceChildren(
-    opt("TRY", "Türk lirası", "Ana para birimi"),
+    opt(HOME, "Türk lirası", "Ana para birimi"),
     opt(V.MMF, "TL para piyasası fonları", funds.length ? `Elindekiler: ${funds.map(c => V.market(c).ticker).join(", ")}`
       : "TEFAS'taki para piyasası fonları; aynı gün nakde döner (T+0)"),
-    ...V.ASSETS.filter(a => a.code !== "TRY").map(a => opt(a.code, a.name)),
+    ...V.assetsFor(HOME).filter(a => a.code !== HOME).map(a => opt(a.code, a.name)),
     ...(others.length ? [el("span", "group-label cash-def-head", "Elindeki diğer fon ve hisseler")] : []),
     ...others.map(c => opt(c, V.market(c).ticker, marketName(c))),
   );
 }
 
 function setCashDef(list) {
-  cashDef = V.cashDef(list);
-  const same = cashDef.length === V.CASH_DEFAULT.length && V.CASH_DEFAULT.every(c => cashDef.includes(c));
+  cashDef = V.cashDef(list, HOME);
+  const same = cashDef.length === V.cashDefault(HOME).length && V.cashDefault(HOME).every(c => cashDef.includes(c));
   writePref(PREF.cashDef, same ? "" : JSON.stringify(cashDef));
   render();
 }
@@ -5986,7 +6025,7 @@ els.cashDefList.addEventListener("change", e => {
   if (!picked.length) { e.target.checked = true; toast("En az birini seç"); return; }
   setCashDef(picked);
 });
-els.cashDefReset.addEventListener("click", () => { setCashDef(null); renderCashDef(); toast("Nakit: TL ve para piyasası fonları"); });
+els.cashDefReset.addEventListener("click", () => { setCashDef(null); renderCashDef(); toast(`Nakit: ${homeShort()} ve para piyasası fonları`); });
 els.cashDefBtn.addEventListener("click", openCashDefSheet);
 if (window.APP_VERSION) $("appVersion").textContent = `CashFollow v${window.APP_VERSION}`;
 // Giriş penceresi (sync.js) ayarların üstünde açılsın diye önce ayarları kapat
@@ -6259,12 +6298,72 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
+// ---------- Ülke ve ana para birimi ----------
+// Girişsizken cihazdaki seçim, yoksa Türkiye (var olan girişsiz veri TL'dir; tarayıcının dili yalnızca kayıt formunda ön
+// seçimdir: guessCountry). Girişliyken hesabın ülkesi; hesap bilgisi gelene kadar bu cihazda son görülen.
+function currentCountry() {
+  const uid = window.CF_USER_ID;
+  if (uid) {
+    const meta = P.country(window.syncGetUser?.()?.user_metadata?.country)?.code;
+    if (meta) { writePref(`${PREF.country}.${uid}`, meta); return meta; }
+    return P.country(readPref(`${PREF.country}.${uid}`))?.code ?? P.DEFAULT_COUNTRY;
+  }
+  return P.country(readPref(PREF.country))?.code ?? P.DEFAULT_COUNTRY;
+}
+
+// Kayıt formunda ön seçim: tarayıcının bölgesi ("de-DE" → Almanya), yoksa Türkiye
+function guessCountry() {
+  const region = (navigator.languages?.[0] || navigator.language || "").split("-")[1];
+  return P.country(region)?.code ?? P.DEFAULT_COUNTRY;
+}
+
+function homeShort() { return P.currency(HOME)?.short ?? HOME; }
+
+// Ana para biriminin adı ekiyle: TL'den, Euro'ya, Dolar'la… (Türkçe ses uyumu; kısaltmalar okunduğu gibi)
+function homeEk(kind) {
+  const word = homeShort();
+  if (word === "TL") return { den: "TL'den", ye: "TL'ye", yle: "TL'yle" }[kind];
+  const lower = word.toLocaleLowerCase("tr-TR");
+  const vowels = [...lower].filter(c => "aeıioöuü".includes(c));
+  const back = "aıou".includes(vowels.at(-1) ?? "a");
+  const endsVowel = "aeıioöuü".includes(lower.at(-1));
+  const hard = "çfhkpsşt".includes(lower.at(-1));
+  const ek = kind === "den" ? (hard ? "t" : "d") + (back ? "an" : "en")
+    : kind === "ye" ? (endsVowel ? "y" : "") + (back ? "a" : "e")
+    : (endsVowel ? "y" : "") + (back ? "la" : "le");
+  return `${word}'${ek}`;
+}
+function homeSymbol() { return P.currency(HOME)?.symbol ?? HOME; }
+
+function applyHome() {
+  HOME = P.homeOfCountry(currentCountry());
+  if (state) state.home = HOME;
+  moneyFmt = new Intl.NumberFormat("tr-TR", { style: "currency", currency: HOME, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  wholeMoney = new Intl.NumberFormat("tr-TR", { style: "currency", currency: HOME, maximumFractionDigits: 0 });
+  tileMoney = new Intl.NumberFormat("tr-TR", { style: "currency", currency: HOME, maximumFractionDigits: 0 });
+  cashDef = readCashDef();
+  for (const n of document.querySelectorAll("[data-home]")) n.textContent = homeShort();
+  for (const n of document.querySelectorAll("[data-home-symbol]")) n.textContent = homeSymbol();
+}
+
+// Ülke değişir: hesapta user_metadata'ya (web, iPhone ve asistan aynısını görür), girişsizse cihaza. Tutarlar çevrilmez.
+async function setCountry(code) {
+  if (!P.country(code)) return;
+  if (window.CF_USER_ID) await window.syncSetCountry?.(code);
+  else writePref(PREF.country, code);
+  applyHome();
+  saveState();
+  render();
+}
+
+applyHome();
+
 // ---------- Boot ----------
 if (typeof window.syncInit === 'function') {
   window.syncInit({
     getState: userId => (stateOwner === userId ? state : null),
     onRemoteData(next) {
-      state = hydrate(next);
+      state = hydrate({ ...next, home: HOME });
       localStorage.setItem(getStorageKey(), JSON.stringify(state));
       render();
     },

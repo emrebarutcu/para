@@ -54,6 +54,13 @@
     document.getElementById('authClose')?.toggleAttribute('hidden', on);
     document.getElementById('authWelcomeDesc')?.toggleAttribute('hidden', !on);
     document.getElementById('authOffline')?.toggleAttribute('hidden', !on);
+    showCountry();
+  }
+
+  // Ülke seçimi: kayıtta ve ilk açılışta (çevrimdışı devam edene de); ana para birimi ondan (para.js)
+  let authModeNow = 'login';
+  function showCountry() {
+    document.getElementById('authCountry')?.toggleAttribute('hidden', !(welcome || authModeNow === 'register'));
   }
 
   // Giriş yapılmamış ve çevrimdışı devam seçilmemişse giriş / kayıt penceresi açılır
@@ -164,6 +171,14 @@
   };
 
   window.syncGetUser = function () { return user; };
+
+  // Hesabın ülkesi (user_metadata.country): web, iPhone ve asistan aynı para birimini kullanır
+  window.syncSetCountry = async function (country) {
+    if (!db || !user) return;
+    const { data, error } = await db.auth.updateUser({ data: { country } });
+    if (error) throw error;
+    user = data.user ?? user;
+  };
 
   // Sitenin sunucu uçları için (ör. /api/kategori) oturum anahtarı; girişsizse null
   window.syncAccessToken = async function () {
@@ -300,7 +315,7 @@
     if (!meta?.base || !meta?.cursor) return null;
     const { SCHEMA, rekey } = window.Tablo;
     if (meta.schema !== SCHEMA) {   // önceki sürümün tabanı: yeni satır biçimine çevrilir, bütün satırlar yeniden çekilir
-      meta = { base: rekey(meta.base), cursor: {}, schema: SCHEMA };
+      meta = { base: rekey(meta.base, window.Para.homeOf(getStateCb?.(uid))), cursor: {}, schema: SCHEMA };
       try { saveMeta(uid, meta); } catch {}
     }
     return meta;
@@ -360,8 +375,9 @@
 
     let base, changed = false;
     if (!meta && TABLES.some(t => rows[t].length)) {
-      state = { ...state, ...toState(rows) };
-      base = baseOf(rows);
+      const home = window.Para.homeOf(state);   // ana para birimi (harcamada boş varlık)
+      state = { ...state, ...toState(rows, home) };
+      base = baseOf(rows, home);
       changed = true;
     } else {
       base = meta?.base || {};
@@ -440,6 +456,8 @@
     document.getElementById('offlineLoginBtn')?.addEventListener('click', openModal);
     document.getElementById('authOfflineBtn')?.addEventListener('click', () => {
       try { localStorage.setItem(OFFLINE_PREF, '1'); } catch {}
+      const country = document.getElementById('authCountry')?.value;
+      if (country) window.setCountry?.(country);
       closeModal();
     });
 
@@ -447,6 +465,8 @@
     document.querySelectorAll('.auth-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         authMode = tab.dataset.tab;
+        authModeNow = authMode;
+        showCountry();
         document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t === tab));
         document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
         document.getElementById('authPassword').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
@@ -492,7 +512,8 @@
 
       const { data, error } = authMode === 'login'
         ? await db.auth.signInWithPassword({ email, password })
-        : await db.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
+        : await db.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin,
+          data: { country: document.getElementById('authCountry')?.value || 'TR' } } });
 
       btn.disabled = false;
       btn.textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';

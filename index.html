@@ -277,7 +277,7 @@
       </div>
       <div class="offline-note info" id="balanceHint" hidden>
         <svg class="ic"><use href="#i-coins"/></svg>
-        <p class="row-text"><strong>TL bakiyeni gir</strong><small id="balanceHintText"></small></p>
+        <p class="row-text"><strong><span data-home>TL</span> bakiyeni gir</strong><small id="balanceHintText"></small></p>
         <button type="button" class="btn btn-ghost sm" id="balanceHintBtn">Bakiye gir</button>
       </div>
       <div class="seg seg-full" id="debtSide" role="group" aria-label="Borçlar ya da alacaklar">
@@ -322,11 +322,11 @@
       <div class="asset-grid" id="assetGrid"></div>
       <section id="holdWrap"></section>
       <div id="entryWrap"></div>
-      <p class="footnote">TL karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Fon fiyatları TEFAS'tan
+      <p class="footnote"><span data-home>TL</span> karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Fon fiyatları TEFAS'tan
         gelir ve günde bir kez açıklanır; hisse fiyatları Borsa İstanbul'dan yaklaşık 15 dakika gecikmelidir. Kâr, alışlarda
         girdiğin birim fiyatlara göre ortalama maliyetle hesaplanır. Kurlar ve fiyatlar internet varken
         birkaç dakikada bir yenilenir; çevrimdışıyken son alınanlar kullanılır. Bakiyelere borç ve alacak ödemeleri de
-        girer. Kart ekstreleri TL bakiyenden düşer: “Otomatik” kartlarda son ödeme gününün ertesi günü, “Ben işaretlerim”
+        girer. Kart ekstreleri <span data-home>TL</span> bakiyenden düşer: “Otomatik” kartlarda son ödeme gününün ertesi günü, “Ben işaretlerim”
         kartlarında “Ödendi”ye dokunduğunda. “Hesaba katılmasın” seçtiğin kartlar bakiyeni etkilemez.</p>
     </section>
   </main>
@@ -346,7 +346,7 @@
         <p class="p-status" id="purchaseStatus" hidden></p>
 
         <label class="amount-input">
-          <span class="cur">₺</span>
+          <span class="cur" data-home-symbol>₺</span>
           <input name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required aria-label="Tutar" data-amount />
         </label>
 
@@ -459,10 +459,10 @@
         <div class="field" id="entryPriceField" hidden>
           <span class="field-label" id="entryPriceLabel">Birim fiyat <small>(kâr / zarar için)</small></span>
           <label class="amount-input sm">
-            <span class="cur">₺</span>
+            <span class="cur" data-home-symbol>₺</span>
             <input name="price" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Birim fiyat" data-amount="6" />
           </label>
-          <label class="check"><input type="checkbox" name="settle" /><span id="entrySettleText">Tutar TL bakiyemden düşülsün</span></label>
+          <label class="check"><input type="checkbox" name="settle" /><span id="entrySettleText">Tutar <span data-home>TL</span> bakiyemden düşülsün</span></label>
         </div>
 
         <label class="field">
@@ -512,7 +512,7 @@
         <div class="field">
           <span class="field-label">Limit</span>
           <label class="amount-input sm">
-            <span class="cur">₺</span>
+            <span class="cur" data-home-symbol>₺</span>
             <input name="limit" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Limit" data-amount />
           </label>
         </div>
@@ -823,6 +823,11 @@
           </div>
         </div>
         <div class="settings-group">
+          <span class="group-label">Ülke</span>
+          <select id="countrySelect" class="input" aria-label="Ülke ve para birimi"></select>
+          <small class="footnote" id="countryNote">Tutarlar ve kurlar ülkenin para biriminde gösterilir; iPhone ve asistan da aynısını kullanır. Ülke değişince kayıtlı tutarlar çevrilmez. Fon ve hisse şimdilik yalnızca Türkiye'de.</small>
+        </div>
+        <div class="settings-group">
           <span class="group-label">Nakit</span>
           <button type="button" class="row-btn" id="cashDefBtn">
             <svg class="ic"><use href="#i-cash"/></svg>
@@ -987,6 +992,7 @@
         <form id="authForm">
           <input id="authEmail" type="email" placeholder="E-posta" autocomplete="email" required />
           <input id="authPassword" type="password" placeholder="Şifre" autocomplete="current-password" minlength="6" required />
+          <select id="authCountry" aria-label="Ülke" hidden></select>
           <button type="submit" id="authSubmitBtn" class="btn btn-primary">Giriş Yap</button>
         </form>
         <p id="authMsg" class="auth-msg"></p>

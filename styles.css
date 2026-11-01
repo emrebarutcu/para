@@ -1075,7 +1075,7 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 .field-label { font-size: 13px; font-weight: 600; color: var(--text-2); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field input[type="text"], .field input[type="number"], .field input[type="date"],
-.inline-add input, .people-edit input, .modal-box input {
+.inline-add input, .people-edit input, .modal-box input, .modal-box select, #countrySelect {
   width: 100%;
   height: 46px;
   padding: 0 14px;
@@ -1086,7 +1086,7 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
   outline: none;
   transition: border-color .15s, box-shadow .15s, background .15s;
 }
-.field input:focus, .inline-add input:focus, .people-edit input:focus, .modal-box input:focus {
+.field input:focus, .inline-add input:focus, .people-edit input:focus, .modal-box input:focus, .modal-box select:focus, #countrySelect:focus {
   border-color: var(--text-2);
   background: var(--surface);
   box-shadow: 0 0 0 3px var(--focus);
