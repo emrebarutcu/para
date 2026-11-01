@@ -6,7 +6,6 @@ struct AkisEkrani: View {
     @EnvironmentObject private var model: Model
     @AppStorage("akis.ay") private var ayCount = 12
     @State private var acik: Set<String> = []
-    @State private var adding = false
 
     var body: some View {
         NavigationStack {
@@ -24,7 +23,7 @@ struct AkisEkrani: View {
             .navigationTitle("Nakit akışı")
             .sayfaZemini()
             .yenilenebilir(model)
-            .yuzenDugme("Harcama ekle") { adding = true }
+            .ekleDugmesi()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
@@ -38,7 +37,6 @@ struct AkisEkrani: View {
                     .accessibilityLabel("Kaç ay")
                 }
             }
-            .sheet(isPresented: $adding) { HarcamaFormu() }
         }
     }
 

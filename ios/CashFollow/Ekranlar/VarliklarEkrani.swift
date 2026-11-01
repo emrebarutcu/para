@@ -4,7 +4,6 @@ import SwiftUI
 // (get_assets, list_entries; web'deki Varlıklar sekmesi)
 struct VarliklarEkrani: View {
     @EnvironmentObject private var model: Model
-    @State private var ekle: HareketTuru?
 
     var body: some View {
         NavigationStack {
@@ -40,16 +39,7 @@ struct VarliklarEkrani: View {
             .navigationTitle("Varlıklar")
             .sayfaZemini()
             .yenilenebilir(model)
-            .overlay(alignment: .bottomTrailing) {
-                Menu {
-                    ForEach(HareketTuru.allCases.filter { $0 != .piyasa || model.marketsAllowed }) { t in
-                        Button { ekle = t } label: { Label(t.baslik, systemImage: t.simge) }
-                    }
-                } label: { YuzenSimge() }
-                .accessibilityLabel("Ekle")
-                .padding(.trailing, 18).padding(.bottom, 14)
-            }
-            .sheet(item: $ekle) { HareketFormu(tur: $0) }
+            .ekleDugmesi()
         }
     }
 

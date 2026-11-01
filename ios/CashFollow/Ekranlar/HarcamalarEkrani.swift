@@ -8,7 +8,6 @@ struct HarcamalarEkrani: View {
     @State private var kisi = ""                 // "" hepsi, yoksa kişinin kimliği
     @State private var kategori: KategoriSecimi? // kategoriye dokununca liste süzülür
     @State private var bitenler = false
-    @State private var adding = false
     @State private var silinecek: Harcama?
 
     var body: some View {
@@ -59,8 +58,7 @@ struct HarcamalarEkrani: View {
             .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
             .searchable(text: $search, prompt: "Ara")
             .yenilenebilir(model)
-            .yuzenDugme("Harcama ekle") { adding = true }
-            .sheet(isPresented: $adding) { HarcamaFormu() }
+            .ekleDugmesi()
             .confirmationDialog(silinecek.map { "\($0.description) ve bütün taksitleri silinsin mi?" } ?? "",
                                 isPresented: Binding(get: { silinecek != nil }, set: { if !$0 { silinecek = nil } }), titleVisibility: .visible) {
                 Button("Sil", role: .destructive) {

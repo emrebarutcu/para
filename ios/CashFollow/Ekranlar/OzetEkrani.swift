@@ -4,7 +4,6 @@ import SwiftUI
 // Kişilerin payı Akış'ta, kategoriler Harcamalar'da, aylık grafik Akış'ta.
 struct OzetEkrani: View {
     @EnvironmentObject private var model: Model
-    @State private var adding = false
     @State private var ayarlar = false
     @State private var odeme: OdemeHedefi?
 
@@ -24,14 +23,13 @@ struct OzetEkrani: View {
             .navigationTitle("Özet")
             .sayfaZemini()
             .yenilenebilir(model)
-            .yuzenDugme("Harcama ekle") { adding = true }
+            .ekleDugmesi()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { EsitlemeDurumu() }
                 ToolbarItem(placement: .primaryAction) {
                     Button { ayarlar = true } label: { Image(systemName: "slider.horizontal.3") }.accessibilityLabel("Ayarlar")
                 }
             }
-            .sheet(isPresented: $adding) { HarcamaFormu() }
             .sheet(isPresented: $ayarlar) { AyarlarEkrani() }
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
         }

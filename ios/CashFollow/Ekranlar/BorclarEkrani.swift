@@ -8,7 +8,6 @@ struct BorclarEkrani: View {
     @State private var kartDuzenle: KartGorunumu?
     @State private var kartDetay: KartGorunumu?
     @State private var kartSil: KartGorunumu?
-    @State private var borcEkle = false
     @State private var secili: Borclar.Kayit?
     @State private var odeme: OdemeHedefi?
     @State private var kapananlar = false
@@ -93,22 +92,7 @@ struct BorclarEkrani: View {
             .navigationTitle("Borçlar")
             .sayfaZemini()
             .yenilenebilir(model)
-            .overlay(alignment: .bottomTrailing) {
-                Menu {
-                    Button { borcEkle = true } label: { Label("Borç, alacak ya da kredi", systemImage: "arrow.left.arrow.right") }
-                    Button { kartEkle = true } label: { Label("Kart", systemImage: "creditcard") }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundStyle(Tema.ustMetin)
-                        .frame(width: 58, height: 58)
-                        .background(Tema.metin, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
-                }
-                .accessibilityLabel("Ekle")
-                .padding(.trailing, 18)
-                .padding(.bottom, 14)
-            }
+            .ekleDugmesi()
             .sheet(isPresented: $kartEkle) { KartFormu(card: nil) }
             .sheet(item: $kartDuzenle) { KartFormu(card: $0) }
             .sheet(item: $kartDetay) { c in
@@ -117,7 +101,6 @@ struct BorclarEkrani: View {
                            sil: { kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { kartSil = c } },
                            odendi: { t in kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { odeme = .kart(id: c.id, ad: c.name, tutar: t) } })
             }
-            .sheet(isPresented: $borcEkle) { BorcFormu() }
             .sheet(item: $secili) { BorcDetayi(d: $0) }
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
             .confirmationDialog(kartSil.map { k in k.purchaseCount > 0 ? "\(k.name) ve \(k.purchaseCount) harcaması silinsin mi?" : "\(k.name) silinsin mi?" } ?? "",
@@ -322,7 +305,7 @@ struct OdemeFormu: View {
 struct BorcFormu: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
-    @State private var tur = "borrowed"
+    @State private var tur: String
     @State private var kim = ""
     @State private var tutar = ""
     @State private var taksitTutari = true      // kredide tutar aylık taksit
@@ -337,6 +320,9 @@ struct BorcFormu: View {
     @State private var kisi = ""
     @State private var kisiler: [Kisi] = []
     @State private var hata: String?
+
+    // baslangic: + seçicisinden gelen tür (borrowed, lent, loan)
+    init(baslangic: String = "borrowed") { _tur = State(initialValue: baslangic) }
 
     private var kredi: Bool { tur == "loan" }
     private var vadeVar: Bool { kredi || vadeli || taksit > 1 }   // taksitli borçta ilk taksitin günü gerekir
