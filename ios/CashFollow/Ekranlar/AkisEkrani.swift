@@ -94,9 +94,9 @@ struct OdemeSatiri: View {
                         if p.notCounted == true {
                             Text("sayılmıyor").font(.footnote).foregroundStyle(Tema.metin3)
                         } else if let by = p.byPerson, !by.isEmpty {
-                            HStack(spacing: 8) {   // sığmazsa kısalır, alta kaymaz
+                            VStack(alignment: .leading, spacing: 2) {   // web'deki gibi kişiler alt alta
                                 ForEach(Array(by.sorted { $0.key < $1.key }.enumerated()), id: \.offset) { _, k in
-                                    RenkliAd(ad: "\(k.key) \(kisa(k.value))", renk: model.kisiRengi(k.key))
+                                    RenkliAd(ad: "\(k.key) \(Bicim.tl(k.value, fraction: false))", renk: model.kisiRengi(k.key))
                                 }
                             }
                         }
