@@ -125,6 +125,19 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
+- **7.0.0** — **Ülke ve ana para birimi** (`para.js`). Kayıtta ülke sorulur (Supabase `user_metadata.country`; girişsizken
+  cihazda), hesabın ana para birimi ondan gelir (Türkiye TL, Almanya euro, ABD dolar, Birleşik Krallık sterlin…, 45 ülke,
+  26 para birimi). Kartlar, nakit harcamalar, ekstreler, kişilerin payları, bütün toplamlar ve "TL" yazan metinler ana para
+  birimindedir; diğer para birimleri ve altın ona güncel kurla çevrilir (`/api/kur` artık bütün para birimlerinin TL
+  karşılığını verir, `para.js homeRates`). Veride `state.home`; harcamada boş varlık ana para birimidir. Fon ve hisse şimdilik
+  yalnızca Türkiye'de. Ülke Ayarlar'dan değişir; tutarlar çevrilmez. Ülkesi olmayan (eski) hesaplar Türkiye sayılır: TL
+  kullanıcıları için hiçbir hesap değişmedi (tutarlılık denetimi aynı).
+  **Yayından önce** `supabase/gecis/7.0.0.sql` çalıştırılır (1 Kasım 2026'da çalıştırıldı; aynısı `tablolar.sql`'in son
+  bölümünde): `entries`, `purchases` ve
+  `debts`'te `asset` kısıtı her üç harfli para birimi kodunu kabul eder; yoksa TL / dolar / euro / altın dışındaki kayıtlar
+  yazılamaz. Eski sürümler yeni para birimli satırları "kullanamayacağı satır" sayıp atlar, silmez.
+  MCP: araçların cevaplarında `currency` hesabın para birimidir; `*Try` adlı alanlar (`tryValue`, `totalTry`…) o para
+  birimindedir. `asset` argümanları her para birimi kodunu (GBP, CHF…) kabul eder; fon / hisse Türkiye dışında reddedilir.
 - **6.0.0** — Varlıklar'da fon ve hisse ve geçmiş fiyatlarla **Varlığın seyri** grafiği (`/api/gecmis`): TEFAS fonları (`FON:AFT`) ve Borsa İstanbul hisseleri (`BIST:THYAO`) adetle
   alınır / satılır, güncel fiyatla TL'ye çevrilir (bölüm 4 → Fon ve hisse). `entries.asset` kısıtı fon ve hisse kodlarını
   da kabul eder; yeni sütunlar `entries.price` (alış / satış günündeki birim fiyat) ve `entries.settle` (tutar TL
@@ -206,6 +219,16 @@ Paylaş butonu → "Ana Ekrana Ekle"
 
 **Android (Chrome):**  
 Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
+
+### Ülke ve para birimi
+
+Veritabanı geçişleri `supabase/gecis/`'tedir; `sh supabase/sql.sh supabase/gecis/<sürüm>.sql` (SUPABASE_ACCESS_TOKEN ile)
+ya da GitHub'da "Supabase SQL" iş akışı (secret tanımlıysa yeni geçiş dosyası itilince kendiliğinden) çalıştırır.
+
+Kayıtta (web ve iPhone) ülke seçilir; hesabın bilgisi olarak saklanır (`user_metadata.country`), web, iPhone ve asistan aynı
+para birimini kullanır. Girişsiz kullanımda ülke cihazdadır (web: `para.ulke`, iPhone: Ayarlar). Ülkeler ve para birimleri
+`para.js`'te; yeni ülke eklemek için oraya bir satır yeter (para birimi kur kaynağında olmalı: `mcp/kur.js`). Ülke Ayarlar'dan
+değişir; kayıtlı tutarlar çevrilmez. Fon ve hisse (TEFAS, Borsa İstanbul) yalnızca Türkiye'de.
 
 ### iOS uygulaması (`ios/`, Swift)
 

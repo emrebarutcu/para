@@ -8,6 +8,7 @@ struct Oturum: Codable, Equatable {
     var expiresAt: Date
     var userId: String
     var email: String
+    var country: String?   // kayıtta seçilen ülke (user_metadata.country); eski hesaplarda yok: Türkiye
 }
 
 enum KayitSonucu {
@@ -44,9 +45,9 @@ enum Auth {
         return c.url!
     }
 
-    private static func post(_ url: URL, _ body: [String: Any], token: String? = nil) async throws -> [String: Any] {
+    private static func post(_ url: URL, _ body: [String: Any], token: String? = nil, method: String = "POST") async throws -> [String: Any] {
         var req = URLRequest(url: url)
-        req.httpMethod = "POST"
+        req.httpMethod = method
         req.setValue(Yapilandirma.supabaseKey, forHTTPHeaderField: "apikey")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -69,7 +70,8 @@ enum Auth {
         let expires: Date
         if let at = json["expires_at"] as? Double { expires = Date(timeIntervalSince1970: at) }
         else { expires = Date().addingTimeInterval(json["expires_in"] as? Double ?? 3600) }
-        return Oturum(accessToken: access, refreshToken: refresh, expiresAt: expires, userId: id, email: user["email"] as? String ?? "")
+        return Oturum(accessToken: access, refreshToken: refresh, expiresAt: expires, userId: id, email: user["email"] as? String ?? "",
+                      country: (user["user_metadata"] as? [String: Any])?["country"] as? String)
     }
 
     static func signIn(email: String, password: String) async throws -> Oturum {
@@ -78,8 +80,8 @@ enum Auth {
         return s
     }
 
-    static func signUp(email: String, password: String) async throws -> KayitSonucu {
-        let json = try await post(endpoint("signup", redirect: true), ["email": email, "password": password])
+    static func signUp(email: String, password: String, country: String) async throws -> KayitSonucu {
+        let json = try await post(endpoint("signup", redirect: true), ["email": email, "password": password, "data": ["country": country]])
         if let s = session(json) { return .session(s) }
         let user = json["user"] as? [String: Any] ?? json
         if let ids = user["identities"] as? [Any], ids.isEmpty { return .alreadyExists }
@@ -97,6 +99,14 @@ enum Auth {
     static func refresh(_ s: Oturum) async throws -> Oturum {
         let json = try await post(endpoint("token?grant_type=refresh_token"), ["refresh_token": s.refreshToken])
         guard let next = session(json) else { throw AuthHatasi(status: 0, code: nil, message: "Oturum yenilenemedi") }
+        return next
+    }
+
+    // Hesabın ülkesi (user_metadata.country): web ve asistan da aynı hesabı bu ülkenin para birimiyle gösterir
+    static func updateCountry(_ s: Oturum, _ country: String) async throws -> Oturum {
+        let user = try await post(endpoint("user"), ["data": ["country": country]], token: s.accessToken, method: "PUT")
+        var next = s
+        next.country = (user["user_metadata"] as? [String: Any])?["country"] as? String ?? country
         return next
     }
 

@@ -56,7 +56,7 @@ struct KartFormu: View {
             Form {
                 Section {
                     TextField("Kart adı (ör. banka)", text: $name)
-                    TextField("Limit (₺)", text: $limit).keyboardType(.decimalPad)
+                    TextField("Limit (\(Bicim.homeSymbol))", text: $limit).keyboardType(.decimalPad)
                     TextField("Son 4 hane (isteğe bağlı)", text: $last4).keyboardType(.numberPad)
                 }
                 Section {

@@ -108,7 +108,29 @@ struct Varliklar: Decodable {
         let profitPct: Double?
         let dayChangePct: Double?
     }
-    struct Kurlar: Decodable { let USD: Double?; let EUR: Double?; let GAU: Double?; let updatedAt: String? }
+    // Kurlar: varlık kodu → bir biriminin ana para birimi karşılığı; updatedAt, source
+    struct Kurlar: Decodable {
+        let values: [String: Double]
+        let updatedAt: String?
+        private struct Anahtar: CodingKey {
+            var stringValue: String
+            init?(stringValue: String) { self.stringValue = stringValue }
+            var intValue: Int? { nil }
+            init?(intValue: Int) { nil }
+        }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Anahtar.self)
+            var v: [String: Double] = [:]
+            var at: String?
+            for k in c.allKeys {
+                if k.stringValue == "updatedAt" { at = try? c.decode(String.self, forKey: k) }
+                else if let d = try? c.decode(Double.self, forKey: k) { v[k.stringValue] = d }
+            }
+            values = v
+            updatedAt = at
+        }
+    }
+    let currency: String?
     let assets: [Bakiye]
     let holdings: [Pozisyon]
     let totalTry: Double

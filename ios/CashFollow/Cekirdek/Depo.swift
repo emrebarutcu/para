@@ -24,6 +24,12 @@ enum Depo {
     }
     static func remove(_ url: URL) { try? FileManager.default.removeItem(at: url) }
 
+    // Girişsiz kullanımın ülkesi (hesapta user_metadata.country)
+    static var offlineCountry: String? {
+        get { UserDefaults.standard.string(forKey: "para.ulke") }
+        set { UserDefaults.standard.set(newValue, forKey: "para.ulke") }
+    }
+
     // Girişsiz devam etmeyi seçti: ilk açılış penceresi bir daha çıkmaz (web: para.offline)
     static var offlineChosen: Bool {
         get { UserDefaults.standard.bool(forKey: "para.offline") }

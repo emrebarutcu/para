@@ -16,6 +16,10 @@ import R from "../tekrar.js";
 import K from "../kategori.js";
 import I from "../icgoru.js";
 import B from "../borc.js";
+import P from "../para.js";
+
+// Hesabın ana para birimi (para.js; state.home, ctx.load verir): kartlar, nakit harcamalar ve toplamlar onunla
+const homeOf = state => P.homeOf(state);
 
 export const TIME_ZONE = "Europe/Istanbul";
 const MAX_MONTHS = 60;       // akıştaki en fazla ay (app.js ile aynı)
@@ -104,15 +108,16 @@ function findEntry(state, id) {
 // "USD", "dolar", "gram altın"… → varlık kodu
 const ASSET_NAMES = { tl: "TRY", try: "TRY", lira: "TRY", usd: "USD", dolar: "USD", dollar: "USD", eur: "EUR", euro: "EUR",
   gau: "GAU", altın: "GAU", altin: "GAU", gold: "GAU", "gram altın": "GAU", "gram altin": "GAU", "gram gold": "GAU" };
+// Para birimi (ISO 4217 kodu: TRY, USD, EUR, GBP…; para.js) ya da gram altın
 function assetArg(v, name = "asset") {
-  const code = ASSET_NAMES[T.normalize(v)];
-  return code ?? fail(`${name} must be one of TRY, USD, EUR, GAU (gram gold).`);
+  const code = ASSET_NAMES[T.normalize(v)] ?? (P.isCurrency(String(v ?? "").trim().toUpperCase()) ? String(v).trim().toUpperCase() : null);
+  return code ?? fail(`${name} must be a currency code (${P.CURRENCIES.map(c => c.code).join(", ")}) or GAU (gram gold).`);
 }
 
 // Varlık hareketinde ayrıca fon ve hisse: "FON:AFT", "bist:thyao" → "BIST:THYAO"
 function entryAssetArg(v, name = "asset") {
   const m = /^\s*(fon|bist)\s*:\s*(\S+)\s*$/i.exec(String(v ?? ""));
-  if (!m) return ASSET_NAMES[T.normalize(v)] ?? fail(`${name} must be one of TRY, USD, EUR, GAU (gram gold), a TEFAS fund FON:XXX (e.g. FON:AFT) or a BIST stock BIST:XXXX (e.g. BIST:THYAO).`);
+  if (!m) return assetArg(v, name);
   return V.marketCode(m[1], m[2]) ?? fail(`${String(v).trim()} is not a valid code: a TEFAS fund is FON: and its 3-character code (FON:AFT), a BIST stock BIST: and its ticker (BIST:THYAO).`);
 }
 
@@ -185,7 +190,7 @@ function cashflow(state, from, to, people = state.people) {
 function lastPaymentIndex(state, today) {
   let last = -Infinity;
   for (const p of knownPurchases(state)) {
-    if (T.assetOf(p) !== "TRY") continue;
+    if (T.assetOf(p, homeOf(state)) !== homeOf(state)) continue;
     const card = cardById(state, p.cardId);
     if (card && !B.tracked(card)) continue;   // hesaba katılmayan kart ödeme penceresini uzatmaz
     const pays = paymentsOf(state, p, today);
@@ -231,7 +236,7 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     status: left.length ? "active" : "done",
     category: K.valid(p.category) ? p.category : null,
     categoryName: K.category(p.category)?.name ?? null,
-    asset: T.assetOf(p),
+    asset: T.assetOf(p, homeOf(state)),
   };
   if (T.repeats(p)) v.repeat = repeatView(p, today);
   if (!p.date) {
@@ -302,7 +307,7 @@ function statementsView(debt, today) {
 
 // Kartın kaydedilen ödemeleri (pay_debt card): delete_debt_payment ile silinebilir
 function cardPaysView(state, card) {
-  return (B.known(state).cardPays.get(card.id) ?? []).map(x => paymentView(x, "TRY"));
+  return (B.known(state).cardPays.get(card.id) ?? []).map(x => paymentView(x, homeOf(state)));
 }
 
 function cardView(state, c, today) {
@@ -370,7 +375,7 @@ function preview(state, p) {
   if (card && p.date) out.statementCutoff = T.statementOf(card, p.date).cut;
   if (!card) {
     out.note = (p.count > 1 ? "Cash — paid each month on the purchase day" : "Cash — paid on the purchase day")
-      + `, deducted from the ${T.assetOf(p)} asset balance`;
+      + `, deducted from the ${T.assetOf(p, homeOf(state))} asset balance`;
   }
   if (T.repeats(p)) out.repeat = R.label(p) + (R.rule(p).n ? ` · ${R.rule(p).n} times` : " · no end");
   return out;
@@ -384,8 +389,8 @@ function buildPurchase(state, args, today, base = null) {
 
   const count = intArg(args.installments, "installments", 1, MAX_COUNT, base?.count ?? 1);
   // Döviz / altın harcaması o varlıktan ödenir: kartsız ve peşin
-  const asset = args.asset !== undefined ? assetArg(args.asset) : T.assetOf(base);
-  const foreign = asset !== "TRY";
+  const asset = args.asset !== undefined ? assetArg(args.asset) : T.assetOf(base, homeOf(state));
+  const foreign = asset !== homeOf(state);
   if (foreign && count !== 1) fail("A USD / EUR / gold purchase is paid at once from that asset: installments must be 1.");
 
   let total = base?.total;
@@ -457,7 +462,7 @@ function buildCard(state, args, base = null) {
 }
 
 // Kesim / son ödeme günü değişirken kullanıcıya sorulacak seçenekler (app.js'teki kart formuyla aynı)
-function transitionQuestion({ choices, open, next }, given) {
+function transitionQuestion({ choices, open, next }, given, home = "TRY") {
   const text = {
     old: `"old": the open statement is still cut on the old days (cutoff ${open.cut}, paid ${open.due}); later statements use the new days.`,
     new: `"new": statements already cut stay as they are; the new days start today${open.count ? ` and the open statement's payments move to the statement cut on ${next.cut}, paid ${next.due}` : ""}.`,
@@ -465,7 +470,7 @@ function transitionQuestion({ choices, open, next }, given) {
   };
   const head = given !== undefined ? `transition must be ${choices.map(k => `"${k}"`).join(", ")}. ` : "";
   const intro = open.count
-    ? `Changing the days affects purchases in between: ${open.count} payment(s) totalling ${round(open.total)} TRY in the statement to be cut on ${open.cut} are not cut yet.`
+    ? `Changing the days affects purchases in between: ${open.count} payment(s) totalling ${round(open.total)} ${home} in the statement to be cut on ${open.cut} are not cut yet.`
     : "Changing the days changes payment dates of this card's purchases.";
   return `${head}${intro} Ask the user which one and pass it as transition: ${choices.map(k => text[k]).join(" ")}`;
 }
@@ -527,22 +532,25 @@ function emailView(x, { body = false } = {}) {
 // { rates: { TRY, USD, EUR, GAU, "BIST:THYAO": 246.7 }, updatedAt, source, market?: { "BIST:THYAO": { price, … } },
 // marketMissing?, marketFailed? }. Kur alınamazsa yalnızca fiyatlarla; hiçbiri yoksa null.
 async function ratesOrNull(ctx, state = null, codes = []) {
+  const home = state ? homeOf(state) : P.isCurrency(ctx.home) ? ctx.home : "TRY";
   const want = [...new Set([...(state ? knownEntries(state).map(e => e.asset) : []), ...codes])].filter(c => V.market(c));
   const [kur, market] = await Promise.all([
     ctx.rates().catch(err => { console.warn("kur:", err.message); return null; }),
     want.length ? ctx.prices(want).catch(err => { console.warn("fiyat:", err.message); return { prices: {}, missing: [], failed: ["FON", "BIST"] }; }) : null,
   ]);
-  if (!market) return kur;
-  const out = { ...(kur ?? { updatedAt: null, source: null }), rates: { TRY: 1, ...kur?.rates }, market: market.prices,
-    marketMissing: market.missing, marketFailed: market.failed };
-  for (const [c, x] of Object.entries(market.prices)) out.rates[c] = x.price;
-  return kur || Object.keys(market.prices).length ? out : null;
+  // Kurlar ve fon / hisse fiyatları TL'dir; hesabın ana para birimine çevrilir (para.js homeRates)
+  const lira = { TRY: 1, ...kur?.rates };
+  for (const [c, x] of Object.entries(market?.prices ?? {})) lira[c] = x.price;
+  const rates = P.homeRates(lira, home);
+  if (!rates || (!kur && !Object.keys(market?.prices ?? {}).length)) return null;
+  if (!market) return { ...kur, rates };
+  return { ...(kur ?? { updatedAt: null, source: null }), rates, market: market.prices, marketMissing: market.missing, marketFailed: market.failed };
 }
 
 const marketType = code => (V.market(code)?.market === "FON" ? "fund" : "stock");
 
 function entryView(state, e, rates, today) {
-  const value = V.toTry(e.amount, e.asset, rates?.rates);
+  const value = V.toTry(e.amount, e.asset, rates?.rates, homeOf(state));
   const n = V.repeatOf(e);
   const v = {
     id: e.id,
@@ -556,9 +564,9 @@ function entryView(state, e, rates, today) {
     personId: e.personId,
   };
   if (V.market(e.asset)) v.type = marketType(e.asset);
-  if (V.tradable(e.asset)) {
+  if (V.tradable(e.asset, homeOf(state))) {
     v.price = e.price > 0 ? e.price : null;
-    v.tradeValueTry = e.price > 0 ? Math.abs(V.tradeValue(e)) : null;
+    v.tradeValueTry = e.price > 0 ? Math.abs(V.tradeValue(e, homeOf(state))) : null;
     v.settledInTry = e.settle === true;
   }
   if (n != null) v.repeat = repeatView(e, today);
@@ -597,7 +605,7 @@ function buildEntry(state, args, today, base = null, quote = null) {
   if (!validDate(date)) fail("date must be a valid date like 2026-10-19.");
   const personId = args.person !== undefined ? findPerson(state, args.person).id : base?.personId ?? state.people[0].id;
   const e = { personId, asset, amount: dir === "out" ? -amount : amount, desc, date };
-  if (asset === "TRY") {
+  if (asset === homeOf(state)) {
     if (args.price !== undefined || args.settle !== undefined) fail("price and settle are for funds, stocks, USD, EUR and gold, not TRY.");
     needDesc();
     return { ...e, ...repeatArgs(args, base) };
@@ -624,6 +632,11 @@ function buildEntry(state, args, today, base = null, quote = null) {
   return { ...e, ...(price != null && { price }), ...(settle && { settle: true }) };
 }
 
+// Fon ve hisse (TEFAS, Borsa İstanbul) şimdilik yalnızca Türkiye'deki hesaplarda (ana para birimi TL; para.js)
+function checkMarketsAllowed(code, home) {
+  if (V.market(code) && !P.marketsFor(P.isCurrency(home) ? home : "TRY")) fail("Funds and stocks (TEFAS, Borsa İstanbul) are only available for accounts in Turkey for now.");
+}
+
 // Fon / hisse kodu biliniyor mu (fiyat kaynağına göre); kaynak alınamadıysa doğrulanamaz, kabul edilir
 function checkMarket(code, rates) {
   if (!V.market(code) || rates?.market?.[code]) return;
@@ -644,7 +657,7 @@ function holdingsView(state, bals, rates, pid) {
   const pos = V.positions(knownEntries(state).filter(e => !pid || e.personId === pid));
   return Object.keys(bals).filter(c => V.market(c) && Math.abs(bals[c]) > 1e-9).map(code => {
     const x = rates?.market?.[code], p = pos[code];
-    const value = V.toTry(bals[code], code, rates?.rates);
+    const value = V.toTry(bals[code], code, rates?.rates, homeOf(state));
     const h = { asset: code, type: marketType(code), ticker: V.market(code).ticker, units: bals[code] };
     if (x?.name) h.name = x.name;
     h.price = x?.price ?? null;
@@ -680,10 +693,10 @@ async function debtsDue(state, today, idx, ctx) {
   const due = (from, to) => B.paymentsDue(state, today, from, to);
   const month = i => due(T.dateKey(i, 1), T.dateKey(i, 31));
   const thisMonth = month(idx), nextMonth = month(idx + 1), upcoming = due(today, "9999-12-31").filter(f => !f.paid).slice(0, UPCOMING);
-  const rates = [...thisMonth, ...nextMonth].some(f => f.asset !== "TRY") ? (await ratesOrNull(ctx))?.rates : null;
+  const rates = [...thisMonth, ...nextMonth].some(f => f.asset !== homeOf(state)) ? (await ratesOrNull(ctx))?.rates : null;
   const missing = new Set();
   const tl = list => list.reduce((s, f) => {
-    const v = V.toTry(-f.amount, f.asset, rates);
+    const v = V.toTry(-f.amount, f.asset, rates, homeOf(state));
     if (v == null) missing.add(f.asset);
     return s + (v ?? 0);
   }, 0);
@@ -746,7 +759,7 @@ function paymentView(x, asset) {
 function debtView(state, d, today, rates, { schedule = false, pays = paymentsOfDebt(state, d) } = {}) {
   const st = B.status(d, pays, today);
   const r = x => V.round(x || 0, d.asset);
-  const remainingTry = V.toTry(st.remaining, d.asset, rates);
+  const remainingTry = V.toTry(st.remaining, d.asset, rates, homeOf(state));
   const v = {
     id: d.id,
     type: typeOf(d),
@@ -822,7 +835,7 @@ function debtPreview(state, d) {
 function buildDebt(state, args, today, base = null) {
   const type = args.type !== undefined ? typeArg(args.type) : base ? typeOf(base) : fail('type is required: "borrowed", "lent" or "loan".');
   const loan = type === "loan";
-  const asset = args.asset !== undefined ? assetArg(args.asset) : base?.asset ?? "TRY";
+  const asset = args.asset !== undefined ? assetArg(args.asset) : base?.asset ?? homeOf(state);
 
   const party = args.party !== undefined ? text(args.party ?? "", "party") : base?.party ?? "";
   if (!loan && !party) fail(`party is required: who the money was ${type === "borrowed" ? "borrowed from" : "lent to"}.`);
@@ -914,7 +927,7 @@ function shareView(state, pid, s, today) {
     dueNow: round(s?.dueNow),
     settled: round(s?.settled),
     nextPayment: s?.next ? { date: s.next.date, amount: round(s.next.amount) } : null,
-    payments: k.settlements.filter(x => x.personId === pid && x.date <= today).map(x => paymentView(x, "TRY")),
+    payments: k.settlements.filter(x => x.personId === pid && x.date <= today).map(x => paymentView(x, homeOf(state))),
   };
 }
 
@@ -988,9 +1001,9 @@ function payModeArgs(state, args, cur, v, today) {
     const cs = B.cardState(state, { ...v, manualSince: cur.manualSince }, today);
     const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((t, x) => t + x.amount, 0);
     if (ahead <= EPS) {
-      fail(`${cur.name} can't go back to automatic today: on automatic its statement due today counts as paid only tomorrow, so ${round(lost)} TRY of the card payments recorded for it would not count today, raising ${payer}'s lira balance by that much for today. Switch tomorrow; don't delete the payment.`);
+      fail(`${cur.name} can't go back to automatic today: on automatic its statement due today counts as paid only tomorrow, so ${round(lost)} ${homeOf(state)} of the card payments recorded for it would not count today, raising ${payer}'s lira balance by that much for today. Switch tomorrow; don't delete the payment.`);
     }
-    fail(`${cur.name} can't go back to automatic yet: ${round(ahead)} TRY was paid ahead for statements not due yet, and on automatic ${round(lost)} TRY of its recorded card payments would stop counting until those due days pass (statements count as paid on their own and payments only count beyond them), raising ${payer}'s lira balance by that much. Delete or reduce the payment made ahead by ${round(ahead)} TRY (delete_debt_payment; ids in list_cards / list_debts cards payments), or switch the day after the due day of the last statement it pays.`);
+    fail(`${cur.name} can't go back to automatic yet: ${round(ahead)} ${homeOf(state)} was paid ahead for statements not due yet, and on automatic ${round(lost)} ${homeOf(state)} of its recorded card payments would stop counting until those due days pass (statements count as paid on their own and payments only count beyond them), raising ${payer}'s lira balance by that much. Delete or reduce the payment made ahead by ${round(ahead)} ${homeOf(state)} (delete_debt_payment; ids in list_cards / list_debts cards payments), or switch the day after the due day of the last statement it pays.`);
   }
   return {};
 }
@@ -1023,7 +1036,7 @@ const PURCHASE_FIELDS = {
     type: ["string", "null"], enum: [...K.CATEGORIES.map(c => c.id), null],
     description: `Spending category: ${K.CATEGORIES.map(c => `${c.id} = ${c.name} (${c.hint})`).join("; ")}. null removes it. Omit on add to reuse the category the user gave the same merchant before.`,
   },
-  asset: { type: "string", enum: ["TRY", "USD", "EUR", "GAU"], description: 'What the purchase is paid in: TRY (default), USD, EUR or GAU (grams of gold). Non-TRY purchases are paid at once in cash from that asset (card "nakit", installments 1).' },
+  asset: { type: "string", description: 'What the purchase is paid in: the account currency (default; the currency field of the answers, TRY in Turkey), another currency code (USD, EUR, GBP…) or GAU (grams of gold). Purchases in another currency are paid at once in cash from that asset (card "nakit", installments 1).' },
   ...REPEAT_FIELDS,
 };
 const CARD_FIELDS = {
@@ -1035,7 +1048,7 @@ const CARD_FIELDS = {
   auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call: statements since then are unpaid until marked paid); on a day a card payment is dated it starts tomorrow instead (the card stays automatic today). Switching back to true counts unpaid past statements as paid; it fails while recorded card payments would stop counting (payments for statements not past their due day yet: on a statement's due day switch the next day; for payments made ahead, delete them or wait until the day after those due days) and while the card is not tracked (an untracked card keeps its mode)."),
 };
 
-const ASSET = { type: "string", enum: ["TRY", "USD", "EUR", "GAU"], description: "TRY (Turkish lira), USD, EUR or GAU (gold, in grams)." };
+const ASSET = { type: "string", description: "A currency code (TRY, USD, EUR, GBP…; the account currency is the default) or GAU (gold, in grams)." };
 const ENTRY_ASSET = { type: "string", description: "TRY (Turkish lira), USD, EUR, GAU (gold, in grams), a TEFAS fund as FON:<code> (e.g. FON:AFT; search_market finds codes by name) or a Borsa İstanbul stock as BIST:<ticker> (e.g. BIST:THYAO)." };
 const ENTRY_FIELDS = {
   asset: ENTRY_ASSET,
@@ -1084,7 +1097,7 @@ export const TOOLS = [
       const end = Math.min(last, start + MAX_MONTHS - 1);
       const months = end >= start ? cashflow(state, start, end) : [];
       const at = idx => months.find(m => m.idx === idx);
-      const endless = knownPurchases(state).some(p => T.assetOf(p) === "TRY" && T.endless(p) && !(cardById(state, p.cardId) && !B.tracked(cardById(state, p.cardId))));
+      const endless = knownPurchases(state).some(p => T.assetOf(p, homeOf(state)) === homeOf(state) && T.endless(p) && !(cardById(state, p.cardId) && !B.tracked(cardById(state, p.cardId))));
       const thisMonth = at(start);
 
       // Sıradaki ödemeler (app.js renderUpcoming gibi): elle ödenen kartın ekstreleri borc.js'ten (ödenmiş ya da önceden
@@ -1125,7 +1138,7 @@ export const TOOLS = [
           };
         }),
         debts: await debtsDue(state, today, start, ctx),
-        currency: "TRY",
+        currency: homeOf(state),
       };
     },
   },
@@ -1155,7 +1168,7 @@ export const TOOLS = [
           byCard: byName(state, m.byCard, cardKeyName),
           payments: m.events.map(ev => ({ ...eventView(state, ev, { items }), ...(ev.ignored && { notCounted: true }) })),
         })),
-        currency: "TRY",
+        currency: homeOf(state),
       };
     },
   },
@@ -1193,7 +1206,7 @@ export const TOOLS = [
           || (b.lastPaymentDate ?? "").localeCompare(a.lastPaymentDate ?? "")
           || a.description.localeCompare(b.description, "tr"));
       const limit = intArg(args.limit, "limit", 1, 1000, 100);
-      return { count: all.length, purchases: all.slice(0, limit), currency: "TRY" };
+      return { count: all.length, purchases: all.slice(0, limit), currency: homeOf(state) };
     },
   },
   {
@@ -1276,7 +1289,7 @@ export const TOOLS = [
     annotations: READ,
     async run(args, ctx) {
       const state = await ctx.load();
-      return { cards: state.cards.map(c => cardView(state, c, ctx.today)), currency: "TRY" };
+      return { cards: state.cards.map(c => cardView(state, c, ctx.today)), currency: homeOf(state) };
     },
   },
   {
@@ -1318,7 +1331,7 @@ export const TOOLS = [
         const v = { id: cur.id, ...buildCard(state, args, cur), color: cur.color, ...trackingArgs(state, args, cur, ctx.today) };
         const change = T.termChoices(cur, { cutoffDay: v.cutoffDay, dueDay: v.dueDay }, state.installments, ctx.today);
         const transition = typeof args.transition === "string" && change.cards && Object.hasOwn(change.cards, args.transition) ? args.transition : undefined;
-        if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition));
+        if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition, homeOf(state)));
         const chosen = transition ? change.cards[transition] : change.card;
         const built = chosen.history ? { ...v, history: chosen.history } : v;
         const next = { ...built, ...payModeArgs(state, args, cur, built, ctx.today) };
@@ -1346,12 +1359,12 @@ export const TOOLS = [
           const nd = B.cardDebt(state, next, ctx.today);
           const owed = nd.statements.filter(x => x.state === "late" || x.state === "due");
           const tail = !fresh ? " Earlier statements stay paid."
-            : owed.length ? ` ${owed.length} statement(s) due since ${next.manualSince} (${round(nd.unpaid)} TRY) are now unpaid: they stay owed until marked paid${owed.some(x => x.state === "late") ? ` (overdue since ${nd.overdueSince})` : ""}.`
+            : owed.length ? ` ${owed.length} statement(s) due since ${next.manualSince} (${round(nd.unpaid)} ${homeOf(state)}) are now unpaid: they stay owed until marked paid${owed.some(x => x.state === "late") ? ` (overdue since ${nd.overdueSince})` : ""}.`
             : "";
           out.note = `From ${next.manualSince} ${next.name}'s statements stay owed until marked paid with pay_debt card="${next.name}" (amount defaults to what is due); unpaid ones past their due day show as overdue.${tail}`;
         } else if (B.manual(cur) && !B.manual(next)) {
           const late = was.statements.filter(x => x.state === "late");
-          out.note = (late.length ? `${late.length} overdue statement(s) (${round(was.overdue)} TRY) now count as paid, deducted from ${payer}'s lira balance. ` : "")
+          out.note = (late.length ? `${late.length} overdue statement(s) (${round(was.overdue)} ${homeOf(state)}) now count as paid, deducted from ${payer}'s lira balance. ` : "")
             + `${next.name}'s statements count as paid the day after their due day again.`;
         }
         return out;
@@ -1402,7 +1415,7 @@ export const TOOLS = [
           remaining: round(months.reduce((s, m) => s + (m.byPerson[p.id] || 0), 0)),
           ...(p.id !== state.people[0].id && { owesUser: round(shares.get(p.id)?.remaining) }),
         })),
-        currency: "TRY",
+        currency: homeOf(state),
       };
     },
   },
@@ -1483,10 +1496,14 @@ export const TOOLS = [
       const { cashTry, ...worth } = worthView(t);
       const holdings = holdingsView(state, bals, rates, person?.id);
       const kur = rates?.updatedAt ? rates : null;   // fon / hisse fiyatları geldi ama kurlar alınamadıysa yok
+      const home = homeOf(state);
+      // Ana para birimi, sık kullanılan yabancılar, altın ve elde olan diğer para birimleri
+      const list = [...new Set([...V.assetsFor(home).map(a => a.code), ...Object.keys(bals).filter(c => V.money(c))])].map(V.asset);
       return {
         person: person?.name ?? "all",
-        assets: V.ASSETS.map(a => {
-          const value = V.toTry(bals[a.code] ?? 0, a.code, rates?.rates);
+        currency: home,
+        assets: list.map(a => {
+          const value = V.toTry(bals[a.code] ?? 0, a.code, rates?.rates, homeOf(state));
           return { asset: a.code, name: a.name, balance: bals[a.code] ?? 0, unit: a.code === "GAU" ? "gram" : a.code, tryValue: value == null ? null : round(value) };
         }),
         holdings,
@@ -1495,8 +1512,8 @@ export const TOOLS = [
         ...worth,
         cardTracking: state.cards.map(c => ({ card: c.name, cardId: c.id, since: B.tracked(c) ? B.since(c, ctx.today) : null })),
         ...(t.missing.length ? { notIncludedInTotal: t.missing } : {}),
-        rates: kur ? { ...Object.fromEntries(V.ASSETS.map(a => [a.code, kur.rates[a.code]])), updatedAt: kur.updatedAt, source: kur.source } : null,
-        ...(kur ? {} : { ratesError: "Current rates are unavailable; only TRY balances are counted in the total." }),
+        rates: kur ? { ...Object.fromEntries(list.map(a => [a.code, kur.rates[a.code]])), updatedAt: kur.updatedAt, source: kur.source } : null,
+        ...(kur ? {} : { ratesError: `Current rates are unavailable; only ${home} balances are counted in the total.` }),
         ...(rates?.marketFailed?.length ? { pricesError: "Some fund / stock prices are unavailable right now; those holdings are not counted in the total." } : {}),
       };
     },
@@ -1513,6 +1530,7 @@ export const TOOLS = [
     annotations: READ,
     async run(args, ctx) {
       if (!args.query && !args.codes?.length) fail("Pass query (to find funds) or codes (to price funds / stocks).");
+      checkMarketsAllowed("FON:AAA", ctx.home);
       const out = {};
       if (args.query) {
         try {
@@ -1564,7 +1582,7 @@ export const TOOLS = [
         .filter(e => !q || T.normalize(e.desc).includes(q))
         .sort((a, b) => b.date.localeCompare(a.date) || order.get(b.id) - order.get(a.id));
       const limit = intArg(args.limit, "limit", 1, 1000, 100);
-      const rates = all.some(e => e.asset !== "TRY") ? await ratesOrNull(ctx, null, all.slice(0, limit).map(e => e.asset)) : null;
+      const rates = all.some(e => e.asset !== homeOf(state)) ? await ratesOrNull(ctx, null, all.slice(0, limit).map(e => e.asset)) : null;
       return { count: all.length, entries: all.slice(0, limit).map(e => entryView(state, e, rates, ctx.today)) };
     },
   },
@@ -1580,15 +1598,16 @@ export const TOOLS = [
     annotations: WRITE,
     async run(args, ctx) {
       const code = args.asset !== undefined ? entryAssetArg(args.asset) : null;
+      checkMarketsAllowed(code, ctx.home);
       const rates = await ratesOrNull(ctx, null, code ? [code] : []);
       checkMarket(code, rates);
       return ctx.mutate(state => {
         const e = { id: uid(), ...buildEntry(state, args, ctx.today, null, V.market(code) ? rates?.market?.[code] : rates?.rates?.[code]) };
-        const tl = balanceOf(state, e.personId, "TRY", ctx.today);
+        const tl = balanceOf(state, e.personId, homeOf(state), ctx.today);
         state.entries.push(e);
         const balance = balanceOf(state, e.personId, e.asset, ctx.today);
         const out = { saved: true, entry: entryView(state, e, rates, ctx.today), balance };
-        if (V.settled(e)) out.tryBalance = { before: tl, after: balanceOf(state, e.personId, "TRY", ctx.today) };
+        if (V.settled(e, homeOf(state))) out.tryBalance = { before: tl, after: balanceOf(state, e.personId, homeOf(state), ctx.today) };
         if (V.market(e.asset) && balance < 0) out.warning = `More units sold than held: the ${e.asset} balance is ${balance}.`;
         return out;
       });
@@ -1604,7 +1623,8 @@ export const TOOLS = [
       return ctx.mutate(async state => {
         const cur = findEntry(state, args.id);
         const code = args.asset !== undefined ? entryAssetArg(args.asset) : cur.asset;
-        const rates = await ratesOrNull(ctx, null, [code]);
+        if (code !== cur.asset) checkMarketsAllowed(code, homeOf(state));
+        const rates = await ratesOrNull(ctx, state, [code]);
         if (code !== cur.asset) checkMarket(code, rates);
         const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur, V.market(code) ? rates?.market?.[code] : rates?.rates?.[code]) };
         state.entries = state.entries.map(x => (x.id === cur.id ? next : x));
@@ -1690,7 +1710,7 @@ export const TOOLS = [
         shares: shares.filter(v => side === "all" || (side === "debt" ? v.owed < 0 : v.owed >= 0)),
         cardCredit,
         debts,
-        currency: "TRY",
+        currency: homeOf(state),
       };
     },
   },
@@ -1703,7 +1723,7 @@ export const TOOLS = [
     async run(args, ctx) {
       const state = await ctx.load();
       const d = findDebt(state, args.id);
-      const rates = d.asset !== "TRY" ? (await ratesOrNull(ctx))?.rates : null;
+      const rates = d.asset !== homeOf(state) ? (await ratesOrNull(ctx))?.rates : null;
       return { ...debtView(state, d, ctx.today, rates, { schedule: true }), preview: debtPreview(state, d) };
     },
   },
@@ -1830,18 +1850,18 @@ export const TOOLS = [
           // Ödemesi gelen (gecikmiş ya da bugün) ekstreler, yoksa kesilmiş ekstre; fazlası ileriki ekstreleri önceden kapatır
           const cut = cd.next?.cut && cd.next.date > today ? cd.next.amount : 0;
           let amount;
-          if (args.amount !== undefined) amount = amountArg(args.amount, "TRY");
+          if (args.amount !== undefined) amount = amountArg(args.amount, homeOf(state));
           else if (cd.unpaid > EPS) amount = round(cd.unpaid);
           else if (cut > EPS) amount = round(cut);
-          else fail(`amount is required: no statement of ${card.name} is due or cut yet${cd.next ? ` (next: ${round(cd.next.amount)} TRY so far, due ${cd.next.date})` : ""}.`);
+          else fail(`amount is required: no statement of ${card.name} is due or cut yet${cd.next ? ` (next: ${round(cd.next.amount)} ${homeOf(state)} so far, due ${cd.next.date})` : ""}.`);
           const payer = state.people[0];
           const x = { id: uid(), kind: "payment", personId: payer.id, cardId: card.id, amount, date, ...(desc && { desc }) };
           state.debts.push(x);
           const after = B.cardDebt(state, card, today);
-          const out = { saved: true, payment: paymentView(x, "TRY"), card: cardDebtView(state, after, today) };
+          const out = { saved: true, payment: paymentView(x, homeOf(state)), card: cardDebtView(state, after, today) };
           if (amount > cd.unpaid + cut + EPS) {
-            out.warning = `This payment is ${round(amount - cd.unpaid - cut)} TRY more than the statements due or already cut (${round(cd.unpaid + cut)} TRY); the rest covers later statements`
-              + (after.credit > EPS ? `, and ${round(after.credit)} TRY is more than the card's whole debt (a credit on the card).` : ".");
+            out.warning = `This payment is ${round(amount - cd.unpaid - cut)} ${homeOf(state)} more than the statements due or already cut (${round(cd.unpaid + cut)} ${homeOf(state)}); the rest covers later statements`
+              + (after.credit > EPS ? `, and ${round(after.credit)} ${homeOf(state)} is more than the card's whole debt (a credit on the card).` : ".");
           }
           return out;
         }
@@ -1856,11 +1876,11 @@ export const TOOLS = [
           // Takip tarihi henüz yazılmamış kartlar bugünden takipte (uygulamadaki gibi); pay her gün kaymasın
           const cards = B.ensureTracking(state, today);
           if (cards) state.cards = cards;
-          const x = { id: uid(), kind: "payment", personId: p.id, amount: amountArg(args.amount, "TRY"), date, ...(desc && { desc }) };
+          const x = { id: uid(), kind: "payment", personId: p.id, amount: amountArg(args.amount, homeOf(state)), date, ...(desc && { desc }) };
           state.debts.push(x);
           const s = B.shares(state, today).get(p.id);
-          const out = { saved: true, payment: paymentView(x, "TRY"), share: shareView(state, p.id, s, today) };
-          if (s.remaining < 0) out.warning = `${p.name} has now paid ${round(-s.remaining)} TRY more than their card share; it counts as owed back to them.`;
+          const out = { saved: true, payment: paymentView(x, homeOf(state)), share: shareView(state, p.id, s, today) };
+          if (s.remaining < 0) out.warning = `${p.name} has now paid ${round(-s.remaining)} ${homeOf(state)} more than their card share; it counts as owed back to them.`;
           return out;
         }
         const d = findDebt(state, args.debt);
@@ -1893,7 +1913,7 @@ export const TOOLS = [
         // Kapanmış borcun ödemesi silinince borç yeniden açılır (kapatan ödeme silinince kalan sessizce silinmesin)
         const reopened = !!d?.closed;
         if (reopened) delete d.closed;
-        const asset = d?.asset ?? "TRY";
+        const asset = d?.asset ?? homeOf(state);
         const out = { deleted: { id: x.id, date: x.date, amount: V.round(x.amount, asset), asset }, ...(reopened && { reopened: true }) };
         const card = !x.debtId && x.cardId ? cardById(state, x.cardId) : null;
         if (d) out.debt = debtView(state, d, ctx.today, rates);
@@ -2042,8 +2062,8 @@ export const TOOLS = [
       const state = await ctx.load();
       const rates = await ratesOrNull(ctx, state);
       // Nakit: uygulamanın varsayılan tanımı (TL ve TL para piyasası fonları; fon bilgisi fiyatla gelir)
-      const cash = code => V.isCash(code, V.CASH_DEFAULT, rates?.market?.[code]);
-      return { today: ctx.today, insights: I.insights(state, { today: ctx.today, rates: rates?.rates, cash }), currency: "TRY" };
+      const cash = code => V.isCash(code, V.cashDefault(homeOf(state)), rates?.market?.[code]);
+      return { today: ctx.today, insights: I.insights(state, { today: ctx.today, rates: rates?.rates, cash }), currency: homeOf(state) };
     },
   },
   {
@@ -2062,7 +2082,7 @@ export const TOOLS = [
       const count = intArg(args.months, "months", 1, 24, 1);
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
       const scoped = person ? { ...state, people: [person] } : state;
-      const rates = state.installments.some(p => T.assetOf(p) !== "TRY") ? (await ratesOrNull(ctx))?.rates : null;
+      const rates = state.installments.some(p => T.assetOf(p, homeOf(state)) !== homeOf(state)) ? (await ratesOrNull(ctx))?.rates : null;
       const months = [];
       for (let idx = last - count + 1; idx <= last; idx++) {
         const b = I.categoryBreakdown(scoped, idx, rates);
@@ -2075,7 +2095,7 @@ export const TOOLS = [
           })),
         });
       }
-      return { months, currency: "TRY" };
+      return { months, currency: homeOf(state) };
     },
   },
   {
@@ -2097,7 +2117,7 @@ export const TOOLS = [
       // Hesaba katılmayan kart (ör. eşinin kartı) önerilmez
       const timing = I.cardTiming(state, date, ctx.today).filter(x => !x.full && B.tracked(x.card));
       const fields = { description: "Simülasyon", ...args, date };
-      if (args.card === undefined) fields.card = args.asset === undefined || assetArg(args.asset) === "TRY" ? timing[0]?.card.id ?? null : null;
+      if (args.card === undefined) fields.card = args.asset === undefined || assetArg(args.asset) === homeOf(state) ? timing[0]?.card.id ?? null : null;
       const { personId, p } = buildPurchase(state, fields, ctx.today);
       const purchase = { id: "simulasyon", personId, ...p };
       const after = { ...state, installments: [...state.installments, purchase] };
@@ -2118,7 +2138,7 @@ export const TOOLS = [
         }),
         card: card ? { name: card.name, limit: round(card.limit), usedAfter: cardView(after, card, ctx.today).used, availableAfter: cardView(after, card, ctx.today).available } : null,
         cardsCompared: timing.map(x => ({ card: x.card.name, firstPayment: x.due, daysUntilFirstPayment: x.days, available: x.available == null ? null : round(x.available) })),
-        currency: "TRY",
+        currency: homeOf(state),
       };
     },
   },
@@ -2146,8 +2166,9 @@ export const TOOLS = [
       if (!Array.isArray(data.people) || !Array.isArray(data.installments)) fail("data must contain people and installments arrays.");
       return ctx.mutate(state => {
         const next = T.hydrate(data);
+        const home = state.home;   // ana para birimi hesabın (ülkesinin), yedekten gelmez
         for (const k of Object.keys(state)) delete state[k];
-        Object.assign(state, next);
+        Object.assign(state, next, home ? { home } : {});
         return {
           imported: true, people: next.people.length, cards: next.cards.length, purchases: next.installments.length,
           entries: next.entries.length, debts: next.debts.length,
@@ -2159,13 +2180,13 @@ export const TOOLS = [
 
 // Sunucunun initialize cevabında LLM'e verilen genel bilgi
 export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (single or in installments / taksit) for one or more people, and shows when each installment is paid.
-- Amounts are Turkish lira (TRY). Dates are YYYY-MM-DD, months YYYY-MM, in Turkey time.
+- Amounts are in the account's currency (the currency field of the answers; TRY for accounts in Turkey, EUR, USD, GBP… elsewhere — the user picks their country at sign-up), unless an asset says otherwise. Field names ending in Try (tryValue, totalTry…) are in the account's currency. Dates are YYYY-MM-DD, months YYYY-MM, in Turkey time.
 - A card has a statement cutoff day (hesap kesim günü) and a due day (son ödeme günü). A purchase on or before the cutoff day goes into that month's statement; the statement is paid on the due day (same month if the due day is after the cutoff, otherwise the next month). Installments fall into the following statements one month apart. Cash purchases are paid on the purchase day.
 - When a card's cutoff / due day changes, statements already cut keep their dates; update_card asks (transition) what happens to the purchases in between — ask the user, don't pick yourself.
 - A card's used limit is the sum of installments still to be paid (on a card paid by hand, also its unpaid past statements).
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
 - Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums of entries dated up to today (repeating ones: the times up to today). get_assets values them in TRY at the current Turkish market rate. Buying dollars / euros / gold with lira or selling them for lira (settle true, price = the rate) is a transfer, not income or spending.
-- Funds and stocks are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
+- Funds and stocks (only for accounts in Turkey for now) are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
 - Deleting a card or a person also deletes their purchases (a card also its statement payments, a person also their asset entries and debts); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.

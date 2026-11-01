@@ -259,12 +259,12 @@ struct OdemeFormu: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Tutar (₺)", text: $tutar).keyboardType(.decimalPad)
+                    TextField("Tutar (\(Bicim.homeSymbol))", text: $tutar).keyboardType(.decimalPad)
                     DatePicker("Tarih", selection: $tarih, in: ...Date(), displayedComponents: .date).environment(\.locale, Bicim.locale)
                 } footer: {
                     switch hedef {
                     case .pay(_, let ad, _): Text("\(ad) kart payından sana ödedi.")
-                    case .kart(_, let ad, _): Text("\(ad) ekstresini ödedin; tutar TL bakiyenden düşer.")
+                    case .kart(_, let ad, _): Text("\(ad) ekstresini ödedin; tutar \(Bicim.homeShort) bakiyenden düşer.")
                     }
                 }
                 HataMetni(text: hata)
@@ -307,7 +307,7 @@ struct BorcFormu: View {
     @State private var vade = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
     @State private var tarih = Date()
     @State private var cekilen = ""
-    @State private var varlik = "TRY"
+    @State private var varlik = Bicim.home
     @State private var otomatik = false
     @State private var not = ""
     @State private var kisi = ""
@@ -331,10 +331,7 @@ struct BorcFormu: View {
                     HStack {
                         TextField(kredi && taksitTutari ? "Aylık taksit" : "Toplam tutar", text: $tutar).keyboardType(.decimalPad)
                         Picker("", selection: $varlik) {
-                            Text("₺").tag("TRY")
-                            Text("$").tag("USD")
-                            Text("€").tag("EUR")
-                            Text("gr").tag("GAU")
+                            ForEach(model.constants?.assets ?? []) { a in Text(a.code == "GAU" ? "gr" : a.symbol).tag(a.code) }
                         }
                         .pickerStyle(.menu)
                         .labelsHidden()
@@ -377,7 +374,7 @@ struct BorcFormu: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Kaydet", action: kaydet).disabled((Bicim.parse(tutar) ?? 0) <= 0) }
             }
             .onChange(of: tur) { _, yeni in
-                if yeni == "loan" { varlik = "TRY"; otomatik = true; if taksit < 2 { taksit = 12 } } else { otomatik = false }
+                if yeni == "loan" { varlik = Bicim.home; otomatik = true; if taksit < 2 { taksit = 12 } } else { otomatik = false }
             }
             .onAppear {
                 kisiler = (try? model.read("list_people") as KisiListesi)?.people ?? []

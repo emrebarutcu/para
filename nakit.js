@@ -9,6 +9,7 @@
   const V = node ? require("./varlik.js") : root.Varlik;
   const R = node ? require("./tekrar.js") : root.Tekrar;
   const B = node ? require("./borc.js") : root.Borc;
+  const P = node ? require("./para.js") : root.Para;   // ana para birimi (state.home); aşağıda "TL" odur
 
   const EPS = 0.005;   // kuruştan küçük fark yok sayılır (borc.js ile aynı)
 
@@ -42,7 +43,7 @@
   // Ay ay ödemeler (taksit.js buildCashflow); hesaba katılmayan kartın (borc.js tracked değil) ekstreleri toplamlara
   // girmez: ay, kişi ve kart toplamları onlarsız yeniden toplanır, olay ignored ile kalır
   function cashflow(state, fromIdx, toIdx) {
-    const months = T.buildCashflow(state.people, state.cards, state.installments, fromIdx, toIdx);
+    const months = T.buildCashflow(state.people, state.cards, state.installments, fromIdx, toIdx, P.homeOf(state));
     const off = new Set(state.cards.filter(c => !B.tracked(c)).map(c => c.id));
     if (!off.size) return months;
     // Etkilenen ayda toplamlar sayılan olaylardan yeniden toplanır (çıkarma yuvarlama kaydırırdı)
@@ -86,21 +87,22 @@
     };
 
     const r = rates;
+    const home = P.homeOf(state);
     const missing = new Set();
     const toTry = (amount, code) => {
-      const v = V.toTry(amount, code, r);
+      const v = V.toTry(amount, code, r, home);
       if (v == null) missing.add(code);
       return v;
     };
     // Yalnızca nakit sayılan varlıklar; kart ekstreleri ve nakit taksitler TL'dir
     const cash = code => isCash(code);
-    const lira = cash("TRY");
+    const lira = cash(home);
     let anchor = 0, any = false;   // anchor: bugüne kadarki nakit, TL (bugünkü hareketler dahil)
     for (const e of knownEntries(state)) {
       if (!V.asset(e.asset) || !Number.isFinite(e.amount)) continue;
       // TL bakiyesine işlenen fon / hisse alışı ya da satışı TL hareketidir. Fon da nakitse (para piyasası fonu) ikisi tek
       // harekettir: TL'den nakit fona geçiş nakdi yalnızca bugünkü fiyatla alış fiyatı arasındaki fark kadar değiştirir.
-      const settled = lira ? -V.settled(e) : 0;
+      const settled = lira ? -V.settled(e, home) : 0;
       const own = cash(e.asset);
       if (!own && !settled) continue;
       any = true;
@@ -118,7 +120,7 @@
       for (const { date } of R.between(e, lo, hi)) add(date, { desc: e.desc, value: v });
     }
     // Kartsız harcamalar ödendikçe varlıktan düşmüştür (bugünkü dahil); kart ödemesi bugün henüz ödenmedi sayılır
-    for (const [code, amount] of Object.entries(T.cashSpent(knownPurchases(state), state.cards, today))) if (cash(code)) anchor -= toTry(amount, code) ?? 0;
+    for (const [code, amount] of Object.entries(T.cashSpent(knownPurchases(state), state.cards, today, home))) if (cash(code)) anchor -= toTry(amount, code) ?? 0;
     // Borç etkileri de düşmüştür (takipteki kartların ödenen ekstreleri dahil: aşağıdaki kart hareketleri o günlerin
     // hareketidir, ikinci kez düşülmez)
     for (const [code, amount] of Object.entries(B.debtSpent(state, today))) if (cash(code)) anchor -= toTry(amount, code) ?? 0;
@@ -152,8 +154,8 @@
     }
     // Döviz / altın harcamaları TL akışında yok: kendi varlıklarından düşer
     for (const p of knownPurchases(state)) {
-      const code = T.assetOf(p);
-      if (code === "TRY" || !cash(code)) continue;
+      const code = T.assetOf(p, home);
+      if (code === home || !cash(code)) continue;
       for (const x of T.payments(p, cardById(state, p.cardId), hi)) {
         if (x.key < lo || x.key > hi) continue;
         const value = toTry(-x.amount, code);
@@ -189,13 +191,22 @@
   const MAX_HISTORY_DAYS = 1830;   // en uzun dönem (5 yıl, /api/gecmis'in sınırı)
   const ASSET_POINTS = 180;
 
-  // Geçmişi istenen varlıklar: kayıtlarda geçen dolar, euro, altın, fon ve hisseler
-  function historyCodes(state) {
+  // Elde tutulan (ana para birimi dışındaki) varlıklar: kayıtlarda geçen döviz, altın, fon ve hisseler
+  function heldCodes(state) {
+    const home = P.homeOf(state);
     const codes = new Set();
-    for (const e of knownEntries(state)) if (e.asset !== "TRY" && V.asset(e.asset)) codes.add(e.asset);
-    for (const p of knownPurchases(state)) if (T.assetOf(p) !== "TRY") codes.add(T.assetOf(p));
-    for (const d of state.debts) if (d.asset && d.asset !== "TRY" && V.asset(d.asset)) codes.add(d.asset);
+    for (const e of knownEntries(state)) if (e.asset !== home && V.asset(e.asset)) codes.add(e.asset);
+    for (const p of knownPurchases(state)) if (T.assetOf(p, home) !== home) codes.add(T.assetOf(p, home));
+    for (const d of state.debts) if (d.asset && d.asset !== home && V.asset(d.asset)) codes.add(d.asset);
     return [...codes].sort();
+  }
+
+  // Geçmişi istenen kodlar (/api/gecmis kapanışları TL'dir): elde tutulanlar (TL hariç) ve TL dışındaki ana para birimi
+  function historyCodes(state) {
+    const home = P.homeOf(state);
+    const codes = heldCodes(state).filter(c => c !== "TRY");
+    if (home !== "TRY" && !codes.includes(home)) codes.push(home);
+    return codes.sort();
   }
 
   // Günün (ya da öncesinin son) kapanışı; dönem başından önceyse ilk kapanış; dizi boşsa null
@@ -239,6 +250,8 @@
   // → { points: [{ date, value, parts: { lira, fx, market, receivable } }], approx: [bugünkü fiyatla sayılanlar], missing }
   // cur: bugünkü kurlar ve fiyatlar; series: kod → [["YYYY-MM-DD", kapanış], …]; pid: kişi (yoksa hepsi)
   function assetPoints(state, { today, span, codes, cur, series, pid }) {
+    const home = P.homeOf(state);
+    const held = heldCodes(state);
     const step = Math.max(1, Math.ceil(span / ASSET_POINTS));
     const days = [];
     for (let i = span; i > 0; i -= step) days.push(T.addDays(today, -i));
@@ -246,9 +259,12 @@
     const approx = new Set();
     let missing = [];
     const points = days.map(day => {
-      const r = { TRY: 1 };
-      for (const c of codes) {
-        const past = day === today ? null : priceAt(series[c], day);
+      // Kapanışlar TL'dir: ana para birimine o günün ana para birimi kapanışıyla çevrilir
+      const r = { [home]: 1 };
+      const base = day === today ? null : home === "TRY" ? 1 : priceAt(series[home], day);
+      for (const c of held) {
+        const lira = day === today ? null : c === "TRY" ? 1 : priceAt(series[c], day);
+        const past = lira != null && base > 0 ? lira / base : null;
         if (day !== today && past == null && cur[c] != null) approx.add(c);
         const v = past ?? cur[c];
         if (v != null) r[c] = v;
@@ -257,9 +273,9 @@
       if (day === today) missing = t.missing;
       const parts = { lira: 0, fx: 0, market: 0, receivable: t.receivable.total };
       for (const [c, amount] of Object.entries(t.balances)) {
-        const v = V.toTry(amount, c, r);
+        const v = V.toTry(amount, c, r, home);
         if (v == null) continue;
-        if (c === "TRY") parts.lira += v; else if (V.market(c)) parts.market += v; else parts.fx += v;
+        if (c === home) parts.lira += v; else if (V.market(c)) parts.market += v; else parts.fx += v;
       }
       return { date: day, value: t.assets, parts };
     });
@@ -268,7 +284,7 @@
 
   const api = {
     knownEntries, knownPurchases, entryTitle, flowLabel, manualCard, cashflow, cashPeriod, cashSeries,
-    ASSET_RANGES, MAX_HISTORY_DAYS, ASSET_POINTS, historyCodes, priceAt, stateAt, firstRecordDate, assetSpan, assetPoints,
+    ASSET_RANGES, MAX_HISTORY_DAYS, ASSET_POINTS, heldCodes, historyCodes, priceAt, stateAt, firstRecordDate, assetSpan, assetPoints,
   };
   if (node) module.exports = api;
   else root.Nakit = api;

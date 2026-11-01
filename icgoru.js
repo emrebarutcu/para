@@ -14,6 +14,7 @@
   const K = node ? require("./kategori.js") : root.Kategori;
   const R = node ? require("./tekrar.js") : root.Tekrar;
   const B = node ? require("./borc.js") : root.Borc;
+  const P = node ? require("./para.js") : root.Para;
 
   const HORIZON = 6;          // serbest nakit ve taksit yükü için bakılan ay (bu ay dahil)
   const PEAK_MONTHS = 12;     // ödeme sıçraması için bakılan ay
@@ -28,8 +29,14 @@
   const DUE_SOON = 7;         // borç ödemesi bu kadar gün içindeyse uyarı
   const EPS = 0.005;
 
-  const money = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
-  const fmt = n => money.format(Math.round(n || 0));
+  // Ana para birimi (para.js): her dışa açık işlev verinin birimini burada tutar (işlevler eşzamanlı, karışmaz)
+  let home = "TRY";
+  const moneys = new Map();
+  const money = () => {
+    if (!moneys.has(home)) moneys.set(home, new Intl.NumberFormat("tr-TR", { style: "currency", currency: home, maximumFractionDigits: 0 }));
+    return moneys.get(home);
+  };
+  const fmt = n => money().format(Math.round(n || 0));
   const pct = r => `%${Math.round(r * 100)}`;
   const monthLong = idx => `${T.monthName(idx)} ${T.yearOf(idx)}`;
   const round = n => Math.round((n || 0) * 100) / 100;
@@ -38,7 +45,7 @@
 
   // Varlığın kendi biriminde: TL fmt ile, döviz "$100", altın "12,5 gr"
   function amountText(n, code) {
-    if (code === "TRY") return fmt(n);
+    if (code === home) return fmt(n);
     const a = V.asset(code);
     const s = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: a.digits }).format(n);
     return code === "GAU" ? `${s} gr` : `${a.symbol}${s}`;
@@ -66,17 +73,18 @@
   }
 
   function known(state) {
+    home = P.homeOf(state);
     const ids = new Set(state.people.map(p => p.id));
     const all = state.entries.filter(e => ids.has(e.personId) && V.asset(e.asset));
     return {
       purchases: state.installments.filter(p => ids.has(p.personId)),
       // TL bakiyesine işlenen alış / satış (aktarım: fon, hisse, döviz, altın) gelir ya da gider değildir, ayrıdır
       // (trades); TL'ye işlenmeyen fon / hisse hareketi hiç sayılmaz (yalnızca varlık değişimi)
-      entries: all.filter(e => !V.market(e.asset) && !V.settled(e)),
-      trades: all.filter(e => V.settled(e)),
+      entries: all.filter(e => !V.market(e.asset) && !V.settled(e, home)),
+      trades: all.filter(e => V.settled(e, home)),
       // TL'ye işlenmeyen fon / hisse hareketi (önceden elde olan, dışarıda alınan): gelir değildir; fon nakitse (para
       // piyasası fonu) nakde girer / nakitten çıkar
-      holdings: all.filter(e => V.market(e.asset) && !V.settled(e)),
+      holdings: all.filter(e => V.market(e.asset) && !V.settled(e, home)),
     };
   }
 
@@ -93,44 +101,46 @@
   // arasındaki fark (Nakit grafiği nakdi bugünkü kur ve fiyatla gösterir). net + borrowed + pending Nakit grafiğinin
   // dönem net'idir. Kuru bilinmeyen hareket sayılmaz (missing). today borçların
   // bugünkü durumu içindir (geciken beklenen ödeme bugüne düşer).
-  function monthFlows(state, idx, rates, months, today = T.todayKey(), cash = code => code === "TRY") {
+  function monthFlows(state, idx, rates, months, today = T.todayKey(), cash = null) {
+    home = P.homeOf(state);
+    cash ??= code => code === home;
     const { entries, trades, holdings, purchases } = known(state);
     let income = 0, outflow = 0, inflow = 0, debtPaid = 0, missing = false;
     let cashIn = 0, cashOut = 0, cashPaid = 0, invest = 0, borrowed = 0, pending = 0, revalue = 0;
     for (const e of trades) {
       if (!V.occurrencesIn(e, idx).length) continue;
-      const v = V.tradeValue(e);
-      invest += (cash("TRY") ? v : 0) - (cash(e.asset) ? v : 0);
+      const v = V.tradeValue(e, home);
+      invest += (cash(home) ? v : 0) - (cash(e.asset) ? v : 0);
       if (!cash(e.asset)) continue;
-      const now = V.toTry(e.amount, e.asset, rates);
+      const now = V.toTry(e.amount, e.asset, rates, home);
       if (now == null) missing = true; else revalue += now - v;
     }
     for (const e of holdings) {
       if (!cash(e.asset) || !V.occurrencesIn(e, idx).length) continue;
-      const v = V.toTry(e.amount, e.asset, rates);
+      const v = V.toTry(e.amount, e.asset, rates, home);
       if (v == null) missing = true; else if (v > 0) cashIn += v; else cashOut -= v;
     }
     for (const e of entries) {
       const n = V.occurrencesIn(e, idx).length;
       if (!n) continue;
-      const v = V.toTry(e.amount * n, e.asset, rates);
+      const v = V.toTry(e.amount * n, e.asset, rates, home);
       if (v == null) { missing = true; continue; }
       if (v > 0) income += v; else outflow -= v;
       if (!cash(e.asset)) continue;
       if (v > 0) cashIn += v; else cashOut -= v;
     }
     for (const p of purchases) {
-      if (T.assetOf(p) === "TRY") continue;
+      if (T.assetOf(p, home) === home) continue;
       const paid = T.payments(p, null, T.dateKey(idx, 31)).filter(x => x.idx === idx).reduce((s, x) => s + x.amount, 0);
       if (!paid) continue;
-      const v = V.toTry(paid, p.asset, rates);
+      const v = V.toTry(paid, p.asset, rates, home);
       if (v == null) { missing = true; continue; }
       outflow += v;
       if (cash(p.asset)) cashOut += v;
     }
     // Borç akışları: gelen para inflow; borç tarafında ödenen (ödeme, taksit, beklenen ödeme) payments; verilen borç gider
     for (const f of B.allFlows(state, today, T.dateKey(idx, 1), T.dateKey(idx, 31))) {
-      const v = V.toTry(f.amount, f.asset, rates);
+      const v = V.toTry(f.amount, f.asset, rates, home);
       if (v == null) { missing = true; continue; }
       if (v > 0) {
         inflow += v;
@@ -145,7 +155,7 @@
       if (B.side(f.debt) === "debt") cashPaid -= v; else cashOut -= v;
     }
     const cards = months.find(m => m.idx === idx)?.total || 0;   // kart ve nakit taksitler (TL)
-    const payments = cards + debtPaid, cashPayments = (cash("TRY") ? cards : 0) + cashPaid;
+    const payments = cards + debtPaid, cashPayments = (cash(home) ? cards : 0) + cashPaid;
     return {
       idx, income, outflow, inflow, payments, cashIn, cashOut, cashPayments, invest, borrowed, pending, revalue,
       net: cashIn - cashOut - cashPayments - invest + revalue, missing,
@@ -156,12 +166,13 @@
   // tekrarı kendi ayına): idx → { kategori → TL }. Kategorisiz harcama "" altında. Döviz / altın harcaması güncel
   // kurla TL'dir; kuru bilinmiyorsa sayılmaz.
   function spendingByMonth(state, fromIdx, toIdx, rates = null) {
+    home = P.homeOf(state);
     const out = new Map();
     for (let i = fromIdx; i <= toIdx; i++) out.set(i, {});
     const from = T.dateKey(fromIdx, 1), to = T.dateKey(toIdx, 31);
     for (const p of known(state).purchases) {
       if (!T.parseDate(p.date)) continue;
-      const value = V.toTry(T.originalTotal(p), T.assetOf(p), rates);
+      const value = V.toTry(T.originalTotal(p), T.assetOf(p, home), rates, home);
       if (value == null) continue;
       const key = K.valid(p.category) ? p.category : "";
       for (const { date } of R.between(p, from, to)) {
@@ -175,6 +186,7 @@
   // Bir ayın kategori dağılımı ve önceki 3 ayın ortalamasıyla karşılaştırma (yalnızca o aylarda harcaması olan
   // kategoriler ortalamaya girer; hiç harcama olmayan ay ortalamayı düşürmez)
   function categoryBreakdown(state, idx, rates = null) {
+    home = P.homeOf(state);
     const months = spendingByMonth(state, idx - 3, idx, rates);
     const cur = months.get(idx);
     const prev = [idx - 3, idx - 2, idx - 1].map(i => months.get(i)).filter(m => Object.keys(m).length);
@@ -189,17 +201,18 @@
   // Tekrarlayan harcamalar, aynı işyerine her ay peşin ödenen (abonelik gibi) harcamalar ve tekrarlayan varlık
   // çıkışları (kira, aidat); monthly aylık karşılıktır (haftada bir ≈ 4,35 kez)
   function recurring(state, today, rates) {
+    home = P.homeOf(state);
     const t = T.parseDate(today).idx;
     const groups = new Map(), out = [];
     const own = paying(state, known(state).purchases);   // hesaba katılmayan kartın abonelikleri sayılmaz
     for (const p of own) {
       if (!T.repeats(p) || !R.nextDate(p, today)) continue;
-      const v = V.toTry(T.originalTotal(p) * R.perMonth(p), T.assetOf(p), rates);
+      const v = V.toTry(T.originalTotal(p) * R.perMonth(p), T.assetOf(p, home), rates, home);
       if (v != null) out.push({ name: p.desc, monthly: v, kind: "purchase", category: p.category ?? null });
     }
     for (const p of own) {
       const d = T.parseDate(p.date);
-      if (!d || T.repeats(p) || T.assetOf(p) !== "TRY" || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
+      if (!d || T.repeats(p) || T.assetOf(p, home) !== home || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
       const key = K.keyOf(p.desc);
       if (!key) continue;
       if (!groups.has(key)) groups.set(key, []);
@@ -214,7 +227,7 @@
     }
     for (const e of known(state).entries) {
       if (e.amount >= 0 || V.repeatOf(e) == null || !V.nextDate(e, today)) continue;
-      const v = V.toTry(-e.amount * R.perMonth(e), e.asset, rates);
+      const v = V.toTry(-e.amount * R.perMonth(e), e.asset, rates, home);
       if (v != null) out.push({ name: e.desc, monthly: v, kind: "entry", category: null });
     }
     return out.sort((a, b) => b.monthly - a.monthly);
@@ -244,9 +257,10 @@
 
   // cash: varlık nakit mi (serbest nakitte yatırım için; monthFlows)
   function insights(state, { today, rates = null, cash } = {}) {
+    home = P.homeOf(state);
     const t = T.parseDate(today).idx;
     const { purchases, entries } = known(state);
-    const cashflow = T.buildCashflow(state.people, state.cards, paying(state), t, t + Math.max(HORIZON, PEAK_MONTHS));
+    const cashflow = T.buildCashflow(state.people, state.cards, paying(state), t, t + Math.max(HORIZON, PEAK_MONTHS), home);
     const out = [];
     const add = x => out.push(x);
 
@@ -306,7 +320,7 @@
       if (!B.tracked(c) || !B.manual(c)) continue;
       const cd = B.cardDebt(state, c, today, debts.cardPays.get(c.id) || []);
       if (cd.overdue > EPS) {
-        due.push({ ref: { cardId: c.id }, name: `${c.name} ekstresi`, party: c.name, asset: "TRY", amount: cd.overdue, date: cd.overdueSince, overdue: true });
+        due.push({ ref: { cardId: c.id }, name: `${c.name} ekstresi`, party: c.name, asset: home, amount: cd.overdue, date: cd.overdueSince, overdue: true });
       }
     }
     if (due.length) {
@@ -392,7 +406,7 @@
     // Alacaklar: takipteki kartlarda ödemesi gelmiş kart payları ve geciken alacaklar (kendiliğinden ödenen gecikmez)
     const shares = B.shares(state, today);
     const owed = state.people.map(p => shares.get(p.id)).filter(s => s?.dueNow > EPS)
-      .map(s => ({ personId: s.person.id, name: s.person.name, amount: s.dueNow, asset: "TRY" }));
+      .map(s => ({ personId: s.person.id, name: s.person.name, amount: s.dueNow, asset: home }));
     const sharesDue = owed.reduce((sum, x) => sum + x.amount, 0);
     for (const { d, st } of active) {
       if (B.side(d) === "receivable" && st.overdue > EPS) {
@@ -426,14 +440,14 @@
 
     // Borcun biteceği ay (süresiz tekrarlayan TL harcaması varsa borç bitmez; hesaba katılmayan kart sayılmaz)
     const own = paying(state, purchases);
-    const endless = own.some(p => T.assetOf(p) === "TRY" && T.endless(p));
+    const endless = own.some(p => T.assetOf(p, home) === home && T.endless(p));
     const lastIdx = endless ? -Infinity : own.reduce((m, p) => {
-      if (T.assetOf(p) !== "TRY") return m;
+      if (T.assetOf(p, home) !== home) return m;
       const pays = T.payments(p, state.cards.find(c => c.id === p.cardId));
       return pays.length ? Math.max(m, pays[pays.length - 1].idx) : m;
     }, -Infinity);
     if (lastIdx >= t) {
-      const rest = T.buildCashflow(state.people, state.cards, paying(state), t, lastIdx).reduce((s, m) => s + m.total, 0);
+      const rest = T.buildCashflow(state.people, state.cards, paying(state), t, lastIdx, home).reduce((s, m) => s + m.total, 0);
       add({
         id: "bitis", tone: "good", title: `Son taksit: ${monthLong(lastIdx)}`,
         text: `Bu aydan son taksite kadar kart ve taksit ödemelerinin toplamı ${fmt(rest)}. Yeni harcama eklemezsen sonrasında kart ve taksit ödemen kalmaz.`,

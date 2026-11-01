@@ -176,6 +176,17 @@ begin
   end if;
 end $$;
 
+-- Ülke ve ana para birimi (7.x; para.js): her hesabın ana para birimi ülkesinden gelir (auth user_metadata.country).
+-- Varlık kodu artık her para birimi olabilir (ISO 4217, üç büyük harf; gram altın GAU da üç harf), fon ve hisse eskisi
+-- gibi. Harcamada boş asset hesabın ana para birimidir. Yeniden çalıştırmak zararsızdır.
+alter table entries drop constraint if exists entries_asset_check;
+alter table entries add constraint entries_asset_check
+  check (asset ~ '^[A-Z]{3}$' or asset ~ '^(FON:[A-Z0-9]{3}|BIST:[A-Z][A-Z0-9]{2,5})$');
+alter table purchases drop constraint if exists purchases_asset_check;
+alter table purchases add constraint purchases_asset_check check (asset ~ '^[A-Z]{3}$');
+alter table debts drop constraint if exists debts_asset_check;
+alter table debts add constraint debts_asset_check check (asset ~ '^[A-Z]{3}$');
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);

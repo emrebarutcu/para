@@ -7,7 +7,9 @@
   // Yazma sırası da budur: harcama kişisine ve kartına, hareket ve borç kişisine bağlıdır
   const TABLES = ["people", "cards", "purchases", "entries", "debts"];
   const FIELD = { people: "people", cards: "cards", purchases: "installments", entries: "entries", debts: "debts" };
-  const ASSETS = ["TRY", "USD", "EUR", "GAU"];   // varlik.js
+  const P = typeof module === "object" && module.exports ? require("./para.js") : root.Para;
+  // Para birimi (para.js) ya da gram altın. Harcamada boş varlık ana para birimidir (state.home; verilmezse TL).
+  const money = c => c === "GAU" || P.isCurrency(c);
   // Fon ve hisse (varlik.js market): yalnızca varlık hareketlerinde
   const MARKET = /^(FON:[A-Z0-9]{3}|BIST:[A-Z][A-Z0-9]{2,5})$/;
   const DEBT_KINDS = ["person", "loan", "payment"], DEBT_SIDES = ["debt", "receivable"];   // borc.js
@@ -80,7 +82,7 @@
         track_since: dateKey(c.trackSince), track_off: c.trackOff === true, manual_since: dateKey(c.manualSince),
       };
     },
-    purchases: p => {
+    purchases: (p, home) => {
       const total = num(p.total), count = int(p.count, 1, 100000), date = dateKey(p.date);
       const firstDue = /^\d{4}-(0[1-9]|1[0-2])$/.test(p.firstDue) ? p.firstDue : null;
       if (!validId(p.personId) || !(total > 0) || count == null || (!date && !firstDue)) return null;
@@ -90,17 +92,17 @@
         plan_count: int(p.planCount, 1, 100000),
         category: validCategory(p.category) ? p.category : null,
         category_by: validCategory(p.category) && CATEGORY_BY.includes(p.categoryBy) ? p.categoryBy : null,
-        asset: ASSETS.includes(p.asset) && p.asset !== "TRY" ? p.asset : null,
+        asset: money(p.asset) && p.asset !== home ? p.asset : null,
         ...(date ? repeatCols(p) : repeatCols({})),
       };
     },
     // Fon / hisse tekrarlamaz. price birim fiyat ya da kur (TL; fon, hisse, döviz ve altında, tek seferlik), settle
     // yalnızca fiyatla (miktar × fiyat TL bakiyesine işlenir)
-    entries: e => {
+    entries: (e, home) => {
       const amount = num(e.amount), date = dateKey(e.date), market = MARKET.test(e.asset);
-      if (!validId(e.personId) || !(ASSETS.includes(e.asset) || market) || !Number.isFinite(amount) || amount === 0 || !date) return null;
+      if (!validId(e.personId) || !(money(e.asset) || market) || !Number.isFinite(amount) || amount === 0 || !date) return null;
       const rep = repeatCols(market ? {} : e);
-      const price = e.asset !== "TRY" && rep.repeat_count == null ? pos(e.price) : null;
+      const price = e.asset !== home && rep.repeat_count == null ? pos(e.price) : null;
       return {
         id: e.id, person_id: e.personId, asset: e.asset, amount, description: String(e.desc ?? ""), date,
         ...rep, price, settle: price != null && e.settle === true ? true : null,
@@ -115,7 +117,7 @@
       const head = kind !== "payment";
       const due = head ? dateKey(d.due) : null;
       const count = head && due ? int(d.count, 1, 600) : null;
-      if (head && !ASSETS.includes(d.asset)) return null;
+      if (head && !money(d.asset)) return null;
       if (kind === "person" && !DEBT_SIDES.includes(d.side)) return null;
       if (kind === "loan" && (!due || count == null)) return null;
       return {
@@ -150,7 +152,7 @@
       if (manual) c.manualSince = manual;
       return c;
     },
-    purchases: r => {
+    purchases: (r, home) => {
       const p = { id: r.id, personId: r.person_id, cardId: r.card_id, desc: r.description, total: Number(r.total), count: r.count };
       if (r.date) p.date = r.date;
       if (r.first_due) p.firstDue = r.first_due;
@@ -159,7 +161,7 @@
         p.category = r.category;
         if (CATEGORY_BY.includes(r.category_by)) p.categoryBy = r.category_by;
       }
-      if (ASSETS.includes(r.asset) && r.asset !== "TRY") p.asset = r.asset;
+      if (money(r.asset) && r.asset !== home) p.asset = r.asset;
       repeatFields(r, p);
       return p;
     },
@@ -190,8 +192,8 @@
     },
   };
 
-  function keyOf(table, item) {
-    const row = item && validId(item.id) ? ROW[table](item) : null;
+  function keyOf(table, item, home = "TRY") {
+    const row = item && validId(item.id) ? ROW[table](item, home) : null;
     return row ? JSON.stringify(row) : null;
   }
 
@@ -203,13 +205,13 @@
                       // 7: entries.price / settle (fon, hisse, döviz ve altın)
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
-  function rekey(base) {
+  function rekey(base, home = "TRY") {
     const out = {};
     for (const t of TABLES) {
       out[t] = {};
       for (const [id, key] of Object.entries(base?.[t] || {})) {
         let k = null;
-        try { k = keyOf(t, ITEM[t](JSON.parse(key))); } catch {}
+        try { k = keyOf(t, ITEM[t](JSON.parse(key), home), home); } catch {}
         if (k) out[t][id] = k;
       }
     }
@@ -220,22 +222,22 @@
   const byCreation = (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : a.id < b.id ? -1 : 1);
 
   // Tablo satırları ({ people: [satır], … }) → veri. Kişi yoksa people yazılmaz: hydrate varsayılan kişiyi koyar.
-  function toState(rows) {
+  function toState(rows, home = "TRY") {
     const state = {};
     for (const t of TABLES) {
-      const list = (rows[t] || []).filter(r => !r.deleted_at).sort(byCreation).map(ITEM[t]);
+      const list = (rows[t] || []).filter(r => !r.deleted_at).sort(byCreation).map(r => ITEM[t](r, home));
       if (list.length || t !== "people") state[FIELD[t]] = list;
     }
     return state;
   }
 
   // Tablodaki satırlar eşitlenmiş kabul edilir
-  function baseOf(rows) {
+  function baseOf(rows, home = "TRY") {
     const base = {};
     for (const t of TABLES) {
       base[t] = {};
       for (const r of rows[t] || []) {
-        const key = r.deleted_at ? null : keyOf(t, ITEM[t](r));
+        const key = r.deleted_at ? null : keyOf(t, ITEM[t](r, home), home);
         if (key) base[t][r.id] = key;
       }
     }
@@ -253,6 +255,7 @@
   // Yazılacaklar: tablo → { upsert: [{ id, key, row }], delete: [id] }. Taban, yazma başarılınca key'lerle güncellenir.
   // Harcamanın / hareketin / borç kaydının kişisi tabloda yoksa yazılmaz; harcamanın kartı yoksa nakit yazılır (uygulamada da nakit sayılır).
   function changes(state, base) {
+    const home = P.homeOf(state);
     const out = {}, exists = {};
     for (const t of TABLES) {
       const known = base?.[t] || {};
@@ -261,7 +264,7 @@
       for (const item of listOf(state, t)) {
         if (!item || !validId(item.id) || seen.has(item.id)) continue;
         seen.add(item.id);
-        const key = keyOf(t, item);
+        const key = keyOf(t, item, home);
         if (!key) continue;
         exists[t].add(item.id);
         if (key !== known[item.id]) upsert.push({ id: item.id, key, row: JSON.parse(key) });
@@ -280,18 +283,19 @@
   // Uzaktan gelen satırları (silinmişler dahil) veriye işler. Yerelde eşitlenmemiş değişikliği olan kayıt olduğu gibi
   // kalır, sonraki yazmada uzağı ezer. → { state, base, changed }; state yalnızca değiştiyse yeni nesnedir.
   function merge(state, base, table, rows) {
+    const home = P.homeOf(state);
     const list = [...listOf(state, table)];
     const index = new Map();
     list.forEach((x, i) => { if (!index.has(x?.id)) index.set(x?.id, i); });   // aynı id'den ilki (changes gibi)
     const known = { ...(base?.[table] || {}) };
     let changed = false;
     for (const r of rows) {
-      const item = r.deleted_at ? null : ITEM[table](r);
-      const key = item ? keyOf(table, item) : undefined;   // silinmişse undefined
+      const item = r.deleted_at ? null : ITEM[table](r, home);
+      const key = item ? keyOf(table, item, home) : undefined;   // silinmişse undefined
       if (key === null) continue;                           // uygulamanın kullanamayacağı satır
       const i = index.get(r.id);
       const local = i === undefined ? undefined : list[i];
-      const localKey = local === undefined ? undefined : keyOf(table, local);
+      const localKey = local === undefined ? undefined : keyOf(table, local, home);
       if (localKey === key) {                               // zaten aynı
         if (key) known[r.id] = key; else delete known[r.id];
         continue;
