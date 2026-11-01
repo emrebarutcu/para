@@ -236,7 +236,7 @@ struct HareketFormu: View {
                         TextField("Tutar (\(Bicim.homeSymbol))", text: $amount).keyboardType(.decimalPad)
                         TextField(gercekTur == .gelir ? "Ne geliri? (ör. Maaş)" : "Ne için? (ör. Kira)", text: $desc)
                     case .doviz:
-                        Picker("Ne", selection: $kind) {
+                        Picker("Hangisi", selection: $kind) {
                             ForEach(dovizler) { a in Text(a.name).tag(a.code) }
                         }
                         Picker("İşlem", selection: $direction) {

@@ -15,11 +15,15 @@ struct OzetEkrani: View {
                 CevrimdisiNotu()
                 if !baslarkenGizli, let d = baslarken, !d.bitti { BaslarkenKarti(durum: d) }
                 Okunan(tool: "get_overview") { (o: Ozet) in
+                    // Hiç ödeme yoksa (yeni kullanıcı) sıfırlarla dolu kartlar gösterilmez; Başlarken yeter
+                    let bos = o.remainingTotal < 0.004 && o.upcomingPayments.isEmpty && o.dueThisMonth < 0.004
                     VStack(alignment: .leading, spacing: 14) {
-                        ustKart(o)
-                        siradakiler(o)
+                        if !bos {
+                            ustKart(o)
+                            siradakiler(o)
+                        }
                         IcgoruBolumu()
-                        NakitKarti()
+                        if !bos || baslarken?.gelir == true { NakitKarti() }
                     }
                 }
             }
