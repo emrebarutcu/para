@@ -51,6 +51,9 @@ jobs:
           print(ids[0])')
           xcrun simctl boot "$UDID"
           xcrun simctl install "$UDID" "$APP"
-          OUT=$(xcrun simctl launch --console-pty "$UDID" app.cashfollow.ios -oz-denetim 2>&1 || true)
-          echo "$OUT"
-          echo "$OUT" | grep -q "OZ-DENETIM TAMAM"
+          xcrun simctl launch "$UDID" app.cashfollow.ios -oz-denetim
+          # Sonuç uygulamanın Documents/oz-denetim.txt dosyasında (Uygulama/OzDenetim.swift)
+          DATA=$(xcrun simctl get_app_container "$UDID" app.cashfollow.ios data)
+          for i in $(seq 1 90); do [ -f "$DATA/Documents/oz-denetim.txt" ] && break; sleep 2; done
+          cat "$DATA/Documents/oz-denetim.txt"
+          grep -q "OZ-DENETIM TAMAM" "$DATA/Documents/oz-denetim.txt"
