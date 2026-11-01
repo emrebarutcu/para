@@ -81,6 +81,7 @@ struct HarcamaDetayi: View {
     @Environment(\.dismiss) private var dismiss
     let id: String
     @State private var confirm = false
+    @State private var duzenle: Harcama?
 
     var body: some View {
         Okunan(tool: "get_purchase", args: ["id": id], key: id) { (p: Harcama) in
@@ -114,6 +115,13 @@ struct HarcamaDetayi: View {
                 }
             }
             .navigationTitle(p.description)
+            .toolbar {
+                // Excel'den gelen tarihsiz kayıt web'de düzenlenir (kalan taksitler ve ilk ödeme ayı)
+                if p.date != nil {
+                    ToolbarItem(placement: .primaryAction) { Button("Düzenle") { duzenle = p } }
+                }
+            }
+            .sheet(item: $duzenle) { HarcamaFormu(duzenle: $0) }
             .confirmationDialog("\(p.description) ve bütün taksitleri silinsin mi?", isPresented: $confirm, titleVisibility: .visible) {
                 Button("Sil", role: .destructive) {
                     try? model.write("delete_purchase", ["id": id])
@@ -125,10 +133,13 @@ struct HarcamaDetayi: View {
     }
 }
 
-// Yeni harcama (add_purchase): ödeme tarihleri kartın kesim ve son ödeme gününden hesaplanır, kaydetmeden önce önizlenir
+// Yeni harcama (add_purchase) ya da düzenleme (update_purchase): ödeme tarihleri kartın kesim ve son ödeme gününden
+// hesaplanır, kaydetmeden önce önizlenir
 struct HarcamaFormu: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
+    var duzenle: Harcama? = nil
+    @State private var yuklendi = false
     @State private var desc = ""
     @State private var amount = ""
     @State private var count = 1
@@ -181,7 +192,7 @@ struct HarcamaFormu: View {
                 }
                 HataMetni(text: error)
             }
-            .navigationTitle("Harcama ekle")
+            .navigationTitle(duzenle == nil ? "Harcama ekle" : "Harcamayı düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
@@ -197,7 +208,18 @@ struct HarcamaFormu: View {
     private func load() {
         cards = (try? model.read("list_cards") as KartListesi)?.cards ?? []
         people = (try? model.read("list_people") as KisiListesi)?.people ?? []
-        if let first = cards.first, card == "nakit" { card = first.id }
+        if !yuklendi, let p = duzenle {
+            desc = p.description
+            amount = p.total.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2)))
+            count = min(max(p.installments, 1), 60)
+            date = p.date.flatMap(Bicim.date) ?? Date()
+            card = p.cardId ?? "nakit"
+            person = p.personId
+            category = p.category ?? ""
+        } else if !yuklendi, let first = cards.first, card == "nakit" {
+            card = first.id
+        }
+        yuklendi = true
         if person.isEmpty { person = people.first?.id ?? "ben" }
     }
 
@@ -206,7 +228,11 @@ struct HarcamaFormu: View {
             "description": desc.trimmingCharacters(in: .whitespaces), "amount": Bicim.parse(amount) ?? 0,
             "installments": count, "date": Bicim.key(date), "card": card, "person": person,
         ]
-        if !category.isEmpty { a["category"] = category }
+        if !category.isEmpty { a["category"] = category } else if duzenle?.category != nil { a["category"] = NSNull() }
+        if let p = duzenle {
+            a["id"] = p.id
+            if p.asset != Bicim.home { a["asset"] = p.asset }
+        }
         return a
     }
 
@@ -214,12 +240,13 @@ struct HarcamaFormu: View {
         guard valid else { preview = nil; return }
         var a = args
         a["dry_run"] = true
+        a["id"] = nil
         preview = try? model.read("add_purchase", a) as HarcamaSonucu
     }
 
     private func save() {
         do {
-            _ = try model.write("add_purchase", args, as: HarcamaSonucu.self)
+            _ = try model.write(duzenle == nil ? "add_purchase" : "update_purchase", args, as: HarcamaSonucu.self)
             dismiss()
         } catch {
             self.error = error.localizedDescription

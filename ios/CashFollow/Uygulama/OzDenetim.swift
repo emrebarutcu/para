@@ -57,6 +57,21 @@ enum OzDenetim {
             try check(plan.contains("\"upsert\"") && plan.contains("Telefon"), "eşitleme planı")
             try check(m.constants()?.categories.isEmpty == false, "kategoriler")
             try check(!m.isBlank(m.box.json) && m.isBlank(m.defaultState), "boş veri")
+            // Harcama düzenleme ve kart günlerinin değişmesi (geçiş sorusu)
+            let duz: HarcamaSonucu = try m.run("update_purchase", ["id": p.purchase.id, "description": "Telefon 2", "installments": 6])
+            try check(duz.purchase.description == "Telefon 2" && duz.purchase.installments == 6, "harcama düzenleme")
+            let kartId = cards.cards.first?.id ?? ""
+            do {
+                try m.runJSON("update_card", ["card": kartId, "cutoff_day": 15, "due_day": 25])   // arada harcama yoksa sorulmaz
+            } catch let e as AracHatasi where e.user && e.message.contains("transition") {
+                let secenek = KartFormu.secenekler(e.message)
+                try check(!secenek.isEmpty, "geçiş seçenekleri: \(e.message)")
+                try m.runJSON("update_card", ["card": kartId, "cutoff_day": 15, "due_day": 25, "transition": secenek[0].kod])
+            }
+            m.setCashDef(["TRY", "USD"])
+            try check(try m.cash(start: "1", shift: 0).any, "nakit tanımı")
+            m.setCashDef(nil)
+
             // Ülke: euro hesabında tutarlar ve kurlar euroya göre, fon / hisse yok (para.js)
             m.box.json = m.defaultState
             m.setHome(m.homeOf(country: "DE"))

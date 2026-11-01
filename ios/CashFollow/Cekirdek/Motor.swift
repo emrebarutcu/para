@@ -127,6 +127,11 @@ final class Motor {
 
     // Hesabın ana para birimi (ülkesinden; para.js): veri, kurlar ve araçlar onunla
     func setHome(_ code: String) { kopru.invokeMethod("setHome", withArguments: [code]) }
+    // Nakit sayılanlar (Nakit grafiği); nil varsayılan (ana para birimi ve para piyasası fonları)
+    func setCashDef(_ list: [String]?) {
+        let json = list.flatMap { try? JSONSerialization.data(withJSONObject: $0) }.map { String(decoding: $0, as: UTF8.self) }
+        kopru.invokeMethod("setCashDef", withArguments: [json.map { $0 as Any } ?? NSNull()])
+    }
     func homeOf(country: String) -> String {
         kopru.forProperty("sync")?.invokeMethod("homeOf", withArguments: [country])?.toString() ?? "TRY"
     }
@@ -206,4 +211,5 @@ struct Sabitler: Decodable {
     let countries: [Ulke]
     let home: String
     let markets: Bool             // fon ve hisse (yalnızca Türkiye)
+    let cashDefault: [String]     // nakit tanımının varsayılanı
 }

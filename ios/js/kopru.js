@@ -16,6 +16,9 @@
   // Hesabın ana para birimi (ülkesinden; para.js). Swift ayarlar (setHome); veri onunla okunur ve eşitlenir.
   let home = "TRY";
   function setHome(code) { home = P.isCurrency(code) ? code : "TRY"; }
+  // Nakit sayılanlar (Ayarlar → Nakit; web'deki gibi cihazda): varlık kodları ve "MMF" (para piyasası fonları); null varsayılan
+  let cashDef = null;
+  function setCashDef(json) { cashDef = json ? V.cashDef(JSON.parse(json), home) : null; }
 
   // JavaScriptCore'da console ve crypto yoktur
   const say = level => (...args) => {
@@ -141,7 +144,7 @@
   // Nakit sayılan varlıklar: varsayılan tanım (ana para birimi ve para piyasası fonları; web'de Ayarlar → Nakit)
   function isCash(code) {
     const fund = V.market(code)?.market === "FON" ? prices[code] : null;
-    return V.isCash(code, V.cashDefault(home), fund);
+    return V.isCash(code, cashDef ?? V.cashDefault(home), fund);
   }
   const todayOf = () => tools.todayKey();
 
@@ -177,6 +180,7 @@
       countries: P.COUNTRIES,
       home,
       markets: P.marketsFor(home),
+      cashDefault: V.cashDefault(home),
     });
   }
 
@@ -212,7 +216,7 @@
   };
 
   root.Kopru = {
-    loadTools, toScript, setRates, setPrices, setHome, run, marketCodes, constants, sync, cash, assetPlan, asset,
+    loadTools, toScript, setRates, setPrices, setHome, setCashDef, run, marketCodes, constants, sync, cash, assetPlan, asset,
     defaultState: () => JSON.stringify(T.defaultState()),
   };
 })(this);

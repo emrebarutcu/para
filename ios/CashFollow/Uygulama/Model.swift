@@ -256,6 +256,7 @@ final class Model: ObservableObject {
         guard let motor else { return }
         let home = motor.homeOf(country: code)
         motor.setHome(home)
+        motor.setCashDef(Depo.cashDef)
         constants = motor.constants()
         let c = constants?.currencies.first { $0.code == home }
         Bicim.home = home
@@ -265,6 +266,14 @@ final class Model: ObservableObject {
     }
 
     var home: String { Bicim.home }
+
+    // Nakit sayılanlar (Özet'teki Nakit grafiği); nil varsayılana döner
+    var cashDef: [String] { Depo.cashDef ?? constants?.cashDefault ?? [home, "MMF"] }
+    func setCashDef(_ list: [String]?) {
+        Depo.cashDef = list
+        motor?.setCashDef(list)
+        revision += 1
+    }
     var marketsAllowed: Bool { constants?.markets ?? true }
 
     // Ülke değişince tutarlar çevrilmez: kayıtlar yazıldıkları para biriminde kalır
