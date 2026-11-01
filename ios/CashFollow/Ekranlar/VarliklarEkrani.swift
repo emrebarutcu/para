@@ -4,7 +4,7 @@ import SwiftUI
 // (get_assets, list_entries; web'deki Varlıklar sekmesi)
 struct VarliklarEkrani: View {
     @EnvironmentObject private var model: Model
-    @State private var adding = false
+    @State private var ekle: HareketTuru?
 
     var body: some View {
         NavigationStack {
@@ -40,8 +40,16 @@ struct VarliklarEkrani: View {
             .navigationTitle("Varlıklar")
             .sayfaZemini()
             .yenilenebilir(model)
-            .yuzenDugme("Hareket ekle") { adding = true }
-            .sheet(isPresented: $adding) { HareketFormu() }
+            .overlay(alignment: .bottomTrailing) {
+                Menu {
+                    ForEach(HareketTuru.allCases.filter { $0 != .piyasa || model.marketsAllowed }) { t in
+                        Button { ekle = t } label: { Label(t.baslik, systemImage: t.simge) }
+                    }
+                } label: { YuzenSimge() }
+                .accessibilityLabel("Ekle")
+                .padding(.trailing, 18).padding(.bottom, 14)
+            }
+            .sheet(item: $ekle) { HareketFormu(tur: $0) }
         }
     }
 
@@ -127,12 +135,14 @@ struct VarliklarEkrani: View {
 struct HareketListesiBolumu: View {
     @EnvironmentObject private var model: Model
     @State private var silinecek: Hareket?
+    @State private var duzenle: Hareket?
+    @State private var hepsi = false
 
     var body: some View {
-        Okunan(tool: "list_entries", args: ["limit": 200]) { (l: HareketListesi) in
+        Okunan(tool: "list_entries", args: ["limit": hepsi ? 500 : 11], key: "\(hepsi)") { (l: HareketListesi) in
             Kart(dolgu: 14) {
                 if l.entries.isEmpty { Text("Hareket yok").foregroundStyle(Tema.metin3) }
-                SatirListesi(veri: l.entries) { e in
+                SatirListesi(veri: hepsi ? l.entries : Array(l.entries.prefix(10))) { e in
                     HStack(alignment: .top, spacing: 12) {
                         Avatar(ad: e.person, renk: model.kisiRengi(e.person))
                         VStack(alignment: .leading, spacing: 3) {
@@ -151,11 +161,20 @@ struct HareketListesiBolumu: View {
                         }
                     }
                     .contentShape(Rectangle())
+                    .onTapGesture { duzenle = e }
                     .contextMenu {
+                        Button("Düzenle", systemImage: "pencil") { duzenle = e }
                         Button("Sil", systemImage: "trash", role: .destructive) { silinecek = e }
                     }
                 }
+                if !hepsi && l.entries.count > 10 {
+                    Ayirici()
+                    Button("Tümünü göster") { hepsi = true }
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin2)
+                        .frame(maxWidth: .infinity).padding(.top, 4)
+                }
             }
+            .sheet(item: $duzenle) { HareketFormu(duzenle: $0) }
             .confirmationDialog(silinecek.map { "\($0.description.isEmpty ? $0.asset : $0.description) silinsin mi?" } ?? "",
                                 isPresented: Binding(get: { silinecek != nil }, set: { if !$0 { silinecek = nil } }), titleVisibility: .visible) {
                 Button("Sil", role: .destructive) {
@@ -167,10 +186,36 @@ struct HareketListesiBolumu: View {
     }
 }
 
-// Yeni varlık hareketi (add_entry): maaş, döviz / altın alışı, fon / hisse alış ve satışı
+// Varlık hareketinin türü: + düğmesinin menüsünden; her biri kendi sade formuyla
+enum HareketTuru: String, Identifiable, CaseIterable {
+    case gelir, gider, doviz, piyasa
+    var id: String { rawValue }
+    var baslik: String {
+        switch self {
+        case .gelir: return "Gelir"
+        case .gider: return "Nakit gider"
+        case .doviz: return "Döviz / altın"
+        case .piyasa: return "Fon / hisse"
+        }
+    }
+    var simge: String {
+        switch self {
+        case .gelir: return "arrow.down.circle"
+        case .gider: return "arrow.up.circle"
+        case .doviz: return "dollarsign.circle"
+        case .piyasa: return "chart.line.uptrend.xyaxis"
+        }
+    }
+}
+
+// Varlık hareketi ekleme (add_entry) ve düzenleme (update_entry): gelir (maaş), nakit gider, döviz / altın alış-satış,
+// fon / hisse alış-satış
 struct HareketFormu: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
+    var tur: HareketTuru = .gelir
+    var duzenle: Hareket? = nil
+    @State private var yuklendi = false
     @State private var kind = Bicim.home     // ana para birimi, diğer para birimleri, GAU, FON, BIST
     @State private var ticker = ""
     @State private var direction = "in"
@@ -178,7 +223,7 @@ struct HareketFormu: View {
     @State private var desc = ""
     @State private var date = Date()
     @State private var monthly = false
-    @State private var settle = false
+    @State private var settle = true
     @State private var price = ""
     @State private var person = ""
     @State private var people: [Kisi] = []
@@ -187,75 +232,129 @@ struct HareketFormu: View {
 
     private var market: Bool { kind == "FON" || kind == "BIST" }
     private var asset: String { market ? "\(kind):\(ticker.trimmingCharacters(in: .whitespaces).uppercased())" : kind }
+    private var gercekTur: HareketTuru {
+        if market { return .piyasa }
+        if kind != Bicim.home { return .doviz }
+        return tur == .gider || (duzenle != nil && direction == "out") ? .gider : .gelir
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Varlık", selection: $kind) {
-                        ForEach(model.constants?.assets ?? []) { a in Text(a.name).tag(a.code) }
-                        if model.marketsAllowed {
+                    switch gercekTur {
+                    case .gelir, .gider:
+                        TextField(gercekTur == .gelir ? "Açıklama (ör. Maaş)" : "Açıklama (ör. Kira, market)", text: $desc)
+                        TextField("Tutar (\(Bicim.homeSymbol))", text: $amount).keyboardType(.decimalPad)
+                    case .doviz:
+                        Picker("Ne", selection: $kind) {
+                            ForEach(dovizler) { a in Text(a.name).tag(a.code) }
+                        }
+                        Picker("İşlem", selection: $direction) {
+                            Text("Aldım / geldi").tag("in")
+                            Text("Sattım / harcadım").tag("out")
+                        }
+                        .pickerStyle(.segmented)
+                        TextField(kind == "GAU" ? "Gram" : "Tutar (\(kind))", text: $amount).keyboardType(.decimalPad)
+                        TextField("Açıklama (isteğe bağlı)", text: $desc)
+                    case .piyasa:
+                        Picker("Tür", selection: $kind) {
                             Text("Fon (TEFAS)").tag("FON")
                             Text("Hisse (BIST)").tag("BIST")
                         }
-                        Section("Diğer para birimleri") {
-                            ForEach((model.constants?.currencies ?? []).filter { c in !(model.constants?.assets ?? []).contains { $0.code == c.code } }) { c in
-                                Text(c.name).tag(c.code)
-                            }
-                        }
-                    }
-                    if market {
+                        .pickerStyle(.segmented)
                         TextField(kind == "FON" ? "Fon kodu (ör. AFT)" : "İşlem kodu (ör. THYAO)", text: $ticker)
                             .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                        Picker("İşlem", selection: $direction) {
+                            Text("Alış").tag("in")
+                            Text("Satış").tag("out")
+                        }
+                        .pickerStyle(.segmented)
+                        TextField("Adet", text: $amount).keyboardType(.decimalPad)
+                        TextField("Birim fiyat (\(Bicim.homeSymbol), boşsa bugünkü)", text: $price).keyboardType(.decimalPad)
                     }
-                    Picker("Yön", selection: $direction) {
-                        Text(market ? "Alış" : "Giriş").tag("in")
-                        Text(market ? "Satış" : "Çıkış").tag("out")
-                    }
-                    .pickerStyle(.segmented)
-                    TextField(market ? "Adet" : kind == "GAU" ? "Gram" : "Tutar (\(kind))", text: $amount).keyboardType(.decimalPad)
-                    TextField(market ? "Açıklama (isteğe bağlı)" : "Açıklama (ör. Maaş)", text: $desc)
                     DatePicker("Tarih", selection: $date, displayedComponents: .date).environment(\.locale, Bicim.locale)
                     if people.count > 1 {
-                        Picker("Kişi", selection: $person) { ForEach(people) { Text($0.name).tag($0.id) } }
+                        Picker("Kimin", selection: $person) { ForEach(people) { Text($0.name).tag($0.id) } }
                     }
                 }
-                if kind == Bicim.home || (!market && !settle) {
-                    Section { Toggle("Her ay tekrarla", isOn: $monthly) }
-                }
-                if kind != Bicim.home {
+                if (gercekTur == .gelir || gercekTur == .gider) && duzenle?.repeat == nil {
                     Section {
-                        if !market {
-                            Toggle(direction == "in" ? "\(Bicim.homeShort) ile alındı" : "\(Bicim.homeShort) karşılığı satıldı", isOn: $settle)
-                        }
-                        if market || settle {
-                            TextField(market ? "Birim fiyat (\(Bicim.homeSymbol), boşsa bugünkü)" : "Kur (\(Bicim.homeSymbol), boşsa bugünkü)", text: $price).keyboardType(.decimalPad)
+                        Toggle("Her ay tekrarla", isOn: $monthly)
+                    } footer: {
+                        Text(gercekTur == .gelir ? "Maaş gibi düzenli gelirler her ay Nakit grafiğine girer." : "Kartla ödenen harcamaları Harcamalar'dan ekle; burası nakit ödemeler için.")
+                    }
+                }
+                if gercekTur == .doviz {
+                    Section {
+                        Toggle(direction == "in" ? "\(Bicim.homeShort) ile aldım" : "\(Bicim.homeShort) karşılığı sattım", isOn: $settle)
+                        if settle {
+                            TextField("Kur (\(Bicim.homeSymbol), boşsa bugünkü)", text: $price).keyboardType(.decimalPad)
                         }
                     } footer: {
-                        Text(market
-                             ? "Fiyat varsa tutar \(Bicim.homeShort) bakiyesinden düşer (alış) ya da ona eklenir (satış)."
-                             : "\(Bicim.homeShort) ile alınan döviz ve altın gelir sayılmaz: tutar \(Bicim.homeShort) bakiyesinden düşer.")
+                        Text(settle
+                             ? "Karşılığı \(Bicim.homeShort) bakiyenden düşer (alış) ya da ona eklenir (satış)."
+                             : "Hediye, maaş gibi \(Bicim.homeShort) ödemeden gelen ya da giden miktar.")
                     }
                 }
                 HataMetni(text: error)
             }
-            .navigationTitle("Hareket ekle")
+            .tint(Tema.metin)
+            .navigationTitle(duzenle == nil ? gercekTur.baslik : "Hareketi düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") { Task { await save() } }.disabled(!valid || saving)
+                    Button("Kaydet") { Task { await save() } }.fontWeight(.semibold).disabled(!valid || saving)
                 }
             }
-            .onAppear {
-                people = (try? model.read("list_people") as KisiListesi)?.people ?? []
-                if person.isEmpty { person = people.first?.id ?? "ben" }
+            .onAppear(perform: hazirla)
+        }
+    }
+
+    private var dovizler: [Sabitler.Varlik] {
+        let tum = (model.constants?.assets ?? []) + (model.constants?.currencies ?? [])
+        var seen = Set<String>()
+        return tum.filter { $0.code != Bicim.home && seen.insert($0.code).inserted }
+    }
+
+    private func hazirla() {
+        people = (try? model.read("list_people") as KisiListesi)?.people ?? []
+        if person.isEmpty { person = people.first?.id ?? "ben" }
+        guard !yuklendi else { return }
+        yuklendi = true
+        if let e = duzenle {
+            if e.asset.hasPrefix("FON:") || e.asset.hasPrefix("BIST:") {
+                kind = String(e.asset.split(separator: ":")[0])
+                ticker = String(e.asset.split(separator: ":").last ?? "")
+            } else {
+                kind = e.asset
             }
+            direction = e.direction
+            amount = e.amount.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...4)))
+            desc = e.description
+            date = Bicim.date(e.date) ?? Date()
+            monthly = e.repeat != nil
+            settle = e.settledInTry ?? false
+            if let p = e.price { price = p.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...4))) }
+            if let p = people.first(where: { $0.name == e.person }) { person = p.id }
+            return
+        }
+        switch tur {
+        case .gelir: direction = "in"
+        case .gider: direction = "out"
+        case .doviz: kind = dovizler.first?.code ?? "USD"
+        case .piyasa: kind = "FON"
         }
     }
 
     private var valid: Bool {
-        (Bicim.parse(amount) ?? 0) > 0 && (market ? !ticker.trimmingCharacters(in: .whitespaces).isEmpty : !desc.trimmingCharacters(in: .whitespaces).isEmpty || settle)
+        guard (Bicim.parse(amount) ?? 0) > 0 else { return false }
+        switch gercekTur {
+        case .piyasa: return !ticker.trimmingCharacters(in: .whitespaces).isEmpty
+        case .doviz: return true
+        case .gelir, .gider: return !desc.trimmingCharacters(in: .whitespaces).isEmpty
+        }
     }
 
     private func save() async {
@@ -265,13 +364,14 @@ struct HareketFormu: View {
             "asset": asset, "direction": direction, "amount": Bicim.parse(amount) ?? 0,
             "description": desc.trimmingCharacters(in: .whitespaces), "date": Bicim.key(date), "person": person,
         ]
-        if monthly && (kind == Bicim.home || (!market && !settle)) { a["repeat"] = 0 }
-        if !market && kind != Bicim.home { a["settle"] = settle }
-        if let p = Bicim.parse(price), p > 0, market || settle { a["price"] = p }
+        let tekrarlanabilir = gercekTur == .gelir || gercekTur == .gider
+        if tekrarlanabilir && monthly && duzenle?.repeat == nil { a["repeat"] = 0 }
+        if gercekTur == .doviz { a["settle"] = settle }
+        if let p = Bicim.parse(price), p > 0, market || (gercekTur == .doviz && settle) { a["price"] = p }
         // Fon / hisse kodu ve bugünkü fiyatı Worker'dan (add_entry kodu bunlarla doğrular)
         if market { await model.fetchPrices([asset]) }
         do {
-            try model.write("add_entry", a)
+            if let e = duzenle { a["id"] = e.id; try model.write("update_entry", a) } else { try model.write("add_entry", a) }
             dismiss()
         } catch {
             self.error = error.localizedDescription

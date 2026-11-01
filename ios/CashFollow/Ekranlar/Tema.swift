@@ -232,7 +232,6 @@ struct RenkliAd: View {
             Text(ad).lineLimit(1)
         }
         .font(.footnote).foregroundStyle(Tema.metin2)
-        .fixedSize()
     }
 }
 
@@ -336,6 +335,18 @@ struct KucukDugme: View {
     }
 }
 
+// + simgesi, siyah yuvarlatılmış kare (menülü düğmelerde de)
+struct YuzenSimge: View {
+    var body: some View {
+        Image(systemName: "plus")
+            .font(.system(size: 24, weight: .medium))
+            .foregroundStyle(Tema.ustMetin)
+            .frame(width: 58, height: 58)
+            .background(Tema.metin, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
+    }
+}
+
 // Sağ altta siyah yuvarlak + düğmesi (web: .fab)
 struct YuzenDugme: View {
     let etiket: String
@@ -371,5 +382,44 @@ extension View {
     // Formlar da web'in zemininde
     func formZemini() -> some View {
         scrollContentBackground(.hidden).background(Tema.zemin)
+    }
+}
+
+// Sığmayanı alt satıra geçiren dizilim (lejantlar, kişi payları). HStack + fixedSize genişliği aşınca bütün sayfa
+// sağa taşıyordu.
+struct Akan: Layout {
+    var aralik: CGFloat = 12
+    var satirAraligi: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let r = diz(proposal.width ?? .infinity, subviews)
+        return CGSize(width: proposal.width ?? r.genislik, height: r.yukseklik)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let r = diz(bounds.width, subviews)
+        for (i, p) in r.yerler.enumerated() {
+            subviews[i].place(at: CGPoint(x: bounds.minX + p.x, y: bounds.minY + p.y), proposal: ProposedViewSize(r.boyutlar[i]))
+        }
+    }
+
+    private func diz(_ genislik: CGFloat, _ subviews: Subviews) -> (yerler: [CGPoint], boyutlar: [CGSize], genislik: CGFloat, yukseklik: CGFloat) {
+        var yerler: [CGPoint] = [], boyutlar: [CGSize] = []
+        var x: CGFloat = 0, y: CGFloat = 0, satir: CGFloat = 0, enGenis: CGFloat = 0
+        for s in subviews {
+            var b = s.sizeThatFits(.unspecified)
+            b.width = min(b.width, genislik)
+            if x > 0, x + b.width > genislik {
+                x = 0
+                y += satir + satirAraligi
+                satir = 0
+            }
+            yerler.append(CGPoint(x: x, y: y))
+            boyutlar.append(b)
+            x += b.width + aralik
+            satir = max(satir, b.height)
+            enGenis = max(enGenis, x - aralik)
+        }
+        return (yerler, boyutlar, enGenis, y + satir)
     }
 }

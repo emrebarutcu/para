@@ -274,7 +274,7 @@ struct AylikOdemeGrafigi: View {
                 Text("Önümüzdeki aylarda ödenecek taksit yok.").font(.footnote).foregroundStyle(Tema.metin3)
             } else {
                 if adlar.count > 1 {
-                    HStack(spacing: 12) { ForEach(adlar, id: \.self) { RenkliAd(ad: $0, renk: renk($0)) } }
+                    Akan { ForEach(adlar, id: \.self) { RenkliAd(ad: $0, renk: renk($0)) } }
                 }
                 Chart(parcalar) { p in
                     BarMark(x: .value("Ay", p.ay), y: .value("Tutar", p.tutar), width: .ratio(0.62))
@@ -301,6 +301,8 @@ struct AylikOdemeGrafigi: View {
 
 struct KategoriKarti: View {
     let months: [KategoriHarcamasi.Ay]
+    var secili: String?? = nil                        // süzülen kategori (Harcamalar)
+    var sec: ((KategoriSecimi) -> Void)? = nil        // varsa satıra dokununca çağrılır
     @State private var secim: String?
 
     var body: some View {
@@ -309,7 +311,7 @@ struct KategoriKarti: View {
         Kart {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Harcamalar · kategoriye göre").font(.system(size: 17, weight: .semibold))
+                    Text(sec == nil ? "Harcamalar · kategoriye göre" : "Kategoriler").font(.system(size: 17, weight: .semibold))
                     HStack(spacing: 4) {
                         Button { if i > 0 { secim = months[i - 1].month } } label: { Image(systemName: "chevron.left") }
                             .disabled(i <= 0).accessibilityLabel("Önceki ay")
@@ -329,8 +331,17 @@ struct KategoriKarti: View {
                 if liste.isEmpty {
                     Text("Bu ayda kategorili harcama yok.").font(.footnote).foregroundStyle(Tema.metin3)
                 }
-                ForEach(liste, id: \.self) { k in satir(k) }
-                Text("Taksitli alışveriş tamamıyla alındığı aya yazılır.").font(.footnote).foregroundStyle(Tema.metin3)
+                ForEach(liste, id: \.self) { k in
+                    if let sec {
+                        Button { sec(KategoriSecimi(id: k.category, ad: k.name)) } label: { satir(k).contentShape(Rectangle()) }
+                            .buttonStyle(.plain)
+                            .opacity(secili == nil || secili! == k.category ? 1 : 0.4)
+                    } else {
+                        satir(k)
+                    }
+                }
+                Text(sec == nil ? "Taksitli alışveriş tamamıyla alındığı aya yazılır." : "Kategoriye dokununca harcamalar süzülür. Taksitli alışveriş tamamıyla alındığı aya yazılır.")
+                    .font(.footnote).foregroundStyle(Tema.metin3)
             }
         }
     }

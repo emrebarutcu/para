@@ -6,6 +6,7 @@ struct BorclarEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var kartEkle = false
     @State private var kartDuzenle: KartGorunumu?
+    @State private var kartDetay: KartGorunumu?
     @State private var kartSil: KartGorunumu?
     @State private var borcEkle = false
     @State private var secili: Borclar.Kayit?
@@ -22,8 +23,6 @@ struct BorclarEkrani: View {
                     Kart {
                         Text("Toplam borç").font(.subheadline).foregroundStyle(Tema.metin2)
                         BuyukTutar(deger: b.totals.debtsTry)
-                        Text("Kartlar, krediler ve kişilere borçlar; döviz ve altın bugünkü kurla.")
-                            .font(.footnote).foregroundStyle(Tema.metin3)
                         Ayirici()
                         IstatistikSatiri(ogeler: [
                             Istatistik(etiket: "Alacak", deger: Bicim.tl(b.totals.receivablesTry), renk: b.totals.receivablesTry > 0 ? Tema.iyi : Tema.metin),
@@ -31,49 +30,21 @@ struct BorclarEkrani: View {
                         ])
                     }
 
-                    BolumBasligi(baslik: "Kartlar")
                     Okunan(tool: "list_cards") { (l: KartListesi) in
-                        VStack(spacing: 12) {
-                            ForEach(l.cards) { c in
-                                let borc = b.cards.first { $0.cardId == c.id }
-                                VStack(spacing: 8) {
-                                    Button { kartDuzenle = c } label: { KartGorseli(c: c) }
-                                        .buttonStyle(.plain)
-                                        .contextMenu {
-                                            Button("Düzenle", systemImage: "pencil") { kartDuzenle = c }
-                                            Button("Sil", systemImage: "trash", role: .destructive) { kartSil = c }
-                                        }
-                                    if let borc, let unpaid = borc.unpaid, unpaid > 0.004 {
-                                        Button { odeme = .kart(id: c.id, ad: c.name, tutar: unpaid) } label: {
-                                            HStack {
-                                                Image(systemName: "checkmark.circle")
-                                                Text("Ödenmemiş ekstre \(Bicim.tl(unpaid))")
-                                                Spacer()
-                                                Text("Ödendi").font(.subheadline.weight(.semibold))
-                                            }
-                                            .font(.subheadline)
-                                            .foregroundStyle((borc.overdue ?? 0) > 0.004 ? Tema.tehlike : Tema.metin)
-                                            .padding(12)
-                                            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
+                        Kart(dolgu: 14) {
+                            KartBasligi(baslik: "Kartlar") {
+                                Button { kartEkle = true } label: { Label("Ekle", systemImage: "plus") }
+                                    .font(.subheadline.weight(.medium)).foregroundStyle(Tema.metin2)
                             }
-                            Button { kartEkle = true } label: {
-                                VStack(spacing: 6) {
-                                    Image(systemName: "plus").font(.title2)
-                                    Text("Yeni kart").font(.subheadline.weight(.medium))
-                                }
-                                .foregroundStyle(Tema.metin2)
-                                .frame(maxWidth: .infinity, minHeight: l.cards.isEmpty ? 120 : 76)
-                                .background(RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous)
-                                    .strokeBorder(Tema.cizgi2, style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
-                            }
-                            .buttonStyle(.plain)
                             if l.cards.isEmpty {
                                 Text("Kesim ve son ödeme gününü girince taksitlerin hangi ay ödeneceği hesaplanır.")
-                                    .font(.footnote).foregroundStyle(Tema.metin3)
+                                    .font(.subheadline).foregroundStyle(Tema.metin3)
+                            }
+                            SatirListesi(veri: l.cards) { c in
+                                let borc = b.cards.first { $0.cardId == c.id }
+                                KartSatiri(c: c, borc: borc,
+                                           ac: { kartDetay = c },
+                                           odendi: { odeme = .kart(id: c.id, ad: c.name, tutar: borc?.unpaid ?? 0) })
                             }
                         }
                     }
@@ -140,6 +111,12 @@ struct BorclarEkrani: View {
             }
             .sheet(isPresented: $kartEkle) { KartFormu(card: nil) }
             .sheet(item: $kartDuzenle) { KartFormu(card: $0) }
+            .sheet(item: $kartDetay) { c in
+                KartDetayi(c: c,
+                           duzenle: { kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { kartDuzenle = c } },
+                           sil: { kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { kartSil = c } },
+                           odendi: { t in kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { odeme = .kart(id: c.id, ad: c.name, tutar: t) } })
+            }
             .sheet(isPresented: $borcEkle) { BorcFormu() }
             .sheet(item: $secili) { BorcDetayi(d: $0) }
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }

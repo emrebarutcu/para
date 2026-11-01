@@ -54,8 +54,8 @@ struct AkisEkrani: View {
             .padding(.top, 8)
             let kisiler = m.byPerson.filter { $0.value > 0.004 }.sorted { $0.key < $1.key }
             if kisiler.count > 1 {
-                HStack(spacing: 12) {
-                    ForEach(Array(kisiler.enumerated()), id: \.offset) { _, k in RenkliAd(ad: "\(k.key) \(Bicim.tl(k.value))", renk: model.kisiRengi(k.key)) }
+                Akan {
+                    ForEach(Array(kisiler.enumerated()), id: \.offset) { _, k in RenkliAd(ad: "\(k.key) \(Bicim.tl(k.value, fraction: false))", renk: model.kisiRengi(k.key)) }
                 }
                 .padding(.horizontal, 4)
             }

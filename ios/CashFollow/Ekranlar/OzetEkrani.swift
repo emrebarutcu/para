@@ -1,11 +1,12 @@
 import SwiftUI
 
-// Özet: bu ay ödenecek, içgörüler, nakit, sıradaki ödemeler, kişiler, kategoriler ve aylık ödemeler (web'deki Özet sekmesi,
-// aynı sıra ve görünüm)
+// Özet: yalnızca "bu ay ve yakında" — bu ay ödenecek, sıradaki ödemeler, en önemli içgörüler, nakit (ios/UX.md).
+// Kişilerin payı Akış'ta, kategoriler Harcamalar'da, aylık grafik Akış'ta.
 struct OzetEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var adding = false
     @State private var ayarlar = false
+    @State private var odeme: OdemeHedefi?
 
     var body: some View {
         NavigationStack {
@@ -14,17 +15,10 @@ struct OzetEkrani: View {
                 Okunan(tool: "get_overview") { (o: Ozet) in
                     VStack(alignment: .leading, spacing: 14) {
                         ustKart(o)
+                        siradakiler(o)
                         IcgoruBolumu()
                         NakitKarti()
-                        siradakiler(o)
-                        if o.people.count > 1 { kisiler(o) }
                     }
-                }
-                Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
-                    KategoriKarti(months: k.months)
-                }
-                Okunan(tool: "get_cashflow", args: ["months": 12, "include_items": false]) { (a: Akis) in
-                    AylikOdemeGrafigi(months: a.months)
                 }
             }
             .navigationTitle("Özet")
@@ -39,6 +33,7 @@ struct OzetEkrani: View {
             }
             .sheet(isPresented: $adding) { HarcamaFormu() }
             .sheet(isPresented: $ayarlar) { AyarlarEkrani() }
+            .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
         }
     }
 
@@ -67,51 +62,46 @@ struct OzetEkrani: View {
         String(Bicim.month(ym).split(separator: " ").first ?? "")
     }
 
-    // Sıradaki ödemeler: tarih rozeti, kart / nakit, ne zaman, tutar
+    // Sıradaki ödemeler: tarih rozeti, kart / nakit, ne zaman, tutar; gecikmiş ekstrede "Ödendi"
     private func siradakiler(_ o: Ozet) -> some View {
         Kart {
             KartBasligi("Sıradaki ödemeler")
             if o.upcomingPayments.isEmpty {
                 Text("Ödenecek taksit yok").font(.subheadline).foregroundStyle(Tema.metin3)
             }
-            SatirListesi(veri: o.upcomingPayments) { p in
+            SatirListesi(veri: Array(o.upcomingPayments.prefix(5))) { p in
                 HStack(spacing: 12) {
                     TarihRozeti(tarih: p.date, gec: p.late == true)
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
                             Image(systemName: p.card == "Nakit" ? "banknote" : "creditcard")
                                 .font(.footnote).foregroundStyle(model.kartRengi(p.card))
-                            Text(p.card).font(.body.weight(.semibold))
+                            Text(p.card).font(.body.weight(.semibold)).lineLimit(1)
                         }
-                        Text("\(Bicim.relative(p.date)) · \(Bicim.day(p.date))")
+                        Text(p.late == true ? "gecikti · \(Bicim.day(p.date))" : "\(Bicim.relative(p.date)) · \(Bicim.day(p.date))")
                             .font(.footnote).foregroundStyle(p.late == true ? Tema.tehlike : Tema.metin3)
                     }
                     Spacer()
-                    Text(Bicim.tl(p.total)).font(.body.weight(.semibold)).monospacedDigit()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(Bicim.tl(p.total)).font(.body.weight(.semibold)).monospacedDigit().fixedSize()
+                        if p.late == true, p.card != "Nakit" {
+                            Button("Ödendi") { odendi(p) }
+                                .font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin)
+                                .padding(.horizontal, 10).padding(.vertical, 4)
+                                .background(Tema.yuzey2, in: Capsule())
+                                .buttonStyle(.plain)
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Kişiler: bu ay payı ve kalan
-    private func kisiler(_ o: Ozet) -> some View {
-        Kart {
-            KartBasligi(baslik: "Kişiler") {
-                Text(Bicim.month(o.month)).font(.subheadline).foregroundStyle(Tema.metin3)
-            }
-            SatirListesi(veri: o.people) { p in
-                HStack(spacing: 12) {
-                    Avatar(ad: p.name, renk: model.kisiRengi(p.name))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(p.name).font(.body.weight(.semibold))
-                        Text("kalan \(Bicim.tl(p.remaining))").font(.footnote).foregroundStyle(Tema.metin3).monospacedDigit()
-                    }
-                    Spacer()
-                    Text(Bicim.tl(p.dueThisMonth)).font(.body.weight(.semibold)).monospacedDigit()
-                }
-            }
-        }
+    private func odendi(_ p: Ozet.Yaklasan) {
+        guard let c = (try? model.read("list_cards") as KartListesi)?.cards.first(where: { $0.name == p.card }) else { return }
+        odeme = .kart(id: c.id, ad: c.name, tutar: c.tracking?.unpaid ?? p.total)
     }
+
 }
 
 // İçgörüler: en önemlileri, "Tümü" ile hepsi (get_insights)
@@ -123,12 +113,12 @@ struct IcgoruBolumu: View {
             if !i.insights.isEmpty {
                 Kart {
                     KartBasligi(baslik: "İçgörüler") {
-                        if i.insights.count > 3 {
+                        if i.insights.count > 2 {
                             Button(hepsi ? "Daha az" : "Tümü (\(i.insights.count))") { withAnimation { hepsi.toggle() } }
                                 .font(.subheadline).foregroundStyle(Tema.metin2)
                         }
                     }
-                    SatirListesi(veri: hepsi ? i.insights : Array(i.insights.prefix(3))) { IcgoruSatiri(i: $0) }
+                    SatirListesi(veri: hepsi ? i.insights : Array(i.insights.prefix(2))) { IcgoruSatiri(i: $0) }
                 }
             }
         }
