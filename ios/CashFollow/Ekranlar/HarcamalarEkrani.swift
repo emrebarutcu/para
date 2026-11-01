@@ -460,6 +460,7 @@ struct AlabilirMiyim: View {
         let nakitVar = sim.months.contains { abs($0.freeCashBefore) > 0.004 }
         let oneri = sim.cardsCompared.max { $0.daysUntilFirstPayment < $1.daysUntilFirstPayment }
         let seciliAd = cards.first { $0.id == secili }?.name
+        let limitYok = (sim.card?.availableAfter ?? 0) < 0 && (sim.card?.limit ?? 0) > 0
         Kart {
             KartBasligi(baslik: "Alabilir miyim?") {
                 if let n = p.nextPayment { Text(Bicim.relative(n.date)).font(.footnote).foregroundStyle(Tema.metin3) }
@@ -489,11 +490,11 @@ struct AlabilirMiyim: View {
                 .foregroundStyle(d.freeCashAfter < 0 ? Tema.tehlike : Tema.iyi)
             }
             if !tekrar, let o = oneri, o.card != seciliAd, let id = cards.first(where: { $0.name == o.card })?.id,
-               let su = sim.cardsCompared.first(where: { $0.card == seciliAd }), o.daysUntilFirstPayment - su.daysUntilFirstPayment >= 10 {
+               limitYok || (sim.cardsCompared.first(where: { $0.card == seciliAd }).map { o.daysUntilFirstPayment - $0.daysUntilFirstPayment >= 10 } ?? false) {
                 Button { sec(id) } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "lightbulb")
-                        Text("\(o.card) ile alırsan ilk ödeme \(Bicim.day(o.firstPayment)) (\(o.daysUntilFirstPayment) gün sonra)")
+                        Text((limitYok ? "Limit yetmiyor. " : "") + "\(o.card) ile alırsan ilk ödeme \(Bicim.day(o.firstPayment)) (\(o.daysUntilFirstPayment) gün sonra)")
                             .multilineTextAlignment(.leading)
                         Spacer(minLength: 4)
                         Text("Seç").fontWeight(.semibold)
