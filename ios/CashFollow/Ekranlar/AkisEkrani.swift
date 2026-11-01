@@ -89,7 +89,7 @@ struct OdemeSatiri: View {
                         HStack(spacing: 6) {
                             Image(systemName: p.card == "Nakit" ? "banknote" : "creditcard")
                                 .font(.footnote).foregroundStyle(model.kartRengi(p.card))
-                            Text(p.card).font(.body.weight(.semibold)).foregroundStyle(Tema.metin)
+                            Text(p.card).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(1)
                         }
                         if p.notCounted == true {
                             Text("sayılmıyor").font(.footnote).foregroundStyle(Tema.metin3)
@@ -104,7 +104,7 @@ struct OdemeSatiri: View {
                     Spacer()
                     Text(Bicim.tl(p.total)).font(.body.weight(.semibold)).monospacedDigit()
                         .foregroundStyle(p.notCounted == true ? Tema.metin3 : Tema.metin)
-                        .layoutPriority(1)
+                        .fixedSize()
                     if !(p.items ?? []).isEmpty {
                         Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(Tema.metin3)
                             .rotationEffect(.degrees(acik ? 180 : 0))
