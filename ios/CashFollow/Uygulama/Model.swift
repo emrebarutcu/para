@@ -81,6 +81,33 @@ final class Model: ObservableObject {
         try engine().runJSON(tool, args)
     }
 
+    // ── Grafikler (nakit.js) ───────────────────────────────────────────────────
+
+    func cash(start: String, shift: Int) throws -> NakitSerisi {
+        try engine().cash(start: start, shift: shift)
+    }
+
+    // Geçmiş kapanışlar (/api/gecmis) dönem başına bir saat saklanır
+    private var histories: [Int: (codes: String, json: String, at: Date)] = [:]
+
+    // Varlığın seyri: range 1m, 3m, 6m, 1y, all; kayıt yoksa nil
+    func assetSeries(range: String) async throws -> VarlikSerisi? {
+        let motor = try engine()
+        let plan = try motor.assetPlan(range: range)
+        guard let span = plan.span else { return nil }
+        var series = "{}"
+        if !plan.codes.isEmpty {
+            let key = plan.codes.joined(separator: ",")
+            if let h = histories[span], h.codes == key, Date().timeIntervalSince(h.at) < 3600 {
+                series = h.json
+            } else if let json = try? await Piyasa.history(plan.codes, days: span) {
+                histories[span] = (key, json, Date())
+                series = json
+            }
+        }
+        return try motor.asset(range: range, seriesJSON: series)
+    }
+
     // ── Eşitleme ───────────────────────────────────────────────────────────────
 
     // Uygulama açılınca, öne gelince ve aşağı çekince: kurlar, fiyatlar; girişliyse çek ve yaz

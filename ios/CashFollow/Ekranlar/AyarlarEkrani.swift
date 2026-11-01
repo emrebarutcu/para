@@ -3,6 +3,7 @@ import SwiftUI
 // Ayarlar: hesap ve eşitleme, kişiler, sürüm
 struct AyarlarEkrani: View {
     @EnvironmentObject private var model: Model
+    @Environment(\.dismiss) private var dismiss
     @State private var login = false
     @State private var confirmLogout = false
     @State private var newPerson = ""
@@ -58,11 +59,12 @@ struct AyarlarEkrani: View {
                 }
 
                 Section {
-                    Link("Web'de aç (borçlar, içe aktarma, banka e-postaları)", destination: Yapilandirma.site)
+                    Link("Web'de aç (içe aktarma, banka e-postaları)", destination: Yapilandirma.site)
                     Satir(title: "Sürüm", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
                 }
             }
             .navigationTitle("Ayarlar")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Bitti") { dismiss() } } }
             .sheet(isPresented: $login) { GirisEkrani(welcome: false) }
             .confirmationDialog("Çıkış yapılsın mı?", isPresented: $confirmLogout, titleVisibility: .visible) {
                 Button("Çıkış yap", role: .destructive) { Task { await model.signOut() } }

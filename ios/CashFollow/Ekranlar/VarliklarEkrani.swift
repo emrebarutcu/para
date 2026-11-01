@@ -24,6 +24,8 @@ struct VarliklarEkrani: View {
                         }
                     }
 
+                    Section("Varlığın seyri") { VarlikSeyriKarti() }
+
                     Section("Bakiyeler") {
                         ForEach(v.assets.filter { $0.balance != 0 || $0.asset == "TRY" }, id: \.self) { a in
                             HStack {

@@ -10,6 +10,8 @@ Uygulamalar App Store / TestFlight'ta Apple'ın imzasıyla dağıtıldığı iç
 
   asc_imza.py olustur <çıktı klasörü>   → anahtar.pem, sertifika.cer, profil.mobileprovision; GITHUB_ENV'e CERT_SHA1, id'ler
   asc_imza.py sil <sertifika id> <profil id>
+  asc_imza.py durum <build numarası> [bekleme sn]  → App Store Connect'in build'i işlemesini bekler, son build'leri ve
+                                                    TestFlight gruplarını yazar; build geçersizse (INVALID) hata
 
 Ortam: KEY_ID, ISSUER_ID, KEY_PATH (.p8), BUNDLE_ID. Gerekli paketler: pyjwt, cryptography.
 """
@@ -91,9 +93,43 @@ def sil(cert_id, profile_id):
     print("Geçici sertifika ve profil silindi")
 
 
+def durum(build, wait=900):
+    bundle = os.environ["BUNDLE_ID"]
+    apps = call("GET", f"/apps?filter[bundleId]={bundle}")["data"]
+    if not apps:
+        sys.exit(f"App Store Connect'te {bundle} için uygulama kaydı yok (SETUP.md → TestFlight, 2. adım)")
+    app = apps[0]["id"]
+    deadline = time.time() + wait
+    while True:
+        builds = call("GET", f"/builds?filter[app]={app}&sort=-uploadedDate&limit=5"
+                             "&fields[builds]=version,processingState,uploadedDate,expired")["data"]
+        mine = [b for b in builds if b["attributes"]["version"] == str(build)]
+        state = mine[0]["attributes"]["processingState"] if mine else "YOK"
+        print(f"build {build}: {state}")
+        if state in ("VALID", "INVALID", "FAILED") or time.time() > deadline:
+            break
+        time.sleep(30)
+    print("Son build'ler:")
+    for b in builds:
+        a = b["attributes"]
+        print(f"  {a['version']}: {a['processingState']}, yüklendi {a['uploadedDate']}" + (", süresi doldu" if a.get("expired") else ""))
+    groups = call("GET", f"/apps/{app}/betaGroups?fields[betaGroups]=name,isInternalGroup,hasAccessToAllBuilds")["data"]
+    print("TestFlight grupları:" if groups else "TestFlight grubu yok: App Store Connect → TestFlight → Dahili Test → + ile oluştur")
+    for g in groups:
+        a = g["attributes"]
+        print(f"  {a['name']}: " + ("dahili" if a.get("isInternalGroup") else "harici")
+              + (", bütün build'ler" if a.get("hasAccessToAllBuilds") else ""))
+    if state in ("INVALID", "FAILED"):
+        sys.exit(f"::error::Build {build} {state}: Apple nedenini hesabın e-postasına yazdı (App Store Connect'ten gelen ileti)")
+    if state != "VALID":
+        print(f"::warning::Build {build} hâlâ {state}; birkaç dakika sonra TestFlight'ta görünür")
+
+
 if __name__ == "__main__":
     if sys.argv[1:2] == ["olustur"]:
         olustur(sys.argv[2])
+    elif sys.argv[1:2] == ["durum"]:
+        durum(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 900)
     elif sys.argv[1:2] == ["sil"]:
         sil(*(sys.argv[2:4] + ["", ""])[:2])
     else:

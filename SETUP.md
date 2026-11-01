@@ -210,7 +210,7 @@ Menü → "Uygulamayı yükle" ya da adres çubuğundaki install simgesi
 ### iOS uygulaması (`ios/`, Swift)
 
 Yerel SwiftUI uygulaması aynı depodadır: aynı Supabase tablolarını kullanır ve hesap kurallarını yeniden yazmaz. Web'in
-DOM'dan bağımsız modülleri (`tekrar`, `taksit`, `varlik`, `borc`, `kategori`, `eposta`, `icgoru`, `tablo`) ve asistan
+DOM'dan bağımsız modülleri (`tekrar`, `taksit`, `varlik`, `borc`, `kategori`, `eposta`, `icgoru`, `nakit`, `tablo`) ve asistan
 araçları (`mcp/tools.js`) JavaScriptCore'da çalışır (`ios/js/kopru.js`); ekranlar araçları çağırır (`get_overview`,
 `list_cards`, `add_purchase`…). Kesim / son ödeme, taksit, bakiye ve borç hesabı web, asistan ve iPhone'da tek koddan
 gelir; bir kural değişince iOS bir sonraki derlemede onu kullanır (Xcode'un "Web modülleri" adımı, `ios/scripts/js-kopyala.sh`,
@@ -223,10 +223,13 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
   (`Cekirdek/Senkron.swift`, PostgREST): yalnızca değişen satırlar yazılır, uygulama açılınca / öne gelince / aşağı çekince
   ve her kayıttan 1.5 sn sonra. Realtime yok. Girişsiz girilen veri girişte hesaba taşınabilir (`Tablo.combine`).
 - **Kurlar ve fiyatlar** `cashfollow.app/api/kur` ve `/api/fiyat`'tan gelir, çevrimdışı için saklanır.
-- **Bu sürümde:** Özet, harcamalar (ekleme önizlemeli, silme, taksit planı), kartlar (ekleme, ad / limit / son 4 hane,
-  silme), varlıklar ve hareketler (TL, döviz, altın, fon, hisse), kişiler, giriş / kayıt / şifre sıfırlama bağlantısı.
-  Borç / kredi, kart günlerinin değişmesi (`transition`), içe aktarma ve banka e-postaları web'de. Araçların doğrulama
-  hataları asistanlar için İngilizcedir; formlar çoğunu önceden engeller.
+- **Ekranlar:** Özet (içgörüler, Nakit grafiği, sıradaki ödemeler, aylık ödemeler grafiği, kategoriler, kartlar, kişiler),
+  Akış (ay ay ödeme günleri ve taksitler), Harcamalar (ekleme önizlemeli, taksit planı, silme), Borçlar (kartlar ve ekstre
+  ödemesi, kart payları, kişilerle borç / alacak, krediler; ödeme kaydı), Varlıklar (Varlığın seyri grafiği, bakiyeler,
+  fon / hisse, hareketler), Ayarlar (Özet'teki dişli: hesap, kişiler). Grafikler Swift Charts'la çizilir; Nakit ve Varlığın
+  seyri web'le aynı modülden hesaplanır (`nakit.js`, geçmiş fiyatlar `/api/gecmis`). Kart günlerinin değişmesi
+  (`transition`), içe aktarma ve banka e-postaları web'de. Araçların doğrulama hataları asistanlar için İngilizcedir; formlar
+  çoğunu önceden engeller.
 - **Sürüm:** mağaza sürümü web sürümüdür; `scripts/surum.sh` `MARKETING_VERSION`'ı da yazar, Sürüm denetimi ikisinin aynı
   olduğuna bakar. `CURRENT_PROJECT_VERSION` (build numarası) her TestFlight yüklemesinde elle artırılır.
 - **Denetim** (`.github/workflows/ios.yml`, iOS): `node --test ios/test/*.test.mjs` köprüyü JavaScriptCore'a benzer ortamda
