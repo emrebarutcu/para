@@ -369,7 +369,7 @@ struct BorcFormu: View {
                         HStack {
                             TextField(L("Tutar"), text: $tutar).keyboardType(.decimalPad)
                             Picker("", selection: $varlik) {
-                                ForEach(model.constants?.assets ?? []) { a in Text(a.code == "GAU" ? "gr" : a.symbol).tag(a.code) }
+                                ForEach(model.constants?.assets ?? []) { a in Text(a.code == "GAU" ? L("gr") : a.symbol).tag(a.code) }
                             }
                             .pickerStyle(.menu)
                             .labelsHidden()

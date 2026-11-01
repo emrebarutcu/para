@@ -74,7 +74,7 @@ struct VarliklarEkrani: View {
     }
 
     private func varlikKutusu(_ a: Varliklar.Bakiye) -> some View {
-        let simge = a.asset == "GAU" ? "gr" : (model.constants?.currencies.first { $0.code == a.asset }?.symbol ?? String(a.asset.prefix(1)))
+        let simge = a.asset == "GAU" ? L("gr") : (model.constants?.currencies.first { $0.code == a.asset }?.symbol ?? String(a.asset.prefix(1)))
         return kutu(simge: simge, ad: Bicim.paraAdi(a.asset, a.name), deger: Bicim.amount(a.balance, asset: a.asset),
                     alt: a.asset != Bicim.home ? a.tryValue.map { "≈ " + Bicim.tl($0) } : nil,
                     renk: a.balance < 0 ? Tema.tehlike : Tema.metin)
@@ -141,7 +141,7 @@ struct HareketListesiBolumu: View {
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 3) {
-                            Text((e.direction == "in" ? "+" : "−") + Bicim.amount(e.amount, asset: e.asset) + (e.repeat != nil ? "/ay" : ""))
+                            Text((e.direction == "in" ? "+" : "−") + Bicim.amount(e.amount, asset: e.asset) + (e.repeat != nil ? L("/ay") : ""))
                                 .font(.body.weight(.semibold)).monospacedDigit()
                                 .foregroundStyle(e.direction == "in" ? Tema.iyi : Tema.tehlike)
                             if let n = e.repeat?.nextDate {

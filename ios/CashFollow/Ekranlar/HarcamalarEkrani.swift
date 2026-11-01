@@ -148,7 +148,7 @@ struct HarcamaSatiri: View {
     }
 
     private var tutar: String {
-        if p.repeat != nil || p.installments > 1 { return Bicim.amount(p.perInstallment, asset: p.asset) + "/ay" }
+        if p.repeat != nil || p.installments > 1 { return Bicim.amount(p.perInstallment, asset: p.asset) + L("/ay") }
         return Bicim.amount(p.total, asset: p.asset)
     }
 
