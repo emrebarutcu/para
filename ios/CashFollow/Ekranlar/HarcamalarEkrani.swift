@@ -317,26 +317,36 @@ struct HarcamaFormu: View {
                         }
                     }
 
+                    if duzenle == nil, let sim { AlabilirMiyim(sim: sim, secili: card, tekrar: tekrar, cards: cards) { card = $0 } }
+                    else if let p = preview { duzenlemeOnizlemesi(p) }
                     Kart {
                         DatePicker("Tarih", selection: $date, displayedComponents: .date)
                             .environment(\.locale, Bicim.locale)
                         if people.count > 1 {
                             Ayirici()
-                            Picker("Kimin", selection: $person) {
-                                ForEach(people) { p in Text(p.name).tag(p.id) }
+                            HStack {
+                                Text("Kimin")
+                                Spacer()
+                                Picker("Kimin", selection: $person) {
+                                    ForEach(people) { p in Text(p.name).tag(p.id) }
+                                }
+                                .labelsHidden()
                             }
                         }
                         Ayirici()
-                        Picker("Kategori", selection: $category) {
-                            Text("Otomatik").tag("")
-                            ForEach(model.constants?.categories ?? []) { c in Text(c.name).tag(c.id) }
+                        HStack {
+                            Text("Kategori")
+                            Spacer()
+                            Picker("Kategori", selection: $category) {
+                                Text("Otomatik").tag("")
+                                ForEach(model.constants?.categories ?? []) { c in Text(c.name).tag(c.id) }
+                            }
+                            .labelsHidden()
                         }
                     }
                     .font(.subheadline)
                     .tint(Tema.metin)
 
-                    if duzenle == nil, let sim { AlabilirMiyim(sim: sim, secili: card, tekrar: tekrar, cards: cards) { card = $0 } }
-                    else if let p = preview { duzenlemeOnizlemesi(p) }
                     HataMetni(text: error)
                 }
                 .padding(16)
