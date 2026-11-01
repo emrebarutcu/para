@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Ayarlar: hesap ve eşitleme, kişiler, sürüm
+// Ayarlar: hesap ve eşitleme, ülke, nakit (dönem başı, nakit sayılanlar), kişiler, sürüm
 struct AyarlarEkrani: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
@@ -14,6 +14,7 @@ struct AyarlarEkrani: View {
     @State private var error: String?
     @State private var ulke = ""
     @State private var ulkeHatasi: String?
+    @AppStorage("nakit.baslangic") private var nakitBaslangic = "today"
 
     var body: some View {
         NavigationStack {
@@ -30,11 +31,11 @@ struct AyarlarEkrani: View {
                             .disabled(model.syncing)
                         Button("Çıkış yap", role: .destructive) { confirmLogout = true }
                     } else {
-                        Text("Veriler yalnızca bu cihazda. Giriş yapınca bulutta saklanır ve web (cashfollow.app), diğer cihazlar ve yapay zekâ asistanlarıyla eşitlenir.")
+                        Text("Veriler yalnızca bu telefonda. Giriş yapınca yedeklenir; web'de (cashfollow.app) ve diğer cihazlarında da görürsün.")
                             .font(.footnote).foregroundStyle(.secondary)
                         Button("Giriş yap / Kayıt ol") { login = true }
                     }
-                } header: { Text("Bulut senkronizasyonu") }
+                } header: { Text("Hesap") }
 
                 Section {
                     UlkeSecici(secim: $ulke)
@@ -53,18 +54,22 @@ struct AyarlarEkrani: View {
                 }
 
                 Section {
+                    Picker("Dönem başı", selection: $nakitBaslangic) {
+                        Text("Bugün").tag("today")
+                        ForEach(1...31, id: \.self) { Text("Ayın \(Bicim.gunEki($0))").tag(String($0)) }
+                    }
                     NavigationLink { NakitTanimi() } label: {
                         Satir(title: "Nakit sayılanlar", value: nakitMetni)
                     }
                 } header: { Text("Nakit") } footer: {
-                    Text("Özet'teki Nakit grafiği yalnızca bunları gösterir.")
+                    Text("Özet'teki Nakit grafiği bu günden başlayan bir ayı gösterir (ör. maaş günün) ve yalnızca nakit sayılanları toplar.")
                 }
 
                 Section {
                     Okunan(tool: "list_people") { (l: KisiListesi) in
                         ForEach(Array(l.people.enumerated()), id: \.element.id) { i, p in
                             HStack {
-                                Circle().fill(Renk.seri[i % Renk.seri.count]).frame(width: 10, height: 10)
+                                Avatar(ad: p.name, renk: model.kisiRengi(p.id), boyut: 28)
                                 Text(p.name)
                                 Spacer()
                                 if let owes = p.owesUser, abs(owes) >= 0.01 {
@@ -81,7 +86,7 @@ struct AyarlarEkrani: View {
                     }
                     HataMetni(text: error)
                 } header: { Text("Kişiler") } footer: {
-                    Text("İlk kişi kartları ödeyen sensin; diğerlerinin kartlarındaki harcamaları sana borç sayılır.")
+                    Text("Adını değiştirmek için dokun, silmek için sola kaydır. İlk kişi sensin; diğerlerinin senin kartlarındaki harcamaları sana borç sayılır.")
                 }
 
                 Section {

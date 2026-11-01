@@ -6,11 +6,14 @@ struct OzetEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var ayarlar = false
     @State private var odeme: OdemeHedefi?
+    @State private var baslarken: BaslarkenDurumu?
+    @AppStorage("baslarken.gizli") private var baslarkenGizli = false
 
     var body: some View {
         NavigationStack {
             Sayfa {
                 CevrimdisiNotu()
+                if !baslarkenGizli, let d = baslarken, !d.bitti { BaslarkenKarti(durum: d) }
                 Okunan(tool: "get_overview") { (o: Ozet) in
                     VStack(alignment: .leading, spacing: 14) {
                         ustKart(o)
@@ -27,15 +30,16 @@ struct OzetEkrani: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { EsitlemeDurumu() }
                 ToolbarItem(placement: .primaryAction) {
-                    Button { ayarlar = true } label: { Image(systemName: "slider.horizontal.3") }.accessibilityLabel("Ayarlar")
+                    Button { ayarlar = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Ayarlar")
                 }
             }
             .sheet(isPresented: $ayarlar) { AyarlarEkrani() }
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
+            .task(id: model.revision) { baslarken = BaslarkenDurumu.oku(model) }
         }
     }
 
-    // Bu ay ödenecek: büyük tutar, borç ödemeleri, gelecek ay / kalan / son taksit
+    // Bu ay ödenecek: büyük tutar, borç ödemeleri, gelecek ay ve kalan toplam
     private func ustKart(_ o: Ozet) -> some View {
         Kart {
             HStack {
@@ -49,9 +53,8 @@ struct OzetEkrani: View {
             }
             Ayirici()
             IstatistikSatiri(ogeler: [
-                Istatistik(etiket: ayAdi(o.nextMonth.month), deger: Bicim.tl(o.nextMonth.total)),
-                Istatistik(etiket: "Kalan ödeme", deger: Bicim.tl(o.remainingTotal)),
-                Istatistik(etiket: "Son taksit", deger: o.endless == true ? "Süresiz" : Bicim.month(o.lastPaymentMonth)),
+                Istatistik(etiket: "Gelecek ay (\(ayAdi(o.nextMonth.month)))", deger: Bicim.tl(o.nextMonth.total)),
+                Istatistik(etiket: "Kalan bütün taksitler", deger: Bicim.tl(o.remainingTotal)),
             ])
         }
     }
@@ -136,5 +139,69 @@ struct EsitlemeDurumu: View {
                 Image(systemName: "checkmark.icloud").foregroundStyle(Tema.metin3).accessibilityLabel("Eşitlendi")
             }
         }
+    }
+}
+
+// Yeni kullanıcı için üç adım: kart, harcama, gelir. Her adım yapılınca işaretlenir; üçü bitince ya da "Gizle" ile
+// kaybolur.
+struct BaslarkenDurumu: Equatable {
+    let kart: Bool, harcama: Bool, gelir: Bool
+    var bitti: Bool { kart && harcama && gelir }
+
+    @MainActor static func oku(_ model: Model) -> BaslarkenDurumu {
+        BaslarkenDurumu(
+            kart: (try? model.read("list_cards") as KartListesi)?.cards.isEmpty == false,
+            harcama: ((try? model.read("list_purchases", ["status": "all", "limit": 1]) as HarcamaListesi)?.count ?? 0) > 0,
+            gelir: ((try? model.read("list_entries", ["limit": 1]) as HareketListesi)?.count ?? 0) > 0)
+    }
+}
+
+struct BaslarkenKarti: View {
+    let durum: BaslarkenDurumu
+    @AppStorage("baslarken.gizli") private var gizli = false
+    @State private var form: EkleSecim?
+
+    var body: some View {
+        let d = durum
+        Kart {
+            KartBasligi(baslik: "Başlarken") {
+                Button("Gizle") { gizli = true }.font(.subheadline).foregroundStyle(Tema.metin3)
+            }
+            Text("Üç adımda bu ay ne ödeyeceğini ve paranın yetip yetmeyeceğini görürsün.")
+                .font(.subheadline).foregroundStyle(Tema.metin2)
+            VStack(spacing: 0) {
+                adim(1, "Kredi kartını ekle", "Kesim ve son ödeme günüyle", d.kart) { form = .kart }
+                Ayirici()
+                adim(2, "Bir harcama ekle", "Taksitliyse taksit sayısıyla", d.harcama) { form = .harcama }
+                Ayirici()
+                adim(3, "Maaşını ekle", "Her ay tekrarlanır; nakdin hesaplanır", d.gelir) { form = .hareket(.gelir) }
+            }
+        }
+        .sheet(item: $form) { EkleFormu(secim: $0) }
+    }
+    private func adim(_ no: Int, _ baslik: String, _ alt: String, _ tamam: Bool, _ eylem: @escaping () -> Void) -> some View {
+        Button(action: eylem) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(tamam ? Tema.iyi : Tema.yuzey2).frame(width: 30, height: 30)
+                    if tamam {
+                        Image(systemName: "checkmark").font(.footnote.weight(.bold)).foregroundStyle(.white)
+                    } else {
+                        Text("\(no)").font(.subheadline.weight(.bold)).foregroundStyle(Tema.metin)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(baslik).font(.body.weight(.semibold)).foregroundStyle(tamam ? Tema.metin3 : Tema.metin)
+                        .strikethrough(tamam, color: Tema.metin3)
+                    Text(alt).font(.footnote).foregroundStyle(Tema.metin3)
+                }
+                Spacer()
+                if !tamam { Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3) }
+            }
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(tamam)
     }
 }

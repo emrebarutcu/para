@@ -8,6 +8,7 @@ struct HarcamalarEkrani: View {
     @State private var kisi = ""                 // "" hepsi, yoksa kişinin kimliği
     @State private var kategori: KategoriSecimi? // kategoriye dokununca liste süzülür
     @State private var bitenler = false
+    @State private var gorunum = "liste"           // liste | kategori
     @State private var silinecek: Harcama?
 
     var body: some View {
@@ -26,32 +27,39 @@ struct HarcamalarEkrani: View {
                     }
                 }
                 if search.isEmpty {
+                    Secici(secim: $gorunum, ogeler: [("liste", "Liste"), ("kategori", "Kategoriler")])
+                }
+                if gorunum == "kategori" && search.isEmpty {
                     Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
                         KategoriKarti(months: k.months, secili: kategori.map { $0.id }) { k in
-                            withAnimation { kategori = kategori?.id == k.id ? nil : k }
+                            withAnimation { kategori = k; gorunum = "liste" }
                         }
                     }
-                }
-                if let k = kategori {
-                    HStack {
-                        Text("Kategori: \(k.ad)").font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Button { withAnimation { kategori = nil } } label: { Image(systemName: "xmark.circle.fill") }
-                            .foregroundStyle(Tema.metin3).accessibilityLabel("Kategori süzgecini kaldır")
+                } else {
+                    if let k = kategori {
+                        HStack {
+                            Text("Kategori: \(k.ad)").font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Button { withAnimation { kategori = nil } } label: {
+                                Label("Hepsini göster", systemImage: "xmark.circle.fill").font(.subheadline)
+                            }
+                            .foregroundStyle(Tema.metin2)
+                        }
+                        .padding(.horizontal, 4)
                     }
-                    .padding(.horizontal, 4)
-                }
-                liste(durum: "active", bos: search.isEmpty ? "Süren harcama yok" : "Bulunamadı")
-                Button { withAnimation { bitenler.toggle() } } label: {
-                    HStack {
-                        Text("Biten harcamalar").font(.subheadline.weight(.semibold))
-                        Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(bitenler ? 180 : 0))
-                        Spacer()
+                    liste(durum: "active", bos: search.isEmpty ? "Süren harcama yok" : "Bulunamadı")
+                    Button { withAnimation { bitenler.toggle() } } label: {
+                        HStack {
+                            Text("Biten harcamalar").font(.subheadline.weight(.semibold))
+                            Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(bitenler ? 180 : 0))
+                            Spacer()
+                        }
+                        .foregroundStyle(Tema.metin2).padding(.horizontal, 4).padding(.top, 4)
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(Tema.metin2).padding(.horizontal, 4).padding(.top, 4)
+                    .buttonStyle(.plain)
+                    if bitenler { liste(durum: "done", bos: "Biten harcama yok") }
                 }
-                .buttonStyle(.plain)
-                if bitenler { liste(durum: "done", bos: "Biten harcama yok") }
             }
             .navigationTitle("Harcamalar")
             .sayfaZemini()
@@ -278,7 +286,7 @@ struct HarcamaFormu: View {
                     }
 
                     Kart {
-                        etiket("Nereden")
+                        etiket("Nasıl ödendi")
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(cards) { c in
@@ -346,6 +354,7 @@ struct HarcamaFormu: View {
                     .tint(Tema.metin)
 
                     HataMetni(text: error)
+                    AltKaydet(eksik: eksik, eylem: save)
                 }
                 .padding(16)
             }
@@ -381,7 +390,14 @@ struct HarcamaFormu: View {
         }
     }
 
-    private var valid: Bool { !desc.trimmingCharacters(in: .whitespaces).isEmpty && (Bicim.parse(amount) ?? 0) > 0 }
+    private var valid: Bool { eksik == nil }
+
+    // Kaydetmek için ne eksik (alttaki düğmede yazar)
+    private var eksik: String? {
+        if (Bicim.parse(amount) ?? 0) <= 0 { return "Tutarı yaz" }
+        if desc.trimmingCharacters(in: .whitespaces).isEmpty { return "Ne alındığını yaz" }
+        return nil
+    }
 
     private func load() {
         cards = (try? model.read("list_cards") as KartListesi)?.cards ?? []

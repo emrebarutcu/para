@@ -423,3 +423,24 @@ struct Akan: Layout {
         return (yerler, boyutlar, enGenis, y + satir)
     }
 }
+
+// Formun altındaki büyük Kaydet: eksik varsa onu yazar ve pasiftir (üstteki Kaydet'e uzanmak gerekmez)
+struct AltKaydet: View {
+    let eksik: String?
+    var baslik = "Kaydet"
+    let eylem: () -> Void
+
+    var body: some View {
+        Button(action: eylem) {
+            Text(eksik ?? baslik)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(eksik == nil ? Tema.ustMetin : Tema.metin3)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(eksik == nil ? Tema.metin : Tema.yuzey3, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(eksik != nil)
+        .animation(.snappy(duration: 0.2), value: eksik)
+    }
+}

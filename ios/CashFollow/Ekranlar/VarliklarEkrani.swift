@@ -18,13 +18,9 @@ struct VarliklarEkrani: View {
                             kutu(simge: "⇄", ad: "Alacak", deger: Bicim.tl(v.receivablesTry), alt: "kart payları · borç verdiklerin")
                         }
                     }
-                    if model.marketsAllowed || !v.holdings.isEmpty {
+                    if !v.holdings.isEmpty {
                         BolumBasligi(baslik: "Fon ve hisse")
                         Kart(dolgu: 14) {
-                            if v.holdings.isEmpty {
-                                Text("TEFAS fonlarını ve Borsa İstanbul hisselerini adetiyle ekle; güncel fiyatla \(Bicim.homeShort) karşılığını görürsün.")
-                                    .font(.subheadline).foregroundStyle(Tema.metin3)
-                            }
                             SatirListesi(veri: v.holdings) { h in pozisyon(h) }
                         }
                     }
@@ -43,24 +39,27 @@ struct VarliklarEkrani: View {
         }
     }
 
-    // Varlık: büyük tutar, özvarlık + borç, öne çıkan kurlar
+    // Varlıkların: büyük tutar, borçlar ve borçlar düşünce kalan, bugünkü kurlar
     private func ustKart(_ v: Varliklar) -> some View {
         Kart {
             HStack {
-                Text("Varlık").font(.subheadline).foregroundStyle(Tema.metin2)
+                Text("Varlıkların").font(.subheadline).foregroundStyle(Tema.metin2)
                 Spacer()
                 if let t = v.rates?.updatedAt, let d = ISO8601DateFormatter().date(from: t) {
                     Text("Kur \(d.formatted(Bicim.tarih.hour().minute()))").font(.footnote).foregroundStyle(Tema.metin3)
                 }
             }
             BuyukTutar(deger: v.totalAssetsTry)
-            Text("= Özvarlık \(Bicim.tl(v.netWorthTry, fraction: false)) + Borç \(Bicim.tl(v.debtsTry, fraction: false))"
-                 + (v.receivablesTry > 0.004 ? " · \(Bicim.tl(v.receivablesTry, fraction: false)) alacak dahil" : ""))
-                .font(.footnote).foregroundStyle(Tema.metin2).monospacedDigit()
+            Ayirici()
+            IstatistikSatiri(ogeler: [
+                Istatistik(etiket: "Borçların", deger: Bicim.tl(v.debtsTry, fraction: false), renk: v.debtsTry > 0 ? Tema.tehlike : Tema.metin),
+                Istatistik(etiket: "Borçlar düşünce", deger: Bicim.tl(v.netWorthTry, fraction: false)),
+            ])
             if let r = v.rates {
                 let kodlar = ["USD", "EUR", "GAU", "GBP", "TRY"].filter { $0 != Bicim.home && r.values[$0] != nil }.prefix(3)
                 if !kodlar.isEmpty {
                     Ayirici()
+                    Text("Bugünkü kurlar").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
                     IstatistikSatiri(ogeler: kodlar.map { k in
                         Istatistik(etiket: ad(k, v), deger: Bicim.tl(r.values[k] ?? 0))
                     })
@@ -234,18 +233,18 @@ struct HareketFormu: View {
                 Section {
                     switch gercekTur {
                     case .gelir, .gider:
-                        TextField(gercekTur == .gelir ? "Açıklama (ör. Maaş)" : "Açıklama (ör. Kira, market)", text: $desc)
                         TextField("Tutar (\(Bicim.homeSymbol))", text: $amount).keyboardType(.decimalPad)
+                        TextField(gercekTur == .gelir ? "Ne geliri? (ör. Maaş)" : "Ne için? (ör. Kira)", text: $desc)
                     case .doviz:
                         Picker("Ne", selection: $kind) {
                             ForEach(dovizler) { a in Text(a.name).tag(a.code) }
                         }
                         Picker("İşlem", selection: $direction) {
-                            Text("Aldım / geldi").tag("in")
-                            Text("Sattım / harcadım").tag("out")
+                            Text("Aldım").tag("in")
+                            Text("Sattım").tag("out")
                         }
                         .pickerStyle(.segmented)
-                        TextField(kind == "GAU" ? "Gram" : "Tutar (\(kind))", text: $amount).keyboardType(.decimalPad)
+                        TextField(kind == "GAU" ? "Kaç gram" : "Ne kadar (\(kind))", text: $amount).keyboardType(.decimalPad)
                         TextField("Açıklama (isteğe bağlı)", text: $desc)
                     case .piyasa:
                         Picker("Tür", selection: $kind) {
@@ -277,17 +276,22 @@ struct HareketFormu: View {
                 }
                 if gercekTur == .doviz {
                     Section {
-                        Toggle(direction == "in" ? "\(Bicim.homeShort) ile aldım" : "\(Bicim.homeShort) karşılığı sattım", isOn: $settle)
+                        Toggle(direction == "in" ? "Parasını \(Bicim.homeShort) bakiyemden ödedim" : "Karşılığı \(Bicim.homeShort) bakiyeme geçti", isOn: $settle)
                         if settle {
                             TextField("Kur (\(Bicim.homeSymbol), boşsa bugünkü)", text: $price).keyboardType(.decimalPad)
                         }
                     } footer: {
                         Text(settle
-                             ? "Karşılığı \(Bicim.homeShort) bakiyenden düşer (alış) ya da ona eklenir (satış)."
-                             : "Hediye, maaş gibi \(Bicim.homeShort) ödemeden gelen ya da giden miktar.")
+                             ? (direction == "in" ? "Gelir sayılmaz; paran \(Bicim.homeShort)'den dövize / altına geçer." : "Gelir sayılmaz; paran dövizden / altından \(Bicim.homeShort)'ye geçer.")
+                             : "Kapalıysa \(Bicim.homeShort) ödemeden gelen ya da giden miktar (hediye, döviz maaş).")
                     }
                 }
                 HataMetni(text: error)
+                Section {
+                    AltKaydet(eksik: eksik) { Task { await save() } }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                }
             }
             .tint(Tema.metin)
             .navigationTitle(duzenle == nil ? gercekTur.baslik : "Hareketi düzenle")
@@ -338,13 +342,14 @@ struct HareketFormu: View {
         }
     }
 
-    private var valid: Bool {
-        guard (Bicim.parse(amount) ?? 0) > 0 else { return false }
-        switch gercekTur {
-        case .piyasa: return !ticker.trimmingCharacters(in: .whitespaces).isEmpty
-        case .doviz: return true
-        case .gelir, .gider: return !desc.trimmingCharacters(in: .whitespaces).isEmpty
-        }
+    private var valid: Bool { eksik == nil }
+
+    // Kaydetmek için ne eksik (alttaki düğmede yazar)
+    private var eksik: String? {
+        if gercekTur == .piyasa && ticker.trimmingCharacters(in: .whitespaces).isEmpty { return kind == "FON" ? "Fon kodunu yaz" : "Hisse kodunu yaz" }
+        if (Bicim.parse(amount) ?? 0) <= 0 { return gercekTur == .piyasa ? "Adedi yaz" : "Tutarı yaz" }
+        if (gercekTur == .gelir || gercekTur == .gider) && desc.trimmingCharacters(in: .whitespaces).isEmpty { return "Açıklamayı yaz" }
+        return nil
     }
 
     private func save() async {

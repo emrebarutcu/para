@@ -199,7 +199,7 @@ struct KartFormu: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Kart adı (ör. banka)", text: $name)
+                    TextField("Kartın adı (ör. Bonus, Axess)", text: $name)
                     TextField("Limit (\(Bicim.homeSymbol))", text: $limit).keyboardType(.decimalPad)
                     TextField("Son 4 hane (isteğe bağlı)", text: $last4).keyboardType(.numberPad)
                 }
@@ -212,7 +212,13 @@ struct KartFormu: View {
                          : "Günler değişirse arada kalan harcamaların ne olacağını sorarım.")
                 }
                 HataMetni(text: error)
+                Section {
+                    AltKaydet(eksik: name.trimmingCharacters(in: .whitespaces).isEmpty ? "Kartın adını yaz" : nil, eylem: save)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                }
             }
+            .tint(Tema.metin)
             .navigationTitle(card == nil ? "Kart ekle" : "Kartı düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

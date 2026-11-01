@@ -6,12 +6,13 @@ import SwiftUI
 // kategoriler spending_by_category'den. Her biri kendi kartıdır (Kart).
 
 // ── Nakit (Özet) ──────────────────────────────────────────────────────────────
-// Dönemin gün gün nakit bakiyesi (ya da dönem başından beri net), bugün çizgisi, dokununca günün hareketleri
+// Dönemin gün gün nakit bakiyesi, bugün çizgisi, dokununca günün hareketleri. Dönem başı (bugün ya da ayın bir günü,
+// ör. maaş günü) Ayarlar → Nakit'te.
 
 struct NakitKarti: View {
     @EnvironmentObject private var model: Model
     @AppStorage("nakit.baslangic") private var start = "today"
-    @AppStorage("nakit.mod") private var mode = "balance"
+    private let mode = "balance"     // "Dönem net" görünümü sadelik için kaldırıldı; dönem başı Ayarlar'da
     @State private var shift = 0
     @State private var seri: NakitSerisi?
     @State private var hata: String?
@@ -35,25 +36,6 @@ struct NakitKarti: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Tema.metin2)
-
-            HStack(spacing: 8) {
-                Menu {
-                    Picker("Dönem başlangıcı", selection: $start) {
-                        Text("Bugünden").tag("today")
-                        ForEach(1...31, id: \.self) { Text("Ayın \(Bicim.gunEki($0))").tag(String($0)) }
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(start == "today" ? "Bugün" : "Ayın \(Bicim.gunEki(Int(start) ?? 1))")
-                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Tema.metin)
-                    .padding(.horizontal, 12).padding(.vertical, 9)
-                    .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                Secici(secim: $mode, ogeler: [("balance", "Bakiye"), ("net", "Dönem net")])
-            }
 
             if let s = seri {
                 HStack(alignment: .top, spacing: 8) {
@@ -433,14 +415,6 @@ struct VarlikSeyriKarti: View {
                 }
                 .frame(height: 190)
                 .grafikTakvimi()
-                HStack(alignment: .top, spacing: 8) {
-                    parca(Bicim.homeShort, simdi.parts.lira)
-                    parca("Döviz / altın", simdi.parts.fx)
-                    parca("Fon / hisse", simdi.parts.market)
-                    parca("Alacak", simdi.parts.receivable)
-                }
-                Text("Her gün o güne kadarki kayıtlarla ve o günün kur ve fiyatlarıyla.")
-                    .font(.footnote).foregroundStyle(Tema.metin3)
                 if !s.approx.isEmpty {
                     Text("Geçmiş fiyatı alınamayanlar bugünkü fiyatla: \(s.approx.joined(separator: ", "))")
                         .font(.footnote).foregroundStyle(Tema.metin3)

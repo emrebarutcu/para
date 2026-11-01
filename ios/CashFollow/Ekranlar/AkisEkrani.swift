@@ -4,7 +4,7 @@ import SwiftUI
 // Hesaba katılmayan kartın (ör. eşin kartı) ekstreleri "sayılmıyor" diye görünür, toplamlara girmez.
 struct AkisEkrani: View {
     @EnvironmentObject private var model: Model
-    @AppStorage("akis.ay") private var ayCount = 12
+    @State private var ayCount = 12
     @State private var acik: Set<String> = []
 
     var body: some View {
@@ -12,31 +12,26 @@ struct AkisEkrani: View {
             Sayfa {
                 Okunan(tool: "get_cashflow", args: ["months": ayCount], key: "\(ayCount)") { (a: Akis) in
                     VStack(alignment: .leading, spacing: 14) {
-                        AylikOdemeGrafigi(months: a.months, baslik: "\(a.months.count) ayda \(kisa(a.months.reduce(0) { $0 + $1.total }))")
+                        AylikOdemeGrafigi(months: Array(a.months.prefix(12)), baslik: "Önümüzdeki 12 ay")
                         if a.months.allSatisfy({ $0.payments.isEmpty }) {
                             Kart { Text("Önümüzdeki aylarda ödenecek taksit yok.").foregroundStyle(Tema.metin3) }
                         }
                         ForEach(a.months.filter { !$0.payments.isEmpty }) { m in ay(m) }
+                        if ayCount < 60 {
+                            Button { withAnimation { ayCount = min(60, ayCount + 12) } } label: {
+                                Text("Sonraki 12 ayı da göster").font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                                    .frame(maxWidth: .infinity).padding(.vertical, 13)
+                                    .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
             }
-            .navigationTitle("Nakit akışı")
+            .navigationTitle("Akış")
             .sayfaZemini()
             .yenilenebilir(model)
             .ekleDugmesi(.harcama)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Picker("Kaç ay", selection: $ayCount) {
-                            Text("6 ay").tag(6)
-                            Text("12 ay").tag(12)
-                            Text("24 ay").tag(24)
-                            Text("60 ay").tag(60)
-                        }
-                    } label: { Image(systemName: "calendar") }
-                    .accessibilityLabel("Kaç ay")
-                }
-            }
         }
     }
 
