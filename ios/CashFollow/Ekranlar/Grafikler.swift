@@ -232,6 +232,10 @@ struct AylikOdemeGrafigi: View {
 
     // Etiketler sığsın: en çok ~6 ay adı
     private var adim: Int { max(1, Int((Double(months.count) / 6).rounded(.up))) }
+    // İlk aydan başlayarak her adim'inci ay (Charts'ın kendi adımı çift aylara hizalanıp ilk ayı atlıyordu)
+    private var etiketAylari: [Date] {
+        months.enumerated().compactMap { i, m in i % adim == 0 ? Bicim.date(m.month + "-01") : nil }
+    }
 
     var body: some View {
         let parcalar = self.parcalar, adlar = self.adlar
@@ -252,7 +256,7 @@ struct AylikOdemeGrafigi: View {
                 .chartLegend(position: .bottom)
                 .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
                 .chartXAxis {
-                    AxisMarks(values: .stride(by: .month, count: adim)) { _ in
+                    AxisMarks(values: etiketAylari) { _ in
                         AxisValueLabel(format: months.count > 12
                                        ? Bicim.tarih.month(.abbreviated).year(.twoDigits)
                                        : Bicim.tarih.month(.abbreviated), centered: true)
