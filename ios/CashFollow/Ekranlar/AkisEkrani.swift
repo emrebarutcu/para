@@ -94,7 +94,7 @@ struct OdemeSatiri: View {
                         if p.notCounted == true {
                             Text("sayılmıyor").font(.footnote).foregroundStyle(Tema.metin3)
                         } else if let by = p.byPerson, !by.isEmpty {
-                            HStack(spacing: 8) {
+                            HStack(spacing: 8) {   // sığmazsa kısalır, alta kaymaz
                                 ForEach(Array(by.sorted { $0.key < $1.key }.enumerated()), id: \.offset) { _, k in
                                     RenkliAd(ad: "\(k.key) \(kisa(k.value))", renk: model.kisiRengi(k.key))
                                 }
@@ -104,6 +104,7 @@ struct OdemeSatiri: View {
                     Spacer()
                     Text(Bicim.tl(p.total)).font(.body.weight(.semibold)).monospacedDigit()
                         .foregroundStyle(p.notCounted == true ? Tema.metin3 : Tema.metin)
+                        .layoutPriority(1)
                     if !(p.items ?? []).isEmpty {
                         Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(Tema.metin3)
                             .rotationEffect(.degrees(acik ? 180 : 0))

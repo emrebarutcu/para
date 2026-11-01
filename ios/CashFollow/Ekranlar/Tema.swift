@@ -229,9 +229,10 @@ struct RenkliAd: View {
     var body: some View {
         HStack(spacing: 5) {
             Circle().fill(renk).frame(width: 7, height: 7)
-            Text(ad)
+            Text(ad).lineLimit(1)
         }
         .font(.footnote).foregroundStyle(Tema.metin2)
+        .fixedSize()
     }
 }
 

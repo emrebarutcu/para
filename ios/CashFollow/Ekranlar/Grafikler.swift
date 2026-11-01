@@ -256,7 +256,7 @@ struct AylikOdemeGrafigi: View {
 
     private func ayEtiketi(_ ym: String) -> String {
         guard let d = Bicim.date(ym + "-01") else { return ym }
-        if months.count > 12 || ym == months.first?.month || ym.hasSuffix("-01") {
+        if months.count > 12 || ym.hasSuffix("-01") {   // yıl yalnızca Ocak'ta (ilk etikette sığmıyordu)
             return d.formatted(Bicim.tarih.month(.abbreviated)) + " ’" + String(ym.prefix(4).suffix(2))
         }
         return d.formatted(Bicim.tarih.month(.abbreviated))
