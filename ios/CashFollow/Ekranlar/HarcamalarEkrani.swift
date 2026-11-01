@@ -452,6 +452,8 @@ struct HarcamaFormu: View {
         do {
             _ = try model.write(duzenle == nil ? "add_purchase" : "update_purchase", args, as: HarcamaSonucu.self)
             if duzenle == nil { sonKart = card }
+            Analitik.olay(duzenle == nil ? "purchase_added" : "purchase_edited",
+                          ["installments": tekrar ? 1 : count, "repeat": tekrar, "cash": card == "nakit", "afford_shown": sim != nil])
             dismiss()
         } catch {
             self.error = error.localizedDescription
@@ -505,7 +507,7 @@ struct AlabilirMiyim: View {
             }
             if !tekrar, let o = oneri, o.card != seciliAd, let id = cards.first(where: { $0.name == o.card })?.id,
                limitYok || (sim.cardsCompared.first(where: { $0.card == seciliAd }).map { o.daysUntilFirstPayment - $0.daysUntilFirstPayment >= 10 } ?? false) {
-                Button { sec(id) } label: {
+                Button { sec(id); Analitik.olay("afford_card_suggestion_used") } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "lightbulb")
                         Text((limitYok ? L("Limit yetmiyor.") + " " : "") + L("{0} ile alırsan ilk ödeme {1} ({2} gün sonra)", o.card, Bicim.day(o.firstPayment), o.daysUntilFirstPayment))

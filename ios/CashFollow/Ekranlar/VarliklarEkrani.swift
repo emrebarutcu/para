@@ -367,6 +367,7 @@ struct HareketFormu: View {
         if market { await model.fetchPrices([asset]) }
         do {
             if let e = duzenle { a["id"] = e.id; try model.write("update_entry", a) } else { try model.write("add_entry", a) }
+            Analitik.olay(duzenle == nil ? "entry_added" : "entry_edited", ["type": gercekTur.rawValue, "repeat": monthly])
             dismiss()
         } catch {
             self.error = error.localizedDescription

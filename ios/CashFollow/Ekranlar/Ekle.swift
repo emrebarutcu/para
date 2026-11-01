@@ -54,6 +54,9 @@ private struct EkleDugmesi: ViewModifier {
                     .padding(.bottom, 14)
             }
             .sheet(item: $secim) { EkleFormu(secim: $0) }
+            .onChange(of: secim) { _, s in
+                if let s { Analitik.olay("add_opened", ["item": s.id, "screen": "\(baglam)"]) }
+            }
     }
 
     @ViewBuilder private var dugme: some View {

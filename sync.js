@@ -148,10 +148,14 @@
           watchInbox();
           watchData();
           syncZone();
+          window.Analitik?.identify(user.id);
+          window.Analitik?.event('signed_in');
         }
       }
       if (event === 'SIGNED_OUT') {
         loginFor = null;
+        window.Analitik?.event('signed_out');
+        window.Analitik?.reset();
         unwatchInbox();
         unwatchData();
         if (typeof window.onAuthLogout === 'function') window.onAuthLogout();
@@ -531,6 +535,7 @@
       btn.disabled = false;
       btn.textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
       showResend(null);
+      if (authMode !== 'login' && !error) window.Analitik?.event('account_created', { country: document.getElementById('authCountry')?.value || 'TR' });
 
       if (error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
         authMessage('E-posta adresin henüz doğrulanmadı. E-postana gelen bağlantıya tıkla.', false);

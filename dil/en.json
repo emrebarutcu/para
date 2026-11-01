@@ -476,5 +476,7 @@
  "Türk lirası": "Turkish lira",
  "Dolar": "US dollar",
  "Euro": "Euro",
- "Ben": "Me"
+ "Ben": "Me",
+ "Kullanım verisi gönder": "Share usage data",
+ "Hangi özelliklerin kullanıldığını gönderir; tutarlar, adlar ve açıklamalar gönderilmez. Uygulamayı geliştirmek için kullanılır.": "Sends which features are used, never amounts, names or descriptions. Used to improve the app."
 }

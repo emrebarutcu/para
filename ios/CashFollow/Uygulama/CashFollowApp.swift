@@ -17,7 +17,12 @@ struct CashFollowApp: App {
                 .tint(Tema.metin)
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refresh() } }
+            if phase == .active {
+                Task { await model.refresh() }
+                Analitik.olay("app_opened", ["signed_in": model.session != nil])
+                Task { await Analitik.bayraklariYukle() }
+            }
+            if phase == .background { Analitik.gonder() }
         }
     }
 }
@@ -40,6 +45,9 @@ struct AnaEkran: View {
                     HarcamalarEkrani().tabItem { Label(L("Harcamalar"), systemImage: "list.bullet.rectangle") }.tag(2)
                     BorclarEkrani().tabItem { Label(L("Kartlar"), systemImage: "creditcard") }.tag(3)
                     VarliklarEkrani().tabItem { Label(L("Varlıklar"), systemImage: "banknote") }.tag(4)
+                }
+                .onChange(of: sekme) { _, yeni in
+                    Analitik.olay("tab_viewed", ["tab": ["overview", "cash_flow", "purchases", "cards", "assets"][min(max(yeni, 0), 4)]])
                 }
             }
         }

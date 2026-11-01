@@ -269,6 +269,7 @@ struct KartFormu: View {
                 a["due_day"] = due
                 try model.write("add_card", a)
             }
+            Analitik.olay(card == nil ? "card_added" : "card_edited")
             dismiss()
         } catch {
             self.error = error.localizedDescription

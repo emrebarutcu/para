@@ -94,7 +94,9 @@ struct GirisEkrani: View {
         resendFor = nil
         do {
             if register {
-                switch try await Auth.signUp(email: trimmed, password: password, country: ulke) {
+                let sonuc = try await Auth.signUp(email: trimmed, password: password, country: ulke)
+                if case .alreadyExists = sonuc {} else { Analitik.olay("account_created", ["country": ulke]) }
+                switch sonuc {
                 case .session(let s):
                     model.signedIn(s)
                     dismiss()

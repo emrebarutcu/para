@@ -242,7 +242,7 @@ struct BorcDetayi: View {
     private func kaydet() {
         var a: [String: Any] = ["debt": d.id, "amount": Bicim.parse(tutar) ?? 0, "date": Bicim.key(tarih)]
         if kapat { a["close"] = true }
-        do { try model.write("pay_debt", a); dismiss() } catch { hata = error.localizedDescription }
+        do { try model.write("pay_debt", a); Analitik.olay("payment_recorded", ["kind": "debt", "close": kapat]); dismiss() } catch { hata = error.localizedDescription }
     }
 }
 
@@ -307,7 +307,7 @@ struct OdemeFormu: View {
         case .pay(let id, _, _): a["person"] = id
         case .kart(let id, _, _): a["card"] = id
         }
-        do { try model.write("pay_debt", a); dismiss() } catch { hata = error.localizedDescription }
+        do { try model.write("pay_debt", a); Analitik.olay("payment_recorded", ["kind": a["card"] != nil ? "card_statement" : "card_share"]); dismiss() } catch { hata = error.localizedDescription }
     }
 }
 
@@ -444,6 +444,10 @@ struct BorcFormu: View {
             a["due_date"] = Bicim.key(vade)
             a["auto_pay"] = kredi ? otomatik : false
         }
-        do { try model.write("add_debt", a); dismiss() } catch { hata = error.localizedDescription }
+        do {
+            try model.write("add_debt", a)
+            Analitik.olay("debt_added", ["type": tur, "installments": taksitSayisi])
+            dismiss()
+        } catch { hata = error.localizedDescription }
     }
 }

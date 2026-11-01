@@ -169,7 +169,7 @@ struct BaslarkenKarti: View {
         let d = durum
         Kart {
             KartBasligi(baslik: L("Başlarken")) {
-                Button(L("Gizle")) { gizli = true }.font(.subheadline).foregroundStyle(Tema.metin3)
+                Button(L("Gizle")) { gizli = true; Analitik.olay("onboarding_hidden") }.font(.subheadline).foregroundStyle(Tema.metin3)
             }
             Text(L("Üç adımda bu ay ne ödeyeceğini ve paranın yetip yetmeyeceğini görürsün."))
                 .font(.subheadline).foregroundStyle(Tema.metin2)
@@ -182,6 +182,9 @@ struct BaslarkenKarti: View {
             }
         }
         .sheet(item: $form) { EkleFormu(secim: $0) }
+        .onChange(of: form) { _, s in
+            if let s { Analitik.olay("onboarding_step_opened", ["item": s.id]) }
+        }
     }
     private func adim(_ no: Int, _ baslik: String, _ alt: String, _ tamam: Bool, _ eylem: @escaping () -> Void) -> some View {
         Button(action: eylem) {

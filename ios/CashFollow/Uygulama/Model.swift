@@ -220,6 +220,8 @@ final class Model: ObservableObject {
     }
 
     func signedIn(_ s: Oturum) {
+        Analitik.girisYapti(s.userId)
+        Analitik.olay("signed_in")
         Auth.store(s)
         session = s
         showWelcome = false
@@ -253,6 +255,8 @@ final class Model: ObservableObject {
     }
 
     func signOut() async {
+        Analitik.olay("signed_out")
+        defer { Analitik.cikisYapti() }
         pushTimer?.cancel()
         await run { try await $0.push() }   // bekleyen değişiklikler yazılsın
         guard let s = session else { return }
@@ -274,6 +278,8 @@ final class Model: ObservableObject {
         guard var s = session else { return }
         s.accessToken = try await token()
         try await Auth.deleteAccount(s)
+        Analitik.olay("account_deleted")
+        Analitik.cikisYapti()
         Auth.store(nil)
         Depo.remove(Depo.stateFile(s.userId))
         Depo.remove(Depo.metaFile(s.userId))
@@ -291,6 +297,7 @@ final class Model: ObservableObject {
     private func applyCountry() {
         let code = session.map { $0.country ?? "TR" } ?? Depo.offlineCountry ?? "TR"
         country = code
+        Analitik.ulkeAyarla(code)
         guard let motor else { return }
         let home = motor.homeOf(country: code)
         motor.setHome(home)
@@ -331,6 +338,7 @@ final class Model: ObservableObject {
     }
 
     func continueOffline(country: String) {
+        Analitik.olay("started_without_account", ["country": country])
         Depo.offlineCountry = country
         applyCountry()
         Depo.offlineChosen = true

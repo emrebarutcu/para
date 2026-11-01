@@ -94,6 +94,12 @@ struct AyarlarEkrani: View {
                 }
 
                 Section {
+                    Toggle(L("Kullanım verisi gönder"), isOn: Binding(get: { Analitik.acik }, set: { Analitik.acik = $0 }))
+                } footer: {
+                    Text(L("Hangi özelliklerin kullanıldığını gönderir; tutarlar, adlar ve açıklamalar gönderilmez. Uygulamayı geliştirmek için kullanılır."))
+                }
+
+                Section {
                     Link(L("Web'de aç (içe aktarma, banka e-postaları)"), destination: Yapilandirma.site)
                     Link(L("Gizlilik politikası"), destination: Yapilandirma.gizlilik)
                     Link(L("Kullanım koşulları"), destination: Yapilandirma.kosullar)
