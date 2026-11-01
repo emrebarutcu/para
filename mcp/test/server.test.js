@@ -475,7 +475,7 @@ test("varlıklar: TL, döviz ve gram altın hareketleri, güncel kurla TL karş�
   assert.equal(gold.entry.tryValueNow, 10000);
   assert.equal(gold.balance, 2.5);
 
-  assert.match((await c.call("add_entry", { asset: "BTC", direction: "in", amount: 1, description: "x" })).error, /TRY, USD, EUR, GAU/);
+  assert.match((await c.call("add_entry", { asset: "BTC", direction: "in", amount: 1, description: "x" })).error, /currency code \(TRY, USD, EUR/);
   assert.match((await c.call("add_entry", { asset: "USD", direction: "in", amount: -5, description: "x" })).error, /positive/);
   assert.match((await c.call("add_entry", { asset: "USD", direction: "in", amount: 5, description: "x", date: "2026-02-30" })).error, /valid date/);
 
@@ -694,7 +694,7 @@ test("borçlar: borç aldım / borç verdim / kredi ekleme, listeleme, düzenlem
   await bad({ type: "borrowed", party: "X", amount: 100, auto_pay: true }, /auto_pay needs due_date/);
   await bad({ type: "borrowed", party: "X", amount: 100, date: "2026-02-30" }, /date must be a valid date/);
   await bad({ type: "borrowed", party: "X", amount: 100, due_date: "2026-13-01" }, /due_date must be a valid date/);
-  await bad({ type: "borrowed", party: "X", amount: 100, asset: "BTC" }, /TRY, USD, EUR, GAU/);
+  await bad({ type: "borrowed", party: "X", amount: 100, asset: "BTC" }, /currency code \(TRY, USD, EUR/);
   await bad({ type: "borrowed", party: "X", amount: 100, person: "Zeynep" }, /Unknown person/);
   assert.equal(stored(sb).debts.length, 0);
 

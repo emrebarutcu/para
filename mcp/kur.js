@@ -1,4 +1,5 @@
-// ---------- Güncel kurlar: dolar, euro, gram altın (TL) ----------
+// ---------- Güncel kurlar: para birimleri (para.js) ve gram altın, TL karşılıklarıyla ----------
+// Başka ana para birimi olan hesaplar bunlardan kendi kurlarını hesaplar (para.js homeRates).
 // Uygulama /api/kur'dan, asistan araçları doğrudan buradan alır. Kaynak Truncgil (Türkiye piyasası, satış fiyatı);
 // erişilemezse dolar / euro open.er-api.com'dan, altın gold-api.com'un ons fiyatından hesaplanır.
 // Sonuç 10 dakika saklanır (Worker örneğinin belleğinde ve Cloudflare önbelleğinde).
@@ -10,6 +11,9 @@ const PRIMARY = "https://finans.truncgil.com/v4/today.json";
 const FX = "https://open.er-api.com/v6/latest/USD";
 const GOLD = "https://api.gold-api.com/price/XAU";
 
+import P from "../para.js";
+
+const CODES = P.CURRENCIES.map(c => c.code).filter(c => c !== "TRY");
 const valid = r => [r.USD, r.EUR, r.GAU].every(v => Number.isFinite(v) && v > 0);
 
 async function getJson(f, url) {
@@ -22,6 +26,10 @@ async function fromTruncgil(f) {
   const d = await getJson(f, PRIMARY);
   const rates = { TRY: 1, USD: Number(d.USD?.Selling), EUR: Number(d.EUR?.Selling), GAU: Number(d.GRA?.Selling) };
   if (!valid(rates)) throw new Error("truncgil: eksik kur");
+  for (const c of CODES) {
+    const v = Number(d[c]?.Selling);
+    if (Number.isFinite(v) && v > 0) rates[c] = v;
+  }
   // "2026-10-19 13:36:02" Türkiye saati
   const at = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(d.Update_Date) ? `${d.Update_Date.replace(" ", "T")}+03:00` : null;
   return { rates, updatedAt: at ? new Date(at).toISOString() : new Date().toISOString(), source: "truncgil" };
@@ -32,13 +40,17 @@ async function fromFallback(f) {
   const usd = Number(fx.rates?.TRY);
   const rates = { TRY: 1, USD: usd, EUR: usd / Number(fx.rates?.EUR), GAU: (Number(gold.price) * usd) / OUNCE };
   if (!valid(rates)) throw new Error("yedek kaynak: eksik kur");
-  for (const k of ["USD", "EUR", "GAU"]) rates[k] = Math.round(rates[k] * 10000) / 10000;
+  for (const c of CODES) {
+    const v = usd / Number(fx.rates?.[c]);
+    if (!(c in rates) && Number.isFinite(v) && v > 0) rates[c] = v;
+  }
+  for (const k of Object.keys(rates)) if (k !== "TRY") rates[k] = Number(rates[k].toPrecision(6));
   return { rates, updatedAt: gold.updatedAt || new Date().toISOString(), source: "open.er-api + gold-api" };
 }
 
 let memo = null;   // { at, value }
 
-// { rates: { TRY: 1, USD, EUR, GAU }, updatedAt, source }
+// { rates: { TRY: 1, USD, EUR, GAU, GBP, … }, updatedAt, source }: bir biriminin TL karşılığı
 export async function getRates({ fetch: f = fetch, now = Date.now } = {}) {
   if (memo && now() - memo.at < TTL) return memo.value;
   let value;

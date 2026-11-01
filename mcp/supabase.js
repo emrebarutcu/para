@@ -4,6 +4,7 @@
 // Kişiler, kartlar ve harcamalar ayrı tablolardadır (supabase/tablolar.sql); yalnızca değişen satırlar yazılır.
 import T from "../taksit.js";
 import Tablo from "../tablo.js";
+import P from "../para.js";
 
 export class StoreError extends Error {
   constructor(status, body) {
@@ -19,14 +20,16 @@ export async function getUser({ url, key, token, fetch: f = fetch }) {
   if (res.status >= 400 && res.status < 500) return null;
   if (!res.ok) throw new StoreError(res.status, await res.text());
   const u = await res.json();
-  return u?.id ? { id: u.id, email: u.email ?? null } : null;
+  // Ülke kayıtta seçilir (user_metadata.country, para.js); yoksa Türkiye
+  const country = P.country(u?.user_metadata?.country)?.code ?? P.DEFAULT_COUNTRY;
+  return u?.id ? { id: u.id, email: u.email ?? null, country, home: P.homeOfCountry(country) } : null;
 }
 
 const PAGE = 1000;   // PostgREST'in bir cevapta döndürdüğü en fazla satır
 const BATCH = 200;   // bir istekte yazılan / silinen en fazla satır
 const quote = v => `"${String(v).replace(/["\\]/g, "\\$&")}"`;   // PostgREST in.(…) değeri
 
-export function createStore({ url, key, token, userId, fetch: f = fetch }) {
+export function createStore({ url, key, token, userId, home = "TRY", fetch: f = fetch }) {
   const base = { apikey: key, Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   async function rest(path, { method = "GET", headers = {}, body } = {}) {
@@ -87,16 +90,16 @@ export function createStore({ url, key, token, userId, fetch: f = fetch }) {
 
   return {
     async load() {
-      return T.hydrate(Tablo.toState(await readAll()));
+      return T.hydrate({ ...Tablo.toState(await readAll(), home), home });
     },
 
     // fn veriyi değiştirir; yalnızca değişen kayıtlar yazılır. Aynı anda başka cihazın değiştirdiği diğer kayıtlar
     // korunur, aynı kayıt iki yerde değiştiyse sonra yazan kazanır.
     async mutate(fn) {
       const rows = await readAll();
-      const state = T.hydrate(Tablo.toState(rows));
+      const state = T.hydrate({ ...Tablo.toState(rows, home), home });
       const result = await fn(state);
-      await write(Tablo.changes(state, Tablo.baseOf(rows)));
+      await write(Tablo.changes(state, Tablo.baseOf(rows, home)));
       return result;
     },
 

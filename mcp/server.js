@@ -138,10 +138,12 @@ export async function handle(request, env = {}, { fetch: f = fetch, now = () => 
   let body;
   try { body = await request.json(); } catch { return json(rpcError(null, -32700, "Parse error"), 400); }
 
-  const store = createStore({ ...cfg, token, userId: user.id, fetch: f });
+  const home = user.home ?? "TRY";   // hesabın ana para birimi (ülkesinden; para.js)
+  const store = createStore({ ...cfg, token, userId: user.id, home, fetch: f });
   const ctx = {
     today: todayKey(now()),
     user,
+    home,
     load: store.load,
     mutate: store.mutate,
     inbox: { ...store.inbox, address: renew => store.inbox.address(renew, cfg.domain) },
