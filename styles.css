@@ -1784,3 +1784,5 @@ a.hero-eq { display: block; width: fit-content; }
 
 /* Hesabı sil: çıkışın altında, kırmızı yazı */
 .auth-delete { color: var(--danger); margin-top: 8px; }
+.auth-legal { font-size: 13px; color: var(--text-3); margin: 8px 0 0; }
+.auth-legal a { color: var(--text-2); }

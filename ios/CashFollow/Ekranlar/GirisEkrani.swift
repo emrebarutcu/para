@@ -47,6 +47,11 @@ struct GirisEkrani: View {
                         HStack { Spacer(); if busy { ProgressView() } else { Text(register ? "Kayıt Ol" : "Giriş Yap") }; Spacer() }
                     }
                     .disabled(busy || email.isEmpty || password.isEmpty)
+                } footer: {
+                    if register {
+                        let metin = "Kayıt olarak [Kullanım Koşulları](\(Yapilandirma.kosullar.absoluteString))'nı ve [Gizlilik Politikası](\(Yapilandirma.gizlilik.absoluteString))'nı kabul edersin."
+                        Text((try? AttributedString(markdown: metin)) ?? AttributedString(metin))
+                    }
                 }
                 if let m = message {
                     Section {

@@ -95,6 +95,8 @@ struct AyarlarEkrani: View {
 
                 Section {
                     Link("Web'de aç (içe aktarma, banka e-postaları)", destination: Yapilandirma.site)
+                    Link("Gizlilik politikası", destination: Yapilandirma.gizlilik)
+                    Link("Kullanım koşulları", destination: Yapilandirma.kosullar)
                     Satir(title: "Sürüm", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
                 }
             }

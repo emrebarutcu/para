@@ -61,6 +61,7 @@
   let authModeNow = 'login';
   function showCountry() {
     document.getElementById('authCountry')?.toggleAttribute('hidden', !(welcome || authModeNow === 'register'));
+    document.getElementById('authLegal')?.toggleAttribute('hidden', authModeNow !== 'register');
   }
 
   // Giriş yapılmamış ve çevrimdışı devam seçilmemişse giriş / kayıt penceresi açılır
