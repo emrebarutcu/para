@@ -24,6 +24,12 @@ enum Depo {
     }
     static func remove(_ url: URL) { try? FileManager.default.removeItem(at: url) }
 
+    // Nakit sayılanlar (web: para.cashDef); nil varsayılan
+    static var cashDef: [String]? {
+        get { UserDefaults.standard.stringArray(forKey: "para.nakit") }
+        set { UserDefaults.standard.set(newValue, forKey: "para.nakit") }
+    }
+
     // Girişsiz kullanımın ülkesi (hesapta user_metadata.country)
     static var offlineCountry: String? {
         get { UserDefaults.standard.string(forKey: "para.ulke") }

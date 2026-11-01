@@ -50,6 +50,11 @@ struct KartFormu: View {
     @State private var due = 20
     @State private var last4 = ""
     @State private var error: String?
+    @State private var gecis: [Gecis] = []      // günler değişince sorulan seçenekler (update_card transition)
+    @State private var soru = false
+
+    // Kesim / son ödeme günü değişince arada kalan harcamalar (web'deki kart formuyla aynı seçenekler)
+    struct Gecis: Hashable { let kod: String; let baslik: String; let aciklama: String }
 
     var body: some View {
         NavigationStack {
@@ -65,9 +70,8 @@ struct KartFormu: View {
                 } footer: {
                     Text(card == nil
                          ? "Kesim günü dahil yapılan harcama o ayın ekstresine girer; ekstre son ödeme gününde ödenir."
-                         : "Kesim ve son ödeme günü değişikliği, eski ekstrelerin ne olacağını sorduğu için cashfollow.app'te yapılır.")
+                         : "Günler değişirse arada kalan harcamaların ne olacağını sorarım.")
                 }
-                .disabled(card != nil)
                 HataMetni(text: error)
             }
             .navigationTitle(card == nil ? "Kart ekle" : "Kartı düzenle")
@@ -77,6 +81,12 @@ struct KartFormu: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Kaydet", action: save).disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+            }
+            .confirmationDialog("Kartın günleri değişiyor", isPresented: $soru, titleVisibility: .visible) {
+                ForEach(gecis, id: \.self) { g in Button(g.baslik) { save(transition: g.kod) } }
+                Button("Vazgeç", role: .cancel) {}
+            } message: {
+                Text(gecis.map { "\($0.baslik): \($0.aciklama)" }.joined(separator: "\n\n"))
             }
             .onAppear {
                 guard let c = card else { return }
@@ -89,12 +99,26 @@ struct KartFormu: View {
         }
     }
 
-    private func save() {
+    private func save() { save(transition: nil) }
+
+    private func save(transition: String?) {
         var a: [String: Any] = ["name": name.trimmingCharacters(in: .whitespaces), "limit": Bicim.parse(limit) ?? 0, "last4": last4]
         do {
             if let c = card {
                 a["card"] = c.id
-                try model.write("update_card", a)
+                if cutoff != c.cutoffDay || due != c.dueDay {
+                    a["cutoff_day"] = cutoff
+                    a["due_day"] = due
+                }
+                if let transition { a["transition"] = transition }
+                do {
+                    try model.write("update_card", a)
+                } catch let e as AracHatasi where e.user && e.message.contains("transition") {
+                    gecis = Self.secenekler(e.message)
+                    if gecis.isEmpty { throw e }
+                    soru = true
+                    return
+                }
             } else {
                 a["cutoff_day"] = cutoff
                 a["due_day"] = due
@@ -104,5 +128,30 @@ struct KartFormu: View {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    // Aracın sorusundan seçenekler ve tarihleri (mcp/tools.js transitionQuestion)
+    static func secenekler(_ m: String) -> [Gecis] {
+        func tarih(_ pattern: String) -> [String] {
+            guard let r = try? NSRegularExpression(pattern: pattern),
+                  let x = r.firstMatch(in: m, range: NSRange(m.startIndex..., in: m)) else { return [] }
+            return (1..<x.numberOfRanges).compactMap { Range(x.range(at: $0), in: m).map { Bicim.day(String(m[$0])) } }
+        }
+        var out: [Gecis] = []
+        if m.contains("\"old\":") {
+            let d = tarih(#"cutoff (\d{4}-\d{2}-\d{2}), paid (\d{4}-\d{2}-\d{2})"#)
+            out.append(Gecis(kod: "old", baslik: "Bu ekstre eski günlerle kesilsin",
+                             aciklama: d.count == 2 ? "\(d[0]) kesilir, \(d[1]) tarihinde ödenir; sonraki ekstreler yeni günlerle." : "Açık ekstre eski günlerle; sonrakiler yeni günlerle."))
+        }
+        if m.contains("\"new\":") {
+            let d = tarih(#"cut on (\d{4}-\d{2}-\d{2}), paid (\d{4}-\d{2}-\d{2})"#)
+            out.append(Gecis(kod: "new", baslik: "Yeni günler hemen başlasın",
+                             aciklama: d.count == 2 ? "Kesilmiş ekstreler değişmez; henüz kesilmemiş harcamalar \(d[0]) tarihinde kesilecek ekstreye girer, son ödeme \(d[1])." : "Kesilmiş ekstreler olduğu gibi kalır; bundan sonrakiler yeni günlerle."))
+        }
+        if m.contains("\"fix\":") {
+            out.append(Gecis(kod: "fix", baslik: "Günleri yanlış girmiştim",
+                             aciklama: "Geçmiş ekstreler dahil hepsi yeni günlerle yeniden hesaplanır. \(Bicim.homeShort) bakiyen değişebilir."))
+        }
+        return out
     }
 }

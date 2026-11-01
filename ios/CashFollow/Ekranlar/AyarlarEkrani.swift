@@ -53,6 +53,14 @@ struct AyarlarEkrani: View {
                 }
 
                 Section {
+                    NavigationLink { NakitTanimi() } label: {
+                        Satir(title: "Nakit sayılanlar", value: nakitMetni)
+                    }
+                } header: { Text("Nakit") } footer: {
+                    Text("Özet'teki Nakit grafiği yalnızca bunları gösterir.")
+                }
+
+                Section {
                     Okunan(tool: "list_people") { (l: KisiListesi) in
                         ForEach(Array(l.people.enumerated()), id: \.element.id) { i, p in
                             HStack {
@@ -107,7 +115,50 @@ struct AyarlarEkrani: View {
         }
     }
 
+    private var nakitMetni: String {
+        let ad: (String) -> String = { c in
+            c == "MMF" ? "para piyasası fonları" : model.constants?.currencies.first { $0.code == c }?.short ?? (c == "GAU" ? "altın" : c)
+        }
+        let list = model.cashDef.map(ad)
+        return list.isEmpty ? "hiçbiri" : list.joined(separator: ", ")
+    }
+
     private func act(_ tool: String, _ args: [String: Any]) {
         do { try model.write(tool, args); error = nil } catch { self.error = error.localizedDescription }
+    }
+}
+
+// Nakit tanımı: hangi varlıklar nakit sayılır (web: Ayarlar → Nakit sayılanlar)
+struct NakitTanimi: View {
+    @EnvironmentObject private var model: Model
+
+    private var secenekler: [(kod: String, ad: String, alt: String?)] {
+        var out = (model.constants?.assets ?? []).map { (kod: $0.code, ad: $0.name, alt: $0.code == model.home ? "Ana para birimi" : nil as String?) }
+        if model.marketsAllowed { out.append((kod: "MMF", ad: "Para piyasası fonları", alt: "Aynı gün nakde dönen (T+0) TL fonları")) }
+        return out
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(secenekler, id: \.kod) { x in
+                    Toggle(isOn: Binding(get: { model.cashDef.contains(x.kod) }, set: { on in
+                        var list = model.cashDef.filter { $0 != x.kod }
+                        if on { list.append(x.kod) }
+                        model.setCashDef(list)
+                    })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(x.ad)
+                            if let alt = x.alt { Text(alt).font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
+            } footer: {
+                Text("Nakit grafiği bu varlıkların toplamını gösterir; döviz, altın ve fonlar bugünkü kur ve fiyatla \(Bicim.homeShort) karşılığıyla.")
+            }
+            Section { Button("Varsayılana dön") { model.setCashDef(nil) } }
+        }
+        .navigationTitle("Nakit sayılanlar")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
