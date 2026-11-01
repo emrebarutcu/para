@@ -232,12 +232,13 @@ struct AylikOdemeGrafigi: View {
 
     // Etiketler sığsın: en çok ~6 ay adı
     private var adim: Int { max(1, Int((Double(months.count) / 6).rounded(.up))) }
-    // Her ayın başı ve son ayın bitişi: etiket iki çizgi arasında, çubuğun altında ortalanır; yazı her adim'inci ayda
-    // (Charts'ın kendi adımı çift aylara hizalanıp ilk ayı atlıyor, seyrek çizgide de etiketi kaydırıyordu)
-    private var aySinirlari: [Date] {
-        let d = months.compactMap { Bicim.date($0.month + "-01") }
-        guard let son = d.last, let sonra = Bicim.takvim.date(byAdding: .month, value: 1, to: son) else { return d }
-        return d + [sonra]
+    // Etiketli ayların ortası (çubuk ayın ortasında durur): ilk aydan başlayıp her adim'inci ay. Charts'ın kendi
+    // ay adımı çift aylara hizalanıp ilk ayı atlıyor, "centered" etiketleri de bir çubuk kaydırıyordu.
+    private var etiketler: [Date] {
+        months.enumerated().compactMap { i, m in
+            guard i % adim == 0, let d = Bicim.date(m.month + "-01") else { return nil }
+            return d.addingTimeInterval(15 * 86_400)
+        }
     }
 
     var body: some View {
@@ -259,9 +260,9 @@ struct AylikOdemeGrafigi: View {
                 .chartLegend(position: .bottom)
                 .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
                 .chartXAxis {
-                    AxisMarks(values: aySinirlari) { v in
-                        AxisValueLabel(centered: true) {
-                            if v.index < months.count, v.index % adim == 0, let d = v.as(Date.self) {
+                    AxisMarks(values: etiketler) { v in
+                        AxisValueLabel {
+                            if let d = v.as(Date.self) {
                                 Text(d, format: months.count > 12 ? Bicim.tarih.month(.abbreviated).year(.twoDigits) : Bicim.tarih.month(.abbreviated))
                             }
                         }
