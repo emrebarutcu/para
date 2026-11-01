@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Varlıklar: TL, dolar, euro, gram altın, fon ve hisse bakiyeleri güncel kurla; hareketler (get_assets, list_entries)
+// Varlıklar: ana para birimi, döviz, gram altın, fon ve hisse (yalnızca Türkiye) bakiyeleri güncel kurla; hareketler (get_assets, list_entries)
 struct VarliklarEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var adding = false
@@ -19,7 +19,7 @@ struct VarliklarEkrani: View {
                         if v.receivablesTry > 0 { Satir(title: "Alacaklar", value: Bicim.tl(v.receivablesTry), color: Renk.gelir) }
                         if v.debtsTry > 0 { Satir(title: "Borçlar (kart dahil)", value: "−" + Bicim.tl(v.debtsTry), color: Renk.gider) }
                         if let e = v.ratesError ?? v.pricesError {
-                            Text(e.hasPrefix("Current rates") ? "Güncel kurlar alınamadı; toplama yalnızca TL girdi." : "Bazı fon / hisse fiyatları alınamadı.")
+                            Text(e.hasPrefix("Current rates") ? "Güncel kurlar alınamadı; toplama yalnızca \(Bicim.homeShort) girdi." : "Bazı fon / hisse fiyatları alınamadı.")
                                 .font(.caption).foregroundStyle(Renk.uyari)
                         }
                     }
@@ -27,14 +27,14 @@ struct VarliklarEkrani: View {
                     Section("Varlığın seyri") { VarlikSeyriKarti() }
 
                     Section("Bakiyeler") {
-                        ForEach(v.assets.filter { $0.balance != 0 || $0.asset == "TRY" }, id: \.self) { a in
+                        ForEach(v.assets.filter { $0.balance != 0 || $0.asset == Bicim.home }, id: \.self) { a in
                             HStack {
                                 Text(a.name)
                                 Spacer()
                                 VStack(alignment: .trailing) {
                                     Text(Bicim.amount(a.balance, asset: a.asset)).monospacedDigit()
                                         .foregroundStyle(a.balance < 0 ? Renk.gider : .primary)
-                                    if a.asset != "TRY", let t = a.tryValue {
+                                    if a.asset != Bicim.home, let t = a.tryValue {
                                         Text(Bicim.tl(t)).font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
@@ -60,10 +60,13 @@ struct VarliklarEkrani: View {
                     }
 
                     if let r = v.rates {
-                        Section("Kurlar") {
-                            if let x = r.USD { Satir(title: "Dolar", value: Bicim.tl(x)) }
-                            if let x = r.EUR { Satir(title: "Euro", value: Bicim.tl(x)) }
-                            if let x = r.GAU { Satir(title: "Gram altın", value: Bicim.tl(x)) }
+                        let kodlar = v.assets.map(\.asset).filter { $0 != Bicim.home && r.values[$0] != nil }
+                        if !kodlar.isEmpty {
+                            Section("Kurlar") {
+                                ForEach(kodlar, id: \.self) { k in
+                                    Satir(title: v.assets.first { $0.asset == k }?.name ?? k, value: Bicim.tl(r.values[k] ?? 0))
+                                }
+                            }
                         }
                     }
 
@@ -112,7 +115,7 @@ struct HareketListesiBolumu: View {
 struct HareketFormu: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
-    @State private var kind = "TRY"          // TRY, USD, EUR, GAU, FON, BIST
+    @State private var kind = Bicim.home     // ana para birimi, diğer para birimleri, GAU, FON, BIST
     @State private var ticker = ""
     @State private var direction = "in"
     @State private var amount = ""
@@ -134,12 +137,16 @@ struct HareketFormu: View {
             Form {
                 Section {
                     Picker("Varlık", selection: $kind) {
-                        Text("Türk lirası").tag("TRY")
-                        Text("Dolar").tag("USD")
-                        Text("Euro").tag("EUR")
-                        Text("Gram altın").tag("GAU")
-                        Text("Fon (TEFAS)").tag("FON")
-                        Text("Hisse (BIST)").tag("BIST")
+                        ForEach(model.constants?.assets ?? []) { a in Text(a.name).tag(a.code) }
+                        if model.marketsAllowed {
+                            Text("Fon (TEFAS)").tag("FON")
+                            Text("Hisse (BIST)").tag("BIST")
+                        }
+                        Section("Diğer para birimleri") {
+                            ForEach((model.constants?.currencies ?? []).filter { c in !(model.constants?.assets ?? []).contains { $0.code == c.code } }) { c in
+                                Text(c.name).tag(c.code)
+                            }
+                        }
                     }
                     if market {
                         TextField(kind == "FON" ? "Fon kodu (ör. AFT)" : "İşlem kodu (ör. THYAO)", text: $ticker)
@@ -150,28 +157,28 @@ struct HareketFormu: View {
                         Text(market ? "Satış" : "Çıkış").tag("out")
                     }
                     .pickerStyle(.segmented)
-                    TextField(market ? "Adet" : kind == "GAU" ? "Gram" : "Tutar", text: $amount).keyboardType(.decimalPad)
+                    TextField(market ? "Adet" : kind == "GAU" ? "Gram" : "Tutar (\(kind))", text: $amount).keyboardType(.decimalPad)
                     TextField(market ? "Açıklama (isteğe bağlı)" : "Açıklama (ör. Maaş)", text: $desc)
                     DatePicker("Tarih", selection: $date, displayedComponents: .date).environment(\.locale, Bicim.locale)
                     if people.count > 1 {
                         Picker("Kişi", selection: $person) { ForEach(people) { Text($0.name).tag($0.id) } }
                     }
                 }
-                if kind == "TRY" || (!market && !settle) {
+                if kind == Bicim.home || (!market && !settle) {
                     Section { Toggle("Her ay tekrarla", isOn: $monthly) }
                 }
-                if kind != "TRY" {
+                if kind != Bicim.home {
                     Section {
                         if !market {
-                            Toggle(direction == "in" ? "TL ile alındı" : "TL'ye bozduruldu", isOn: $settle)
+                            Toggle(direction == "in" ? "\(Bicim.homeShort) ile alındı" : "\(Bicim.homeShort) karşılığı satıldı", isOn: $settle)
                         }
                         if market || settle {
-                            TextField(market ? "Birim fiyat (₺, boşsa bugünkü)" : "Kur (₺, boşsa bugünkü)", text: $price).keyboardType(.decimalPad)
+                            TextField(market ? "Birim fiyat (\(Bicim.homeSymbol), boşsa bugünkü)" : "Kur (\(Bicim.homeSymbol), boşsa bugünkü)", text: $price).keyboardType(.decimalPad)
                         }
                     } footer: {
                         Text(market
-                             ? "Fiyat varsa tutar TL bakiyesinden düşer (alış) ya da ona eklenir (satış)."
-                             : "TL ile alınan döviz ve altın gelir sayılmaz: tutar TL bakiyesinden düşer.")
+                             ? "Fiyat varsa tutar \(Bicim.homeShort) bakiyesinden düşer (alış) ya da ona eklenir (satış)."
+                             : "\(Bicim.homeShort) ile alınan döviz ve altın gelir sayılmaz: tutar \(Bicim.homeShort) bakiyesinden düşer.")
                     }
                 }
                 HataMetni(text: error)
@@ -202,8 +209,8 @@ struct HareketFormu: View {
             "asset": asset, "direction": direction, "amount": Bicim.parse(amount) ?? 0,
             "description": desc.trimmingCharacters(in: .whitespaces), "date": Bicim.key(date), "person": person,
         ]
-        if monthly && (kind == "TRY" || (!market && !settle)) { a["repeat"] = 0 }
-        if !market && kind != "TRY" { a["settle"] = settle }
+        if monthly && (kind == Bicim.home || (!market && !settle)) { a["repeat"] = 0 }
+        if !market && kind != Bicim.home { a["settle"] = settle }
         if let p = Bicim.parse(price), p > 0, market || settle { a["price"] = p }
         // Fon / hisse kodu ve bugünkü fiyatı Worker'dan (add_entry kodu bunlarla doğrular)
         if market { await model.fetchPrices([asset]) }

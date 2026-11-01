@@ -300,7 +300,7 @@ struct VarlikSeyriKarti: View {
                 .frame(height: 200)
                 if let n = nokta(s) {
                     HStack {
-                        parca("TL", n.parts.lira)
+                        parca(Bicim.homeShort, n.parts.lira)
                         parca("Döviz / altın", n.parts.fx)
                         parca("Fon / hisse", n.parts.market)
                         parca("Alacak", n.parts.receivable)

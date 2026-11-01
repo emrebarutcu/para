@@ -12,6 +12,8 @@ struct AyarlarEkrani: View {
     @State private var renameText = ""
     @State private var deleting: Kisi?
     @State private var error: String?
+    @State private var ulke = ""
+    @State private var ulkeHatasi: String?
 
     var body: some View {
         NavigationStack {
@@ -33,6 +35,22 @@ struct AyarlarEkrani: View {
                         Button("Giriş yap / Kayıt ol") { login = true }
                     }
                 } header: { Text("Bulut senkronizasyonu") }
+
+                Section {
+                    UlkeSecici(secim: $ulke)
+                    Satir(title: "Para birimi", value: "\(Bicim.homeShort) (\(Bicim.home))")
+                    HataMetni(text: ulkeHatasi)
+                } header: { Text("Ülke") } footer: {
+                    Text("Tutarlar ve kurlar ülkenin para biriminde gösterilir; web ve asistan da aynısını kullanır. Ülke değişince kayıtlı tutarlar çevrilmez. Fon ve hisse şimdilik yalnızca Türkiye'de.")
+                }
+                .onAppear { if ulke.isEmpty { ulke = model.country } }
+                .onChange(of: ulke) { _, yeni in
+                    guard !yeni.isEmpty, yeni != model.country else { return }
+                    Task {
+                        do { try await model.setCountry(yeni); ulkeHatasi = nil }
+                        catch { ulkeHatasi = (error as? AuthHatasi)?.turkish ?? error.localizedDescription; ulke = model.country }
+                    }
+                }
 
                 Section {
                     Okunan(tool: "list_people") { (l: KisiListesi) in

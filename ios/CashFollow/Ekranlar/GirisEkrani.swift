@@ -12,6 +12,8 @@ struct GirisEkrani: View {
     @State private var busy = false
     @State private var message: (text: String, ok: Bool)?
     @State private var resendFor: String?
+    // Ülke: ana para birimi ondan (para.js); varsayılan cihazın bölgesi (listede yoksa Türkiye)
+    @State private var ulke = Locale.current.region?.identifier ?? "TR"
 
     var body: some View {
         NavigationStack {
@@ -38,6 +40,9 @@ struct GirisEkrani: View {
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                     SecureField("Şifre", text: $password)
                         .textContentType(register ? .newPassword : .password)
+                    if register || welcome {
+                        UlkeSecici(secim: $ulke)
+                    }
                     Button { Task { await submit() } } label: {
                         HStack { Spacer(); if busy { ProgressView() } else { Text(register ? "Kayıt Ol" : "Giriş Yap") }; Spacer() }
                     }
@@ -58,7 +63,7 @@ struct GirisEkrani: View {
                 }
                 if welcome {
                     Section {
-                        Button("Çevrimdışı devam et") { model.continueOffline() }
+                        Button("Çevrimdışı devam et") { model.continueOffline(country: ulke) }
                     } footer: {
                         Text("Veriler yalnızca bu cihazda durur; istediğin zaman Ayarlar'dan giriş yapabilirsin.")
                     }
@@ -71,6 +76,9 @@ struct GirisEkrani: View {
             }
         }
         .interactiveDismissDisabled(welcome)
+        .onAppear {
+            if model.constants?.countries.contains(where: { $0.code == ulke }) != true { ulke = "TR" }
+        }
     }
 
     private var trimmed: String { email.trimmingCharacters(in: .whitespaces) }
@@ -81,7 +89,7 @@ struct GirisEkrani: View {
         resendFor = nil
         do {
             if register {
-                switch try await Auth.signUp(email: trimmed, password: password) {
+                switch try await Auth.signUp(email: trimmed, password: password, country: ulke) {
                 case .session(let s):
                     model.signedIn(s)
                     dismiss()
@@ -125,6 +133,20 @@ struct GirisEkrani: View {
             message = (e.turkish, false)
         } catch {
             message = (error.localizedDescription, false)
+        }
+    }
+}
+
+// Ülke seçici: para birimiyle birlikte ("Almanya · Euro")
+struct UlkeSecici: View {
+    @EnvironmentObject private var model: Model
+    @Binding var secim: String
+
+    var body: some View {
+        Picker("Ülke", selection: $secim) {
+            ForEach(model.constants?.countries ?? []) { u in
+                Text("\(u.name) · \(model.constants?.currencies.first { $0.code == u.currency }?.short ?? u.currency)").tag(u.code)
+            }
         }
     }
 }

@@ -57,6 +57,17 @@ enum OzDenetim {
             try check(plan.contains("\"upsert\"") && plan.contains("Telefon"), "eşitleme planı")
             try check(m.constants()?.categories.isEmpty == false, "kategoriler")
             try check(!m.isBlank(m.box.json) && m.isBlank(m.defaultState), "boş veri")
+            // Ülke: euro hesabında tutarlar ve kurlar euroya göre, fon / hisse yok (para.js)
+            m.box.json = m.defaultState
+            m.setHome(m.homeOf(country: "DE"))
+            try m.runJSON("add_entry", ["asset": "EUR", "direction": "in", "amount": 1000, "description": "Gehalt", "date": "2026-10-01"])
+            try m.runJSON("add_entry", ["asset": "USD", "direction": "in", "amount": 110, "description": "Geschenk", "date": "2026-10-01"])
+            let eur: Varliklar = try m.run("get_assets")
+            try check(eur.currency == "EUR" && abs(eur.totalTry - (1000 + 110.0 * 40 / 45)) < 0.01, "euro hesabı: \(eur.currency ?? "-") \(eur.totalTry)")
+            try check(m.constants()?.markets == false && m.constants()?.assets.first?.code == "EUR", "euro formları")
+            try check(m.homeOf(country: "GB") == "GBP", "ülke → para birimi")
+            m.setHome("TRY")
+
             finish("OZ-DENETIM TAMAM", code: 0)
         } catch {
             finish("OZ-DENETIM HATA: \(error)", code: 1)

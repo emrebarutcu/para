@@ -12,6 +12,7 @@ final class Model: ObservableObject {
     @Published private(set) var lastSync: Date?
     @Published var showWelcome = false
     @Published var askMove = false          // girişsiz kullanımın verisi hesaba taşınsın mı (sync.js "Hesabıma taşı")
+    @Published private(set) var country = "TR"   // hesabın ülkesi; ana para birimi ondan (para.js)
     let motor: Motor?
     let startupError: String?
     private(set) var constants: Sabitler?
@@ -30,6 +31,7 @@ final class Model: ObservableObject {
         motor?.setPrices(Depo.read(Depo.url("fiyat.json")))
         session = Auth.stored()
         open(session?.userId)
+        applyCountry()
         showWelcome = session == nil && !Depo.offlineChosen
         if session != nil, let local = Depo.read(Depo.stateFile(nil)), motor?.isBlank(local) == false { askMove = true }
     }
@@ -193,6 +195,7 @@ final class Model: ObservableObject {
         Auth.store(nil)
         session = nil
         open(nil)
+        applyCountry()
     }
 
     func signedIn(_ s: Oturum) {
@@ -200,6 +203,7 @@ final class Model: ObservableObject {
         session = s
         showWelcome = false
         open(s.userId)
+        applyCountry()
         let local = Depo.read(Depo.stateFile(nil))
         if let local, let motor, !motor.isBlank(local) { askMove = true }
         Task { await refresh() }
@@ -240,9 +244,47 @@ final class Model: ObservableObject {
         syncError = nil
         lastSync = nil
         open(nil)
+        applyCountry()
     }
 
-    func continueOffline() {
+    // ── Ülke ve ana para birimi ────────────────────────────────────────────────
+
+    // Hesabın (ya da girişsiz kullanımın) ülkesi: veri, kurlar, araçlar ve biçimler o ülkenin para birimiyle
+    private func applyCountry() {
+        let code = session.map { $0.country ?? "TR" } ?? Depo.offlineCountry ?? "TR"
+        country = code
+        guard let motor else { return }
+        let home = motor.homeOf(country: code)
+        motor.setHome(home)
+        constants = motor.constants()
+        let c = constants?.currencies.first { $0.code == home }
+        Bicim.home = home
+        Bicim.homeSymbol = c?.symbol ?? home
+        Bicim.homeShort = c?.short ?? home
+        revision += 1
+    }
+
+    var home: String { Bicim.home }
+    var marketsAllowed: Bool { constants?.markets ?? true }
+
+    // Ülke değişince tutarlar çevrilmez: kayıtlar yazıldıkları para biriminde kalır
+    func setCountry(_ code: String) async throws {
+        if session != nil {
+            _ = try await token()   // süresi dolmak üzereyse yenilenir
+            guard let s = session else { return }
+            let next = try await Auth.updateCountry(s, code)
+            session = next
+            Auth.store(next)
+        } else {
+            Depo.offlineCountry = code
+        }
+        applyCountry()
+        schedulePush()
+    }
+
+    func continueOffline(country: String) {
+        Depo.offlineCountry = country
+        applyCountry()
         Depo.offlineChosen = true
         showWelcome = false
     }

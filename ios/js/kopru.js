@@ -11,7 +11,11 @@
 //   native.random(n)       → n rastgele bayt (dizi)
 //   native.log(level, msg)
 (function (root) {
-  const T = root.Taksit, V = root.Varlik, K = root.Kategori, Tablo = root.Tablo, N = root.Nakit;
+  const T = root.Taksit, V = root.Varlik, K = root.Kategori, Tablo = root.Tablo, N = root.Nakit, P = root.Para;
+
+  // Hesabın ana para birimi (ülkesinden; para.js). Swift ayarlar (setHome); veri onunla okunur ve eşitlenir.
+  let home = "TRY";
+  function setHome(code) { home = P.isCurrency(code) ? code : "TRY"; }
 
   // JavaScriptCore'da console ve crypto yoktur
   const say = level => (...args) => {
@@ -31,7 +35,7 @@
 
   // mcp/tools.js bir ES modülüdür (import / export); JavaScriptCore'un düz betiğine çevrilir. İçe aktardığı modüller
   // yukarıda yüklenmiş genel nesnelerdir.
-  const GLOBALS = { taksit: "Taksit", eposta: "Eposta", varlik: "Varlik", tekrar: "Tekrar", kategori: "Kategori", icgoru: "Icgoru", borc: "Borc", tablo: "Tablo" };
+  const GLOBALS = { para: "Para", taksit: "Taksit", eposta: "Eposta", varlik: "Varlik", tekrar: "Tekrar", kategori: "Kategori", icgoru: "Icgoru", borc: "Borc", tablo: "Tablo" };
   function toScript(src) {
     const body = String(src)
       .replace(/^import\s+(\w+)\s+from\s+"\.\.\/(\w+)\.js";?\s*$/gm, (line, name, file) => {
@@ -66,12 +70,13 @@
     const raw = root.native?.load ? root.native.load() : "";
     let data = null;
     try { data = raw ? JSON.parse(raw) : null; } catch {}
-    return T.hydrate(data || T.defaultState());
+    return T.hydrate({ ...(data || T.defaultState()), home });
   }
 
   function ctxFor(today) {
     return {
       today,
+      home,
       load: async () => loadState(),
       // Uygulamadaki gibi: araç veriyi değiştirir, Swift kaydeder ve değişen satırları eşitler (Tablo.changes)
       mutate: async fn => {
@@ -127,15 +132,16 @@
 
   // ── Grafikler (nakit.js; web'deki Nakit ve Varlığın seyri ile aynı hesap) ──
   // Bugünkü kurlar ve fon / hisse fiyatları tek tabloda (web: curRates)
+  // Kurlar ve fiyatlar TL'dir (/api/kur, /api/fiyat); ana para birimine çevrilir (para.js homeRates)
   function curRates() {
-    const out = { TRY: 1, ...(rates && rates.rates) };
-    for (const [code, x] of Object.entries(prices)) if (x?.price > 0) out[code] = x.price;
-    return out;
+    const lira = { TRY: 1, ...(rates && rates.rates) };
+    for (const [code, x] of Object.entries(prices)) if (x?.price > 0) lira[code] = x.price;
+    return P.homeRates(lira, home) ?? { [home]: 1 };
   }
-  // Nakit sayılan varlıklar: varsayılan tanım (TL ve para piyasası fonları; web'de Ayarlar → Nakit)
+  // Nakit sayılan varlıklar: varsayılan tanım (ana para birimi ve para piyasası fonları; web'de Ayarlar → Nakit)
   function isCash(code) {
     const fund = V.market(code)?.market === "FON" ? prices[code] : null;
-    return V.isCash(code, V.CASH_DEFAULT, fund);
+    return V.isCash(code, V.cashDefault(home), fund);
   }
   const todayOf = () => tools.todayKey();
 
@@ -165,28 +171,35 @@
   function constants() {
     return JSON.stringify({
       categories: K.CATEGORIES.map(c => ({ id: c.id, name: c.name, hint: c.hint })),
-      assets: V.ASSETS.map(a => ({ code: a.code, name: a.name, short: a.short, symbol: a.symbol, digits: a.digits })),
+      // Formlarda sunulan varlıklar (ana para birimi, sık kullanılan yabancılar, altın) ve bütün para birimleri
+      assets: V.assetsFor(home).map(a => ({ code: a.code, name: a.name, short: a.short, symbol: a.symbol, digits: a.digits })),
+      currencies: P.CURRENCIES.map(a => ({ code: a.code, name: a.name, short: a.short, symbol: a.symbol, digits: a.digits })),
+      countries: P.COUNTRIES,
+      home,
+      markets: P.marketsFor(home),
     });
   }
 
   // ── Eşitleme (Senkron.swift): sync.js'in kullandığı Tablo işlevleri, JSON içinde JSON dışında ──
+  const withHome = json => T.hydrate({ ...JSON.parse(json), home });
   const sync = {
     TABLES: Tablo.TABLES,
     SCHEMA: Tablo.SCHEMA,
     state: () => JSON.stringify(loadState()),
     // Veri boş mu (yalnızca varsayılan kişi; kart, harcama, hareket, borç yok): Tablo.stale'in "boş" koşulu
     isBlank: json => Tablo.stale(T.hydrate(json ? JSON.parse(json) : null), { cards: { _: "1" } }),
-    stale: (stateJson, baseJson) => Tablo.stale(T.hydrate(JSON.parse(stateJson)), JSON.parse(baseJson)),
-    rekey: baseJson => JSON.stringify(Tablo.rekey(JSON.parse(baseJson))),
-    changes: (stateJson, baseJson) => JSON.stringify(Tablo.changes(T.hydrate(JSON.parse(stateJson)), JSON.parse(baseJson))),
+    homeOf: country => P.homeOfCountry(country),
+    stale: (stateJson, baseJson) => Tablo.stale(withHome(stateJson), JSON.parse(baseJson)),
+    rekey: baseJson => JSON.stringify(Tablo.rekey(JSON.parse(baseJson), home)),
+    changes: (stateJson, baseJson) => JSON.stringify(Tablo.changes(withHome(stateJson), JSON.parse(baseJson))),
     // Hiç eşitlenmemiş cihaz: tablolar esastır (ekrandaki verinin üstüne yazılır)
     fromRows: (stateJson, rowsJson) => {
       const rows = JSON.parse(rowsJson);
-      const state = { ...T.hydrate(JSON.parse(stateJson)), ...Tablo.toState(rows) };
-      return JSON.stringify({ state: T.hydrate(state), base: Tablo.baseOf(rows) });
+      const state = { ...withHome(stateJson), ...Tablo.toState(rows, home) };
+      return JSON.stringify({ state: T.hydrate(state), base: Tablo.baseOf(rows, home) });
     },
     merge: (stateJson, baseJson, rowsJson) => {
-      let state = T.hydrate(JSON.parse(stateJson)), base = JSON.parse(baseJson), changed = false;
+      let state = withHome(stateJson), base = JSON.parse(baseJson), changed = false;
       const rows = JSON.parse(rowsJson);
       for (const t of Tablo.TABLES) {
         const out = Tablo.merge(state, base, t, rows[t] || []);
@@ -195,11 +208,11 @@
       }
       return JSON.stringify({ state, base, changed });
     },
-    combine: (accountJson, localJson) => JSON.stringify(Tablo.combine(T.hydrate(JSON.parse(accountJson)), T.hydrate(JSON.parse(localJson)))),
+    combine: (accountJson, localJson) => JSON.stringify(Tablo.combine(withHome(accountJson), withHome(localJson))),
   };
 
   root.Kopru = {
-    loadTools, toScript, setRates, setPrices, run, marketCodes, constants, sync, cash, assetPlan, asset,
+    loadTools, toScript, setRates, setPrices, setHome, run, marketCodes, constants, sync, cash, assetPlan, asset,
     defaultState: () => JSON.stringify(T.defaultState()),
   };
 })(this);

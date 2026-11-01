@@ -146,7 +146,7 @@ struct HarcamaFormu: View {
             Form {
                 Section {
                     TextField("Ne alındı", text: $desc)
-                    TextField("Tutar (₺)", text: $amount).keyboardType(.decimalPad)
+                    TextField("Tutar (\(Bicim.homeSymbol))", text: $amount).keyboardType(.decimalPad)
                     Picker("Taksit", selection: $count) {
                         Text("Peşin").tag(1)
                         ForEach(2...60, id: \.self) { Text("\($0) taksit").tag($0) }

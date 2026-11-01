@@ -4,19 +4,21 @@ import SwiftUI
 enum Bicim {
     static let locale = Locale(identifier: "tr_TR")
 
+    // Hesabın ana para birimi (ülkesinden; Model.applyCountry ayarlar). tl() ana para biriminde yazar.
+    static var home = "TRY"
+    static var homeSymbol = "₺"
+    static var homeShort = "TL"
+
     static func tl(_ v: Double, fraction: Bool = true) -> String {
-        v.formatted(.currency(code: "TRY").locale(locale).precision(.fractionLength(fraction ? 2 : 0)))
+        v.formatted(.currency(code: home).locale(locale).precision(.fractionLength(fraction ? 2 : 0)))
     }
 
     // Varlığın kendi biriminde: "100 $", "12,500 gr", fon / hissede adet
     static func amount(_ v: Double, asset: String) -> String {
-        switch asset {
-        case "TRY": return tl(v)
-        case "USD": return v.formatted(.currency(code: "USD").locale(locale))
-        case "EUR": return v.formatted(.currency(code: "EUR").locale(locale))
-        case "GAU": return v.formatted(.number.locale(locale).precision(.fractionLength(0...3))) + " gr"
-        default: return v.formatted(.number.locale(locale).precision(.fractionLength(0...4))) + " adet"
-        }
+        if asset == home { return tl(v) }
+        if asset == "GAU" { return v.formatted(.number.locale(locale).precision(.fractionLength(0...3))) + " gr" }
+        if asset.count == 3, asset.allSatisfy(\.isUppercase) { return v.formatted(.currency(code: asset).locale(locale)) }
+        return v.formatted(.number.locale(locale).precision(.fractionLength(0...4))) + " adet"
     }
 
     static func percent(_ v: Double) -> String {
@@ -76,7 +78,7 @@ enum Bicim {
 
     // Kullanıcının yazdığı tutar: "1.234,56", "1234.56", "1234"
     static func parse(_ s: String) -> Double? {
-        let t = s.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "₺", with: "").replacingOccurrences(of: " ", with: "")
+        let t = s.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: homeSymbol, with: "").replacingOccurrences(of: "₺", with: "").replacingOccurrences(of: " ", with: "")
         guard !t.isEmpty else { return nil }
         let normalized = t.contains(",") ? t.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".") : t
         return Double(normalized)

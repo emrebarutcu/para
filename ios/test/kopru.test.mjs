@@ -130,3 +130,30 @@ test("grafikler: Nakit ve Varlığın seyri web'deki nakit.js ile", async () => 
   assert.equal(a.points.at(-1).value, 1400);
   assert.equal(a.points[0].value, 0);              // 30 gün önce kayıt yok
 });
+
+test("ülke: euro hesabında tutarlar, kurlar ve formlar euroya göre", async () => {
+  const e = engine();
+  const K = e.sandbox.Kopru;
+  K.setHome("EUR");
+  K.setRates(JSON.stringify({ rates: { TRY: 1, USD: 50, EUR: 55, GBP: 66, GAU: 6000 }, updatedAt: "x", source: "t" }));
+  const c = JSON.parse(K.constants());
+  assert.equal(c.home, "EUR");
+  assert.equal(c.markets, false);
+  assert.deepEqual(c.assets.map(a => a.code), ["EUR", "USD", "GBP", "TRY", "GAU"]);
+  assert.ok(c.countries.some(x => x.code === "DE" && x.currency === "EUR"));
+  assert.equal(K.sync.homeOf("GB"), "GBP");
+  const today = JSON.parse(K.cash("today", 0)).today;
+  await e.call("add_entry", { asset: "EUR", direction: "in", amount: 1000, description: "Gehalt", date: today }, today);
+  await e.call("add_entry", { asset: "USD", direction: "in", amount: 110, description: "Geschenk", date: today }, today);
+  const a = await e.call("get_assets", {}, today);
+  assert.equal(a.ok.currency, "EUR");
+  assert.equal(a.ok.totalTry, 1100);                          // 110 $ × 50 / 55
+  assert.equal(JSON.parse(K.cash("today", 0)).days[0].balance, 1000);
+  assert.equal(JSON.parse(e.saved()).home, "EUR");
+  const fon = await e.call("add_entry", { asset: "FON:AFT", direction: "in", amount: 1 }, today);
+  assert.equal(fon.err.user, true);
+  // Eşitleme: euro hesabında euro harcaması satırda boş varlıkla yazılır
+  await e.call("add_purchase", { description: "Brot", amount: 3, card: "nakit", date: today }, today);
+  const plan = JSON.parse(K.sync.changes(K.sync.state(), "{}"));
+  assert.equal(plan.purchases.upsert[0].row.asset, null);
+});

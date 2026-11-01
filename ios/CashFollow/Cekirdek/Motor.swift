@@ -125,6 +125,12 @@ final class Motor {
 
     // ── Kurlar, fiyatlar, sabitler ─────────────────────────────────────────────
 
+    // Hesabın ana para birimi (ülkesinden; para.js): veri, kurlar ve araçlar onunla
+    func setHome(_ code: String) { kopru.invokeMethod("setHome", withArguments: [code]) }
+    func homeOf(country: String) -> String {
+        kopru.forProperty("sync")?.invokeMethod("homeOf", withArguments: [country])?.toString() ?? "TRY"
+    }
+
     func setRates(_ json: String?) { kopru.invokeMethod("setRates", withArguments: [json.map { $0 as Any } ?? NSNull()]) }
     func setPrices(_ json: String?) { kopru.invokeMethod("setPrices", withArguments: [json.map { $0 as Any } ?? NSNull()]) }
 
@@ -188,11 +194,16 @@ final class Motor {
 }
 
 struct Sabitler: Decodable {
+    struct Ulke: Decodable, Identifiable, Hashable { let code: String; let name: String; let currency: String; var id: String { code } }
     struct Kategori: Decodable, Identifiable, Hashable { let id: String; let name: String; let hint: String }
     struct Varlik: Decodable, Identifiable, Hashable {
         let code: String; let name: String; let short: String; let symbol: String; let digits: Int
         var id: String { code }
     }
     let categories: [Kategori]
-    let assets: [Varlik]
+    let assets: [Varlik]          // formlarda: ana para birimi, sık kullanılan yabancılar, altın
+    let currencies: [Varlik]
+    let countries: [Ulke]
+    let home: String
+    let markets: Bool             // fon ve hisse (yalnızca Türkiye)
 }
