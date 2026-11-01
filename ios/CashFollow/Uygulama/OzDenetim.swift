@@ -38,14 +38,19 @@ enum OzDenetim {
             try check(plan.contains("\"upsert\"") && plan.contains("Telefon"), "eşitleme planı")
             try check(m.constants()?.categories.isEmpty == false, "kategoriler")
             try check(!m.isBlank(m.box.json) && m.isBlank(m.defaultState), "boş veri")
-            print("OZ-DENETIM TAMAM")
-            fflush(stdout)
-            exit(0)
+            finish("OZ-DENETIM TAMAM", code: 0)
         } catch {
-            print("OZ-DENETIM HATA: \(error)")
-            fflush(stdout)
-            exit(1)
+            finish("OZ-DENETIM HATA: \(error)", code: 1)
         }
+    }
+
+    // Sonuç hem konsola hem uygulamanın Documents/oz-denetim.txt dosyasına (CI konsolu her zaman yakalayamıyor)
+    private static func finish(_ result: String, code: Int32) -> Never {
+        print(result)
+        fflush(stdout)
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? Data((result + "\n").utf8).write(to: docs.appendingPathComponent("oz-denetim.txt"), options: .atomic)
+        exit(code)
     }
 
     private static func check(_ ok: Bool, _ what: @autoclosure () -> String) throws {

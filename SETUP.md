@@ -216,7 +216,7 @@ araçları (`mcp/tools.js`) JavaScriptCore'da çalışır (`ios/js/kopru.js`); e
 gelir; bir kural değişince iOS bir sonraki derlemede onu kullanır (Xcode'un "Web modülleri" adımı, `ios/scripts/js-kopyala.sh`,
 dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iOS aynı PR'da değişir.
 
-- **Açmak:** Xcode 16+ ile `ios/CashFollow.xcodeproj` → hedef CashFollow → Signing & Capabilities'te kendi ekibini seç
+- **Açmak:** Xcode 26+ ile (App Store Connect eski SDK ile yapılmış build'i kabul etmez) `ios/CashFollow.xcodeproj` → hedef CashFollow → Signing & Capabilities'te kendi ekibini seç
   (bundle id `app.cashfollow.ios`) → çalıştır. iOS 17+, yalnızca iPhone.
 - **Veri:** Girişsiz kullanımın verisi `veri.json`'da, hesabınki `veri.<kullanıcı id>.json`'da (Application Support), biçim
   web'deki localStorage ile aynıdır. Oturum Anahtar Zinciri'ndedir. Eşitleme `sync.js`'in Swift karşılığıdır
@@ -236,8 +236,11 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
 
 #### TestFlight (Mac gerekmez)
 
-`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS makinesinde arşivler, Apple'ın bulut sertifikasıyla imzalar ve
-App Store Connect'e yükler. Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
+`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS 26 makinesinde, kurulu en yeni (beta olmayan) Xcode ile arşivler ve
+App Store Connect'e yükler. İmza için her çalışmada API ile geçici bir dağıtım sertifikası ve App Store profili oluşturulur,
+arşiv imzasız alınıp `codesign` ile elle imzalanır, iş bitince sertifika ve profil silinir (`ios/scripts/asc_imza.py`).
+Dağıtım sertifikasının adı hesap sahibinin adıdır; Xcode'un imzasında addaki "ç" imzayı geçersiz kılıyordu (ITMS-90035),
+elle imzada imza gereksinimi takım kimliğinden kurulur. Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
 
 1. **Team ID:** [developer.apple.com/account](https://developer.apple.com/account) → Membership details → Team ID (10 karakter).
 2. **Uygulama kaydı:** [App Store Connect](https://appstoreconnect.apple.com) → Uygulamalar → **+** → Yeni Uygulama: platform iOS,
@@ -245,7 +248,7 @@ App Store Connect'e yükler. Bir kez yapılacaklar (Apple Developer Program üye
    (listede yoksa önce [Identifiers](https://developer.apple.com/account/resources/identifiers/list)'ta **+** → App IDs →
    Explicit `app.cashfollow.ios` ile kaydedilir), SKU `cashfollow-ios`.
 3. **API anahtarı:** App Store Connect → Kullanıcılar ve Erişim → Entegrasyonlar → App Store Connect API → Takım Anahtarları →
-   **+**, erişim **Admin** (bulut imza sertifikası için gerekli). Issuer ID ve Key ID'yi not et, `.p8` dosyasını indir
+   **+**, erişim **Admin** (geçici sertifika ve profil oluşturmak için gerekli). Issuer ID ve Key ID'yi not et, `.p8` dosyasını indir
    (yalnızca bir kez indirilebilir).
 4. **GitHub → Settings → Secrets and variables → Actions → New repository secret:** `APPLE_TEAM_ID`, `ASC_ISSUER_ID`,
    `ASC_KEY_ID`, `ASC_KEY_P8` (`.p8` dosyasının bütün içeriği, `-----BEGIN PRIVATE KEY-----` satırları dahil).
