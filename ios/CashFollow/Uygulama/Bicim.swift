@@ -25,6 +25,15 @@ enum Bicim {
         (v >= 0 ? "+" : "") + (v / 100).formatted(.percent.locale(locale).precision(.fractionLength(0...2)))
     }
 
+    // Gün anahtarlarıyla aynı saat dilimindeki takvim; grafikler eksen ve ay gruplarını bununla kurar
+    static let takvim: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = Yapilandirma.timeZone
+        c.locale = locale
+        return c
+    }()
+    static var tarih: Date.FormatStyle { Date.FormatStyle(locale: locale, calendar: takvim, timeZone: Yapilandirma.timeZone) }
+
     // "YYYY-MM-DD" (Türkiye günü) ↔ Date
     private static let dayFormat: DateFormatter = {
         let f = DateFormatter()

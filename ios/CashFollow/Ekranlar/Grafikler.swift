@@ -134,17 +134,18 @@ struct NakitKarti: View {
             AxisMarks(values: haftalik(bas, son)) { v in
                 AxisGridLine()
                 AxisValueLabel(anchor: v.index == 0 ? .topLeading : .top) {
-                    if let d = v.as(Date.self) { Text(d, format: .dateTime.day().month(.abbreviated).locale(Bicim.locale)) }
+                    if let d = v.as(Date.self) { Text(d, format: Bicim.tarih.day().month(.abbreviated)) }
                 }
             }
         }
         .frame(height: 200)
+        .grafikTakvimi()
     }
 
     // Dönem başından haftada bir; sona 3 günden yakın olan yazılmaz (kesilmesin)
     private func haftalik(_ bas: Date, _ son: Date) -> [Date] {
         var out: [Date] = [], d = bas
-        let cal = Calendar(identifier: .gregorian)
+        let cal = Bicim.takvim
         while d <= son.addingTimeInterval(-3 * 86_400) || out.isEmpty {
             out.append(d)
             guard let n = cal.date(byAdding: .day, value: 7, to: d) else { break }
@@ -178,6 +179,13 @@ struct NakitKarti: View {
         }
         .padding(8)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+extension View {
+    // Grafik eksenleri gün anahtarlarıyla aynı saat diliminde (yoksa cihaz başka dilimdeyse ay / gün kayar)
+    func grafikTakvimi() -> some View {
+        environment(\.calendar, Bicim.takvim).environment(\.timeZone, Yapilandirma.timeZone)
     }
 }
 
@@ -246,11 +254,12 @@ struct AylikOdemeGrafigi: View {
                 .chartXAxis {
                     AxisMarks(values: .stride(by: .month, count: adim)) { _ in
                         AxisValueLabel(format: months.count > 12
-                                       ? .dateTime.month(.abbreviated).year(.twoDigits).locale(Bicim.locale)
-                                       : .dateTime.month(.abbreviated).locale(Bicim.locale), centered: true)
+                                       ? Bicim.tarih.month(.abbreviated).year(.twoDigits)
+                                       : Bicim.tarih.month(.abbreviated), centered: true)
                     }
                 }
                 .frame(height: 220)
+                .grafikTakvimi()
             }
         }
     }
@@ -368,8 +377,9 @@ struct VarlikSeyriKarti: View {
                 .chartXSelection(value: $secili)
                 .chartYScale(domain: alan)
                 .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
-                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisGridLine(); AxisValueLabel(format: .dateTime.day().month(.abbreviated).locale(Bicim.locale)) } }
+                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisGridLine(); AxisValueLabel(format: Bicim.tarih.day().month(.abbreviated)) } }
                 .frame(height: 200)
+                .grafikTakvimi()
                 if let n = nokta(s) {
                     HStack {
                         parca(Bicim.homeShort, n.parts.lira)

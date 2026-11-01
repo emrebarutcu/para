@@ -47,6 +47,9 @@ jobs:
             sleep 12
             xcrun simctl io "$UDID" screenshot "out/$name-$theme.png"
           }
+          # İlk açılış (soğuk başlangıç, sistem bildirimleri) görüntüye girmesin
+          xcrun simctl launch "$UDID" app.cashfollow.ios -ornek
+          sleep 30
           for theme in light dark; do
             shot galeri1 $theme -galeri 1
             shot galeri2 $theme -galeri 2
