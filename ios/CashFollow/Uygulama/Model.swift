@@ -137,7 +137,7 @@ final class Model: ObservableObject {
         guard let uid = session?.userId, UserDefaults.standard.string(forKey: "para.tz.\(uid)") != tz,
               let t = try? await token(), var s = session, s.userId == uid else { return }
         s.accessToken = t
-        if (try? await Oturum.updateZone(s, tz)) != nil { UserDefaults.standard.set(tz, forKey: "para.tz.\(uid)") }
+        if (try? await Auth.updateZone(s, tz)) != nil { UserDefaults.standard.set(tz, forKey: "para.tz.\(uid)") }
     }
 
     func schedulePush() {
