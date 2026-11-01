@@ -34,6 +34,25 @@ enum OzDenetim {
                 try m.runJSON("add_purchase", ["description": "x", "amount": -1])
                 try check(false, "geçersiz tutar kabul edildi")
             } catch let e as AracHatasi where e.user {}
+            // Yeni ekranlar: Akış, içgörüler, kategoriler, borçlar, grafikler
+            try m.runJSON("add_debt", ["type": "loan", "party": "Banka", "amount": 2500, "installments": 12,
+                                       "due_date": "2026-11-15", "date": "2026-10-15", "principal": 25000])
+            try m.runJSON("add_debt", ["type": "lent", "party": "Can", "amount": 5000, "date": "2026-10-20", "due_date": "2026-11-20"])
+            let akis: Akis = try m.run("get_cashflow", ["months": 3])
+            try check(akis.months.count == 3, "akış: \(akis.months.count) ay")
+            let _: Icgoruler = try m.run("get_insights")
+            let _: KategoriHarcamasi = try m.run("spending_by_category", ["month": "2026-10"])
+            let borclar: Borclar = try m.run("list_debts")
+            try check(borclar.debts.count == 2 && borclar.cards.count == 1, "borçlar: \(borclar.debts.count)")
+            let loan = borclar.debts.first { $0.type == "loan" }
+            try m.runJSON("pay_debt", ["debt": loan?.id ?? "", "amount": 2500, "date": "2026-10-31"])
+            let nakit = try m.cash(start: "1", shift: 0)
+            try check(!nakit.days.isEmpty && nakit.any, "nakit: \(nakit.days.count) gün")
+            let plan1 = try m.assetPlan(range: "3m")
+            try check(plan1.span == 91 && plan1.codes == ["USD"], "varlık planı: \(plan1)")
+            let seri = try m.asset(range: "3m", seriesJSON: #"{"USD":[["2026-08-01",38],["2026-10-01",40]]}"#)
+            try check((seri?.points.count ?? 0) > 10, "varlığın seyri: \(seri?.points.count ?? 0) nokta")
+
             let plan = try m.changes(state: m.box.json, base: "{}")
             try check(plan.contains("\"upsert\"") && plan.contains("Telefon"), "eşitleme planı")
             try check(m.constants()?.categories.isEmpty == false, "kategoriler")

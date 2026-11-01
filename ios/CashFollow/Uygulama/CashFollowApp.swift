@@ -29,12 +29,13 @@ struct AnaEkran: View {
             if let error = model.startupError {
                 ContentUnavailableView("Uygulama açılamadı", systemImage: "exclamationmark.triangle", description: Text(error))
             } else {
+                // iPhone'da en fazla 5 sekme: Kartlar Borçlar'da, Ayarlar Özet'teki dişlide
                 TabView {
                     OzetEkrani().tabItem { Label("Özet", systemImage: "house") }
+                    AkisEkrani().tabItem { Label("Akış", systemImage: "calendar") }
                     HarcamalarEkrani().tabItem { Label("Harcamalar", systemImage: "list.bullet.rectangle") }
-                    KartlarEkrani().tabItem { Label("Kartlar", systemImage: "creditcard") }
+                    BorclarEkrani().tabItem { Label("Borçlar", systemImage: "creditcard") }
                     VarliklarEkrani().tabItem { Label("Varlıklar", systemImage: "banknote") }
-                    AyarlarEkrani().tabItem { Label("Ayarlar", systemImage: "gearshape") }
                 }
             }
         }

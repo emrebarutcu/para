@@ -7,6 +7,7 @@ const K = window.Kategori;
 const I = window.Icgoru;
 const YZ = window.YZ;
 const B = window.Borc;
+const N = window.Nakit;   // Nakit grafiği ve Varlığın seyri (nakit.js)
 const STORAGE_KEY_BASE = "cashflow.v1";
 function getStorageKey() {
   return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
@@ -279,10 +280,7 @@ function setMoney(node, n) {
   }
 }
 
-function knownPurchases() {
-  const known = new Set(state.people.map(p => p.id));
-  return state.installments.filter(p => known.has(p.personId));
-}
+function knownPurchases() { return N.knownPurchases(state); }
 
 // Son ödemenin ayı; süresiz tekrarlayan TL harcaması varsa en az bir yıl ileri bakılır
 function lastPaymentIndex() {
@@ -399,23 +397,7 @@ const els = {
 // ---------- Render ----------
 // Kart ve nakit ödemeleri aylara göre (taksit.js buildCashflow). Hesaba katılmayan kartın (borc.js) ekstreleri ödeme
 // toplamlarına girmez: ay, kişi ve kart toplamlarından çıkarılır, olay listede kalır (ignored: soluk, "hesaba katılmıyor")
-function cashflow(fromIdx, toIdx) {
-  const months = T.buildCashflow(state.people, state.cards, state.installments, fromIdx, toIdx);
-  const off = new Set(state.cards.filter(c => !B.tracked(c)).map(c => c.id));
-  if (!off.size) return months;
-  // Etkilenen ayda toplamlar sayılan olaylardan yeniden toplanır (çıkarma yuvarlama kaydırırdı)
-  return months.map(m => {
-    if (!m.events.some(ev => off.has(ev.cardId))) return m;
-    const out = { ...m, total: 0, byPerson: {}, byCard: { ...m.byCard } };
-    out.events = m.events.map(ev => {
-      if (off.has(ev.cardId)) { delete out.byCard[ev.cardId]; return { ...ev, ignored: true }; }
-      out.total += ev.total;
-      for (const [pid, v] of Object.entries(ev.byPerson)) out.byPerson[pid] = (out.byPerson[pid] || 0) + v;
-      return ev;
-    });
-    return out;
-  });
-}
+function cashflow(fromIdx, toIdx) { return N.cashflow(state, fromIdx, toIdx); }
 
 function render() {
   const start = T.monthIndex(currentMonth);
@@ -1437,122 +1419,12 @@ function hideTooltip() { els.tooltip.hidden = true; }
 // bilinmeyen varlık hiç sayılmaz (missing). Dönem net'i dönem başından o güne hareketlerin toplamıdır.
 
 // Seçili başlangıçla bugünün dönemi; shift dönem kaydırır
-function cashPeriod(today, start, shift) {
-  const t = T.parseDate(today);
-  let idx = t.idx, day = t.day;
-  if (start !== "today") {
-    day = Number(start);
-    if (t.day < T.dayOf(idx, day)) idx--;
-  }
-  idx += shift;
-  return { from: T.dateKey(idx, day), to: T.addDays(T.dateKey(idx + 1, day), -1) };
-}
+function cashPeriod(today, start, shift) { return N.cashPeriod(today, start, shift); }
 
 function cashSeries(from, to, today) {
-  const lo = from < today ? from : today, hi = to > today ? to : today;
-  const loIdx = T.parseDate(lo).idx, hiIdx = T.parseDate(hi).idx;
-  const moves = new Map();   // tarih → [{ desc, value }]
-  const add = (date, m) => {
-    if (!moves.has(date)) moves.set(date, []);
-    moves.get(date).push(m);
-  };
-
-  const r = curRates();
-  const missing = new Set();
-  const toTry = (amount, code) => {
-    const v = V.toTry(amount, code, r);
-    if (v == null) missing.add(code);
-    return v;
-  };
-  // Yalnızca nakit sayılan varlıklar (Ayarlar → Nakit: varsayılan TL ve para piyasası fonları); kart ekstreleri ve
-  // nakit taksitler TL'dir
-  const cash = code => isCashCode(code);
-  const lira = cash("TRY");
-  let anchor = 0, any = false;   // anchor: bugüne kadarki nakit, TL (bugünkü hareketler dahil)
-  for (const e of knownEntries()) {
-    if (!V.asset(e.asset) || !Number.isFinite(e.amount)) continue;
-    // TL bakiyesine işlenen fon / hisse alışı ya da satışı TL hareketidir. Fon da nakitse (para piyasası fonu) ikisi tek
-    // harekettir: TL'den nakit fona geçiş nakdi yalnızca bugünkü fiyatla alış fiyatı arasındaki fark kadar değiştirir.
-    const settled = lira ? -V.settled(e) : 0;
-    const own = cash(e.asset);
-    if (!own && !settled) continue;
-    any = true;
-    const value = own ? toTry(e.amount, e.asset) : 0;
-    if (value == null && !settled) continue;
-    const v = (value ?? 0) + settled;
-    // Nakitten nakde alış / satışta kalan bugünkü değerle işlem tutarı arasındaki farktır
-    const desc = settled && own ? `${entryTitle(e)} (fiyat farkı)` : entryTitle(e);
-    if (V.repeatOf(e) == null) {
-      if (e.date <= today) anchor += v;
-      if (e.date >= lo && e.date <= hi && Math.abs(v) > EPS) add(e.date, { desc, value: v });
-      continue;
-    }
-    anchor += v * V.processedCount(e, today);
-    for (const { date } of R.between(e, lo, hi)) add(date, { desc: e.desc, value: v });
-  }
-  // Kartsız harcamalar ödendikçe varlıktan düşmüştür (bugünkü dahil); kart ödemesi bugün henüz ödenmedi sayılır
-  for (const [code, amount] of Object.entries(T.cashSpent(knownPurchases(), state.cards, today))) if (cash(code)) anchor -= toTry(amount, code) ?? 0;
-  // Borç etkileri de düşmüştür (takipteki kartların ödenen ekstreleri dahil: aşağıdaki kart hareketleri o günlerin
-  // hareketidir, ikinci kez düşülmez)
-  for (const [code, amount] of Object.entries(B.debtSpent(state, today))) if (cash(code)) anchor -= toTry(amount, code) ?? 0;
-  const since = new Map(state.cards.filter(B.tracked).map(c => [c.id, B.since(c, today)]));
-  for (const m of lira ? cashflow(loIdx, hiIdx) : []) {
-    for (const ev of m.events) {
-      // Hesaba katılmayan kartın ekstresi TL bakiyesinden düşmez
-      if (ev.ignored || ev.date < lo || ev.date > hi || (since.has(ev.cardId) && ev.date >= since.get(ev.cardId))) continue;
-      if (ev.date === today && ev.cardId) anchor -= ev.total;
-      add(ev.date, { desc: ev.cardId ? `${cardName(ev.cardId)} ekstresi` : "Nakit ödemeler", value: -ev.total });
-    }
-  }
-  // Bugünkü planlı kart hareketi (bugün ödenecek ya da ödenmemiş ekstre) henüz düşmedi: gün sonunda düşer
-  for (const mv of lira ? B.cardMoves(state, today, lo, hi, hi) : []) {
-    const c = cardById(mv.cardId);
-    if (mv.planned && mv.date === today) anchor += mv.amount;
-    const desc = mv.type === "payment" ? `${c.name} · kart ödemen` : mv.type === "prepay" ? `${c.name} · erken ödeme`
-      : mv.type === "unpaid" && manualCard(c, today)
-        ? `${c.name} · ödenmemiş ekstre${B.cardDebt(state, c, today).overdue > EPS ? " (gecikti)" : ""}` : `${c.name} ekstresi`;
-    add(mv.date, { desc, value: mv.amount });
-  }
-  // Borç akışları kendi günlerinde; bugünkü kredi taksiti ve beklenen ödemeler kart ekstresi gibi gün sonunda düşer
-  for (const f of B.allFlows(state, today, lo, hi)) {
-    if (!cash(f.asset)) continue;
-    any = true;
-    if (f.type === "plan" && !f.paid && f.date === today && f.amount > 0) continue;   // gecikmiş / bugünkü tahsilat henüz yok
-    const value = toTry(f.amount, f.asset);
-    if (value == null) continue;
-    if (f.date === today && !f.paid) anchor += value;
-    add(f.date, { desc: flowLabel(f), value });
-  }
-  // Döviz / altın harcamaları TL akışında yok: kendi varlıklarından düşer
-  for (const p of knownPurchases()) {
-    const code = T.assetOf(p);
-    if (code === "TRY" || !cash(code)) continue;
-    for (const x of paymentsOf(p, hi)) {
-      if (x.key < lo || x.key > hi) continue;
-      const value = toTry(-x.amount, code);
-      if (value != null) add(x.key, { desc: p.desc, value });
-    }
-  }
-  if (missing.size || knownEntries().some(e => e.asset !== "TRY")) loadRates();   // fon bilgisi de (para piyasası fonu mu)
-
-  const sum = date => (moves.get(date) || []).reduce((s, m) => s + m.value, 0);
-  const r2 = v => Math.round(v * 100) / 100;
-  const end = new Map([[today, anchor]]);   // gün sonu bakiyeleri
-  for (let d = T.addDays(today, 1), v = anchor; d <= hi; d = T.addDays(d, 1)) end.set(d, v += sum(d));
-  for (let d = today, v = anchor; d > lo; d = T.addDays(d, -1)) end.set(T.addDays(d, -1), v -= sum(d));
-
-  const days = [];
-  let net = 0, inSum = 0, outSum = 0;
-  for (let d = from; d <= to; d = T.addDays(d, 1)) {
-    const list = moves.get(d) || [];
-    for (const m of list) {
-      net += m.value;
-      if (m.value > 0) inSum += m.value; else outSum -= m.value;
-    }
-    days.push({ date: d, balance: r2(end.get(d)), net: r2(net), moves: list });
-  }
-  const before = r2(end.get(from) - sum(from));   // dönem başlamadan önceki bakiye
-  return { days, before, inSum: r2(inSum), outSum: r2(outSum), any: any || inSum > 0 || outSum > 0, missing: [...missing] };
+  const out = N.cashSeries(state, from, to, today, { rates: curRates(), isCash: isCashCode });
+  if (out.missing.length || knownEntries().some(e => e.asset !== "TRY")) loadRates();   // fon bilgisi de (para piyasası fonu mu)
+  return out;
 }
 
 // Ayın günü iyelik ekiyle: 1'i, 6'sı, 15'i, 20'si, 30'u
@@ -2356,12 +2228,7 @@ function fmtAsset(amount, code, signed = false) {
 }
 
 // Hareketin başlığı: açıklaması; boşsa fon / hissede "THYAO alışı", TL'yle alınan / bozdurulan dövizde "Dolar alışı"
-function entryTitle(e) {
-  const m = V.market(e.asset);
-  if (e.desc) return e.desc;
-  if (m) return `${m.ticker} ${e.amount > 0 ? "alışı" : "satışı"}`;
-  return V.settled(e) ? `${V.asset(e.asset).name} ${e.amount > 0 ? "alışı" : "bozdurma"}` : "";
-}
+function entryTitle(e) { return N.entryTitle(e); }
 
 // "bugün 13:36" ya da "18 Eki 13:36"
 function fmtTime(iso) {
@@ -2372,10 +2239,7 @@ function fmtTime(iso) {
   return key === T.todayKey() ? `bugün ${time}` : `${fmtDayShort(key)} ${time}`;
 }
 
-function knownEntries() {
-  const known = new Set(state.people.map(p => p.id));
-  return state.entries.filter(e => known.has(e.personId));
-}
+function knownEntries() { return N.knownEntries(state); }
 
 // Varlıktan ödenen (kartsız) harcamalar: varlık bakiyesinden düşer, Varlıklar'da çıkış olarak görünür
 function cashPurchases() {
@@ -2479,10 +2343,8 @@ function renderAssets() {
 // kapanışı olmayan gün öncekiyle). Bugün güncel kur ve fiyatla, üstteki toplamla aynıdır. Geçmişi alınamayan varlık
 // bugünkü fiyatla sayılır (notta yazar). Uzun dönemde birkaç günde bir nokta (en fazla ~180). Özet'teki Nakit
 // grafiğinden ayrıdır: o yalnızca nakdi gösterir.
-const ASSET_RANGES = { "1m": 30, "3m": 91, "6m": 182, "1y": 365, all: null };
+const ASSET_RANGES = N.ASSET_RANGES;
 const HISTORY_TTL = 60 * 60_000;   // geçmiş fiyatlar bu kadar süre taze sayılır (/api/gecmis de bu kadar saklar)
-const MAX_HISTORY_DAYS = 1830;     // en uzun dönem (5 yıl)
-const ASSET_POINTS = 180;
 let assetRange = Object.hasOwn(ASSET_RANGES, readPref(PREF.assetRange) ?? "") ? readPref(PREF.assetRange) : "3m";
 const histories = new Map();       // gün sayısı → { days, to, series: { kod: [["YYYY-MM-DD", fiyat], …] }, failed, fetchedAt }
 let historyLoading = null;
@@ -2497,13 +2359,7 @@ try {
 } catch {}
 
 // Geçmişi istenen varlıklar: kayıtlarda geçen dolar, euro, altın, fon ve hisseler
-function historyCodes() {
-  const codes = new Set();
-  for (const e of knownEntries()) if (e.asset !== "TRY" && V.asset(e.asset)) codes.add(e.asset);
-  for (const p of knownPurchases()) if (T.assetOf(p) !== "TRY") codes.add(T.assetOf(p));
-  for (const d of state.debts) if (d.asset && d.asset !== "TRY" && V.asset(d.asset)) codes.add(d.asset);
-  return [...codes].sort();
-}
+function historyCodes() { return N.historyCodes(state); }
 
 function loadHistory(codes, days) {
   const h = histories.get(days), now = Date.now();
@@ -2532,74 +2388,26 @@ function historyFor(days, codes) {
 }
 
 // Günün (ya da öncesinin son) kapanışı; dönem başından önceyse ilk kapanış; dizi boşsa null
-function priceAt(list, day) {
-  if (!list?.length) return null;
-  if (day < list[0][0]) return list[0][1];
-  let lo = 0, hi = list.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (list[mid][0] <= day) lo = mid; else hi = mid - 1;
-  }
-  return list[lo][1];
-}
+function priceAt(list, day) { return N.priceAt(list, day); }
 
 // Verinin day günü sonundaki hali: o güne kadarki hareketler, harcamalar ve borç kayıtları (tarihsiz harcama ilk ödeme
 // ayından)
-function stateAt(day) {
-  const month = day.slice(0, 7);
-  return {
-    ...state,
-    entries: state.entries.filter(e => e.date <= day),
-    installments: state.installments.filter(p => (p.date ? p.date <= day : !p.firstDue || p.firstDue <= month)),
-    debts: state.debts.filter(d => d.date <= day),
-  };
-}
+function stateAt(day) { return N.stateAt(state, day); }
 
-function firstRecordDate() {
-  const dates = [...knownEntries().map(e => e.date), ...knownPurchases().map(p => p.date), ...state.debts.map(d => d.date)]
-    .filter(d => T.parseDate(d));
-  return dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : null;
-}
+function firstRecordDate() { return N.firstRecordDate(state); }
 
 // → { span, codes, points: [{ date, value, parts: { lira, fx, market, receivable } }], approx, missing } ya da kayıt yoksa null
 function assetSeries(range, pid) {
   const today = T.todayKey();
-  const first = firstRecordDate();
-  if (!first) return null;
-  const all = Math.round((T.toDate(today) - T.toDate(first)) / 864e5);
-  const span = ASSET_RANGES[range] ?? Math.min(MAX_HISTORY_DAYS, Math.max(7, all));
+  const span = N.assetSpan(state, range, today);
+  if (span == null) return null;
   const codes = historyCodes();
   const hist = historyFor(span, codes);
   const cur = curRates() ?? { TRY: 1 };
   const key = [range, pid, today, state.entries, state.entries.length, state.installments, state.installments.length, state.debts,
     state.debts.length, state.cards, state.people, rates, prices, hist.stamp];
   if (assetMemo && key.every((x, i) => x === assetMemo.key[i])) return assetMemo.value;
-
-  const step = Math.max(1, Math.ceil(span / ASSET_POINTS));
-  const days = [];
-  for (let i = span; i > 0; i -= step) days.push(T.addDays(today, -i));
-  days.push(today);
-  const approx = new Set();
-  let missing = [];
-  const points = days.map(day => {
-    const r = { TRY: 1 };
-    for (const c of codes) {
-      const past = day === today ? null : priceAt(hist.series[c], day);
-      if (day !== today && past == null && cur[c] != null) approx.add(c);
-      const v = past ?? cur[c];
-      if (v != null) r[c] = v;
-    }
-    const t = B.totals(stateAt(day), day, r, pid);
-    if (day === today) missing = t.missing;
-    const parts = { lira: 0, fx: 0, market: 0, receivable: t.receivable.total };
-    for (const [c, amount] of Object.entries(t.balances)) {
-      const v = V.toTry(amount, c, r);
-      if (v == null) continue;
-      if (c === "TRY") parts.lira += v; else if (V.market(c)) parts.market += v; else parts.fx += v;
-    }
-    return { date: day, value: t.assets, parts };
-  });
-  const value = { span, codes, points, approx: [...approx], missing };
+  const value = { span, codes, ...N.assetPoints(state, { today, span, codes, cur, series: hist.series, pid }) };
   assetMemo = { key, value };
   return value;
 }
@@ -2924,11 +2732,7 @@ function cardPayments(id) { return B.known(state).cardPays.get(id) ?? []; }
 
 // Ekstreleri "Ben işaretlerim" ile ödenen (Ödendi ile) hesaba katılan kart; kart ödemesi yalnızca bunlara girilir. Elle
 // mod yarın başlıyorsa (bugün ödeme varken geçildi, startDay) kart bugün otomatik gibidir.
-function manualCard(c, today = T.todayKey()) {
-  if (!c || !B.tracked(c) || !B.manual(c)) return false;
-  const since = B.since(c, today);
-  return (c.manualSince > since ? c.manualSince : since) <= today;
-}
+function manualCard(c, today = T.todayKey()) { return N.manualCard(c, today); }
 // since gününden bugüne kaç gün geçti (gecikme)
 function lateDays(since, today) { return Math.round((T.toDate(today) - T.toDate(since)) / 864e5); }
 
@@ -2996,9 +2800,7 @@ function flowMark(f) {
   return m;
 }
 // Borç akışının adı (borc.js flowText); kartındaki harcamalar için kişinin ödemesi "Annem · sana ödedi"
-function flowLabel(f) {
-  return f.type === "share" ? `${personById(f.payment.personId)?.name ?? "?"} · sana ödedi` : B.flowText(f, state);
-}
+function flowLabel(f) { return N.flowLabel(state, f); }
 // Akışın işaretli tutarı kendi biriminde: "−₺5.500,00", "+$100,00"
 function flowMoney(f) { return (f.amount < 0 ? "−" : "+") + money(Math.abs(f.amount), f.asset); }
 // Borç akışının penceresi: kart payı ödemesinde kişinin kart payı, diğerlerinde borcun kendisi

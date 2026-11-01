@@ -9,7 +9,7 @@ import vm from "node:vm";
 const root = new URL("../../", import.meta.url);
 const read = p => readFileSync(new URL(p, root), "utf8");
 // Motor.swift'teki sıra
-const SCRIPTS = ["tekrar.js", "taksit.js", "varlik.js", "borc.js", "kategori.js", "eposta.js", "icgoru.js", "tablo.js", "ios/js/kopru.js"];
+const SCRIPTS = ["tekrar.js", "taksit.js", "varlik.js", "borc.js", "kategori.js", "eposta.js", "icgoru.js", "nakit.js", "tablo.js", "ios/js/kopru.js"];
 
 function engine(initial = "") {
   let saved = initial;
@@ -109,4 +109,24 @@ test("eşitleme: değişen satırlar, uzaktan gelenler, boş veri", async () => 
   assert.equal(f.state.cards.length, 1);
   assert.equal(f.state.people[0].id, "ben");
   assert.equal(S.SCHEMA, 7);
+});
+
+test("grafikler: Nakit ve Varlığın seyri web'deki nakit.js ile", async () => {
+  const e = engine();
+  const K = e.sandbox.Kopru;
+  K.setRates(JSON.stringify({ rates: { TRY: 1, USD: 40, EUR: 45, GAU: 4000 }, updatedAt: "x", source: "t" }));
+  const today = JSON.parse(K.cash("today", 0)).today;
+  await e.call("add_entry", { asset: "TRY", direction: "in", amount: 1000, description: "Maaş", date: today }, today);
+  await e.call("add_entry", { asset: "USD", direction: "in", amount: 10, description: "Hediye", date: today }, today);
+  const c = JSON.parse(K.cash("today", 0));
+  assert.equal(c.from, today);
+  assert.equal(c.days[0].balance, 1000);           // dolar nakit sayılmaz (varsayılan: TL ve para piyasası fonları)
+  assert.ok(c.days[0].moves.some(m => m.desc === "Maaş" && m.value === 1000));
+  const plan = JSON.parse(K.assetPlan("1m"));
+  assert.equal(plan.span, 30);
+  assert.deepEqual(plan.codes, ["USD"]);
+  const a = JSON.parse(K.asset("1m", JSON.stringify({ USD: [[today, 40]] })));
+  assert.equal(a.points.at(-1).date, today);
+  assert.equal(a.points.at(-1).value, 1400);
+  assert.equal(a.points[0].value, 0);              // 30 gün önce kayıt yok
 });

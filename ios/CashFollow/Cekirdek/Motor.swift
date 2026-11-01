@@ -22,7 +22,7 @@ final class VeriKutusu {
 @MainActor
 final class Motor {
     // Yükleme sırası: her modül kendinden öncekileri genel nesneden alır (ios/js/kopru.js)
-    private static let scripts = ["tekrar", "taksit", "varlik", "borc", "kategori", "eposta", "icgoru", "tablo", "kopru"]
+    private static let scripts = ["tekrar", "taksit", "varlik", "borc", "kategori", "eposta", "icgoru", "nakit", "tablo", "kopru"]
 
     let box: VeriKutusu
     private let context: JSContext
@@ -138,6 +138,31 @@ final class Motor {
     }
 
     var defaultState: String { kopru.invokeMethod("defaultState", withArguments: [])?.toString() ?? "" }
+
+    // ── Grafikler (nakit.js) ───────────────────────────────────────────────────
+
+    private func call(_ fn: String, _ args: [Any]) throws -> Data {
+        lastException = nil
+        let out = kopru.invokeMethod(fn, withArguments: args)
+        if let lastException { throw AracHatasi(message: "\(fn): \(lastException)", user: false) }
+        guard let text = out?.toString() else { throw AracHatasi(message: "\(fn) sonuç vermedi", user: false) }
+        return Data(text.utf8)
+    }
+
+    // Nakit grafiği: start "today" ya da ayın günü, shift dönem kaydırır
+    func cash(start: String, shift: Int) throws -> NakitSerisi {
+        try JSONDecoder().decode(NakitSerisi.self, from: call("cash", [start, shift]))
+    }
+
+    struct VarlikPlani: Decodable { let span: Int?; let codes: [String] }
+    func assetPlan(range: String) throws -> VarlikPlani {
+        try JSONDecoder().decode(VarlikPlani.self, from: call("assetPlan", [range]))
+    }
+
+    // series: kod → [["YYYY-MM-DD", kapanış], …] (/api/gecmis)
+    func asset(range: String, seriesJSON: String) throws -> VarlikSerisi? {
+        try JSONDecoder().decode(VarlikSerisi?.self, from: call("asset", [range, seriesJSON]))
+    }
 
     // ── Eşitleme (tablo.js; Senkron.swift) ─────────────────────────────────────
 

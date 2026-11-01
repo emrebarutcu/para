@@ -220,6 +220,14 @@ enum Piyasa {
     // { rates: { TRY, USD, EUR, GAU }, updatedAt, source }
     static func rates() async throws -> String { try await get("/api/kur") }
 
+    // Günlük kapanışlar: { from, to, series: { "USD": [["YYYY-MM-DD", fiyat], …] }, failed }; yalnızca series döner
+    static func history(_ codes: [String], days: Int) async throws -> String {
+        let json = try await get("/api/gecmis?kod=" + codes.joined(separator: ",").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)! + "&gun=\(days)")
+        let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
+        let series = obj?["series"] ?? [String: Any]()
+        return String(decoding: try JSONSerialization.data(withJSONObject: series), as: UTF8.self)
+    }
+
     // { prices: { "FON:AFT": { price, … } }, missing, failed, updatedAt }
     static func prices(_ codes: [String]) async throws -> String {
         try await get("/api/fiyat?kod=" + codes.joined(separator: ",").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)

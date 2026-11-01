@@ -67,6 +67,13 @@ enum Bicim {
         }
     }
 
+    // Ayın günü iyelik ekiyle (web: dayWithSuffix): 1'i, 6'sı, 15'i, 20'si, 30'u
+    static func gunEki(_ n: Int) -> String {
+        let last = n % 10
+        let ek = last > 0 ? ["i", "si", "ü", "ü", "i", "sı", "si", "i", "u"][last - 1] : (n == 20 ? "si" : "u")
+        return "\(n)'\(ek)"
+    }
+
     // Kullanıcının yazdığı tutar: "1.234,56", "1234.56", "1234"
     static func parse(_ s: String) -> Double? {
         let t = s.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "₺", with: "").replacingOccurrences(of: " ", with: "")

@@ -2,7 +2,7 @@
 // iOS uygulaması (ios/CashFollow) hesap ve doğrulama kurallarını yeniden yazmaz: web'in DOM'dan bağımsız modüllerini
 // (tekrar, taksit, varlik, borc, kategori, eposta, icgoru, tablo) ve asistanların araçlarını (mcp/tools.js) olduğu gibi
 // çalıştırır. Ekranlar araçları çağırır (get_overview, list_cards, add_purchase…); veri, eşitleme tabanı ve ağ Swift'tedir.
-// Yükleme sırası (Motor.swift): tekrar, taksit, varlik, borc, kategori, eposta, icgoru, tablo, kopru; sonra
+// Yükleme sırası (Motor.swift): tekrar, taksit, varlik, borc, kategori, eposta, icgoru, nakit, tablo, kopru; sonra
 // Kopru.loadTools(mcp/tools.js'in metni).
 //
 // Swift'in verdiği yerel işlevler (globalThis.native):
@@ -11,7 +11,7 @@
 //   native.random(n)       → n rastgele bayt (dizi)
 //   native.log(level, msg)
 (function (root) {
-  const T = root.Taksit, V = root.Varlik, K = root.Kategori, Tablo = root.Tablo;
+  const T = root.Taksit, V = root.Varlik, K = root.Kategori, Tablo = root.Tablo, N = root.Nakit;
 
   // JavaScriptCore'da console ve crypto yoktur
   const say = level => (...args) => {
@@ -125,6 +125,42 @@
     return [...new Set(s.entries.map(e => e.asset).filter(c => V.market(c)))].sort();
   }
 
+  // ── Grafikler (nakit.js; web'deki Nakit ve Varlığın seyri ile aynı hesap) ──
+  // Bugünkü kurlar ve fon / hisse fiyatları tek tabloda (web: curRates)
+  function curRates() {
+    const out = { TRY: 1, ...(rates && rates.rates) };
+    for (const [code, x] of Object.entries(prices)) if (x?.price > 0) out[code] = x.price;
+    return out;
+  }
+  // Nakit sayılan varlıklar: varsayılan tanım (TL ve para piyasası fonları; web'de Ayarlar → Nakit)
+  function isCash(code) {
+    const fund = V.market(code)?.market === "FON" ? prices[code] : null;
+    return V.isCash(code, V.CASH_DEFAULT, fund);
+  }
+  const todayOf = () => tools.todayKey();
+
+  // Nakit grafiği: start "today" ya da ayın günü ("1"…"31"), shift dönem kaydırır
+  function cash(start, shift) {
+    const today = todayOf();
+    const { from, to } = N.cashPeriod(today, start || "today", Number(shift) || 0);
+    const out = N.cashSeries(loadState(), from, to, today, { rates: curRates(), isCash });
+    return JSON.stringify({ from, to, today, ...out });
+  }
+
+  // Varlığın seyri iki adımda: önce dönem ve geçmişi gereken kodlar (Swift /api/gecmis'ten çeker), sonra seri
+  function assetPlan(range) {
+    const state = loadState(), today = todayOf();
+    return JSON.stringify({ span: N.assetSpan(state, range, today), codes: N.historyCodes(state) });
+  }
+  function asset(range, seriesJson, pid) {
+    const state = loadState(), today = todayOf();
+    const span = N.assetSpan(state, range, today);
+    if (span == null) return "null";
+    const codes = N.historyCodes(state);
+    const series = seriesJson ? JSON.parse(seriesJson) : {};
+    return JSON.stringify({ span, codes, ...N.assetPoints(state, { today, span, codes, cur: curRates(), series, pid: pid || undefined }) });
+  }
+
   // Formlar için sabitler
   function constants() {
     return JSON.stringify({
@@ -162,5 +198,8 @@
     combine: (accountJson, localJson) => JSON.stringify(Tablo.combine(T.hydrate(JSON.parse(accountJson)), T.hydrate(JSON.parse(localJson)))),
   };
 
-  root.Kopru = { loadTools, toScript, setRates, setPrices, run, marketCodes, constants, sync, defaultState: () => JSON.stringify(T.defaultState()) };
+  root.Kopru = {
+    loadTools, toScript, setRates, setPrices, run, marketCodes, constants, sync, cash, assetPlan, asset,
+    defaultState: () => JSON.stringify(T.defaultState()),
+  };
 })(this);

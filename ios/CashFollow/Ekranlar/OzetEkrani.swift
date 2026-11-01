@@ -1,9 +1,11 @@
 import SwiftUI
 
-// Özet: bu ay ve gelecek ay ödenecekler, sıradaki ödemeler, kartlar ve kişiler (get_overview; web'deki Özet sekmesi)
+// Özet: içgörüler, nakit, bu ay ve gelecek ay ödenecekler, sıradaki ödemeler, aylık ödemeler, kategoriler, kartlar ve
+// kişiler (web'deki Özet sekmesi)
 struct OzetEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var adding = false
+    @State private var ayarlar = false
 
     var body: some View {
         NavigationStack {
@@ -24,6 +26,10 @@ struct OzetEkrani: View {
                         }
                     }
 
+                    IcgoruBolumu()
+
+                    Section("Nakit") { NakitKarti() }
+
                     Section("Sıradaki ödemeler") {
                         if o.upcomingPayments.isEmpty {
                             Text("Ödenecek taksit yok").foregroundStyle(.secondary)
@@ -39,6 +45,18 @@ struct OzetEkrani: View {
                                 Spacer()
                                 Text(Bicim.tl(p.total)).monospacedDigit()
                             }
+                        }
+                    }
+
+                    Section("Aylık ödemeler") {
+                        Okunan(tool: "get_cashflow", args: ["months": 12, "include_items": false]) { (a: Akis) in
+                            AylikOdemeGrafigi(months: a.months)
+                        }
+                    }
+
+                    Section("Bu ay kategoriler") {
+                        Okunan(tool: "spending_by_category") { (k: KategoriHarcamasi) in
+                            if let ay = k.months.last { KategoriKarti(ay: ay) }
                         }
                     }
 
@@ -87,13 +105,42 @@ struct OzetEkrani: View {
             .navigationTitle("Özet")
             .yenilenebilir(model)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { EsitlemeDurumu() }
+                ToolbarItem(placement: .topBarLeading) {
+                    HStack(spacing: 14) {
+                        Button { ayarlar = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Ayarlar")
+                        EsitlemeDurumu()
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button { adding = true } label: { Image(systemName: "plus") }
                         .accessibilityLabel("Harcama ekle")
                 }
             }
             .sheet(isPresented: $adding) { HarcamaFormu() }
+            .sheet(isPresented: $ayarlar) { AyarlarEkrani() }
+        }
+    }
+}
+
+// İçgörüler: en önemlileri, "Tümü" ile hepsi (get_insights)
+struct IcgoruBolumu: View {
+    @State private var hepsi = false
+
+    var body: some View {
+        Okunan(tool: "get_insights") { (i: Icgoruler) in
+            if !i.insights.isEmpty {
+                Section {
+                    ForEach(hepsi ? i.insights : Array(i.insights.prefix(3))) { IcgoruSatiri(i: $0) }
+                } header: {
+                    HStack {
+                        Text("İçgörüler")
+                        Spacer()
+                        if i.insights.count > 3 {
+                            Button(hepsi ? "Daha az" : "Tümü (\(i.insights.count))") { hepsi.toggle() }.font(.caption).textCase(nil)
+                        }
+                    }
+                }
+            }
         }
     }
 }

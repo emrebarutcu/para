@@ -148,3 +148,154 @@ struct Kisi: Decodable, Identifiable, Hashable {
     let remaining: Double
     let owesUser: Double?
 }
+
+// ── Grafikler (nakit.js: web'deki Nakit ve Varlığın seyri) ─────────────────────
+
+struct NakitSerisi: Decodable {
+    struct Hareket: Decodable, Hashable { let desc: String; let value: Double }
+    struct Gun: Decodable, Identifiable, Hashable {
+        let date: String
+        let balance: Double
+        let net: Double
+        let moves: [Hareket]
+        var id: String { date }
+    }
+    let from: String
+    let to: String
+    let today: String
+    let days: [Gun]
+    let before: Double
+    let inSum: Double
+    let outSum: Double
+    let any: Bool
+    let missing: [String]
+}
+
+struct VarlikSerisi: Decodable {
+    struct Parca: Decodable, Hashable { let lira: Double; let fx: Double; let market: Double; let receivable: Double }
+    struct Nokta: Decodable, Identifiable, Hashable {
+        let date: String
+        let value: Double
+        let parts: Parca
+        var id: String { date }
+    }
+    let span: Int
+    let codes: [String]
+    let points: [Nokta]
+    let approx: [String]
+    let missing: [String]
+}
+
+// ── Akış (get_cashflow) ──────────────────────────────────────────────────────
+
+struct Akis: Decodable {
+    struct Kalem: Decodable, Hashable { let purchaseId: String; let description: String; let person: String; let installment: String; let amount: Double }
+    struct Odeme: Decodable, Hashable {
+        let date: String
+        let card: String
+        let total: Double
+        let byPerson: [String: Double]?
+        let items: [Kalem]?
+        let notCounted: Bool?
+    }
+    struct Ay: Decodable, Identifiable, Hashable {
+        let month: String
+        let total: Double
+        let byPerson: [String: Double]
+        let byCard: [String: Double]
+        let payments: [Odeme]
+        var id: String { month }
+    }
+    let months: [Ay]
+}
+
+// ── İçgörüler (get_insights) ve kategoriler (spending_by_category) ─────────────
+
+struct Icgoruler: Decodable {
+    struct Icgoru: Decodable, Identifiable, Hashable {
+        let id: String
+        let tone: String?
+        let title: String
+        let text: String
+    }
+    let insights: [Icgoru]
+}
+
+struct KategoriHarcamasi: Decodable {
+    struct Kategori: Decodable, Hashable {
+        let category: String?
+        let name: String
+        let amount: Double
+        let share: Double
+        let previous3MonthAverage: Double?
+    }
+    struct Ay: Decodable, Identifiable, Hashable {
+        let month: String
+        let total: Double
+        let categories: [Kategori]
+        var id: String { month }
+    }
+    let months: [Ay]
+}
+
+// ── Borçlar (list_debts) ─────────────────────────────────────────────────────
+
+struct Borclar: Decodable {
+    struct Toplamlar: Decodable {
+        let receivablesTry: Double
+        let debtsTry: Double
+        let totalAssetsTry: Double
+        let netWorthTry: Double
+    }
+    struct Ekstre: Decodable, Hashable { let date: String; let amount: Double; let alreadyCut: Bool? }
+    struct KartBorcu: Decodable, Identifiable, Hashable {
+        let cardId: String
+        let card: String
+        let tracked: Bool
+        let debt: Double
+        let statement: Ekstre?
+        let byPerson: [String: Double]?
+        let autoPay: Bool?
+        let unpaid: Double?
+        let overdue: Double?
+        var id: String { cardId }
+    }
+    struct Pay: Decodable, Identifiable, Hashable {
+        let person: String
+        let personId: String
+        let owed: Double
+        var id: String { personId }
+    }
+    struct Sonraki: Decodable, Hashable { let date: String; let amount: Double; let installment: String? }
+    struct Odeme: Decodable, Identifiable, Hashable { let id: String; let date: String; let amount: Double }
+    struct Kayit: Decodable, Identifiable, Hashable {
+        let id: String
+        let type: String           // borrowed, lent, loan
+        let side: String           // debt, receivable
+        let party: String?
+        let description: String?
+        let person: String
+        let asset: String
+        let total: Double
+        let principal: Double?
+        let date: String
+        let started: Bool?
+        let dueDate: String?
+        let installments: Int?
+        let perInstallment: Double?
+        let autoPay: Bool?
+        let paid: Double
+        let remaining: Double
+        let remainingTry: Double?
+        let overdue: Double?
+        let overdueSince: String?
+        let nextPayment: Sonraki?
+        let closed: String?
+        let status: String
+        let payments: [Odeme]?
+    }
+    let totals: Toplamlar
+    let cards: [KartBorcu]
+    let shares: [Pay]?
+    let debts: [Kayit]
+}

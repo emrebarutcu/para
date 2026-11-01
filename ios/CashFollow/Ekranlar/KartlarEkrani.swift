@@ -1,56 +1,6 @@
 import SwiftUI
 
-// Kartlar: limit, kullanılan, sıradaki ödeme, bugün alışveriş yapılırsa ödemenin düşeceği gün (list_cards)
-struct KartlarEkrani: View {
-    @EnvironmentObject private var model: Model
-    @State private var editing: KartGorunumu?
-    @State private var adding = false
-    @State private var deleting: KartGorunumu?
-
-    var body: some View {
-        NavigationStack {
-            Okunan(tool: "list_cards") { (l: KartListesi) in
-                List {
-                    if l.cards.isEmpty {
-                        ContentUnavailableView("Kart yok", systemImage: "creditcard",
-                                               description: Text("Kartı eklerken hesap kesim ve son ödeme gününü gir: taksitlerin hangi ay ödeneceği bunlardan hesaplanır."))
-                    }
-                    ForEach(l.cards) { c in
-                        KartSatiri(c: c)
-                            .contentShape(Rectangle())
-                            .onTapGesture { editing = c }
-                            .swipeActions {
-                                Button("Sil", role: .destructive) { deleting = c }
-                            }
-                    }
-                }
-            }
-            .navigationTitle("Kartlar")
-            .yenilenebilir(model)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Kart ekle")
-                }
-            }
-            .sheet(isPresented: $adding) { KartFormu(card: nil) }
-            .sheet(item: $editing) { KartFormu(card: $0) }
-            .confirmationDialog(deleteTitle, isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-                Button("Sil", role: .destructive) {
-                    if let c = deleting { try? model.write("delete_card", ["card": c.id]) }
-                    deleting = nil
-                }
-            } message: {
-                Text("Karttaki bütün harcamalar ve kaydedilen ekstre ödemeleri de silinir.")
-            }
-        }
-    }
-
-    private var deleteTitle: String {
-        guard let c = deleting else { return "" }
-        return c.purchaseCount > 0 ? "\(c.name) ve \(c.purchaseCount) harcaması silinsin mi?" : "\(c.name) silinsin mi?"
-    }
-}
-
+// Kart satırı ve kart formu; kartlar Borçlar sekmesinde listelenir (BorclarEkrani)
 struct KartSatiri: View {
     let c: KartGorunumu
 
