@@ -13,88 +13,130 @@ struct BorclarEkrani: View {
     @State private var kapananlar = false
     @State private var hata: String?
 
+    @State private var taraf = "debt"
+
     var body: some View {
         NavigationStack {
             Okunan(tool: "list_debts", args: ["status": kapananlar ? "all" : "open"], key: "\(kapananlar)") { (b: Borclar) in
-                List {
-                    Section {
-                        Satir(title: "Borçlar (kartlar dahil)", value: Bicim.tl(b.totals.debtsTry), color: b.totals.debtsTry > 0 ? Renk.gider : .primary)
-                        Satir(title: "Alacaklar", value: Bicim.tl(b.totals.receivablesTry), color: b.totals.receivablesTry > 0 ? Renk.gelir : .primary)
-                        Satir(title: "Net varlık", value: Bicim.tl(b.totals.netWorthTry))
+                Sayfa {
+                    Kart {
+                        Text("Toplam borç").font(.subheadline).foregroundStyle(Tema.metin2)
+                        BuyukTutar(deger: b.totals.debtsTry)
+                        Text("Kartlar, krediler ve kişilere borçlar; döviz ve altın bugünkü kurla.")
+                            .font(.footnote).foregroundStyle(Tema.metin3)
+                        Ayirici()
+                        IstatistikSatiri(ogeler: [
+                            Istatistik(etiket: "Alacak", deger: Bicim.tl(b.totals.receivablesTry), renk: b.totals.receivablesTry > 0 ? Tema.iyi : Tema.metin),
+                            Istatistik(etiket: "Net varlık", deger: Bicim.tl(b.totals.netWorthTry)),
+                        ])
                     }
 
-                    Section {
-                        Okunan(tool: "list_cards") { (l: KartListesi) in
-                            if l.cards.isEmpty {
-                                Text("Kart yok. Kesim ve son ödeme gününü girince taksitlerin hangi ay ödeneceği hesaplanır.")
-                                    .font(.footnote).foregroundStyle(.secondary)
-                            }
+                    BolumBasligi(baslik: "Kartlar")
+                    Okunan(tool: "list_cards") { (l: KartListesi) in
+                        VStack(spacing: 12) {
                             ForEach(l.cards) { c in
                                 let borc = b.cards.first { $0.cardId == c.id }
-                                VStack(alignment: .leading, spacing: 6) {
-                                    KartSatiri(c: c)
-                                    if let borc, let unpaid = borc.unpaid, unpaid > 0.004 {
-                                        Button {
-                                            odeme = .kart(id: c.id, ad: c.name, tutar: unpaid)
-                                        } label: {
-                                            Label("Ödenmemiş ekstre \(Bicim.tl(unpaid)) · Ödendi", systemImage: "checkmark.circle")
-                                                .font(.caption)
+                                VStack(spacing: 8) {
+                                    Button { kartDuzenle = c } label: { KartGorseli(c: c) }
+                                        .buttonStyle(.plain)
+                                        .contextMenu {
+                                            Button("Düzenle", systemImage: "pencil") { kartDuzenle = c }
+                                            Button("Sil", systemImage: "trash", role: .destructive) { kartSil = c }
                                         }
-                                        .buttonStyle(.bordered)
-                                        .tint((borc.overdue ?? 0) > 0.004 ? Renk.gider : Renk.vurgu)
+                                    if let borc, let unpaid = borc.unpaid, unpaid > 0.004 {
+                                        Button { odeme = .kart(id: c.id, ad: c.name, tutar: unpaid) } label: {
+                                            HStack {
+                                                Image(systemName: "checkmark.circle")
+                                                Text("Ödenmemiş ekstre \(Bicim.tl(unpaid))")
+                                                Spacer()
+                                                Text("Ödendi").font(.subheadline.weight(.semibold))
+                                            }
+                                            .font(.subheadline)
+                                            .foregroundStyle((borc.overdue ?? 0) > 0.004 ? Tema.tehlike : Tema.metin)
+                                            .padding(12)
+                                            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
-                                .contentShape(Rectangle())
-                                .onTapGesture { kartDuzenle = c }
-                                .swipeActions { Button("Sil", role: .destructive) { kartSil = c } }
                             }
-                            Button { kartEkle = true } label: { Label("Kart ekle", systemImage: "plus") }
+                            Button { kartEkle = true } label: {
+                                VStack(spacing: 6) {
+                                    Image(systemName: "plus").font(.title2)
+                                    Text("Yeni kart").font(.subheadline.weight(.medium))
+                                }
+                                .foregroundStyle(Tema.metin2)
+                                .frame(maxWidth: .infinity, minHeight: l.cards.isEmpty ? 120 : 76)
+                                .background(RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous)
+                                    .strokeBorder(Tema.cizgi2, style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+                            }
+                            .buttonStyle(.plain)
+                            if l.cards.isEmpty {
+                                Text("Kesim ve son ödeme gününü girince taksitlerin hangi ay ödeneceği hesaplanır.")
+                                    .font(.footnote).foregroundStyle(Tema.metin3)
+                            }
                         }
-                    } header: { Text("Kartlar") }
+                    }
 
                     let paylar = (b.shares ?? []).filter { abs($0.owed) > 0.004 }
                     if !paylar.isEmpty {
-                        Section {
-                            ForEach(paylar) { p in
+                        Kart(dolgu: 14) {
+                            KartBasligi("Kart payları")
+                            SatirListesi(veri: paylar) { p in
                                 Button { odeme = .pay(id: p.personId, ad: p.person, tutar: max(p.owed, 0)) } label: {
-                                    HStack {
-                                        Text(p.person).foregroundStyle(.primary)
+                                    HStack(spacing: 12) {
+                                        Avatar(ad: p.person, renk: model.kisiRengi(p.personId))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(p.person).font(.body.weight(.semibold))
+                                            Text(p.owed > 0 ? "sana borçlu · dokun, ödediğinde kaydet" : "ödendi").font(.footnote).foregroundStyle(Tema.metin3)
+                                        }
                                         Spacer()
-                                        Text(Bicim.tl(p.owed)).monospacedDigit().foregroundStyle(p.owed > 0 ? Renk.gelir : .secondary)
+                                        Text(Bicim.tl(p.owed)).font(.body.weight(.semibold)).monospacedDigit()
+                                            .foregroundStyle(p.owed > 0 ? Tema.iyi : Tema.metin3)
                                     }
+                                    .contentShape(Rectangle())
                                 }
+                                .buttonStyle(.plain)
                             }
-                        } header: { Text("Kart payları") } footer: {
-                            Text("Diğer kişilerin takipteki kartlardaki harcamaları sana borçtur. Ödediklerinde dokunup kaydet.")
+                            Text("Diğer kişilerin takipteki kartlardaki harcamaları sana borçtur.").font(.footnote).foregroundStyle(Tema.metin3)
                         }
                     }
 
                     let borclar = b.debts.filter { $0.side == "debt" }
                     let alacaklar = b.debts.filter { $0.side == "receivable" }
-                    Section("Borçlarım ve krediler") {
-                        if borclar.isEmpty { Text("Kayıtlı borç ya da kredi yok").foregroundStyle(.secondary) }
-                        ForEach(borclar) { d in Button { secili = d } label: { BorcSatiri(d: d) } }
-                    }
-                    Section("Alacaklarım") {
-                        if alacaklar.isEmpty { Text("Kayıtlı alacak yok").foregroundStyle(.secondary) }
-                        ForEach(alacaklar) { d in Button { secili = d } label: { BorcSatiri(d: d) } }
-                    }
-                    Section {
-                        Toggle("Kapananları da göster", isOn: $kapananlar)
+                    Secici(secim: $taraf, ogeler: [("debt", "Borçlarım (\(borclar.count))"), ("receivable", "Alacaklarım (\(alacaklar.count))")])
+                    let liste = taraf == "debt" ? borclar : alacaklar
+                    Kart(dolgu: 14) {
+                        if liste.isEmpty {
+                            Text(taraf == "debt" ? "Kayıtlı borç ya da kredi yok" : "Kayıtlı alacak yok").foregroundStyle(Tema.metin3)
+                        }
+                        SatirListesi(veri: liste) { d in
+                            Button { secili = d } label: { BorcSatiri(d: d) }.buttonStyle(.plain)
+                        }
+                        Ayirici()
+                        Toggle("Kapananları da göster", isOn: $kapananlar).font(.subheadline).tint(Tema.metin)
                         HataMetni(text: hata)
                     }
                 }
             }
             .navigationTitle("Borçlar")
+            .sayfaZemini()
             .yenilenebilir(model)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button { borcEkle = true } label: { Label("Borç, alacak ya da kredi", systemImage: "arrow.left.arrow.right") }
-                        Button { kartEkle = true } label: { Label("Kart", systemImage: "creditcard") }
-                    } label: { Image(systemName: "plus") }
-                    .accessibilityLabel("Ekle")
+            .overlay(alignment: .bottomTrailing) {
+                Menu {
+                    Button { borcEkle = true } label: { Label("Borç, alacak ya da kredi", systemImage: "arrow.left.arrow.right") }
+                    Button { kartEkle = true } label: { Label("Kart", systemImage: "creditcard") }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(Tema.ustMetin)
+                        .frame(width: 58, height: 58)
+                        .background(Tema.metin, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
                 }
+                .accessibilityLabel("Ekle")
+                .padding(.trailing, 18)
+                .padding(.bottom, 14)
             }
             .sheet(isPresented: $kartEkle) { KartFormu(card: nil) }
             .sheet(item: $kartDuzenle) { KartFormu(card: $0) }
@@ -128,18 +170,23 @@ struct BorcSatiri: View {
     let d: Borclar.Kayit
 
     var body: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: d.type == "loan" ? "building.columns" : "arrow.left.arrow.right")
+                .font(.subheadline).foregroundStyle(Tema.metin2)
+                .frame(width: 36, height: 36)
+                .background(Tema.yuzey2, in: Circle())
             VStack(alignment: .leading, spacing: 3) {
-                Text(d.party?.isEmpty == false ? d.party! : borcTuru(d.type)).foregroundStyle(.primary)
-                Text(alt).font(.caption).foregroundStyle((d.overdue ?? 0) > 0.004 ? Renk.gider : .secondary)
+                Text(d.party?.isEmpty == false ? d.party! : borcTuru(d.type)).font(.body.weight(.semibold)).foregroundStyle(Tema.metin)
+                Text(alt).font(.footnote).foregroundStyle((d.overdue ?? 0) > 0.004 ? Tema.tehlike : Tema.metin3)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 3) {
-                Text(Bicim.amount(d.remaining, asset: d.asset)).monospacedDigit()
-                    .foregroundStyle(d.status == "open" ? (d.side == "debt" ? Renk.gider : Renk.gelir) : .secondary)
-                if d.status != "open" { Text("kapandı").font(.caption2).foregroundStyle(.secondary) }
+                Text(Bicim.amount(d.remaining, asset: d.asset)).font(.body.weight(.semibold)).monospacedDigit()
+                    .foregroundStyle(d.status == "open" ? (d.side == "debt" ? Tema.tehlike : Tema.iyi) : Tema.metin3)
+                if d.status != "open" { Text("kapandı").font(.caption2).foregroundStyle(Tema.metin3) }
             }
         }
+        .contentShape(Rectangle())
     }
 
     private var alt: String {

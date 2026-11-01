@@ -1,18 +1,9 @@
 import Charts
 import SwiftUI
 
-// Grafikler (Swift Charts). Rakamlar web'dekiyle aynı hesaptan gelir: Nakit ve Varlığın seyri nakit.js'ten, aylık
-// ödemeler get_cashflow'dan, kategoriler spending_by_category'den.
-
-// Seri renkleri: adlar sırasıyla web'in --s1…--s8 renklerini alır, "Nakit" gri
-func seriRenkleri(_ adlar: [String]) -> [Color] {
-    var i = 0
-    return adlar.map { ad in
-        if ad == "Nakit" { return Color.gray }
-        defer { i += 1 }
-        return Renk.seri[i % Renk.seri.count]
-    }
-}
+// Grafikler (Swift Charts), web'deki gibi: çizgiler tek renk (metin rengi), çubuklar kişi / kart renginde. Rakamlar
+// web'dekiyle aynı hesaptan gelir: Nakit ve Varlığın seyri nakit.js'ten, aylık ödemeler get_cashflow'dan,
+// kategoriler spending_by_category'den. Her biri kendi kartıdır (Kart).
 
 // ── Nakit (Özet) ──────────────────────────────────────────────────────────────
 // Dönemin gün gün nakit bakiyesi (ya da dönem başından beri net), bugün çizgisi, dokununca günün hareketleri
@@ -26,57 +17,74 @@ struct NakitKarti: View {
     @State private var hata: String?
     @State private var secili: Date?
 
+    private struct Nokta { let d: Date; let v: Double }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Button { shift -= 1 } label: { Image(systemName: "chevron.left") }
-                    .buttonStyle(.borderless).accessibilityLabel("Önceki dönem")
+        Kart {
+            HStack(spacing: 6) {
+                Text("Nakit").font(.system(size: 17, weight: .semibold))
                 Spacer()
+                Button { shift -= 1 } label: { Image(systemName: "chevron.left").frame(width: 28, height: 28) }
+                    .accessibilityLabel("Önceki dönem")
                 Button { shift = 0 } label: {
-                    Text(seri.map { "\(Bicim.day($0.from)) – \(Bicim.day($0.to))" } ?? "…").font(.subheadline.weight(.medium))
+                    Text(seri.map { "\(Bicim.day($0.from)) – \(Bicim.day($0.to))" } ?? "…")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
                 }
-                .buttonStyle(.borderless).foregroundStyle(.primary)
-                Spacer()
-                Button { shift += 1 } label: { Image(systemName: "chevron.right") }
-                    .buttonStyle(.borderless).accessibilityLabel("Sonraki dönem")
+                Button { shift += 1 } label: { Image(systemName: "chevron.right").frame(width: 28, height: 28) }
+                    .accessibilityLabel("Sonraki dönem")
             }
-            Picker("Grafik", selection: $mode) {
-                Text("Bakiye").tag("balance")
-                Text("Dönem net").tag("net")
+            .buttonStyle(.plain)
+            .foregroundStyle(Tema.metin2)
+
+            HStack(spacing: 8) {
+                Menu {
+                    Picker("Dönem başlangıcı", selection: $start) {
+                        Text("Bugünden").tag("today")
+                        ForEach(1...31, id: \.self) { Text("Ayın \(Bicim.gunEki($0))").tag(String($0)) }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(start == "today" ? "Bugün" : "Ayın \(Bicim.gunEki(Int(start) ?? 1))")
+                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Tema.metin)
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                Secici(secim: $mode, ogeler: [("balance", "Bakiye"), ("net", "Dönem net")])
             }
-            .pickerStyle(.segmented)
 
             if let s = seri {
-                HStack {
-                    ozet("Giren", s.inSum, Renk.gelir)
-                    ozet("Çıkan", -s.outSum, Renk.gider)
-                    ozet("Dönem sonu", s.days.last?.balance ?? 0, .primary)
+                HStack(alignment: .top, spacing: 8) {
+                    if mode == "net" {
+                        Kutucuk(etiket: "Giren", deger: Bicim.tl(s.inSum), renk: Tema.iyi)
+                        Kutucuk(etiket: "Çıkan", deger: Bicim.tl(-s.outSum), renk: Tema.tehlike)
+                        Kutucuk(etiket: "Net", deger: Bicim.tl(s.days.last?.net ?? 0))
+                    } else {
+                        let bugun = s.days.first { $0.date == s.today } ?? s.days.first
+                        let enDusuk = s.days.min { $0.balance < $1.balance }
+                        Kutucuk(etiket: bugun?.date == s.today ? "Bugün" : Bicim.day(bugun?.date), deger: Bicim.tl(bugun?.balance ?? 0))
+                        Kutucuk(etiket: "\(Bicim.day(s.to)) sonunda", deger: Bicim.tl(s.days.last?.balance ?? 0))
+                        Kutucuk(etiket: "En düşük · \(Bicim.day(enDusuk?.date))", deger: Bicim.tl(enDusuk?.balance ?? 0),
+                                renk: (enDusuk?.balance ?? 0) < 0 ? Tema.tehlike : Tema.metin)
+                    }
                 }
                 if s.any {
                     grafik(s)
                     if let gun = seciliGun(s) { hareketler(gun) }
                 } else {
                     Text("Nakit hareketi yok. Varlıklar'dan maaş gibi bir giriş ekleyince burada görünür.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(.footnote).foregroundStyle(Tema.metin3)
                 }
                 if !s.missing.isEmpty {
                     Text("Kuru alınamayan varlıklar sayılmadı: \(s.missing.joined(separator: ", "))")
-                        .font(.caption).foregroundStyle(Renk.uyari)
+                        .font(.caption).foregroundStyle(Tema.uyari)
                 }
             } else if let hata {
                 HataMetni(text: hata)
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 180)
-            }
-
-            Menu {
-                Picker("Dönem başlangıcı", selection: $start) {
-                    Text("Bugünden").tag("today")
-                    ForEach(1...31, id: \.self) { Text("Ayın \(Bicim.gunEki($0))").tag(String($0)) }
-                }
-            } label: {
-                Label(start == "today" ? "Dönem başı: bugün" : "Dönem başı: ayın \(Bicim.gunEki(Int(start) ?? 1))", systemImage: "calendar")
-                    .font(.caption)
             }
         }
         .task(id: "\(model.revision)|\(start)|\(shift)") { yukle() }
@@ -85,16 +93,6 @@ struct NakitKarti: View {
     private func yukle() {
         do { seri = try model.cash(start: start, shift: shift); hata = nil } catch { hata = error.localizedDescription }
     }
-
-    private func ozet(_ baslik: String, _ deger: Double, _ renk: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(baslik).font(.caption).foregroundStyle(.secondary)
-            Text(Bicim.tl(deger, fraction: false)).font(.subheadline.weight(.semibold)).foregroundStyle(renk).monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private struct Nokta { let d: Date; let v: Double }
 
     private func deger(_ g: NakitSerisi.Gun) -> Double { mode == "net" ? g.net : g.balance }
 
@@ -107,48 +105,58 @@ struct NakitKarti: View {
         return Chart {
             ForEach(gunler, id: \.d) { g in
                 AreaMark(x: .value("Gün", g.d), yStart: .value("Taban", alan.lowerBound), yEnd: .value("Tutar", g.v))
-                    .foregroundStyle(LinearGradient(colors: [Renk.vurgu.opacity(0.35), Renk.vurgu.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                    .foregroundStyle(Tema.metin.opacity(0.07))
                     .interpolationMethod(.stepEnd)
                 LineMark(x: .value("Gün", g.d), y: .value("Tutar", g.v))
-                    .foregroundStyle(Renk.vurgu)
+                    .foregroundStyle(Tema.metin)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
                     .interpolationMethod(.stepEnd)
             }
+            if let last = gunler.last {
+                PointMark(x: .value("Gün", last.d), y: .value("Tutar", last.v))
+                    .foregroundStyle(Tema.metin)
+                    .symbolSize(30)
+                    .annotation(position: .top, alignment: .trailing, spacing: 4) {
+                        Text(kisa(last.v)).font(.caption.weight(.semibold)).foregroundStyle(Tema.metin)
+                    }
+            }
             if mode == "net", alan.lowerBound < 0 {
-                RuleMark(y: .value("Sıfır", 0)).foregroundStyle(.secondary.opacity(0.5))
+                RuleMark(y: .value("Sıfır", 0)).foregroundStyle(Tema.cizgi2)
             }
             // Bugün dönemin içindeyse kesikli çizgi (dönem bugünden başlıyorsa sol kenar zaten bugündür)
             if let today, today > bas, today <= son {
                 RuleMark(x: .value("Bugün", today))
-                    .foregroundStyle(.secondary.opacity(0.6))
+                    .foregroundStyle(Tema.metin3)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
             }
             if let secili {
-                RuleMark(x: .value("Seçili", secili)).foregroundStyle(.primary.opacity(0.3))
+                RuleMark(x: .value("Seçili", secili)).foregroundStyle(Tema.metin.opacity(0.3))
             }
         }
         .chartXSelection(value: $secili)
         .chartXScale(domain: bas...max(son, bas.addingTimeInterval(86_400)))
         .chartYScale(domain: alan)
-        .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
+        .chartYAxis { tutarEkseni() }
         .chartXAxis {
             AxisMarks(values: haftalik(bas, son)) { v in
-                AxisGridLine()
+                AxisGridLine().foregroundStyle(Tema.cizgi)
                 AxisValueLabel(anchor: v.index == 0 ? .topLeading : .top) {
-                    if let d = v.as(Date.self) { Text(d, format: Bicim.tarih.day().month(.abbreviated)) }
+                    if let d = v.as(Date.self) {
+                        Text(d, format: Bicim.tarih.day().month(.abbreviated)).foregroundStyle(Tema.metin3)
+                    }
                 }
             }
         }
-        .frame(height: 200)
+        .frame(height: 190)
         .grafikTakvimi()
     }
 
     // Dönem başından haftada bir; sona 3 günden yakın olan yazılmaz (kesilmesin)
     private func haftalik(_ bas: Date, _ son: Date) -> [Date] {
         var out: [Date] = [], d = bas
-        let cal = Bicim.takvim
         while d <= son.addingTimeInterval(-3 * 86_400) || out.isEmpty {
             out.append(d)
-            guard let n = cal.date(byAdding: .day, value: 7, to: d) else { break }
+            guard let n = Bicim.takvim.date(byAdding: .day, value: 7, to: d) else { break }
             d = n
         }
         return out
@@ -167,18 +175,26 @@ struct NakitKarti: View {
                 Spacer()
                 Text("\(mode == "net" ? "Net" : "Bakiye") \(Bicim.tl(deger(g)))").font(.caption).monospacedDigit()
             }
-            if g.moves.isEmpty { Text("Hareket yok").font(.caption).foregroundStyle(.secondary) }
+            if g.moves.isEmpty { Text("Hareket yok").font(.caption).foregroundStyle(Tema.metin3) }
             ForEach(Array(g.moves.enumerated()), id: \.offset) { _, m in
                 HStack {
                     Text(m.desc).font(.caption).lineLimit(1)
                     Spacer()
                     Text((m.value >= 0 ? "+" : "") + Bicim.tl(m.value)).font(.caption).monospacedDigit()
-                        .foregroundStyle(m.value >= 0 ? Renk.gelir : Renk.gider)
+                        .foregroundStyle(m.value >= 0 ? Tema.iyi : Tema.tehlike)
                 }
             }
         }
-        .padding(8)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .padding(10)
+        .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+// Tutar ekseni: sağda kısa tutarlar, ince ızgara
+func tutarEkseni() -> some AxisContent {
+    AxisMarks(values: .automatic(desiredCount: 4)) { v in
+        AxisGridLine().foregroundStyle(Tema.cizgi)
+        AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)).foregroundStyle(Tema.metin3) } }
     }
 }
 
@@ -211,11 +227,12 @@ func yAlani(_ vals: [Double], sifirDahil: Bool = false) -> ClosedRange<Double> {
 // ── Aylık ödemeler (Özet ve Akış) ─────────────────────────────────────────────
 
 struct AylikOdemeGrafigi: View {
+    @EnvironmentObject private var model: Model
     let months: [Akis.Ay]
+    var baslik = "Aylık ödemeler"
     @AppStorage("grafik.grup") private var by = "person"
 
-    // x ekseni ay anahtarına göre (kategorik): her ay bir bant, etiket kendi çubuğunun altında. Tarihli eksende
-    // Charts çubukları ve etiketleri farklı hizalıyordu.
+    // x ekseni ay anahtarına göre (kategorik): her ay bir bant, etiket kendi çubuğunun altında
     private struct Parca: Identifiable { let id = UUID(); let ay: String; let ad: String; let tutar: Double }
 
     private var parcalar: [Parca] {
@@ -231,111 +248,118 @@ struct AylikOdemeGrafigi: View {
         return out
     }
 
-    // Etiketler sığsın: en çok ~6 ay adı
+    private func renk(_ ad: String) -> Color { by == "person" ? model.kisiRengi(ad) : model.kartRengi(ad) }
+
+    // Etiketler sığsın: en çok ~6 ay adı, ilk aydan başlayarak
     private var adim: Int { max(1, Int((Double(months.count) / 6).rounded(.up))) }
-    // Yazılacak aylar: ilk aydan başlayıp her adim'inci ay
-    private var etiketler: [String] {
-        months.enumerated().compactMap { i, m in i % adim == 0 ? m.month : nil }
-    }
+    private var etiketler: [String] { months.enumerated().compactMap { i, m in i % adim == 0 ? m.month : nil } }
 
     private func ayEtiketi(_ ym: String) -> String {
         guard let d = Bicim.date(ym + "-01") else { return ym }
-        return d.formatted(months.count > 12 ? Bicim.tarih.month(.abbreviated).year(.twoDigits) : Bicim.tarih.month(.abbreviated))
+        if months.count > 12 || ym == months.first?.month || ym.hasSuffix("-01") {
+            return d.formatted(Bicim.tarih.month(.abbreviated)) + " ’" + String(ym.prefix(4).suffix(2))
+        }
+        return d.formatted(Bicim.tarih.month(.abbreviated))
     }
 
     var body: some View {
         let parcalar = self.parcalar, adlar = self.adlar
-        VStack(alignment: .leading, spacing: 10) {
-            Picker("Grupla", selection: $by) {
-                Text("Kişi").tag("person")
-                Text("Kart").tag("card")
+        Kart {
+            HStack {
+                Text(baslik).font(.system(size: 17, weight: .semibold))
+                Spacer()
+                Secici(secim: $by, ogeler: [("person", "Kişi"), ("card", "Kart")], tamGenislik: false)
             }
-            .pickerStyle(.segmented)
             if parcalar.isEmpty {
-                Text("Önümüzdeki aylarda ödenecek taksit yok.").font(.footnote).foregroundStyle(.secondary)
+                Text("Önümüzdeki aylarda ödenecek taksit yok.").font(.footnote).foregroundStyle(Tema.metin3)
             } else {
-                Chart(parcalar) { p in
-                    BarMark(x: .value("Ay", p.ay), y: .value("Tutar", p.tutar))
-                        .foregroundStyle(by: .value("Grup", p.ad))
+                if adlar.count > 1 {
+                    HStack(spacing: 12) { ForEach(adlar, id: \.self) { RenkliAd(ad: $0, renk: renk($0)) } }
                 }
-                .chartForegroundStyleScale(domain: adlar, range: seriRenkleri(adlar))
-                .chartLegend(position: .bottom)
-                .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
+                Chart(parcalar) { p in
+                    BarMark(x: .value("Ay", p.ay), y: .value("Tutar", p.tutar), width: .ratio(0.62))
+                        .foregroundStyle(by: .value("Grup", p.ad))
+                        .cornerRadius(3)
+                }
+                .chartForegroundStyleScale(domain: adlar, range: adlar.map(renk))
+                .chartLegend(.hidden)
+                .chartYAxis { tutarEkseni() }
                 .chartXAxis {
                     AxisMarks(values: etiketler) { v in
-                        AxisValueLabel { if let ym = v.as(String.self) { Text(ayEtiketi(ym)) } }
+                        AxisValueLabel { if let ym = v.as(String.self) { Text(ayEtiketi(ym)).foregroundStyle(Tema.metin3) } }
                     }
                 }
                 .chartXScale(domain: months.map(\.month))
-                .frame(height: 220)
-                .grafikTakvimi()
+                .frame(height: 190)
             }
         }
     }
 }
 
 // ── Kategoriler (Özet) ────────────────────────────────────────────────────────
+// Web'deki gibi: kategori başına tutar, payı gösteren çubuk ve son 3 ayın ortalamasıyla karşılaştırma
 
 struct KategoriKarti: View {
     let months: [KategoriHarcamasi.Ay]
     @State private var secim: String?
 
     var body: some View {
-        let ay = months.first { $0.month == secim } ?? months.last
-        VStack(alignment: .leading, spacing: 10) {
-            if months.count > 1 {
-                Picker("Ay", selection: Binding(get: { ay?.month ?? "" }, set: { secim = $0 })) {
-                    ForEach(months) { m in Text(ayAdi(m.month)).tag(m.month) }
+        let i = months.firstIndex { $0.month == secim } ?? (months.count - 1)
+        let ay = months.indices.contains(i) ? months[i] : nil
+        Kart {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Harcamalar · kategoriye göre").font(.system(size: 17, weight: .semibold))
+                    HStack(spacing: 4) {
+                        Button { if i > 0 { secim = months[i - 1].month } } label: { Image(systemName: "chevron.left") }
+                            .disabled(i <= 0).accessibilityLabel("Önceki ay")
+                        Text(Bicim.month(ay?.month)).font(.subheadline).foregroundStyle(Tema.metin3)
+                        Button { if i < months.count - 1 { secim = months[i + 1].month } } label: { Image(systemName: "chevron.right") }
+                            .disabled(i >= months.count - 1).accessibilityLabel("Sonraki ay")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Tema.metin2)
                 }
-                .pickerStyle(.segmented)
+                Spacer()
+                if let ay { Text(Bicim.tl(ay.total)).font(.subheadline).foregroundStyle(Tema.metin3).monospacedDigit() }
             }
-            if let ay { pasta(ay) }
+            if let ay {
+                let liste = ay.categories.filter { $0.amount > 0 }
+                if liste.isEmpty {
+                    Text("Bu ayda kategorili harcama yok.").font(.footnote).foregroundStyle(Tema.metin3)
+                }
+                ForEach(liste, id: \.self) { k in satir(k) }
+                Text("Taksitli alışveriş tamamıyla alındığı aya yazılır.").font(.footnote).foregroundStyle(Tema.metin3)
+            }
         }
     }
 
-    // "Kasım"; yıl yalnızca bu yıl değilse
-    private func ayAdi(_ ym: String) -> String {
-        let tam = Bicim.month(ym)
-        return ym.hasPrefix(String(Bicim.key(Date()).prefix(4))) ? String(tam.split(separator: " ").first ?? Substring(tam)) : tam
-    }
-
-    private func pasta(_ ay: KategoriHarcamasi.Ay) -> some View {
-        let liste = ay.categories.filter { $0.amount > 0 }
-        let adlar = liste.map(\.name)
-        return VStack(alignment: .leading, spacing: 10) {
-            if liste.isEmpty {
-                Text("Bu ayda kategorili harcama yok.").font(.footnote).foregroundStyle(.secondary)
-            } else {
-                HStack(alignment: .center, spacing: 16) {
-                    Chart(liste, id: \.name) { k in
-                        SectorMark(angle: .value("Tutar", k.amount), innerRadius: .ratio(0.62), angularInset: 1.5)
-                            .foregroundStyle(by: .value("Kategori", k.name))
-                            .cornerRadius(3)
-                    }
-                    .chartForegroundStyleScale(domain: adlar, range: seriRenkleri(adlar))
-                    .chartLegend(.hidden)
-                    .frame(width: 120, height: 120)
-                    .overlay {
-                        VStack(spacing: 0) {
-                            Text("Toplam").font(.caption2).foregroundStyle(.secondary)
-                            Text(Bicim.tl(ay.total, fraction: false)).font(.caption.weight(.semibold)).monospacedDigit()
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(liste.prefix(6).enumerated()), id: \.offset) { i, k in
-                            HStack(spacing: 6) {
-                                Circle().fill(seriRenkleri(adlar)[i]).frame(width: 8, height: 8)
-                                Text(k.name).font(.caption).lineLimit(1)
-                                Spacer()
-                                Text("%\(Int((k.share * 100).rounded()))").font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                            }
-                        }
-                        if liste.count > 6 {
-                            Text("+\(liste.count - 6) kategori daha").font(.caption2).foregroundStyle(.secondary)
-                        }
+    private func satir(_ k: KategoriHarcamasi.Kategori) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(k.name).font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(Bicim.tl(k.amount)).font(.subheadline.weight(.semibold)).monospacedDigit()
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Tema.yuzey3)
+                    Capsule().fill(Tema.metin2).frame(width: max(4, g.size.width * min(max(k.share, 0), 1)))
+                }
+            }
+            .frame(height: 6)
+            HStack(spacing: 6) {
+                Text("%\(Int((k.share * 100).rounded()))").foregroundStyle(Tema.metin3)
+                if let ort = k.previous3MonthAverage, ort > 0.004 {
+                    let fark = (k.amount - ort) / ort
+                    if abs(fark) >= 0.05 {
+                        Text("\(fark > 0 ? "↑" : "↓") 3 ay ortalamasından %\(Int((abs(fark) * 100).rounded())) \(fark > 0 ? "fazla" : "az")")
+                            .foregroundStyle(fark > 0 ? Tema.tehlike : Tema.iyi)
                     }
                 }
             }
+            .font(.footnote).monospacedDigit()
         }
     }
 }
@@ -351,58 +375,67 @@ struct VarlikSeyriKarti: View {
     @State private var secili: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Picker("Dönem", selection: $range) {
-                Text("1A").tag("1m")
-                Text("3A").tag("3m")
-                Text("6A").tag("6m")
-                Text("1Y").tag("1y")
-                Text("Tümü").tag("all")
-            }
-            .pickerStyle(.segmented)
+        Kart {
+            Text("Varlığın seyri").font(.system(size: 17, weight: .semibold))
+            Secici(secim: $range, ogeler: [("1m", "1A"), ("3m", "3A"), ("6m", "6A"), ("1y", "1Y"), ("all", "Tümü")])
             if let s = seri, let ilk = s.points.first, let son = s.points.last {
-                let fark = son.value - ilk.value
-                HStack(alignment: .firstTextBaseline) {
-                    Text(Bicim.tl(nokta(s)?.value ?? son.value, fraction: false)).font(.title3.weight(.semibold)).monospacedDigit()
-                    Text((fark >= 0 ? "+" : "") + Bicim.tl(fark, fraction: false))
-                        .font(.subheadline).foregroundStyle(fark >= 0 ? Renk.gelir : Renk.gider).monospacedDigit()
-                    Spacer()
-                    if let n = nokta(s) { Text(Bicim.day(n.date)).font(.caption).foregroundStyle(.secondary) }
+                let n = nokta(s)
+                let simdi = n ?? son
+                let fark = simdi.value - ilk.value
+                HStack(alignment: .top, spacing: 8) {
+                    Kutucuk(etiket: Bicim.day(ilk.date), deger: Bicim.tl(ilk.value))
+                    Kutucuk(etiket: n == nil ? "Bugün" : Bicim.day(simdi.date), deger: Bicim.tl(simdi.value))
+                    Kutucuk(etiket: "Değişim", deger: (fark >= 0 ? "+" : "") + Bicim.tl(fark, fraction: false),
+                            renk: fark >= 0 ? Tema.iyi : Tema.tehlike)
                 }
                 let alan = yAlani(s.points.map(\.value))
                 Chart {
                     ForEach(s.points) { p in
                         if let d = Bicim.date(p.date) {
                             AreaMark(x: .value("Gün", d, unit: .day), yStart: .value("Taban", alan.lowerBound), yEnd: .value("Varlık", p.value))
-                                .foregroundStyle(LinearGradient(colors: [Renk.vurgu.opacity(0.35), Renk.vurgu.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                                .foregroundStyle(Tema.metin.opacity(0.07))
                             LineMark(x: .value("Gün", d, unit: .day), y: .value("Varlık", p.value))
-                                .foregroundStyle(Renk.vurgu)
+                                .foregroundStyle(Tema.metin)
+                                .lineStyle(StrokeStyle(lineWidth: 2))
                         }
                     }
+                    if let d = Bicim.date(son.date) {
+                        PointMark(x: .value("Gün", d, unit: .day), y: .value("Varlık", son.value))
+                            .foregroundStyle(Tema.metin)
+                            .symbolSize(30)
+                            .annotation(position: .top, alignment: .trailing, spacing: 4) {
+                                Text(kisa(son.value)).font(.caption.weight(.semibold)).foregroundStyle(Tema.metin)
+                            }
+                    }
                     if let secili {
-                        RuleMark(x: .value("Seçili", secili, unit: .day)).foregroundStyle(.primary.opacity(0.3))
+                        RuleMark(x: .value("Seçili", secili, unit: .day)).foregroundStyle(Tema.metin.opacity(0.3))
                     }
                 }
                 .chartXSelection(value: $secili)
                 .chartYScale(domain: alan)
-                .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
-                .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in AxisGridLine(); AxisValueLabel(format: Bicim.tarih.day().month(.abbreviated)) } }
-                .frame(height: 200)
-                .grafikTakvimi()
-                if let n = nokta(s) {
-                    HStack {
-                        parca(Bicim.homeShort, n.parts.lira)
-                        parca("Döviz / altın", n.parts.fx)
-                        parca("Fon / hisse", n.parts.market)
-                        parca("Alacak", n.parts.receivable)
+                .chartYAxis { tutarEkseni() }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisGridLine().foregroundStyle(Tema.cizgi)
+                        AxisValueLabel(format: Bicim.tarih.day().month(.abbreviated))
                     }
                 }
+                .frame(height: 190)
+                .grafikTakvimi()
+                HStack(alignment: .top, spacing: 8) {
+                    parca(Bicim.homeShort, simdi.parts.lira)
+                    parca("Döviz / altın", simdi.parts.fx)
+                    parca("Fon / hisse", simdi.parts.market)
+                    parca("Alacak", simdi.parts.receivable)
+                }
+                Text("Her gün o güne kadarki kayıtlarla ve o günün kur ve fiyatlarıyla.")
+                    .font(.footnote).foregroundStyle(Tema.metin3)
                 if !s.approx.isEmpty {
                     Text("Geçmiş fiyatı alınamayanlar bugünkü fiyatla: \(s.approx.joined(separator: ", "))")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.footnote).foregroundStyle(Tema.metin3)
                 }
             } else if yok {
-                Text("Henüz kayıt yok.").font(.footnote).foregroundStyle(.secondary)
+                Text("Henüz kayıt yok.").font(.footnote).foregroundStyle(Tema.metin3)
             } else if let hata {
                 HataMetni(text: hata)
             } else {
@@ -431,44 +464,44 @@ struct VarlikSeyriKarti: View {
 
     private func parca(_ ad: String, _ v: Double) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(ad).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-            Text(kisa(v)).font(.caption.weight(.medium)).monospacedDigit()
+            Text(ad).font(.caption2).foregroundStyle(Tema.metin3).lineLimit(1)
+            Text(kisa(v)).font(.caption.weight(.semibold)).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 // ── İçgörü satırı ────────────────────────────────────────────────────────────
+// Web'deki gibi: ince çizgili simge (uyarı turuncu, kötü kırmızı, diğerleri metin renginde)
 
 struct IcgoruSatiri: View {
     let i: Icgoruler.Icgoru
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: simge).foregroundStyle(renk).frame(width: 22)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: simge).font(.system(size: 17)).foregroundStyle(renk).frame(width: 22)
             VStack(alignment: .leading, spacing: 3) {
-                Text(i.title).font(.subheadline.weight(.semibold))
-                Text(i.text).font(.footnote).foregroundStyle(.secondary)
+                Text(i.title).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                Text(i.text).font(.subheadline).foregroundStyle(Tema.metin2)
             }
         }
-        .padding(.vertical, 2)
     }
 
     private var renk: Color {
         switch i.tone {
-        case "good": return Renk.gelir
-        case "warn": return Renk.uyari
-        case "bad": return Renk.gider
-        default: return Renk.vurgu
+        case "good": return Tema.iyi
+        case "warn": return Tema.uyari
+        case "bad": return Tema.tehlike
+        default: return Tema.metin2
         }
     }
 
     private var simge: String {
         switch i.tone {
-        case "good": return "checkmark.circle.fill"
-        case "warn": return "exclamationmark.triangle.fill"
-        case "bad": return "exclamationmark.octagon.fill"
-        default: return "lightbulb.fill"
+        case "good": return "checkmark.circle"
+        case "warn": return "exclamationmark.triangle"
+        case "bad": return "exclamationmark.octagon"
+        default: return "lightbulb"
         }
     }
 }

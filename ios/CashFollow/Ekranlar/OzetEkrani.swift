@@ -1,7 +1,7 @@
 import SwiftUI
 
-// Özet: içgörüler, nakit, bu ay ve gelecek ay ödenecekler, sıradaki ödemeler, aylık ödemeler, kategoriler, kartlar ve
-// kişiler (web'deki Özet sekmesi)
+// Özet: bu ay ödenecek, içgörüler, nakit, sıradaki ödemeler, kişiler, kategoriler ve aylık ödemeler (web'deki Özet sekmesi,
+// aynı sıra ve görünüm)
 struct OzetEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var adding = false
@@ -9,115 +9,107 @@ struct OzetEkrani: View {
 
     var body: some View {
         NavigationStack {
-            Okunan(tool: "get_overview") { (o: Ozet) in
-                List {
-                    CevrimdisiNotu()
-                    Section {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("\(Bicim.month(o.month)) ödemeleri").font(.subheadline).foregroundStyle(.secondary)
-                            Text(Bicim.tl(o.dueThisMonth)).font(.largeTitle.weight(.semibold)).monospacedDigit()
-                        }
-                        .padding(.vertical, 4)
-                        Satir(title: "Gelecek ay (\(Bicim.month(o.nextMonth.month)))", value: Bicim.tl(o.nextMonth.total))
-                        Satir(title: "Kalan toplam", value: Bicim.tl(o.remainingTotal))
-                        Satir(title: "Son ödeme", value: o.endless == true ? "Süresiz" : Bicim.month(o.lastPaymentMonth))
-                        if let d = o.debts, (d.dueThisMonth ?? 0) > 0 || (d.nextMonth ?? 0) > 0 {
-                            Satir(title: "Borç ve kredi ödemeleri (bu ay)", value: Bicim.tl(d.dueThisMonth ?? 0))
-                        }
+            Sayfa {
+                CevrimdisiNotu()
+                Okunan(tool: "get_overview") { (o: Ozet) in
+                    VStack(alignment: .leading, spacing: 14) {
+                        ustKart(o)
+                        IcgoruBolumu()
+                        NakitKarti()
+                        siradakiler(o)
+                        if o.people.count > 1 { kisiler(o) }
                     }
-
-                    IcgoruBolumu()
-
-                    Section("Nakit") { NakitKarti() }
-
-                    Section("Sıradaki ödemeler") {
-                        if o.upcomingPayments.isEmpty {
-                            Text("Ödenecek taksit yok").foregroundStyle(.secondary)
-                        }
-                        ForEach(o.upcomingPayments, id: \.self) { p in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(p.card)
-                                    Text("\(Bicim.day(p.date)) · \(Bicim.relative(p.date))")
-                                        .font(.caption)
-                                        .foregroundStyle(p.late == true ? Renk.gider : .secondary)
-                                }
-                                Spacer()
-                                Text(Bicim.tl(p.total)).monospacedDigit()
-                            }
-                        }
-                    }
-
-                    Section("Aylık ödemeler") {
-                        Okunan(tool: "get_cashflow", args: ["months": 12, "include_items": false]) { (a: Akis) in
-                            AylikOdemeGrafigi(months: a.months)
-                        }
-                    }
-
-                    Section("Kategoriler") {
-                        Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
-                            KategoriKarti(months: k.months)
-                        }
-                    }
-
-                    if !o.cards.isEmpty {
-                        Section("Kartlar") {
-                            ForEach(o.cards, id: \.self) { c in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text(c.name)
-                                        Spacer()
-                                        if let n = c.nextPayment {
-                                            Text("\(Bicim.day(n.date)): \(Bicim.tl(n.amount))").font(.caption).foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    if let available = c.available {
-                                        Doluluk(used: c.used, limit: c.used + available)
-                                        Text("Kullanılabilir \(Bicim.tl(available))").font(.caption).foregroundStyle(.secondary)
-                                    } else {
-                                        Text("Kullanılan \(Bicim.tl(c.used))").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    if let overdue = c.overdue, overdue > 0 {
-                                        Text("Geciken ekstre: \(Bicim.tl(overdue))").font(.caption).foregroundStyle(Renk.gider)
-                                    }
-                                }
-                                .padding(.vertical, 2)
-                            }
-                        }
-                    }
-
-                    if o.people.count > 1 {
-                        Section("Kişiler") {
-                            ForEach(o.people, id: \.self) { p in
-                                HStack {
-                                    Text(p.name)
-                                    Spacer()
-                                    VStack(alignment: .trailing) {
-                                        Text(Bicim.tl(p.dueThisMonth)).monospacedDigit()
-                                        Text("kalan \(Bicim.tl(p.remaining))").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                }
+                Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
+                    KategoriKarti(months: k.months)
+                }
+                Okunan(tool: "get_cashflow", args: ["months": 12, "include_items": false]) { (a: Akis) in
+                    AylikOdemeGrafigi(months: a.months)
                 }
             }
             .navigationTitle("Özet")
+            .sayfaZemini()
             .yenilenebilir(model)
+            .yuzenDugme("Harcama ekle") { adding = true }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 14) {
-                        Button { ayarlar = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Ayarlar")
-                        EsitlemeDurumu()
-                    }
-                }
+                ToolbarItem(placement: .topBarLeading) { EsitlemeDurumu() }
                 ToolbarItem(placement: .primaryAction) {
-                    Button { adding = true } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("Harcama ekle")
+                    Button { ayarlar = true } label: { Image(systemName: "slider.horizontal.3") }.accessibilityLabel("Ayarlar")
                 }
             }
             .sheet(isPresented: $adding) { HarcamaFormu() }
             .sheet(isPresented: $ayarlar) { AyarlarEkrani() }
+        }
+    }
+
+    // Bu ay ödenecek: büyük tutar, borç ödemeleri, gelecek ay / kalan / son taksit
+    private func ustKart(_ o: Ozet) -> some View {
+        Kart {
+            HStack {
+                Text("Bu ay ödenecek").font(.subheadline).foregroundStyle(Tema.metin2)
+                Spacer()
+                Text(Bicim.month(o.month)).font(.subheadline.weight(.semibold))
+            }
+            BuyukTutar(deger: o.dueThisMonth)
+            if let d = o.debts?.dueThisMonth, d > 0.004 {
+                Text("+ \(Bicim.tl(d)) borç ödemesi").font(.subheadline).foregroundStyle(Tema.metin2).monospacedDigit()
+            }
+            Ayirici()
+            IstatistikSatiri(ogeler: [
+                Istatistik(etiket: ayAdi(o.nextMonth.month), deger: Bicim.tl(o.nextMonth.total)),
+                Istatistik(etiket: "Kalan ödeme", deger: Bicim.tl(o.remainingTotal)),
+                Istatistik(etiket: "Son taksit", deger: o.endless == true ? "Süresiz" : Bicim.month(o.lastPaymentMonth)),
+            ])
+        }
+    }
+
+    private func ayAdi(_ ym: String) -> String {
+        String(Bicim.month(ym).split(separator: " ").first ?? "")
+    }
+
+    // Sıradaki ödemeler: tarih rozeti, kart / nakit, ne zaman, tutar
+    private func siradakiler(_ o: Ozet) -> some View {
+        Kart {
+            KartBasligi("Sıradaki ödemeler")
+            if o.upcomingPayments.isEmpty {
+                Text("Ödenecek taksit yok").font(.subheadline).foregroundStyle(Tema.metin3)
+            }
+            SatirListesi(veri: o.upcomingPayments) { p in
+                HStack(spacing: 12) {
+                    TarihRozeti(tarih: p.date, gec: p.late == true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Image(systemName: p.card == "Nakit" ? "banknote" : "creditcard")
+                                .font(.footnote).foregroundStyle(model.kartRengi(p.card))
+                            Text(p.card).font(.body.weight(.semibold))
+                        }
+                        Text("\(Bicim.relative(p.date)) · \(Bicim.day(p.date))")
+                            .font(.footnote).foregroundStyle(p.late == true ? Tema.tehlike : Tema.metin3)
+                    }
+                    Spacer()
+                    Text(Bicim.tl(p.total)).font(.body.weight(.semibold)).monospacedDigit()
+                }
+            }
+        }
+    }
+
+    // Kişiler: bu ay payı ve kalan
+    private func kisiler(_ o: Ozet) -> some View {
+        Kart {
+            KartBasligi(baslik: "Kişiler") {
+                Text(Bicim.month(o.month)).font(.subheadline).foregroundStyle(Tema.metin3)
+            }
+            SatirListesi(veri: o.people) { p in
+                HStack(spacing: 12) {
+                    Avatar(ad: p.name, renk: model.kisiRengi(p.name))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(p.name).font(.body.weight(.semibold))
+                        Text("kalan \(Bicim.tl(p.remaining))").font(.footnote).foregroundStyle(Tema.metin3).monospacedDigit()
+                    }
+                    Spacer()
+                    Text(Bicim.tl(p.dueThisMonth)).font(.body.weight(.semibold)).monospacedDigit()
+                }
+            }
         }
     }
 }
@@ -129,16 +121,14 @@ struct IcgoruBolumu: View {
     var body: some View {
         Okunan(tool: "get_insights") { (i: Icgoruler) in
             if !i.insights.isEmpty {
-                Section {
-                    ForEach(hepsi ? i.insights : Array(i.insights.prefix(3))) { IcgoruSatiri(i: $0) }
-                } header: {
-                    HStack {
-                        Text("İçgörüler")
-                        Spacer()
+                Kart {
+                    KartBasligi(baslik: "İçgörüler") {
                         if i.insights.count > 3 {
-                            Button(hepsi ? "Daha az" : "Tümü (\(i.insights.count))") { hepsi.toggle() }.font(.caption).textCase(nil)
+                            Button(hepsi ? "Daha az" : "Tümü (\(i.insights.count))") { withAnimation { hepsi.toggle() } }
+                                .font(.subheadline).foregroundStyle(Tema.metin2)
                         }
                     }
+                    SatirListesi(veri: hepsi ? i.insights : Array(i.insights.prefix(3))) { IcgoruSatiri(i: $0) }
                 }
             }
         }
@@ -155,7 +145,7 @@ struct EsitlemeDurumu: View {
             } else if model.syncError != nil {
                 Image(systemName: "exclamationmark.icloud").foregroundStyle(Renk.gider).accessibilityLabel("Eşitlenemedi")
             } else {
-                Image(systemName: "checkmark.icloud").foregroundStyle(.secondary).accessibilityLabel("Eşitlendi")
+                Image(systemName: "checkmark.icloud").foregroundStyle(Tema.metin3).accessibilityLabel("Eşitlendi")
             }
         }
     }

@@ -1,40 +1,72 @@
 import SwiftUI
 
-// Kart satırı ve kart formu; kartlar Borçlar sekmesinde listelenir (BorclarEkrani)
-struct KartSatiri: View {
+// Kart görseli ve kart formu; kartlar Borçlar sekmesinde listelenir (BorclarEkrani)
+
+// Web'deki kart görseli: kartın renginde degrade, ad, kesim / son ödeme, kullanılabilir limit (ya da aşım), doluluk
+struct KartGorseli: View {
+    @EnvironmentObject private var model: Model
     let c: KartGorunumu
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(c.name).font(.headline)
-                if let l4 = c.last4 { Text("··\(l4)").foregroundStyle(.secondary) }
+        let renk = model.kartRengi(c.id)
+        let asim = c.limit > 0 && c.used > c.limit
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                Text(c.name).font(.title3.weight(.bold))
+                if let l4 = c.last4 { Text("•• \(l4)").font(.subheadline).opacity(0.75) }
                 Spacer()
-                if let n = c.nextPayment {
-                    VStack(alignment: .trailing) {
-                        Text(Bicim.tl(n.amount)).monospacedDigit()
-                        Text(Bicim.day(n.date)).font(.caption).foregroundStyle(.secondary)
-                    }
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("Kesim \(c.cutoffDay)")
+                    Text("Son ödeme \(c.dueDay)")
                 }
+                .font(.footnote.weight(.medium)).opacity(0.85)
+            }
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white.opacity(0.35))
+                    .frame(width: 34, height: 24)
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(.white.opacity(0.4), lineWidth: 1))
+                if asim {
+                    Text("Limit aşıldı").font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(.white.opacity(0.22), in: Capsule())
+                }
+                if let t = c.tracking, !t.autoPay, t.overdue > 0 {
+                    Text("Geciken \(Bicim.tl(t.overdue, fraction: false))").font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(.white.opacity(0.22), in: Capsule())
+                }
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(c.limit <= 0 ? "Kullanılan" : asim ? "Limit aşımı" : "Kullanılabilir limit").font(.footnote).opacity(0.85)
+                Text(Bicim.tl(c.limit <= 0 ? c.used : asim ? c.used - c.limit : (c.available ?? 0)))
+                    .font(.system(size: 28, weight: .bold)).monospacedDigit()
             }
             if c.limit > 0 {
-                Doluluk(used: c.used, limit: c.limit)
-                HStack {
-                    Text("Kullanılan \(Bicim.tl(c.used, fraction: false))")
-                    Spacer()
-                    Text("Kalan \(Bicim.tl(c.available ?? 0, fraction: false))")
+                GeometryReader { g in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.28))
+                        Capsule().fill(.white).frame(width: max(4, g.size.width * min(c.used / c.limit, 1)))
+                    }
                 }
-                .font(.caption).foregroundStyle(.secondary)
-            } else {
-                Text("Kullanılan \(Bicim.tl(c.used))").font(.caption).foregroundStyle(.secondary)
+                .frame(height: 5)
             }
-            Text("Kesim \(c.cutoffDay) · Son ödeme \(c.dueDay) · Bugün alınan: \(Bicim.day(c.purchaseToday.dueDate))")
-                .font(.caption).foregroundStyle(.secondary)
-            if let t = c.tracking, !t.autoPay, t.overdue > 0 {
-                Text("Geciken ekstre: \(Bicim.tl(t.overdue))").font(.caption).foregroundStyle(Renk.gider)
+            HStack {
+                if c.limit > 0 { Text("\(kisa(c.used)) / \(kisa(c.limit)) kullanıldı") }
+                Spacer()
+                if let n = c.nextPayment { Text("Son ödeme \(Bicim.day(n.date)) · \(Bicim.tl(n.amount, fraction: false))") }
             }
+            .font(.caption.weight(.medium)).opacity(0.9).monospacedDigit()
         }
-        .padding(.vertical, 4)
+        .foregroundStyle(.white)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            let sekil = RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous)
+            sekil.fill(renk)
+                .overlay(sekil.fill(LinearGradient(colors: [.white.opacity(0.14), .black.opacity(0.24)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+        }
+        .shadow(color: renk.opacity(0.3), radius: 12, y: 8)
+        .contentShape(RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous))
     }
 }
 

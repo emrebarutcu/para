@@ -95,13 +95,14 @@ enum Bicim {
 }
 
 // Web'in renkleri (styles.css)
+// Eski adlar: web'in renkleri (Tema). Vurgu web'deki gibi siyah / beyaz; renk yalnızca veride.
 enum Renk {
-    static let vurgu = hex(0x1baf7a)
-    static let gider = hex(0xd43c4b)
-    static let gelir = hex(0x13915c)
-    static let uyari = hex(0xb7791f)
+    static var vurgu: Color { Tema.metin }
+    static var gider: Color { Tema.tehlike }
+    static var gelir: Color { Tema.iyi }
+    static var uyari: Color { Tema.uyari }
     // Kişi ve kart renkleri (--s1…--s8; kayıttaki color)
-    static let seri = [0x2a78d6, 0xeb6834, 0x1baf7a, 0xeda100, 0xe87ba4, 0x008300, 0x6250d6, 0xe34948].map(hex)
+    static let seri = (0..<8).map { Tema.seri($0) }
 
     static func hex(_ v: Int) -> Color {
         Color(red: Double((v >> 16) & 0xff) / 255, green: Double((v >> 8) & 0xff) / 255, blue: Double(v & 0xff) / 255)

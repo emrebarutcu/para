@@ -170,6 +170,14 @@
     return JSON.stringify({ span, codes, ...N.assetPoints(state, { today, span, codes, cur: curRates(), series, pid: pid || undefined }) });
   }
 
+  // Kişi ve kart renkleri (web'deki --s1…--s8 sırası; kayıttaki color): ada ve kimliğe göre
+  function colors() {
+    const state = loadState(), out = { people: {}, cards: {} };
+    for (const p of state.people) { out.people[p.id] = p.color || 0; out.people[p.name] = p.color || 0; }
+    for (const c of state.cards) { out.cards[c.id] = c.color || 0; out.cards[c.name] = c.color || 0; }
+    return JSON.stringify(out);
+  }
+
   // Formlar için sabitler
   function constants() {
     return JSON.stringify({
@@ -216,7 +224,7 @@
   };
 
   root.Kopru = {
-    loadTools, toScript, setRates, setPrices, setHome, setCashDef, run, marketCodes, constants, sync, cash, assetPlan, asset,
+    loadTools, toScript, setRates, setPrices, setHome, setCashDef, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
     defaultState: () => JSON.stringify(T.defaultState()),
   };
 })(this);

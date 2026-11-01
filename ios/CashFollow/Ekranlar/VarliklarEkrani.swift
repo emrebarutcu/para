@@ -1,6 +1,7 @@
 import SwiftUI
 
-// Varlıklar: ana para birimi, döviz, gram altın, fon ve hisse (yalnızca Türkiye) bakiyeleri güncel kurla; hareketler (get_assets, list_entries)
+// Varlıklar: ana para birimi, döviz, gram altın, fon ve hisse (yalnızca Türkiye) bakiyeleri güncel kurla; hareketler
+// (get_assets, list_entries; web'deki Varlıklar sekmesi)
 struct VarliklarEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var adding = false
@@ -8,104 +9,159 @@ struct VarliklarEkrani: View {
     var body: some View {
         NavigationStack {
             Okunan(tool: "get_assets") { (v: Varliklar) in
-                List {
-                    Section {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Net varlık").font(.subheadline).foregroundStyle(.secondary)
-                            Text(Bicim.tl(v.netWorthTry)).font(.largeTitle.weight(.semibold)).monospacedDigit()
-                        }
-                        .padding(.vertical, 4)
-                        Satir(title: "Varlıklar", value: Bicim.tl(v.totalTry))
-                        if v.receivablesTry > 0 { Satir(title: "Alacaklar", value: Bicim.tl(v.receivablesTry), color: Renk.gelir) }
-                        if v.debtsTry > 0 { Satir(title: "Borçlar (kart dahil)", value: "−" + Bicim.tl(v.debtsTry), color: Renk.gider) }
-                        if let e = v.ratesError ?? v.pricesError {
-                            Text(e.hasPrefix("Current rates") ? "Güncel kurlar alınamadı; toplama yalnızca \(Bicim.homeShort) girdi." : "Bazı fon / hisse fiyatları alınamadı.")
-                                .font(.caption).foregroundStyle(Renk.uyari)
+                Sayfa {
+                    ustKart(v)
+                    VarlikSeyriKarti()
+                    let bakiyeler = v.assets.filter { $0.balance != 0 || $0.asset == Bicim.home }
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                        ForEach(bakiyeler, id: \.self) { a in varlikKutusu(a) }
+                        if v.receivablesTry > 0.004 {
+                            kutu(simge: "⇄", ad: "Alacak", deger: Bicim.tl(v.receivablesTry), alt: "kart payları · borç verdiklerin")
                         }
                     }
-
-                    Section("Varlığın seyri") { VarlikSeyriKarti() }
-
-                    Section("Bakiyeler") {
-                        ForEach(v.assets.filter { $0.balance != 0 || $0.asset == Bicim.home }, id: \.self) { a in
-                            HStack {
-                                Text(a.name)
-                                Spacer()
-                                VStack(alignment: .trailing) {
-                                    Text(Bicim.amount(a.balance, asset: a.asset)).monospacedDigit()
-                                        .foregroundStyle(a.balance < 0 ? Renk.gider : .primary)
-                                    if a.asset != Bicim.home, let t = a.tryValue {
-                                        Text(Bicim.tl(t)).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
+                    if model.marketsAllowed || !v.holdings.isEmpty {
+                        BolumBasligi(baslik: "Fon ve hisse")
+                        Kart(dolgu: 14) {
+                            if v.holdings.isEmpty {
+                                Text("TEFAS fonlarını ve Borsa İstanbul hisselerini adetiyle ekle; güncel fiyatla \(Bicim.homeShort) karşılığını görürsün.")
+                                    .font(.subheadline).foregroundStyle(Tema.metin3)
                             }
-                        }
-                        ForEach(v.holdings, id: \.self) { h in
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(h.ticker)
-                                    if let n = h.name { Text(n).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                                }
-                                Spacer()
-                                VStack(alignment: .trailing) {
-                                    Text(h.tryValue.map { Bicim.tl($0) } ?? "fiyat yok").monospacedDigit()
-                                    HStack(spacing: 4) {
-                                        Text(Bicim.amount(h.units, asset: h.asset))
-                                        if let p = h.profitPct { Text(Bicim.percent(p)).foregroundStyle(p >= 0 ? Renk.gelir : Renk.gider) }
-                                    }
-                                    .font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
+                            SatirListesi(veri: v.holdings) { h in pozisyon(h) }
                         }
                     }
-
-                    if let r = v.rates {
-                        let kodlar = v.assets.map(\.asset).filter { $0 != Bicim.home && r.values[$0] != nil }
-                        if !kodlar.isEmpty {
-                            Section("Kurlar") {
-                                ForEach(kodlar, id: \.self) { k in
-                                    Satir(title: v.assets.first { $0.asset == k }?.name ?? k, value: Bicim.tl(r.values[k] ?? 0))
-                                }
-                            }
-                        }
+                    if let e = v.ratesError ?? v.pricesError {
+                        Text(e.hasPrefix("Current rates") ? "Güncel kurlar alınamadı; toplama yalnızca \(Bicim.homeShort) girdi." : "Bazı fon / hisse fiyatları alınamadı.")
+                            .font(.footnote).foregroundStyle(Tema.uyari)
                     }
-
-                    Section("Hareketler") { HareketListesiBolumu() }
+                    BolumBasligi(baslik: "Hareketler")
+                    HareketListesiBolumu()
                 }
             }
             .navigationTitle("Varlıklar")
+            .sayfaZemini()
             .yenilenebilir(model)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Hareket ekle")
+            .yuzenDugme("Hareket ekle") { adding = true }
+            .sheet(isPresented: $adding) { HareketFormu() }
+        }
+    }
+
+    // Varlık: büyük tutar, özvarlık + borç, öne çıkan kurlar
+    private func ustKart(_ v: Varliklar) -> some View {
+        Kart {
+            HStack {
+                Text("Varlık").font(.subheadline).foregroundStyle(Tema.metin2)
+                Spacer()
+                if let t = v.rates?.updatedAt, let d = ISO8601DateFormatter().date(from: t) {
+                    Text("Kur \(d.formatted(Bicim.tarih.hour().minute()))").font(.footnote).foregroundStyle(Tema.metin3)
                 }
             }
-            .sheet(isPresented: $adding) { HareketFormu() }
+            BuyukTutar(deger: v.totalAssetsTry)
+            Text("= Özvarlık \(Bicim.tl(v.netWorthTry, fraction: false)) + Borç \(Bicim.tl(v.debtsTry, fraction: false))"
+                 + (v.receivablesTry > 0.004 ? " · \(Bicim.tl(v.receivablesTry, fraction: false)) alacak dahil" : ""))
+                .font(.footnote).foregroundStyle(Tema.metin2).monospacedDigit()
+            if let r = v.rates {
+                let kodlar = ["USD", "EUR", "GAU", "GBP", "TRY"].filter { $0 != Bicim.home && r.values[$0] != nil }.prefix(3)
+                if !kodlar.isEmpty {
+                    Ayirici()
+                    IstatistikSatiri(ogeler: kodlar.map { k in
+                        Istatistik(etiket: ad(k, v), deger: Bicim.tl(r.values[k] ?? 0))
+                    })
+                }
+            }
+        }
+    }
+
+    private func ad(_ kod: String, _ v: Varliklar) -> String {
+        if kod == "GAU" { return "Gram altın" }
+        return model.constants?.currencies.first { $0.code == kod }?.name ?? v.assets.first { $0.asset == kod }?.name ?? kod
+    }
+
+    private func varlikKutusu(_ a: Varliklar.Bakiye) -> some View {
+        let simge = a.asset == "GAU" ? "gr" : (model.constants?.currencies.first { $0.code == a.asset }?.symbol ?? String(a.asset.prefix(1)))
+        return kutu(simge: simge, ad: a.name, deger: Bicim.amount(a.balance, asset: a.asset),
+                    alt: a.asset != Bicim.home ? a.tryValue.map { "≈ " + Bicim.tl($0) } : nil,
+                    renk: a.balance < 0 ? Tema.tehlike : Tema.metin)
+    }
+
+    private func kutu(simge: String, ad: String, deger: String, alt: String?, renk: Color = Tema.metin) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(simge).font(.footnote.weight(.bold)).foregroundStyle(Tema.metin2)
+                    .frame(width: 28, height: 28)
+                    .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Text(ad).font(.subheadline.weight(.semibold)).lineLimit(1)
+            }
+            Text(deger).font(.system(size: 19, weight: .bold)).foregroundStyle(renk).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.6)
+            Text(alt ?? " ").font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1).monospacedDigit()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.05), radius: 10, y: 6)
+    }
+
+    private func pozisyon(_ h: Varliklar.Pozisyon) -> some View {
+        HStack(spacing: 12) {
+            Text(String(h.ticker.prefix(3))).font(.caption.weight(.bold)).foregroundStyle(Tema.metin2)
+                .frame(width: 36, height: 36)
+                .background(Tema.yuzey2, in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(h.ticker).font(.body.weight(.semibold))
+                if let n = h.name { Text(n).font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1) }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(h.tryValue.map { Bicim.tl($0) } ?? "fiyat yok").font(.body.weight(.semibold)).monospacedDigit()
+                HStack(spacing: 4) {
+                    Text(Bicim.amount(h.units, asset: h.asset))
+                    if let p = h.profitPct { Text(Bicim.percent(p)).foregroundStyle(p >= 0 ? Tema.iyi : Tema.tehlike) }
+                }
+                .font(.footnote).foregroundStyle(Tema.metin3)
+            }
         }
     }
 }
 
+// Hareketler: kişinin baş harfi, açıklama, varlık · tarih · tekrar, tutar (web'deki gibi)
 struct HareketListesiBolumu: View {
     @EnvironmentObject private var model: Model
+    @State private var silinecek: Hareket?
 
     var body: some View {
         Okunan(tool: "list_entries", args: ["limit": 200]) { (l: HareketListesi) in
-            if l.entries.isEmpty { Text("Hareket yok").foregroundStyle(.secondary) }
-            ForEach(l.entries) { e in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(e.description.isEmpty ? e.asset : e.description).lineLimit(1)
-                        Text([Bicim.day(e.date), e.repeat?.label, e.person].compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption).foregroundStyle(.secondary)
+            Kart(dolgu: 14) {
+                if l.entries.isEmpty { Text("Hareket yok").foregroundStyle(Tema.metin3) }
+                SatirListesi(veri: l.entries) { e in
+                    HStack(alignment: .top, spacing: 12) {
+                        Avatar(ad: e.person, renk: model.kisiRengi(e.person))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(e.description.isEmpty ? e.asset : e.description).font(.body.weight(.semibold)).lineLimit(1)
+                            Text([Bicim.day(e.date), e.repeat?.label].compactMap { $0 }.joined(separator: " · "))
+                                .font(.footnote).foregroundStyle(Tema.metin3)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 3) {
+                            Text((e.direction == "in" ? "+" : "−") + Bicim.amount(e.amount, asset: e.asset) + (e.repeat != nil ? "/ay" : ""))
+                                .font(.body.weight(.semibold)).monospacedDigit()
+                                .foregroundStyle(e.direction == "in" ? Tema.iyi : Tema.tehlike)
+                            if let n = e.repeat?.nextDate {
+                                Text("sonraki \(Bicim.day(n))").font(.footnote).foregroundStyle(Tema.metin3)
+                            }
+                        }
                     }
-                    Spacer()
-                    Text((e.direction == "in" ? "+" : "−") + Bicim.amount(e.amount, asset: e.asset))
-                        .monospacedDigit()
-                        .foregroundStyle(e.direction == "in" ? Renk.gelir : Renk.gider)
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        Button("Sil", systemImage: "trash", role: .destructive) { silinecek = e }
+                    }
                 }
             }
-            .onDelete { idx in
-                for i in idx { try? model.write("delete_entry", ["id": l.entries[i].id]) }
+            .confirmationDialog(silinecek.map { "\($0.description.isEmpty ? $0.asset : $0.description) silinsin mi?" } ?? "",
+                                isPresented: Binding(get: { silinecek != nil }, set: { if !$0 { silinecek = nil } }), titleVisibility: .visible) {
+                Button("Sil", role: .destructive) {
+                    if let e = silinecek { try? model.write("delete_entry", ["id": e.id]) }
+                    silinecek = nil
+                }
             }
         }
     }

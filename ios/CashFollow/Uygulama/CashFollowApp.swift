@@ -14,7 +14,7 @@ struct CashFollowApp: App {
         WindowGroup {
             AnaEkran()
                 .environmentObject(model)
-                .tint(Renk.vurgu)
+                .tint(Tema.metin)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refresh() } }

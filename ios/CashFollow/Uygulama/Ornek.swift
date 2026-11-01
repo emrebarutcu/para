@@ -79,22 +79,17 @@ struct GrafikGalerisi: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            Sayfa {
                 if sayfa == 1 {
-                    Section("Nakit") { NakitKarti() }
-                    Section("Kategoriler") {
-                        Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
-                            KategoriKarti(months: k.months)
-                        }
+                    NakitKarti()
+                    Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
+                        KategoriKarti(months: k.months)
                     }
                 } else {
-                    Section("Aylık ödemeler") {
-                        Okunan(tool: "get_cashflow", args: ["months": 12, "include_items": false]) { (a: Akis) in AylikOdemeGrafigi(months: a.months) }
-                    }
-                    Section("Varlığın seyri") { VarlikSeyriKarti() }
+                    Okunan(tool: "get_cashflow", args: ["months": 12, "include_items": false]) { (a: Akis) in AylikOdemeGrafigi(months: a.months) }
+                    VarlikSeyriKarti()
                 }
             }
-            .listSectionSpacing(.compact)
             .navigationTitle("Grafikler")
         }
     }

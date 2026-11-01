@@ -6,35 +6,25 @@ struct AkisEkrani: View {
     @EnvironmentObject private var model: Model
     @AppStorage("akis.ay") private var ayCount = 12
     @State private var acik: Set<String> = []
+    @State private var adding = false
 
     var body: some View {
         NavigationStack {
-            Okunan(tool: "get_cashflow", args: ["months": ayCount], key: "\(ayCount)") { (a: Akis) in
-                List {
-                    Section {
-                        AylikOdemeGrafigi(months: a.months)
-                        Satir(title: "\(a.months.count) ayda toplam", value: Bicim.tl(a.months.reduce(0) { $0 + $1.total }))
-                    }
-                    if a.months.allSatisfy({ $0.payments.isEmpty }) {
-                        Text("Önümüzdeki aylarda ödenecek taksit yok.").foregroundStyle(.secondary)
-                    }
-                    ForEach(a.months.filter { !$0.payments.isEmpty }) { m in
-                        Section {
-                            ForEach(Array(m.payments.enumerated()), id: \.offset) { i, p in
-                                OdemeSatiri(p: p, acik: binding("\(m.month)|\(i)"))
-                            }
-                        } header: {
-                            HStack {
-                                Text(Bicim.month(m.month))
-                                Spacer()
-                                Text(Bicim.tl(m.total)).monospacedDigit()
-                            }
+            Sayfa {
+                Okunan(tool: "get_cashflow", args: ["months": ayCount], key: "\(ayCount)") { (a: Akis) in
+                    VStack(alignment: .leading, spacing: 14) {
+                        AylikOdemeGrafigi(months: a.months, baslik: "\(a.months.count) ayda \(kisa(a.months.reduce(0) { $0 + $1.total }))")
+                        if a.months.allSatisfy({ $0.payments.isEmpty }) {
+                            Kart { Text("Önümüzdeki aylarda ödenecek taksit yok.").foregroundStyle(Tema.metin3) }
                         }
+                        ForEach(a.months.filter { !$0.payments.isEmpty }) { m in ay(m) }
                     }
                 }
             }
-            .navigationTitle("Akış")
+            .navigationTitle("Nakit akışı")
+            .sayfaZemini()
             .yenilenebilir(model)
+            .yuzenDugme("Harcama ekle") { adding = true }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
@@ -48,6 +38,32 @@ struct AkisEkrani: View {
                     .accessibilityLabel("Kaç ay")
                 }
             }
+            .sheet(isPresented: $adding) { HarcamaFormu() }
+        }
+    }
+
+    // Ay başlığı, kişilerin payı, ödeme günleri
+    private func ay(_ m: Akis.Ay) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(Bicim.month(m.month)).font(.system(size: 19, weight: .bold))
+                Spacer()
+                Text(Bicim.tl(m.total)).font(.system(size: 17, weight: .bold)).monospacedDigit()
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, 8)
+            let kisiler = m.byPerson.filter { $0.value > 0.004 }.sorted { $0.key < $1.key }
+            if kisiler.count > 1 {
+                HStack(spacing: 12) {
+                    ForEach(Array(kisiler.enumerated()), id: \.offset) { _, k in RenkliAd(ad: "\(k.key) \(Bicim.tl(k.value))", renk: model.kisiRengi(k.key)) }
+                }
+                .padding(.horizontal, 4)
+            }
+            Kart(dolgu: 14) {
+                SatirListesi(veri: Array(m.payments.enumerated()).map { OdemeAnahtari(ay: m.month, i: $0.offset, p: $0.element) }) { x in
+                    OdemeSatiri(p: x.p, acik: binding("\(x.ay)|\(x.i)"))
+                }
+            }
         }
     }
 
@@ -56,40 +72,61 @@ struct AkisEkrani: View {
     }
 }
 
-// Bir ödeme günü: kart, tutar, kişiler; açınca taksitler
+private struct OdemeAnahtari: Hashable { let ay: String; let i: Int; let p: Akis.Odeme }
+
+// Bir ödeme günü: tarih rozeti, kart, kişiler, tutar; dokununca taksitler
 struct OdemeSatiri: View {
+    @EnvironmentObject private var model: Model
     let p: Akis.Odeme
     @Binding var acik: Bool
 
     var body: some View {
-        DisclosureGroup(isExpanded: $acik) {
-            ForEach(p.items ?? [], id: \.self) { x in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(x.description).font(.subheadline).lineLimit(1)
-                        Text("\(x.person) · \(x.installment)").font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            Button { withAnimation(.snappy(duration: 0.25)) { acik.toggle() } } label: {
+                HStack(spacing: 12) {
+                    TarihRozeti(tarih: p.date)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Image(systemName: p.card == "Nakit" ? "banknote" : "creditcard")
+                                .font(.footnote).foregroundStyle(model.kartRengi(p.card))
+                            Text(p.card).font(.body.weight(.semibold)).foregroundStyle(Tema.metin)
+                        }
+                        if p.notCounted == true {
+                            Text("sayılmıyor").font(.footnote).foregroundStyle(Tema.metin3)
+                        } else if let by = p.byPerson, !by.isEmpty {
+                            HStack(spacing: 8) {
+                                ForEach(Array(by.sorted { $0.key < $1.key }.enumerated()), id: \.offset) { _, k in
+                                    RenkliAd(ad: "\(k.key) \(kisa(k.value))", renk: model.kisiRengi(k.key))
+                                }
+                            }
+                        }
                     }
                     Spacer()
-                    Text(Bicim.tl(x.amount)).font(.subheadline).monospacedDigit()
-                }
-            }
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(p.card)
-                    Text("\(Bicim.day(p.date)) · \(Bicim.relative(p.date))").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(Bicim.tl(p.total)).monospacedDigit()
-                        .foregroundStyle(p.notCounted == true ? .secondary : .primary)
-                    if p.notCounted == true {
-                        Text("sayılmıyor").font(.caption2).foregroundStyle(.secondary)
-                    } else if let by = p.byPerson, by.count > 1 {
-                        Text(by.sorted { $0.key < $1.key }.map { "\($0.key) \(kisa($0.value))" }.joined(separator: " · "))
-                            .font(.caption2).foregroundStyle(.secondary)
+                    Text(Bicim.tl(p.total)).font(.body.weight(.semibold)).monospacedDigit()
+                        .foregroundStyle(p.notCounted == true ? Tema.metin3 : Tema.metin)
+                    if !(p.items ?? []).isEmpty {
+                        Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(Tema.metin3)
+                            .rotationEffect(.degrees(acik ? 180 : 0))
                     }
                 }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if acik {
+                VStack(spacing: 8) {
+                    ForEach(p.items ?? [], id: \.self) { x in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(x.description).font(.subheadline).lineLimit(1)
+                                Text("\(x.person) · \(x.installment)").font(.footnote).foregroundStyle(Tema.metin3)
+                            }
+                            Spacer()
+                            Text(Bicim.tl(x.amount)).font(.subheadline).monospacedDigit()
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
     }
