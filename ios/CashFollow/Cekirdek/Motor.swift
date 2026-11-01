@@ -148,6 +148,13 @@ final class Motor {
         return try? JSONDecoder().decode(Sabitler.self, from: Data(json.utf8))
     }
 
+    // Kişi / kart adı ve kimliği → renk sırası (Tema.seri)
+    func colors() -> Renkler {
+        guard let json = kopru.invokeMethod("colors", withArguments: [])?.toString(),
+              let r = try? JSONDecoder().decode(Renkler.self, from: Data(json.utf8)) else { return Renkler(people: [:], cards: [:]) }
+        return r
+    }
+
     var defaultState: String { kopru.invokeMethod("defaultState", withArguments: [])?.toString() ?? "" }
 
     // ── Grafikler (nakit.js) ───────────────────────────────────────────────────
@@ -212,4 +219,9 @@ struct Sabitler: Decodable {
     let home: String
     let markets: Bool             // fon ve hisse (yalnızca Türkiye)
     let cashDefault: [String]     // nakit tanımının varsayılanı
+}
+
+struct Renkler: Decodable {
+    let people: [String: Int]
+    let cards: [String: Int]
 }

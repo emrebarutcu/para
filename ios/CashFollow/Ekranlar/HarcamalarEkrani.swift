@@ -1,77 +1,120 @@
 import SwiftUI
 
-// Harcamalar: süren / biten taksitler, arama, ekleme ve silme (list_purchases, add_purchase, delete_purchase)
+// Harcamalar: kişiye göre süzme, süren / biten taksitler, arama, ekleme ve silme (list_purchases, add_purchase,
+// delete_purchase; web'deki Harcamalar sekmesi)
 struct HarcamalarEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var status = "active"
     @State private var search = ""
+    @State private var kisi = ""            // "" hepsi, yoksa kişinin kimliği
     @State private var adding = false
+    @State private var silinecek: Harcama?
 
     var body: some View {
         NavigationStack {
-            Okunan(tool: "list_purchases", args: args, key: "\(status)|\(search)") { (l: HarcamaListesi) in
-                List {
-                    Picker("Durum", selection: $status) {
-                        Text("Süren").tag("active")
-                        Text("Biten").tag("done")
-                        Text("Hepsi").tag("all")
+            Sayfa {
+                Okunan(tool: "list_people") { (k: KisiListesi) in
+                    if k.people.count > 1 {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                Cip(ad: "Tümü", sayi: k.people.reduce(0) { $0 + $1.purchaseCount }, secili: kisi.isEmpty) { kisi = "" }
+                                ForEach(k.people) { p in
+                                    Cip(ad: p.name, sayi: p.purchaseCount, renk: model.kisiRengi(p.id), secili: kisi == p.id) { kisi = p.id }
+                                }
+                            }
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-
+                }
+                Secici(secim: $status, ogeler: [("active", "Süren"), ("done", "Biten"), ("all", "Hepsi")])
+                Okunan(tool: "list_purchases", args: args, key: "\(status)|\(search)|\(kisi)") { (l: HarcamaListesi) in
                     if l.purchases.isEmpty {
-                        Text(search.isEmpty ? "Harcama yok" : "Bulunamadı").foregroundStyle(.secondary)
-                    }
-                    ForEach(l.purchases) { p in
-                        NavigationLink(value: p.id) { HarcamaSatiri(p: p) }
-                    }
-                    .onDelete { idx in
-                        for i in idx { try? model.write("delete_purchase", ["id": l.purchases[i].id]) }
+                        Kart { Text(search.isEmpty ? "Harcama yok" : "Bulunamadı").foregroundStyle(Tema.metin3) }
+                    } else {
+                        Kart(dolgu: 14) {
+                            SatirListesi(veri: l.purchases) { p in
+                                NavigationLink(value: p.id) { HarcamaSatiri(p: p) }
+                                    .buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button("Sil", systemImage: "trash", role: .destructive) { silinecek = p }
+                                    }
+                            }
+                        }
                     }
                 }
             }
             .navigationTitle("Harcamalar")
+            .sayfaZemini()
             .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
             .searchable(text: $search, prompt: "Ara")
             .yenilenebilir(model)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Harcama ekle")
+            .yuzenDugme("Harcama ekle") { adding = true }
+            .sheet(isPresented: $adding) { HarcamaFormu() }
+            .confirmationDialog(silinecek.map { "\($0.description) ve bütün taksitleri silinsin mi?" } ?? "",
+                                isPresented: Binding(get: { silinecek != nil }, set: { if !$0 { silinecek = nil } }), titleVisibility: .visible) {
+                Button("Sil", role: .destructive) {
+                    if let p = silinecek { try? model.write("delete_purchase", ["id": p.id]) }
+                    silinecek = nil
                 }
             }
-            .sheet(isPresented: $adding) { HarcamaFormu() }
         }
     }
 
     private var args: [String: Any] {
         var a: [String: Any] = ["status": status, "limit": 500]
         if !search.trimmingCharacters(in: .whitespaces).isEmpty { a["search"] = search }
+        if !kisi.isEmpty { a["person"] = kisi }
         return a
     }
 }
 
+// Web'deki harcama satırı: kişinin baş harfi, ad, kart · tarih, taksit · kategori; sağda aylık tutar ve kalan,
+// taksitliyse ilerleme çubuğu
 struct HarcamaSatiri: View {
+    @EnvironmentObject private var model: Model
     let p: Harcama
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(p.description).lineLimit(1)
-                Text([p.card, p.person, p.categoryName].compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(p.installments > 1 ? "\(Bicim.amount(p.perInstallment, asset: p.asset)) × \(p.installments)" : Bicim.amount(p.total, asset: p.asset))
-                    .monospacedDigit()
-                if p.status == "active", let n = p.nextPayment {
-                    Text(p.installments > 1 ? "\(p.paidInstallments)/\(p.installments) · \(Bicim.day(n.date))" : Bicim.day(n.date))
-                        .font(.caption).foregroundStyle(.secondary)
-                } else if p.status == "done" {
-                    Text("Bitti").font(.caption).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            Avatar(ad: p.person, renk: model.kisiRengi(p.personId))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(p.description).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(tutar).font(.body.weight(.semibold)).monospacedDigit().foregroundStyle(Tema.metin)
+                }
+                HStack(spacing: 5) {
+                    Image(systemName: p.cardId == nil ? "banknote" : "creditcard").font(.caption)
+                        .foregroundStyle(p.cardId.map { model.kartRengi($0) } ?? Tema.nakit)
+                    Text([p.card, p.date.map { Bicim.day($0) }].compactMap { $0 }.joined(separator: " · ")).lineLimit(1)
+                    Spacer(minLength: 6)
+                    if let sag = sagAlt { Text(sag).monospacedDigit() }
+                }
+                .font(.footnote).foregroundStyle(Tema.metin3)
+                let alt = [p.repeat?.label ?? (p.installments > 1 ? "\(p.installments) taksit" : "Peşin"), p.categoryName].compactMap { $0 }
+                Text(alt.joined(separator: " · ")).font(.footnote).foregroundStyle(Tema.metin3)
+                if p.installments > 1, p.repeat == nil {
+                    HStack(spacing: 8) {
+                        Doluluk(used: Double(p.paidInstallments), limit: Double(p.installments), renk: Tema.metin2)
+                            .frame(width: 90)
+                        Text("\(p.paidInstallments)/\(p.installments) ödendi").font(.caption).foregroundStyle(Tema.metin3)
+                    }
                 }
             }
         }
+        .contentShape(Rectangle())
+    }
+
+    private var tutar: String {
+        if p.repeat != nil || p.installments > 1 { return Bicim.amount(p.perInstallment, asset: p.asset) + "/ay" }
+        return Bicim.amount(p.total, asset: p.asset)
+    }
+
+    private var sagAlt: String? {
+        if p.status == "done" { return "bitti" }
+        if p.repeat != nil, let n = p.repeat?.nextDate { return "sonraki \(Bicim.day(n))" }
+        if p.installments > 1 { return "kalan \(Bicim.amount(p.remainingAmount, asset: p.asset))" }
+        if let n = p.nextPayment { return Bicim.relative(n.date) }
+        return nil
     }
 }
 
@@ -85,34 +128,57 @@ struct HarcamaDetayi: View {
 
     var body: some View {
         Okunan(tool: "get_purchase", args: ["id": id], key: id) { (p: Harcama) in
-            List {
-                Section {
-                    Satir(title: "Toplam", value: Bicim.amount(p.total, asset: p.asset))
-                    Satir(title: "Kart", value: p.card)
-                    Satir(title: "Kişi", value: p.person)
-                    if let d = p.date { Satir(title: "Tarih", value: Bicim.day(d)) }
-                    if let c = p.categoryName { Satir(title: "Kategori", value: c) }
-                    if let cut = p.statementCutoff { Satir(title: "Ekstre kesimi", value: Bicim.day(cut)) }
-                    if let r = p.repeat?.label { Satir(title: "Tekrar", value: r) }
-                    Satir(title: "Kalan", value: Bicim.amount(p.remainingAmount, asset: p.asset))
+            Sayfa {
+                Kart {
+                    HStack(spacing: 12) {
+                        Avatar(ad: p.person, renk: model.kisiRengi(p.personId), boyut: 40)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(p.description).font(.title3.weight(.bold))
+                            Text([p.person, p.card].joined(separator: " · ")).font(.subheadline).foregroundStyle(Tema.metin3)
+                        }
+                    }
+                    BuyukTutar(deger: p.total, boyut: 40)
+                    Ayirici()
+                    IstatistikSatiri(ogeler: [
+                        Istatistik(etiket: p.repeat != nil ? "Her ay" : "Taksit", deger: p.installments > 1 || p.repeat != nil ? Bicim.amount(p.perInstallment, asset: p.asset) : "Peşin"),
+                        Istatistik(etiket: "Ödenen", deger: p.repeat != nil ? "—" : "\(p.paidInstallments)/\(p.installments)"),
+                        Istatistik(etiket: "Kalan", deger: Bicim.amount(p.remainingAmount, asset: p.asset)),
+                    ])
                 }
-                Section("Ödemeler") {
-                    ForEach(p.payments ?? [], id: \.self) { x in
-                        HStack {
-                            Image(systemName: x.paid ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(x.paid ? Renk.vurgu : .secondary)
-                            Text("\(x.no). taksit")
-                            Spacer()
-                            VStack(alignment: .trailing) {
-                                Text(Bicim.amount(x.amount, asset: p.asset)).monospacedDigit()
-                                Text(Bicim.day(x.date)).font(.caption).foregroundStyle(.secondary)
+                Kart {
+                    VStack(spacing: 10) {
+                        if let d = p.date { Satir(title: "Tarih", value: Bicim.day(d)) }
+                        if let c = p.categoryName { Satir(title: "Kategori", value: c) }
+                        if let cut = p.statementCutoff { Satir(title: "Ekstre kesimi", value: Bicim.day(cut)) }
+                        if let r = p.repeat?.label { Satir(title: "Tekrar", value: r) }
+                    }
+                    .font(.subheadline)
+                }
+                if let odemeler = p.payments, !odemeler.isEmpty {
+                    Kart(dolgu: 14) {
+                        KartBasligi("Ödemeler")
+                        SatirListesi(veri: odemeler) { x in
+                            HStack(spacing: 12) {
+                                TarihRozeti(tarih: x.date)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(x.no). taksit").font(.body.weight(.semibold))
+                                    Text(x.paid ? "ödendi" : Bicim.relative(x.date)).font(.footnote).foregroundStyle(Tema.metin3)
+                                }
+                                Spacer()
+                                Text(Bicim.amount(x.amount, asset: p.asset)).font(.body.weight(.semibold)).monospacedDigit()
+                                    .foregroundStyle(x.paid ? Tema.metin3 : Tema.metin)
+                                Image(systemName: x.paid ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(x.paid ? Tema.iyi : Tema.cizgi2)
                             }
                         }
                     }
                 }
-                Section {
-                    Button("Harcamayı sil", role: .destructive) { confirm = true }
+                Button(role: .destructive) { confirm = true } label: {
+                    Text("Harcamayı sil").font(.body.weight(.semibold)).foregroundStyle(Tema.tehlike)
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
+                .buttonStyle(.plain)
             }
             .navigationTitle(p.description)
             .toolbar {

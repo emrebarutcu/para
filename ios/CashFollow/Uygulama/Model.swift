@@ -63,6 +63,17 @@ final class Model: ObservableObject {
         schedulePush()
     }
 
+    // Kişi ve kart renkleri (grafikler, avatarlar); revision değişince yeniden okunur
+    private var renkOnbellek: (rev: Int, r: Renkler)?
+    var renkler: Renkler {
+        if let c = renkOnbellek, c.rev == revision { return c.r }
+        let r = motor?.colors() ?? Renkler(people: [:], cards: [:])
+        renkOnbellek = (revision, r)
+        return r
+    }
+    func kisiRengi(_ key: String) -> Color { Tema.seri(renkler.people[key] ?? 0) }
+    func kartRengi(_ key: String) -> Color { key == "Nakit" ? Tema.nakit : Tema.seri(renkler.cards[key] ?? 0) }
+
     private func engine() throws -> Motor {
         guard let motor else { throw AracHatasi(message: startupError ?? "Uygulama çekirdeği açılamadı", user: false) }
         return motor

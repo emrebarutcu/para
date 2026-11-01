@@ -1,0 +1,71 @@
+# iOS ekran görüntüleri: simülatörde örnek veriyle (Uygulama/Ornek.swift) her sekme ve grafikler, açık ve koyu temada.
+# Görüntüler ekran-goruntuleri dalına yazılır (her çalışmada yeniden). claude/grafik* dallarına itilince ya da elle çalışır.
+name: Ekran görüntüleri
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/grafik*"]
+    paths: ["ios/**", "*.js", ".github/workflows/ekran.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  ekran:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -viE "beta|rc" | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+      - name: Derle
+        run: |
+          xcodebuild -project ios/CashFollow.xcodeproj -scheme CashFollow -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO build -quiet
+      - name: Ekran görüntüleri
+        run: |
+          APP=build/Build/Products/Debug-iphonesimulator/CashFollow.app
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)["devices"]
+          ids = [x["udid"] for rt, xs in sorted(d.items(), reverse=True) if "iOS" in rt for x in xs if x["name"].startswith("iPhone") and "Pro" in x["name"] and "Max" not in x["name"]]
+          print(ids[0])')
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryLevel 100 --cellularBars 4 || true
+          xcrun simctl install "$UDID" "$APP"
+          mkdir -p out
+          shot() {  # ad, tema, argümanlar…
+            name=$1; theme=$2; shift 2
+            xcrun simctl ui "$UDID" appearance "$theme"
+            xcrun simctl terminate "$UDID" app.cashfollow.ios 2>/dev/null || true
+            xcrun simctl launch "$UDID" app.cashfollow.ios -ornek "$@"
+            sleep 12
+            xcrun simctl io "$UDID" screenshot "out/$name-$theme.png"
+          }
+          # İlk açılış (soğuk başlangıç, sistem bildirimleri) görüntüye girmesin
+          xcrun simctl launch "$UDID" app.cashfollow.ios -ornek
+          sleep 30
+          for theme in light dark; do
+            shot galeri1 $theme -galeri 1
+            shot galeri2 $theme -galeri 2
+            for i in 0 1 2 3 4; do shot sekme$i $theme -sekme $i; done
+          done
+          ls -la out
+      - name: Görüntüleri yaz
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git checkout --orphan ekran-goruntuleri
+          git rm -rq --cached .
+          mkdir -p /tmp/ekran && cp out/*.png /tmp/ekran/
+          git clean -fdxq -e out
+          cp /tmp/ekran/*.png .
+          echo "Kaynak: $GITHUB_SHA" > KAYNAK.txt
+          git add *.png KAYNAK.txt
+          git commit -qm "Ekran görüntüleri ($GITHUB_SHA)"
+          git push -f origin ekran-goruntuleri

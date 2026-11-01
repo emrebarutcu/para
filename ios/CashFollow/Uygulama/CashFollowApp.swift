@@ -7,13 +7,14 @@ struct CashFollowApp: App {
 
     init() {
         OzDenetim.runIfRequested()
+        Ornek.hazirlaIfRequested()
     }
 
     var body: some Scene {
         WindowGroup {
             AnaEkran()
                 .environmentObject(model)
-                .tint(Renk.vurgu)
+                .tint(Tema.metin)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refresh() } }
@@ -23,19 +24,22 @@ struct CashFollowApp: App {
 
 struct AnaEkran: View {
     @EnvironmentObject private var model: Model
+    @State private var sekme = Ornek.sekme
 
     var body: some View {
         Group {
             if let error = model.startupError {
                 ContentUnavailableView("Uygulama açılamadı", systemImage: "exclamationmark.triangle", description: Text(error))
+            } else if let g = Ornek.galeri {
+                GrafikGalerisi(sayfa: g)
             } else {
                 // iPhone'da en fazla 5 sekme: Kartlar Borçlar'da, Ayarlar Özet'teki dişlide
-                TabView {
-                    OzetEkrani().tabItem { Label("Özet", systemImage: "house") }
-                    AkisEkrani().tabItem { Label("Akış", systemImage: "calendar") }
-                    HarcamalarEkrani().tabItem { Label("Harcamalar", systemImage: "list.bullet.rectangle") }
-                    BorclarEkrani().tabItem { Label("Borçlar", systemImage: "creditcard") }
-                    VarliklarEkrani().tabItem { Label("Varlıklar", systemImage: "banknote") }
+                TabView(selection: $sekme) {
+                    OzetEkrani().tabItem { Label("Özet", systemImage: "house") }.tag(0)
+                    AkisEkrani().tabItem { Label("Akış", systemImage: "calendar") }.tag(1)
+                    HarcamalarEkrani().tabItem { Label("Harcamalar", systemImage: "list.bullet.rectangle") }.tag(2)
+                    BorclarEkrani().tabItem { Label("Borçlar", systemImage: "creditcard") }.tag(3)
+                    VarliklarEkrani().tabItem { Label("Varlıklar", systemImage: "banknote") }.tag(4)
                 }
             }
         }
