@@ -43,11 +43,15 @@ Puan: 1 (yapılamıyor / çok zor) … 5 (hızlı ve açık). "Önce" 7.1.0, "So
 
 ## Eklenenler
 
+- **Her sekmede aynı + düğmesi**: "Ne eklemek istiyorsun?" — Harcama (en üstte, büyük), Para (Gelir, Döviz / altın,
+  Fon / hisse), Borç (Borç verdim, Borç aldım, Kredi), Kart. Seçilen iş aynı pencerede formuna dönüşür; Vazgeç hepsini
+  kapatır. Nakit harcama ayrı seçenek değil, Harcama'da "Nakit" seçilir (aynı işi yapan iki yol kafa karıştırıyordu).
+  Ödeme kaydı (ekstre, borç taksiti, kişi payı) bağlamında kalır: ilgili satırdaki "Ödendi".
 - **Harcama formu baştan**: tutar en üstte ve büyük; taksit çipleri (Peşin, 2, 3, 6, 9, 12, diğer); kartlar renkli çipler,
   son kullanılan kart seçili gelir; "Her ay tekrarlar" anahtarı (abonelik, kira).
 - **Alabilir miyim?** Formda tutar yazılınca: ilk ödeme hangi ay, o ayın ödemesi önce → sonra, ay sonunda boşta kalan
   nakit (eksiye düşerse kırmızı uyarı), kartın kalan limiti; ilk ödemesi en geç gelen kart önerisi.
-- **Varlıklar'ın + düğmesi**: Gelir, Gider, Döviz / altın, Fon / hisse — her biri kendi sade formuyla.
+- **Varlık hareketleri türüne göre**: Gelir, Döviz / altın, Fon / hisse — her biri kendi sade formuyla.
 - **Hareket düzenleme**: harekete dokununca form dolu açılır.
 - **Kategoriler Harcamalar'da**: bu ayın dağılımı; kategoriye dokununca liste o kategoriye süzülür.
 - **Geciken ekstre Özet'te**: sıradaki ödemelerde gecikmiş ekstrenin yanında "Ödendi" düğmesi.
