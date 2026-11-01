@@ -214,13 +214,14 @@ struct AylikOdemeGrafigi: View {
     let months: [Akis.Ay]
     @AppStorage("grafik.grup") private var by = "person"
 
-    private struct Parca: Identifiable { let id = UUID(); let ay: Date; let ad: String; let tutar: Double }
+    // x ekseni ay anahtarına göre (kategorik): her ay bir bant, etiket kendi çubuğunun altında. Tarihli eksende
+    // Charts çubukları ve etiketleri farklı hizalıyordu.
+    private struct Parca: Identifiable { let id = UUID(); let ay: String; let ad: String; let tutar: Double }
 
     private var parcalar: [Parca] {
         months.flatMap { m -> [Parca] in
-            guard let d = Bicim.date(m.month + "-01") else { return [] }
             let map = by == "person" ? m.byPerson : m.byCard
-            return map.filter { $0.value > 0.004 }.sorted { $0.key < $1.key }.map { Parca(ay: d, ad: $0.key, tutar: $0.value) }
+            return map.filter { $0.value > 0.004 }.sorted { $0.key < $1.key }.map { Parca(ay: m.month, ad: $0.key, tutar: $0.value) }
         }
     }
 
@@ -232,13 +233,14 @@ struct AylikOdemeGrafigi: View {
 
     // Etiketler sığsın: en çok ~6 ay adı
     private var adim: Int { max(1, Int((Double(months.count) / 6).rounded(.up))) }
-    // Etiketli ayların ortası (çubuk ayın ortasında durur): ilk aydan başlayıp her adim'inci ay. Charts'ın kendi
-    // ay adımı çift aylara hizalanıp ilk ayı atlıyor, "centered" etiketleri de bir çubuk kaydırıyordu.
-    private var etiketler: [Date] {
-        months.enumerated().compactMap { i, m in
-            guard i % adim == 0, let d = Bicim.date(m.month + "-01") else { return nil }
-            return d.addingTimeInterval(15 * 86_400)
-        }
+    // Yazılacak aylar: ilk aydan başlayıp her adim'inci ay
+    private var etiketler: [String] {
+        months.enumerated().compactMap { i, m in i % adim == 0 ? m.month : nil }
+    }
+
+    private func ayEtiketi(_ ym: String) -> String {
+        guard let d = Bicim.date(ym + "-01") else { return ym }
+        return d.formatted(months.count > 12 ? Bicim.tarih.month(.abbreviated).year(.twoDigits) : Bicim.tarih.month(.abbreviated))
     }
 
     var body: some View {
@@ -253,7 +255,7 @@ struct AylikOdemeGrafigi: View {
                 Text("Önümüzdeki aylarda ödenecek taksit yok.").font(.footnote).foregroundStyle(.secondary)
             } else {
                 Chart(parcalar) { p in
-                    BarMark(x: .value("Ay", p.ay, unit: .month), y: .value("Tutar", p.tutar))
+                    BarMark(x: .value("Ay", p.ay), y: .value("Tutar", p.tutar))
                         .foregroundStyle(by: .value("Grup", p.ad))
                 }
                 .chartForegroundStyleScale(domain: adlar, range: seriRenkleri(adlar))
@@ -261,13 +263,10 @@ struct AylikOdemeGrafigi: View {
                 .chartYAxis { AxisMarks { v in AxisGridLine(); AxisValueLabel { if let x = v.as(Double.self) { Text(kisa(x)) } } } }
                 .chartXAxis {
                     AxisMarks(values: etiketler) { v in
-                        AxisValueLabel {
-                            if let d = v.as(Date.self) {
-                                Text(d, format: months.count > 12 ? Bicim.tarih.month(.abbreviated).year(.twoDigits) : Bicim.tarih.month(.abbreviated))
-                            }
-                        }
+                        AxisValueLabel { if let ym = v.as(String.self) { Text(ayEtiketi(ym)) } }
                     }
                 }
+                .chartXScale(domain: months.map(\.month))
                 .frame(height: 220)
                 .grafikTakvimi()
             }
