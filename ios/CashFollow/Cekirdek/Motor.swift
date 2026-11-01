@@ -22,7 +22,7 @@ final class VeriKutusu {
 @MainActor
 final class Motor {
     // Yükleme sırası: her modül kendinden öncekileri genel nesneden alır (ios/js/kopru.js)
-    private static let scripts = ["tekrar", "taksit", "varlik", "borc", "kategori", "eposta", "icgoru", "nakit", "tablo", "kopru"]
+    private static let scripts = ["para", "tekrar", "taksit", "varlik", "borc", "kategori", "eposta", "icgoru", "nakit", "tablo", "kopru"]
 
     let box: VeriKutusu
     private let context: JSContext

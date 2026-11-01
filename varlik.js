@@ -10,6 +10,8 @@
 // seferlik hareket kurla TL'den alınabilir ya da TL'ye bozdurulabilir (price kur, settle). TL bakiyesine işlenen alış /
 // satış (aktarım) gelir ya da gider değildir.
 (function (root) {
+  const P = typeof module === "object" && module.exports ? require("./para.js") : root.Para;
+  // Ana para birimi (home, para.js) her yerde verilebilir; verilmezse TL. Aşağıdaki "TL" ana para birimidir.
   const ASSETS = [
     { code: "TRY", name: "Türk lirası", short: "TL", symbol: "₺", digits: 2 },
     { code: "USD", name: "Dolar", short: "Dolar", symbol: "$", digits: 2 },
@@ -37,11 +39,23 @@
     return market(code) ? code : null;
   }
 
+  // Varlık: TL, dolar, euro, altın (ASSETS), diğer para birimleri (para.js) ya da fon / hisse; değilse null
   function asset(code) {
     const fixed = BY_CODE.get(code);
     if (fixed) return fixed;
+    const c = P.currency(code);
+    if (c) return { code: c.code, name: c.name, short: c.short, symbol: c.symbol, digits: c.digits };
     const m = market(code);
     return m ? { code, market: m.market, ticker: m.ticker, name: m.ticker, short: m.ticker, symbol: m.ticker, digits: UNIT_DIGITS } : null;
+  }
+
+  // Para birimi ya da altın (fon / hisse değil)
+  const money = code => !!asset(code) && !market(code);
+
+  // Ana para birimine göre formlarda sunulan varlıklar: ana para birimi, en çok kullanılan yabancılar, gram altın
+  function assetsFor(home = "TRY") {
+    const foreign = home === "TRY" ? ["USD", "EUR"] : ["USD", "EUR", "GBP", "TRY"].filter(c => c !== home).slice(0, 3);
+    return [home, ...foreign, "GAU"].map(asset).filter(Boolean);
   }
 
   // Kayan nokta artığı olmasın: birimin hane sayısına yuvarlanır
@@ -77,30 +91,30 @@
   function nextDate(e, today) { return R.nextDate(e, today); }
 
   // TL'yle alınıp satılabilen: fon, hisse, döviz ve altın
-  const tradable = code => !!market(code) || (BY_CODE.has(code) && code !== "TRY");
+  const tradable = (code, home = "TRY") => !!market(code) || (money(code) && code !== home);
 
   // Alış ya da satışın TL tutarı (miktar × birim fiyat; alışta artı, satışta eksi); fiyatı yoksa null
-  function tradeValue(e) {
-    return tradable(e?.asset) && e.price > 0 && Number.isFinite(e.amount) ? round(e.amount * e.price, "TRY") : null;
+  function tradeValue(e, home = "TRY") {
+    return tradable(e?.asset, home) && e.price > 0 && Number.isFinite(e.amount) ? round(e.amount * e.price, home) : null;
   }
 
   // TL bakiyesine işlenen alış / satış tutarı (settle); işlenmiyorsa 0
-  function settled(e) {
-    return e?.settle === true ? tradeValue(e) ?? 0 : 0;
+  function settled(e, home = "TRY") {
+    return e?.settle === true ? tradeValue(e, home) ?? 0 : 0;
   }
 
   // Varlık → bakiye (yalnızca hareketi olan varlıklar). today verilmezse tekrarlayan hareketlerin yalnızca ilki sayılır.
   // spent: kartsız harcamaların ödenen kısmı varlık başına (taksit.js cashSpent); bakiyeden düşer.
   // TL bakiyesine işlenen fon / hisse alışı TL'den düşer, satışı TL'ye eklenir.
-  function balances(entries, today, spent = {}) {
+  function balances(entries, today, spent = {}, home = "TRY") {
     const out = {};
     for (const e of entries) {
       if (!asset(e.asset) || !Number.isFinite(e.amount)) continue;
       const k = today ? processedCount(e, today) : 1;
       if (!k) { if (!(e.asset in out)) out[e.asset] = 0; continue; }
       out[e.asset] = round((out[e.asset] || 0) + e.amount * k, e.asset);
-      const cash = settled(e);
-      if (cash) out.TRY = round((out.TRY || 0) - cash * k, "TRY");
+      const cash = settled(e, home);
+      if (cash) out[home] = round((out[home] || 0) - cash * k, home);
     }
     for (const [code, amount] of Object.entries(spent)) {
       if (asset(code) && Number.isFinite(amount) && amount) out[code] = round((out[code] || 0) - amount, code);
@@ -109,17 +123,17 @@
   }
 
   // Varlığın TL karşılığı; kuru bilinmiyorsa null
-  function toTry(amount, code, rates) {
-    const rate = code === "TRY" ? 1 : rates?.[code];
+  function toTry(amount, code, rates, home = "TRY") {
+    const rate = code === home ? 1 : rates?.[code];
     return Number.isFinite(rate) && rate > 0 ? amount * rate : null;
   }
 
   // Bakiyelerin TL toplamı; kuru eksik varlık varsa missing'de
-  function totalTry(bals, rates) {
+  function totalTry(bals, rates, home = "TRY") {
     let total = 0;
     const missing = [];
     for (const [code, amount] of Object.entries(bals)) {
-      const v = toTry(amount, code, rates);
+      const v = toTry(amount, code, rates, home);
       if (v == null) missing.push(code); else total += v;
     }
     return { total, missing };
@@ -129,7 +143,7 @@
   // fiyatı maliyete ekler, satış ortalama maliyetle düşer ve aradaki fark gerçekleşen kâra (realized) girer. Fiyatı
   // girilmemiş alış varsa ya da elde olandan fazlası satıldıysa maliyet bilinmez (cost null); pozisyon kapanınca
   // (adet 0) yeniden başlar. Tek seferlik hareketler gibi tarihi gelmemiş alış / satış da sayılır (balances).
-  function positions(entries) {
+  function positions(entries, home = "TRY") {
     const out = {};
     const list = entries.filter(e => market(e.asset) && Number.isFinite(e.amount) && e.amount)
       .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -151,8 +165,8 @@
       p.units = round(p.units + e.amount, e.asset);
     }
     for (const p of Object.values(out)) {
-      if (p.cost != null) p.cost = Math.abs(p.units) < 1e-9 ? 0 : round(p.cost, "TRY");
-      if (p.realized != null) p.realized = round(p.realized, "TRY");
+      if (p.cost != null) p.cost = Math.abs(p.units) < 1e-9 ? 0 : round(p.cost, home);
+      if (p.realized != null) p.realized = round(p.realized, home);
     }
     return out;
   }
@@ -183,6 +197,7 @@
   // "BIST:THYAO") ve "MMF": ana para biriminin (TL) bütün para piyasası fonları. Varsayılan TL ve para piyasası fonları.
   const MMF = "MMF";
   const CASH_DEFAULT = ["TRY", MMF];
+  const cashDefault = (home = "TRY") => [home, MMF];
 
   // Para piyasası fonu: TEFAS'ta adında "para piyasası" geçen yatırım fonu (aynı gün nakde döner, T+0). Hepsi TL'dir;
   // emeklilik fonları (BES) nakit sayılmaz. fund: { name, kind } (fiyatla gelir: /api/fiyat, /api/fonlar)
@@ -191,9 +206,9 @@
   }
 
   // Kayıtlı tanım → geçerli liste (geçersiz ögeler atılır); liste değilse varsayılan
-  function cashDef(list) {
-    if (!Array.isArray(list)) return [...CASH_DEFAULT];
-    return [...new Set(list.filter(c => c === MMF || BY_CODE.has(c) || market(c)))];
+  function cashDef(list, home = "TRY") {
+    if (!Array.isArray(list)) return cashDefault(home);
+    return [...new Set(list.filter(c => c === MMF || money(c) || market(c)))];
   }
 
   // Varlık nakit mi; fund fonun TEFAS bilgisi (para piyasası fonu mu diye)
@@ -202,7 +217,7 @@
   }
 
   const api = {
-    ASSETS, MARKETS, MAX_REPEAT, asset, market, marketCode, tradable, round, repeatOf, occurrenceDate, occurrencesIn, lastDate,
+    ASSETS, MARKETS, assetsFor, money, cashDefault, MAX_REPEAT, asset, market, marketCode, tradable, round, repeatOf, occurrenceDate, occurrencesIn, lastDate,
     processedCount, nextDate, tradeValue, settled, balances, positions, toTry, totalTry, matchFunds,
     MMF, CASH_DEFAULT, moneyMarket, cashDef, isCash,
   };

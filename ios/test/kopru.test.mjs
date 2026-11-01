@@ -9,7 +9,7 @@ import vm from "node:vm";
 const root = new URL("../../", import.meta.url);
 const read = p => readFileSync(new URL(p, root), "utf8");
 // Motor.swift'teki sıra
-const SCRIPTS = ["tekrar.js", "taksit.js", "varlik.js", "borc.js", "kategori.js", "eposta.js", "icgoru.js", "nakit.js", "tablo.js", "ios/js/kopru.js"];
+const SCRIPTS = ["para.js", "tekrar.js", "taksit.js", "varlik.js", "borc.js", "kategori.js", "eposta.js", "icgoru.js", "nakit.js", "tablo.js", "ios/js/kopru.js"];
 
 function engine(initial = "") {
   let saved = initial;

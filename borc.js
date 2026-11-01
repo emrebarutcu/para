@@ -22,6 +22,7 @@
   const node = typeof module === "object" && module.exports;
   const T = node ? require("./taksit.js") : root.Taksit;
   const V = node ? require("./varlik.js") : root.Varlik;
+  const P = node ? require("./para.js") : root.Para;   // ana para birimi (state.home): kartlar, paylar ve toplamlar onunla
 
   const KINDS = ["person", "loan", "payment"];
   const SIDES = ["debt", "receivable"];
@@ -429,7 +430,7 @@
       if (cards.has(p.cardId) || !people.has(p.personId) || (pid && p.personId !== pid)) continue;
       if (valid(p.date) && p.date > today && !T.repeats(p)) continue;   // henüz alınmadı
       for (const x of T.payments(p, null, today)) {
-        if (x.key > today && !(x.at > today)) add(out, T.assetOf(p), x.amount);
+        if (x.key > today && !(x.at > today)) add(out, T.assetOf(p, P.homeOf(state)), x.amount);
       }
     }
     return out;
@@ -447,7 +448,7 @@
     }
     if (inScope(pid, k.payer)) {
       for (const x of k.settlements) {
-        if (x.date >= from && x.date <= to) out.push({ date: x.date, amount: x.amount, asset: "TRY", type: "share", paid: x.date <= today, payment: x });
+        if (x.date >= from && x.date <= to) out.push({ date: x.date, amount: x.amount, asset: P.homeOf(state), type: "share", paid: x.date <= today, payment: x });
       }
     }
     return out.sort(byDate);
@@ -463,8 +464,8 @@
       for (const f of flows(d, k.pays.get(d.id), today, "0000-01-01", today)) if (f.paid) add(out, f.asset, -f.amount);
     }
     if (inScope(pid, k.payer)) {
-      add(out, "TRY", cardPaid(state, today));
-      add(out, "TRY", -sum(k.settlements.filter(x => x.date <= today)));
+      add(out, P.homeOf(state), cardPaid(state, today));
+      add(out, P.homeOf(state), -sum(k.settlements.filter(x => x.date <= today)));
     }
     return out;
   }
@@ -480,7 +481,7 @@
     const ids = new Set((state.cards || []).map(c => c.id));
     const people = new Set((state.people || []).map(p => p.id));
     const cash = (state.installments || []).filter(p => people.has(p.personId) && !ids.has(p.cardId) && inScope(pid, p.personId));
-    return addSpent(T.cashSpent(cash, state.cards || [], today), debtSpent(state, today, pid));
+    return addSpent(T.cashSpent(cash, state.cards || [], today, P.homeOf(state)), debtSpent(state, today, pid));
   }
 
   // Kullanıcının borç ödemeleri (borç tarafı: kredi / borç taksitleri, kaydedilen ve beklenen ödemeler), from…to: Özet,
@@ -496,11 +497,12 @@
     const k = known(state);
     const people = new Set((state.people || []).map(p => p.id));
     const entries = (state.entries || []).filter(e => people.has(e.personId) && inScope(pid, e.personId));
-    const balances = V.balances(entries, today, spent(state, today, pid));
-    const cash = V.totalTry(balances, rates);
+    const home = P.homeOf(state);
+    const balances = V.balances(entries, today, spent(state, today, pid), home);
+    const cash = V.totalTry(balances, rates, home);
     const missing = new Set(cash.missing);
     const tl = (amount, code) => {
-      const v = V.toTry(amount, code, rates);
+      const v = V.toTry(amount, code, rates, home);
       if (v == null) missing.add(code);
       return v ?? 0;
     };

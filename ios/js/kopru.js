@@ -2,7 +2,7 @@
 // iOS uygulaması (ios/CashFollow) hesap ve doğrulama kurallarını yeniden yazmaz: web'in DOM'dan bağımsız modüllerini
 // (tekrar, taksit, varlik, borc, kategori, eposta, icgoru, tablo) ve asistanların araçlarını (mcp/tools.js) olduğu gibi
 // çalıştırır. Ekranlar araçları çağırır (get_overview, list_cards, add_purchase…); veri, eşitleme tabanı ve ağ Swift'tedir.
-// Yükleme sırası (Motor.swift): tekrar, taksit, varlik, borc, kategori, eposta, icgoru, nakit, tablo, kopru; sonra
+// Yükleme sırası (Motor.swift): para, tekrar, taksit, varlik, borc, kategori, eposta, icgoru, nakit, tablo, kopru; sonra
 // Kopru.loadTools(mcp/tools.js'in metni).
 //
 // Swift'in verdiği yerel işlevler (globalThis.native):

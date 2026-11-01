@@ -4,6 +4,7 @@
 // Nakit harcama: harcama gününde ödenir (taksitliyse sonraki aylarda aynı gün).
 (function (root) {
   const R = typeof module === "object" && module.exports ? require("./tekrar.js") : root.Tekrar;
+  const P = typeof module === "object" && module.exports ? require("./para.js") : root.Para;
   const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
   const MONTHS_SHORT = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
   const CASH = "nakit";   // kartsız harcamaların seri / grup anahtarı
@@ -169,8 +170,9 @@
   // girmez, yalnızca o varlığın bakiyesinden düşer. Kartsız (nakit) harcamalar ödendikçe varlığın bakiyesinden düşer.
   // repeat / every / unit: harcama date'ten başlayıp her N gün / hafta / ayda bir yinelenir (tekrar.js); her tekrar
   // kendi tarihiyle aynı karta, aynı taksitle ayrı bir alışveriştir.
+  // Harcamanın para birimi: asset yoksa ana para birimi (home, para.js; verilmezse TL)
   const FOREIGN = ["USD", "EUR", "GAU"];
-  function assetOf(p) { return FOREIGN.includes(p?.asset) ? p.asset : "TRY"; }
+  function assetOf(p, home = "TRY") { return (P.isCurrency(p?.asset) || p?.asset === "GAU") && p.asset !== home ? p.asset : home; }
 
   function perInstallment(p) { return p.total / p.count; }
   function planLength(p)     { return Math.max(p.planCount || 0, p.count); }
@@ -235,19 +237,19 @@
 
   // Kartsız (nakit) harcamaların today'e kadar (dahil) ödenen kısmı, varlık başına: { TRY: 1250, USD: 40 }.
   // Varlık bakiyesinden düşer (varlik.js balances). Kartı silinmiş harcama da nakit sayılır (buildCashflow gibi).
-  function cashSpent(purchases, cards, today) {
+  function cashSpent(purchases, cards, today, home = "TRY") {
     const ids = new Set(cards.map(c => c.id));
     const out = {};
     for (const p of purchases) {
       if (ids.has(p.cardId)) continue;
       const paid = payments(p, null, today).filter(x => x.key <= today).reduce((s, x) => s + x.amount, 0);
-      if (paid) out[assetOf(p)] = (out[assetOf(p)] || 0) + paid;
+      if (paid) out[assetOf(p, home)] = (out[assetOf(p, home)] || 0) + paid;
     }
     return out;
   }
 
   // Ay ay nakit akışı: her ay kişi / kart toplamları ve tarih + kart bazında ödemeler
-  function buildCashflow(people, cards, purchases, fromIdx, toIdx) {
+  function buildCashflow(people, cards, purchases, fromIdx, toIdx, home = "TRY") {
     const known = new Set(people.map(p => p.id));
     const cardById = new Map(cards.map(c => [c.id, c]));
     const cardOrder = new Map(cards.map((c, i) => [c.id, i]));
@@ -258,7 +260,7 @@
 
     const until = dateKey(toIdx, 31);
     for (const p of purchases) {
-      if (!known.has(p.personId) || assetOf(p) !== "TRY") continue;   // döviz / altın harcaması TL akışına girmez
+      if (!known.has(p.personId) || assetOf(p, home) !== home) continue;   // döviz / altın harcaması TL akışına girmez
       const card = cardById.get(p.cardId);
       const cardKey = card ? card.id : CASH;
       for (const pay of payments(p, card, until)) {
