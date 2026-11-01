@@ -33,6 +33,32 @@ ABD pazarı, iPhone öncelikli, uygulama içi abonelikle açılan özellikler. Y
 - **Ekran görüntüleri** hızlandı: `ekran.yml` uygulamayı bir kez açar, `-tur` ile ekranları gezer (~8 dk).
 - Yukarıdakilerin hepsi CI'da derlendi; öz-denetim İngilizce simülatörde geçti. Son görüntüler: `ekran-goruntuleri` dalı.
 
+## Ortam değişkenleri
+
+Değerler bu dosyada (ve repoda) **yok**: bulut ortamının ayarlarında (oturum başlığındaki ortam menüsü → Edit) duruyor,
+kullanıcı oradan kopyalar. Mac'te `~/.claude/settings.json` içine (bütün yerel Claude oturumları görür, git'e girmez):
+
+```json
+{
+  "env": {
+    "SUPABASE_ACCESS_TOKEN": "…",
+    "CLOUDFLARE_ACCOUNT_ID": "…",
+    "CLOUDFLARE_API_KEY": "…"
+  }
+}
+```
+
+| Değişken | Ne için |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Supabase yönetim anahtarı: `sh supabase/sql.sh …` (geçiş SQL'leri). GitHub'da Actions secret'ı olarak da var (`sql.yml`). |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_KEY` | Web ve Worker yayını (`wrangler`). Yayın normalde `main`'e birleşince Cloudflare'de kendiliğinden olur. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Bu projede kullanılmıyor; başka bir iş için gerekiyorsa taşınır. |
+
+GitHub için anahtar gerekmez: Mac'te `gh auth login` (TestFlight, PR, Actions). App Store Connect anahtarları yalnızca
+GitHub Actions secret'larında (`ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8`, `APPLE_TEAM_ID`); TestFlight `testflight.yml` ile.
+
+Denetim (değer göstermeden): `env | grep -E 'SUPABASE|CLOUDFLARE' | sed 's/=.*/=<tanımlı>/'`
+
 ## Açık kararlar (kullanıcıdan)
 
 - Banka bağlantısı (Plaid) olacak mı, yoksa "elle, gizlilik öncelikli" mi?
