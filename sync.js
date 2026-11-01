@@ -146,6 +146,7 @@
           refresh();
           watchInbox();
           watchData();
+          syncZone();
         }
       }
       if (event === 'SIGNED_OUT') {
@@ -171,6 +172,17 @@
   };
 
   window.syncGetUser = function () { return user; };
+
+  // Cihazın saat dilimi hesaba yazılır (user_metadata.tz): asistan "bugün"ü kullanıcının saatine göre hesaplar
+  async function syncZone() {
+    let tz = null;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
+    if (!db || !user || !tz || user.user_metadata?.tz === tz) return;
+    try {
+      const { data } = await db.auth.updateUser({ data: { tz } });
+      if (data?.user) user = data.user;
+    } catch {}
+  }
 
   // Hesabın ülkesi (user_metadata.country): web, iPhone ve asistan aynı para birimini kullanır
   window.syncSetCountry = async function (country) {

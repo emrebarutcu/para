@@ -22,7 +22,9 @@ export async function getUser({ url, key, token, fetch: f = fetch }) {
   const u = await res.json();
   // Ülke kayıtta seçilir (user_metadata.country, para.js); yoksa Türkiye
   const country = P.country(u?.user_metadata?.country)?.code ?? P.DEFAULT_COUNTRY;
-  return u?.id ? { id: u.id, email: u.email ?? null, country, home: P.homeOfCountry(country) } : null;
+  // Saat dilimi: uygulama ve web cihazınkini yazar (user_metadata.tz); yoksa ülkenin başlıca saat dilimi
+  const tz = P.isZone(u?.user_metadata?.tz) ? u.user_metadata.tz : P.zoneOfCountry(country);
+  return u?.id ? { id: u.id, email: u.email ?? null, country, home: P.homeOfCountry(country), tz } : null;
 }
 
 const PAGE = 1000;   // PostgREST'in bir cevapta döndürdüğü en fazla satır

@@ -21,7 +21,7 @@ import P from "../para.js";
 // Hesabın ana para birimi (para.js; state.home, ctx.load verir): kartlar, nakit harcamalar ve toplamlar onunla
 const homeOf = state => P.homeOf(state);
 
-export const TIME_ZONE = "Europe/Istanbul";
+export const TIME_ZONE = "Europe/Istanbul";   // saat dilimi verilmezse (eski çağrılar); sunucu kullanıcınınkini verir
 const MAX_MONTHS = 60;       // akıştaki en fazla ay (app.js ile aynı)
 const MAX_COUNT = 60;        // en fazla taksit (formdaki sınır)
 const MAX_DEBT_COUNT = 600;  // borç / kredide en fazla taksit (tablodaki sınır)

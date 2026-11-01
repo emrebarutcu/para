@@ -141,7 +141,7 @@ export async function handle(request, env = {}, { fetch: f = fetch, now = () => 
   const home = user.home ?? "TRY";   // hesabın ana para birimi (ülkesinden; para.js)
   const store = createStore({ ...cfg, token, userId: user.id, home, fetch: f });
   const ctx = {
-    today: todayKey(now()),
+    today: todayKey(now(), user.tz),   // kullanıcının saat diliminde "bugün"
     user,
     home,
     load: store.load,

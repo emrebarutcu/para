@@ -128,6 +128,16 @@ final class Model: ObservableObject {
         async let market: Void = refreshMarket()
         await run { try await $0.pull(); try await $0.push() }
         await market
+        await sendZone()
+    }
+
+    // Cihazın saat dilimi değiştiyse hesaba yazılır (asistan "bugün"ü buna göre hesaplar)
+    private func sendZone() async {
+        let tz = TimeZone.current.identifier
+        guard let uid = session?.userId, UserDefaults.standard.string(forKey: "para.tz.\(uid)") != tz,
+              let t = try? await token(), var s = session, s.userId == uid else { return }
+        s.accessToken = t
+        if (try? await Oturum.updateZone(s, tz)) != nil { UserDefaults.standard.set(tz, forKey: "para.tz.\(uid)") }
     }
 
     func schedulePush() {

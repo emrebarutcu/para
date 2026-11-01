@@ -110,6 +110,11 @@ enum Auth {
         return next
     }
 
+    // Cihazın saat dilimi (user_metadata.tz): asistan "bugün"ü kullanıcının saatine göre hesaplar
+    static func updateZone(_ s: Oturum, _ tz: String) async throws {
+        _ = try await post(endpoint("user"), ["data": ["tz": tz]], token: s.accessToken, method: "PUT")
+    }
+
     static func signOut(_ s: Oturum) async {
         _ = try? await post(endpoint("logout"), [:], token: s.accessToken)
     }
