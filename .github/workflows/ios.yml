@@ -6,10 +6,10 @@ name: iOS
 on:
   push:
     branches-ignore: [main]
-    paths: ["ios/**", "*.js", "mcp/tools.js", ".github/workflows/ios.yml"]
+    paths: ["ios/**", "*.js", "dil/**", "scripts/dil.mjs", "mcp/tools.js", ".github/workflows/ios.yml"]
   pull_request:
     branches: [main]
-    paths: ["ios/**", "*.js", "mcp/tools.js", ".github/workflows/ios.yml"]
+    paths: ["ios/**", "*.js", "dil/**", "scripts/dil.mjs", "mcp/tools.js", ".github/workflows/ios.yml"]
 
 jobs:
   kopru:
@@ -20,6 +20,8 @@ jobs:
         with:
           node-version: 22
       - run: node --test ios/test/*.test.mjs
+      - name: Çeviriler (dil/en.json)
+        run: node scripts/dil.mjs
 
   simulator:
     runs-on: macos-26

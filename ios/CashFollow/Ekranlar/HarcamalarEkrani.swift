@@ -18,7 +18,7 @@ struct HarcamalarEkrani: View {
                     if k.people.count > 1 {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                Cip(ad: "Tümü", sayi: k.people.reduce(0) { $0 + $1.purchaseCount }, secili: kisi.isEmpty) { kisi = "" }
+                                Cip(ad: L("Tümü"), sayi: k.people.reduce(0) { $0 + $1.purchaseCount }, secili: kisi.isEmpty) { kisi = "" }
                                 ForEach(k.people) { p in
                                     Cip(ad: p.name, sayi: p.purchaseCount, renk: model.kisiRengi(p.id), secili: kisi == p.id) { kisi = p.id }
                                 }
@@ -27,7 +27,7 @@ struct HarcamalarEkrani: View {
                     }
                 }
                 if search.isEmpty {
-                    Secici(secim: $gorunum, ogeler: [("liste", "Liste"), ("kategori", "Kategoriler")])
+                    Secici(secim: $gorunum, ogeler: [("liste", L("Liste")), ("kategori", L("Kategoriler"))])
                 }
                 if gorunum == "kategori" && search.isEmpty {
                     Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
@@ -38,19 +38,19 @@ struct HarcamalarEkrani: View {
                 } else {
                     if let k = kategori {
                         HStack {
-                            Text("Kategori: \(k.ad)").font(.subheadline.weight(.semibold))
+                            Text(L("Kategori: {0}", k.ad)).font(.subheadline.weight(.semibold))
                             Spacer()
                             Button { withAnimation { kategori = nil } } label: {
-                                Label("Hepsini göster", systemImage: "xmark.circle.fill").font(.subheadline)
+                                Label(L("Hepsini göster"), systemImage: "xmark.circle.fill").font(.subheadline)
                             }
                             .foregroundStyle(Tema.metin2)
                         }
                         .padding(.horizontal, 4)
                     }
-                    liste(durum: "active", bos: search.isEmpty ? "Süren harcama yok" : "Bulunamadı")
+                    liste(durum: "active", bos: search.isEmpty ? L("Süren harcama yok") : L("Bulunamadı"))
                     Button { withAnimation { bitenler.toggle() } } label: {
                         HStack {
-                            Text("Biten harcamalar").font(.subheadline.weight(.semibold))
+                            Text(L("Biten harcamalar")).font(.subheadline.weight(.semibold))
                             Image(systemName: "chevron.down").font(.caption.weight(.semibold)).rotationEffect(.degrees(bitenler ? 180 : 0))
                             Spacer()
                         }
@@ -58,18 +58,18 @@ struct HarcamalarEkrani: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    if bitenler { liste(durum: "done", bos: "Biten harcama yok") }
+                    if bitenler { liste(durum: "done", bos: L("Biten harcama yok")) }
                 }
             }
-            .navigationTitle("Harcamalar")
+            .navigationTitle(L("Harcamalar"))
             .sayfaZemini()
             .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
-            .searchable(text: $search, prompt: "Ara")
+            .searchable(text: $search, prompt: Text(L("Ara")))
             .yenilenebilir(model)
             .ekleDugmesi(.harcama)
-            .confirmationDialog(silinecek.map { "\($0.description) ve bütün taksitleri silinsin mi?" } ?? "",
+            .confirmationDialog(silinecek.map { L("{0} ve bütün taksitleri silinsin mi?", $0.description) } ?? "",
                                 isPresented: Binding(get: { silinecek != nil }, set: { if !$0 { silinecek = nil } }), titleVisibility: .visible) {
-                Button("Sil", role: .destructive) {
+                Button(L("Sil"), role: .destructive) {
                     if let p = silinecek { try? model.write("delete_purchase", ["id": p.id]) }
                     silinecek = nil
                 }
@@ -87,7 +87,7 @@ struct HarcamalarEkrani: View {
                         NavigationLink(value: p.id) { HarcamaSatiri(p: p) }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button("Sil", systemImage: "trash", role: .destructive) { silinecek = p }
+                                Button(L("Sil"), systemImage: "trash", role: .destructive) { silinecek = p }
                             }
                     }
                 }
@@ -128,18 +128,18 @@ struct HarcamaSatiri: View {
                 HStack(spacing: 5) {
                     Image(systemName: p.cardId == nil ? "banknote" : "creditcard").font(.caption)
                         .foregroundStyle(p.cardId.map { model.kartRengi($0) } ?? Tema.nakit)
-                    Text([p.card, p.date.map { Bicim.day($0) }].compactMap { $0 }.joined(separator: " · ")).lineLimit(1)
+                    Text([Bicim.kartAdi(p.card), p.date.map { Bicim.day($0) }].compactMap { $0 }.joined(separator: " · ")).lineLimit(1)
                     Spacer(minLength: 6)
                     if let sag = sagAlt { Text(sag).monospacedDigit() }
                 }
                 .font(.footnote).foregroundStyle(Tema.metin3)
-                let alt = [p.repeat?.label ?? (p.installments > 1 ? "\(p.installments) taksit" : "Peşin"), p.categoryName].compactMap { $0 }
+                let alt = [p.repeat?.label ?? (p.installments > 1 ? L("{0} taksit", p.installments) : L("Peşin")), p.categoryName].compactMap { $0 }
                 Text(alt.joined(separator: " · ")).font(.footnote).foregroundStyle(Tema.metin3)
                 if p.installments > 1, p.repeat == nil {
                     HStack(spacing: 8) {
                         Doluluk(used: Double(p.paidInstallments), limit: Double(p.installments), renk: Tema.metin2)
                             .frame(width: 90)
-                        Text("\(p.paidInstallments)/\(p.installments) ödendi").font(.caption).foregroundStyle(Tema.metin3)
+                        Text(L("{0}/{1} ödendi", p.paidInstallments, p.installments)).font(.caption).foregroundStyle(Tema.metin3)
                     }
                 }
             }
@@ -154,8 +154,8 @@ struct HarcamaSatiri: View {
 
     private var sagAlt: String? {
         if p.status == "done" { return "bitti" }
-        if p.repeat != nil, let n = p.repeat?.nextDate { return "sonraki \(Bicim.day(n))" }
-        if p.installments > 1 { return "kalan \(Bicim.amount(p.remainingAmount, asset: p.asset))" }
+        if p.repeat != nil, let n = p.repeat?.nextDate { return L("sonraki {0}", Bicim.day(n)) }
+        if p.installments > 1 { return L("kalan {0}", Bicim.amount(p.remainingAmount, asset: p.asset)) }
         if let n = p.nextPayment { return Bicim.relative(n.date) }
         return nil
     }
@@ -177,35 +177,35 @@ struct HarcamaDetayi: View {
                         Avatar(ad: p.person, renk: model.kisiRengi(p.personId), boyut: 40)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(p.description).font(.title3.weight(.bold))
-                            Text([p.person, p.card].joined(separator: " · ")).font(.subheadline).foregroundStyle(Tema.metin3)
+                            Text([p.person, Bicim.kartAdi(p.card)].joined(separator: " · ")).font(.subheadline).foregroundStyle(Tema.metin3)
                         }
                     }
                     BuyukTutar(deger: p.total, boyut: 40)
                     Ayirici()
                     IstatistikSatiri(ogeler: [
-                        Istatistik(etiket: p.repeat != nil ? "Her ay" : "Taksit", deger: p.installments > 1 || p.repeat != nil ? Bicim.amount(p.perInstallment, asset: p.asset) : "Peşin"),
-                        Istatistik(etiket: "Ödenen", deger: p.repeat != nil ? "—" : "\(p.paidInstallments)/\(p.installments)"),
-                        Istatistik(etiket: "Kalan", deger: Bicim.amount(p.remainingAmount, asset: p.asset)),
+                        Istatistik(etiket: p.repeat != nil ? L("Her ay") : L("Taksit"), deger: p.installments > 1 || p.repeat != nil ? Bicim.amount(p.perInstallment, asset: p.asset) : L("Peşin")),
+                        Istatistik(etiket: L("Ödenen"), deger: p.repeat != nil ? "—" : "\(p.paidInstallments)/\(p.installments)"),
+                        Istatistik(etiket: L("Kalan"), deger: Bicim.amount(p.remainingAmount, asset: p.asset)),
                     ])
                 }
                 Kart {
                     VStack(spacing: 10) {
-                        if let d = p.date { Satir(title: "Tarih", value: Bicim.day(d)) }
-                        if let c = p.categoryName { Satir(title: "Kategori", value: c) }
-                        if let cut = p.statementCutoff { Satir(title: "Ekstre kesimi", value: Bicim.day(cut)) }
-                        if let r = p.repeat?.label { Satir(title: "Tekrar", value: r) }
+                        if let d = p.date { Satir(title: L("Tarih"), value: Bicim.day(d)) }
+                        if let c = p.categoryName { Satir(title: L("Kategori"), value: c) }
+                        if let cut = p.statementCutoff { Satir(title: L("Ekstre kesimi"), value: Bicim.day(cut)) }
+                        if let r = p.repeat?.label { Satir(title: L("Tekrar"), value: r) }
                     }
                     .font(.subheadline)
                 }
                 if let odemeler = p.payments, !odemeler.isEmpty {
                     Kart(dolgu: 14) {
-                        KartBasligi("Ödemeler")
+                        KartBasligi(L("Ödemeler"))
                         SatirListesi(veri: odemeler) { x in
                             HStack(spacing: 12) {
                                 TarihRozeti(tarih: x.date)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(x.no). taksit").font(.body.weight(.semibold))
-                                    Text(x.paid ? "ödendi" : Bicim.relative(x.date)).font(.footnote).foregroundStyle(Tema.metin3)
+                                    Text(L("{0}. taksit", x.no)).font(.body.weight(.semibold))
+                                    Text(x.paid ? L("ödendi") : Bicim.relative(x.date)).font(.footnote).foregroundStyle(Tema.metin3)
                                 }
                                 Spacer()
                                 Text(Bicim.amount(x.amount, asset: p.asset)).font(.body.weight(.semibold)).monospacedDigit()
@@ -217,7 +217,7 @@ struct HarcamaDetayi: View {
                     }
                 }
                 Button(role: .destructive) { confirm = true } label: {
-                    Text("Harcamayı sil").font(.body.weight(.semibold)).foregroundStyle(Tema.tehlike)
+                    Text(L("Harcamayı sil")).font(.body.weight(.semibold)).foregroundStyle(Tema.tehlike)
                         .frame(maxWidth: .infinity).padding(.vertical, 14)
                         .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
@@ -227,12 +227,12 @@ struct HarcamaDetayi: View {
             .toolbar {
                 // Excel'den gelen tarihsiz kayıt web'de düzenlenir (kalan taksitler ve ilk ödeme ayı)
                 if p.date != nil {
-                    ToolbarItem(placement: .primaryAction) { Button("Düzenle") { duzenle = p } }
+                    ToolbarItem(placement: .primaryAction) { Button(L("Düzenle")) { duzenle = p } }
                 }
             }
             .sheet(item: $duzenle) { HarcamaFormu(duzenle: $0) }
-            .confirmationDialog("\(p.description) ve bütün taksitleri silinsin mi?", isPresented: $confirm, titleVisibility: .visible) {
-                Button("Sil", role: .destructive) {
+            .confirmationDialog(L("{0} ve bütün taksitleri silinsin mi?", p.description), isPresented: $confirm, titleVisibility: .visible) {
+                Button(L("Sil"), role: .destructive) {
                     try? model.write("delete_purchase", ["id": id])
                     dismiss()
                 }
@@ -276,38 +276,38 @@ struct HarcamaFormu: View {
                     Kart {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(Bicim.homeSymbol).font(.system(size: 28, weight: .semibold)).foregroundStyle(Tema.metin3)
-                            TextField("0", text: $amount)
+                            TextField(L("0"), text: $amount)
                                 .font(.system(size: 40, weight: .bold)).monospacedDigit()
                                 .keyboardType(.decimalPad)
                                 .focused($tutarOdak)
                         }
                         Ayirici()
-                        TextField("Ne alındı? (ör. Migros)", text: $desc).font(.title3)
+                        TextField(L("Ne alındı? (ör. Migros)"), text: $desc).font(.title3)
                     }
 
                     Kart {
-                        etiket("Nasıl ödendi")
+                        etiket(L("Nasıl ödendi"))
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(cards) { c in
                                     Cip(ad: c.name, renk: model.kartRengi(c.id), secili: card == c.id) { card = c.id }
                                 }
-                                Cip(ad: "Nakit", renk: Tema.nakit, secili: card == "nakit") { card = "nakit" }
+                                Cip(ad: L("Nakit"), renk: Tema.nakit, secili: card == "nakit") { card = "nakit" }
                             }
                         }
                         if !tekrar {
-                            etiket("Taksit")
+                            etiket(L("Taksit"))
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
                                     ForEach(taksitler, id: \.self) { n in
-                                        Cip(ad: n == 1 ? "Peşin" : "\(n)", secili: count == n) { count = n }
+                                        Cip(ad: n == 1 ? L("Peşin") : "\(n)", secili: count == n) { count = n }
                                     }
                                     Menu {
-                                        Picker("Taksit", selection: $count) {
-                                            ForEach(2...60, id: \.self) { Text("\($0) taksit").tag($0) }
+                                        Picker(L("Taksit"), selection: $count) {
+                                            ForEach(2...60, id: \.self) { Text(L("{0} taksit", $0)).tag($0) }
                                         }
                                     } label: {
-                                        Text(taksitler.contains(count) ? "Diğer" : "\(count) taksit")
+                                        Text(taksitler.contains(count) ? L("Diğer") : L("{0} taksit", count))
                                             .font(.subheadline.weight(.semibold))
                                             .foregroundStyle(taksitler.contains(count) ? Tema.metin : Tema.ustMetin)
                                             .padding(.horizontal, 14).padding(.vertical, 8)
@@ -318,7 +318,7 @@ struct HarcamaFormu: View {
                             }
                         }
                         if duzenle == nil {
-                            Toggle("Her ay tekrarlar (abonelik, kira)", isOn: $tekrar.animation())
+                            Toggle(L("Her ay tekrarlar (abonelik, kira)"), isOn: $tekrar.animation())
                                 .font(.subheadline).tint(Tema.metin)
                         }
                     }
@@ -326,14 +326,14 @@ struct HarcamaFormu: View {
                     if duzenle == nil, let sim { AlabilirMiyim(sim: sim, secili: card, tekrar: tekrar, cards: cards) { card = $0 } }
                     else if let p = preview { duzenlemeOnizlemesi(p) }
                     Kart {
-                        DatePicker("Tarih", selection: $date, displayedComponents: .date)
+                        DatePicker(L("Tarih"), selection: $date, displayedComponents: .date)
                             .environment(\.locale, Bicim.locale)
                         if people.count > 1 {
                             Ayirici()
                             HStack {
-                                Text("Kimin")
+                                Text(L("Kimin"))
                                 Spacer()
-                                Picker("Kimin", selection: $person) {
+                                Picker(L("Kimin"), selection: $person) {
                                     ForEach(people) { p in Text(p.name).tag(p.id) }
                                 }
                                 .labelsHidden()
@@ -341,10 +341,10 @@ struct HarcamaFormu: View {
                         }
                         Ayirici()
                         HStack {
-                            Text("Kategori")
+                            Text(L("Kategori"))
                             Spacer()
-                            Picker("Kategori", selection: $category) {
-                                Text("Otomatik").tag("")
+                            Picker(L("Kategori"), selection: $category) {
+                                Text(L("Otomatik")).tag("")
                                 ForEach(model.constants?.categories ?? []) { c in Text(c.name).tag(c.id) }
                             }
                             .labelsHidden()
@@ -360,11 +360,11 @@ struct HarcamaFormu: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Tema.zemin)
-            .navigationTitle(duzenle == nil ? "Harcama ekle" : "Harcamayı düzenle")
+            .navigationTitle(duzenle == nil ? L("Harcama ekle") : L("Harcamayı düzenle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Kaydet", action: save).fontWeight(.semibold).disabled(!valid) }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Vazgeç")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(L("Kaydet"), action: save).fontWeight(.semibold).disabled(!valid) }
             }
             .task { load() }
             .task(id: "\(desc)|\(amount)|\(count)|\(tekrar)|\(Bicim.key(date))|\(card)|\(person)") { dryRun() }
@@ -377,13 +377,13 @@ struct HarcamaFormu: View {
 
     private func duzenlemeOnizlemesi(_ p: HarcamaSonucu) -> some View {
         Kart {
-            KartBasligi("Ödeme planı")
+            KartBasligi(L("Ödeme planı"))
             VStack(spacing: 8) {
-                if let cut = p.preview?.statementCutoff { Satir(title: "Ekstre kesimi", value: Bicim.day(cut)) }
-                Satir(title: "İlk ödeme", value: Bicim.day(p.preview?.firstPayment ?? p.purchase.nextPayment?.date))
+                if let cut = p.preview?.statementCutoff { Satir(title: L("Ekstre kesimi"), value: Bicim.day(cut)) }
+                Satir(title: L("İlk ödeme"), value: Bicim.day(p.preview?.firstPayment ?? p.purchase.nextPayment?.date))
                 if count > 1 {
-                    Satir(title: "Son ödeme", value: Bicim.day(p.preview?.lastPayment ?? p.purchase.lastPaymentDate))
-                    Satir(title: "Taksit tutarı", value: Bicim.tl(p.purchase.perInstallment))
+                    Satir(title: L("Son ödeme"), value: Bicim.day(p.preview?.lastPayment ?? p.purchase.lastPaymentDate))
+                    Satir(title: L("Taksit tutarı"), value: Bicim.tl(p.purchase.perInstallment))
                 }
             }
             .font(.subheadline)
@@ -394,8 +394,8 @@ struct HarcamaFormu: View {
 
     // Kaydetmek için ne eksik (alttaki düğmede yazar)
     private var eksik: String? {
-        if (Bicim.parse(amount) ?? 0) <= 0 { return "Tutarı yaz" }
-        if desc.trimmingCharacters(in: .whitespaces).isEmpty { return "Ne alındığını yaz" }
+        if (Bicim.parse(amount) ?? 0) <= 0 { return L("Tutarı yaz") }
+        if desc.trimmingCharacters(in: .whitespaces).isEmpty { return L("Ne alındığını yaz") }
         return nil
     }
 
@@ -476,20 +476,20 @@ struct AlabilirMiyim: View {
         let seciliAd = cards.first { $0.id == secili }?.name
         let limitYok = (sim.card?.availableAfter ?? 0) < 0 && (sim.card?.limit ?? 0) > 0
         Kart {
-            KartBasligi(baslik: "Alabilir miyim?") {
+            KartBasligi(baslik: L("Alabilir miyim?")) {
                 if let n = p.nextPayment { Text(Bicim.relative(n.date)).font(.footnote).foregroundStyle(Tema.metin3) }
             }
             VStack(spacing: 8) {
-                Satir(title: "İlk ödeme", value: Bicim.day(p.nextPayment?.date ?? p.payments?.first?.date))
+                Satir(title: L("İlk ödeme"), value: Bicim.day(p.nextPayment?.date ?? p.payments?.first?.date))
                 if !tekrar, p.installments > 1 {
-                    Satir(title: "Taksit", value: "\(Bicim.tl(p.perInstallment)) × \(p.installments)")
-                    Satir(title: "Son ödeme", value: Bicim.day(p.lastPaymentDate))
+                    Satir(title: L("Taksit"), value: "\(Bicim.tl(p.perInstallment)) × \(p.installments)")
+                    Satir(title: L("Son ödeme"), value: Bicim.day(p.lastPaymentDate))
                 }
                 if let ilk {
-                    Satir(title: "\(Bicim.month(ilk.month)) ödemesi", value: "\(Bicim.tl(ilk.paymentsBefore, fraction: false)) → \(Bicim.tl(ilk.paymentsAfter, fraction: false))")
+                    Satir(title: L("{0} ödemesi", Bicim.month(ilk.month)), value: "\(Bicim.tl(ilk.paymentsBefore, fraction: false)) → \(Bicim.tl(ilk.paymentsAfter, fraction: false))")
                 }
                 if let c = sim.card, c.limit > 0, let kalan = c.availableAfter {
-                    Satir(title: "Kalan limit", value: Bicim.tl(kalan, fraction: false), color: kalan < 0 ? Tema.tehlike : Tema.metin)
+                    Satir(title: L("Kalan limit"), value: Bicim.tl(kalan, fraction: false), color: kalan < 0 ? Tema.tehlike : Tema.metin)
                 }
             }
             .font(.subheadline)
@@ -497,8 +497,8 @@ struct AlabilirMiyim: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: d.freeCashAfter < 0 ? "exclamationmark.triangle" : "checkmark.circle")
                     Text(d.freeCashAfter < 0
-                         ? "Gelirin ödemeleri karşılamıyor. En sıkışık ay \(Bicim.month(d.month)): \(Bicim.tl(d.freeCashAfter, fraction: false))"
-                         : "Her ay gelirin ödemeleri karşılıyor; en sıkışık ay \(Bicim.month(d.month)), boşta \(Bicim.tl(d.freeCashAfter, fraction: false)) kalıyor.")
+                         ? L("Gelirin ödemeleri karşılamıyor. En sıkışık ay {0}: {1}", Bicim.month(d.month), Bicim.tl(d.freeCashAfter, fraction: false))
+                         : L("Her ay gelirin ödemeleri karşılıyor; en sıkışık ay {0}, boşta {1} kalıyor.", Bicim.month(d.month), Bicim.tl(d.freeCashAfter, fraction: false)))
                 }
                 .font(.footnote)
                 .foregroundStyle(d.freeCashAfter < 0 ? Tema.tehlike : Tema.iyi)
@@ -508,10 +508,10 @@ struct AlabilirMiyim: View {
                 Button { sec(id) } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "lightbulb")
-                        Text((limitYok ? "Limit yetmiyor. " : "") + "\(o.card) ile alırsan ilk ödeme \(Bicim.day(o.firstPayment)) (\(o.daysUntilFirstPayment) gün sonra)")
+                        Text((limitYok ? L("Limit yetmiyor.") + " " : "") + L("{0} ile alırsan ilk ödeme {1} ({2} gün sonra)", o.card, Bicim.day(o.firstPayment), o.daysUntilFirstPayment))
                             .multilineTextAlignment(.leading)
                         Spacer(minLength: 4)
-                        Text("Seç").fontWeight(.semibold)
+                        Text(L("Seç")).fontWeight(.semibold)
                     }
                     .font(.footnote)
                     .foregroundStyle(Tema.metin)

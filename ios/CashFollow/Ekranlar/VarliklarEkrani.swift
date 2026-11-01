@@ -15,24 +15,24 @@ struct VarliklarEkrani: View {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                         ForEach(bakiyeler, id: \.self) { a in varlikKutusu(a) }
                         if v.receivablesTry > 0.004 {
-                            kutu(simge: "⇄", ad: "Alacak", deger: Bicim.tl(v.receivablesTry), alt: "kart payları · borç verdiklerin")
+                            kutu(simge: "⇄", ad: L("Alacak"), deger: Bicim.tl(v.receivablesTry), alt: L("kart payları · borç verdiklerin"))
                         }
                     }
                     if !v.holdings.isEmpty {
-                        BolumBasligi(baslik: "Fon ve hisse")
+                        BolumBasligi(baslik: L("Fon ve hisse"))
                         Kart(dolgu: 14) {
                             SatirListesi(veri: v.holdings) { h in pozisyon(h) }
                         }
                     }
                     if let e = v.ratesError ?? v.pricesError {
-                        Text(e.hasPrefix("Current rates") ? "Güncel kurlar alınamadı; toplama yalnızca \(Bicim.homeShort) girdi." : "Bazı fon / hisse fiyatları alınamadı.")
+                        Text(e.hasPrefix("Current rates") ? L("Güncel kurlar alınamadı; toplama yalnızca {0} girdi.", Bicim.homeShort) : L("Bazı fon / hisse fiyatları alınamadı."))
                             .font(.footnote).foregroundStyle(Tema.uyari)
                     }
-                    BolumBasligi(baslik: "Hareketler")
+                    BolumBasligi(baslik: L("Hareketler"))
                     HareketListesiBolumu()
                 }
             }
-            .navigationTitle("Varlıklar")
+            .navigationTitle(L("Varlıklar"))
             .sayfaZemini()
             .yenilenebilir(model)
             .ekleDugmesi(.varlik)
@@ -43,23 +43,23 @@ struct VarliklarEkrani: View {
     private func ustKart(_ v: Varliklar) -> some View {
         Kart {
             HStack {
-                Text("Varlıkların").font(.subheadline).foregroundStyle(Tema.metin2)
+                Text(L("Varlıkların")).font(.subheadline).foregroundStyle(Tema.metin2)
                 Spacer()
                 if let t = v.rates?.updatedAt, let d = ISO8601DateFormatter().date(from: t) {
-                    Text("Kur \(d.formatted(Bicim.tarih.hour().minute()))").font(.footnote).foregroundStyle(Tema.metin3)
+                    Text(L("Kur {0}", d.formatted(Bicim.tarih.hour().minute()))).font(.footnote).foregroundStyle(Tema.metin3)
                 }
             }
             BuyukTutar(deger: v.totalAssetsTry)
             Ayirici()
             IstatistikSatiri(ogeler: [
-                Istatistik(etiket: "Borçların", deger: Bicim.tl(v.debtsTry, fraction: false), renk: v.debtsTry > 0 ? Tema.tehlike : Tema.metin),
-                Istatistik(etiket: "Borçlar düşünce", deger: Bicim.tl(v.netWorthTry, fraction: false)),
+                Istatistik(etiket: L("Borçların"), deger: Bicim.tl(v.debtsTry, fraction: false), renk: v.debtsTry > 0 ? Tema.tehlike : Tema.metin),
+                Istatistik(etiket: L("Borçlar düşünce"), deger: Bicim.tl(v.netWorthTry, fraction: false)),
             ])
             if let r = v.rates {
                 let kodlar = ["USD", "EUR", "GAU", "GBP", "TRY"].filter { $0 != Bicim.home && r.values[$0] != nil }.prefix(3)
                 if !kodlar.isEmpty {
                     Ayirici()
-                    Text("Bugünkü kurlar").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
+                    Text(L("Bugünkü kurlar")).font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
                     IstatistikSatiri(ogeler: kodlar.map { k in
                         Istatistik(etiket: ad(k, v), deger: Bicim.tl(r.values[k] ?? 0))
                     })
@@ -69,13 +69,13 @@ struct VarliklarEkrani: View {
     }
 
     private func ad(_ kod: String, _ v: Varliklar) -> String {
-        if kod == "GAU" { return "Gram altın" }
-        return model.constants?.currencies.first { $0.code == kod }?.name ?? v.assets.first { $0.asset == kod }?.name ?? kod
+        if kod == "GAU" { return L("Gram altın") }
+        return Bicim.paraAdi(kod, model.constants?.currencies.first { $0.code == kod }?.name ?? v.assets.first { $0.asset == kod }?.name ?? kod)
     }
 
     private func varlikKutusu(_ a: Varliklar.Bakiye) -> some View {
         let simge = a.asset == "GAU" ? "gr" : (model.constants?.currencies.first { $0.code == a.asset }?.symbol ?? String(a.asset.prefix(1)))
-        return kutu(simge: simge, ad: a.name, deger: Bicim.amount(a.balance, asset: a.asset),
+        return kutu(simge: simge, ad: Bicim.paraAdi(a.asset, a.name), deger: Bicim.amount(a.balance, asset: a.asset),
                     alt: a.asset != Bicim.home ? a.tryValue.map { "≈ " + Bicim.tl($0) } : nil,
                     renk: a.balance < 0 ? Tema.tehlike : Tema.metin)
     }
@@ -109,7 +109,7 @@ struct VarliklarEkrani: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(h.tryValue.map { Bicim.tl($0) } ?? "fiyat yok").font(.body.weight(.semibold)).monospacedDigit()
+                Text(h.tryValue.map { Bicim.tl($0) } ?? L("fiyat yok")).font(.body.weight(.semibold)).monospacedDigit()
                 HStack(spacing: 4) {
                     Text(Bicim.amount(h.units, asset: h.asset))
                     if let p = h.profitPct { Text(Bicim.percent(p)).foregroundStyle(p >= 0 ? Tema.iyi : Tema.tehlike) }
@@ -130,7 +130,7 @@ struct HareketListesiBolumu: View {
     var body: some View {
         Okunan(tool: "list_entries", args: ["limit": hepsi ? 500 : 11], key: "\(hepsi)") { (l: HareketListesi) in
             Kart(dolgu: 14) {
-                if l.entries.isEmpty { Text("Hareket yok").foregroundStyle(Tema.metin3) }
+                if l.entries.isEmpty { Text(L("Hareket yok")).foregroundStyle(Tema.metin3) }
                 SatirListesi(veri: hepsi ? l.entries : Array(l.entries.prefix(10))) { e in
                     HStack(alignment: .top, spacing: 12) {
                         Avatar(ad: e.person, renk: model.kisiRengi(e.person))
@@ -145,28 +145,28 @@ struct HareketListesiBolumu: View {
                                 .font(.body.weight(.semibold)).monospacedDigit()
                                 .foregroundStyle(e.direction == "in" ? Tema.iyi : Tema.tehlike)
                             if let n = e.repeat?.nextDate {
-                                Text("sonraki \(Bicim.day(n))").font(.footnote).foregroundStyle(Tema.metin3)
+                                Text(L("sonraki {0}", Bicim.day(n))).font(.footnote).foregroundStyle(Tema.metin3)
                             }
                         }
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { duzenle = e }
                     .contextMenu {
-                        Button("Düzenle", systemImage: "pencil") { duzenle = e }
-                        Button("Sil", systemImage: "trash", role: .destructive) { silinecek = e }
+                        Button(L("Düzenle"), systemImage: "pencil") { duzenle = e }
+                        Button(L("Sil"), systemImage: "trash", role: .destructive) { silinecek = e }
                     }
                 }
                 if !hepsi && l.entries.count > 10 {
                     Ayirici()
-                    Button("Tümünü göster") { hepsi = true }
+                    Button(L("Tümünü göster")) { hepsi = true }
                         .font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin2)
                         .frame(maxWidth: .infinity).padding(.top, 4)
                 }
             }
             .sheet(item: $duzenle) { HareketFormu(duzenle: $0) }
-            .confirmationDialog(silinecek.map { "\($0.description.isEmpty ? $0.asset : $0.description) silinsin mi?" } ?? "",
+            .confirmationDialog(silinecek.map { L("{0} silinsin mi?", $0.description.isEmpty ? $0.asset : $0.description) } ?? "",
                                 isPresented: Binding(get: { silinecek != nil }, set: { if !$0 { silinecek = nil } }), titleVisibility: .visible) {
-                Button("Sil", role: .destructive) {
+                Button(L("Sil"), role: .destructive) {
                     if let e = silinecek { try? model.write("delete_entry", ["id": e.id]) }
                     silinecek = nil
                 }
@@ -181,10 +181,10 @@ enum HareketTuru: String, Identifiable, CaseIterable {
     var id: String { rawValue }
     var baslik: String {
         switch self {
-        case .gelir: return "Gelir"
-        case .gider: return "Nakit gider"
-        case .doviz: return "Döviz / altın"
-        case .piyasa: return "Fon / hisse"
+        case .gelir: return L("Gelir")
+        case .gider: return L("Nakit gider")
+        case .doviz: return L("Döviz / altın")
+        case .piyasa: return L("Fon / hisse")
         }
     }
     var simge: String {
@@ -233,57 +233,57 @@ struct HareketFormu: View {
                 Section {
                     switch gercekTur {
                     case .gelir, .gider:
-                        TextField("Tutar (\(Bicim.homeSymbol))", text: $amount).keyboardType(.decimalPad)
-                        TextField(gercekTur == .gelir ? "Ne geliri? (ör. Maaş)" : "Ne için? (ör. Kira)", text: $desc)
+                        TextField(L("Tutar ({0})", Bicim.homeSymbol), text: $amount).keyboardType(.decimalPad)
+                        TextField(gercekTur == .gelir ? L("Ne geliri? (ör. Maaş)") : L("Ne için? (ör. Kira)"), text: $desc)
                     case .doviz:
-                        Picker("Hangisi", selection: $kind) {
-                            ForEach(dovizler) { a in Text(a.name).tag(a.code) }
+                        Picker(L("Hangisi"), selection: $kind) {
+                            ForEach(dovizler) { a in Text(Bicim.paraAdi(a.code, a.name)).tag(a.code) }
                         }
-                        Picker("İşlem", selection: $direction) {
-                            Text("Aldım").tag("in")
-                            Text("Sattım").tag("out")
+                        Picker(L("İşlem"), selection: $direction) {
+                            Text(L("Aldım")).tag("in")
+                            Text(L("Sattım")).tag("out")
                         }
                         .pickerStyle(.segmented)
-                        TextField(kind == "GAU" ? "Kaç gram" : "Ne kadar (\(kind))", text: $amount).keyboardType(.decimalPad)
-                        TextField("Açıklama (isteğe bağlı)", text: $desc)
+                        TextField(kind == "GAU" ? L("Kaç gram") : L("Ne kadar ({0})", kind), text: $amount).keyboardType(.decimalPad)
+                        TextField(L("Açıklama (isteğe bağlı)"), text: $desc)
                     case .piyasa:
-                        Picker("Tür", selection: $kind) {
-                            Text("Fon (TEFAS)").tag("FON")
-                            Text("Hisse (BIST)").tag("BIST")
+                        Picker(L("Tür"), selection: $kind) {
+                            Text(L("Fon (TEFAS)")).tag("FON")
+                            Text(L("Hisse (BIST)")).tag("BIST")
                         }
                         .pickerStyle(.segmented)
-                        TextField(kind == "FON" ? "Fon kodu (ör. AFT)" : "İşlem kodu (ör. THYAO)", text: $ticker)
+                        TextField(kind == "FON" ? L("Fon kodu (ör. AFT)") : L("İşlem kodu (ör. THYAO)"), text: $ticker)
                             .textInputAutocapitalization(.characters).autocorrectionDisabled()
-                        Picker("İşlem", selection: $direction) {
-                            Text("Alış").tag("in")
-                            Text("Satış").tag("out")
+                        Picker(L("İşlem"), selection: $direction) {
+                            Text(L("Alış")).tag("in")
+                            Text(L("Satış")).tag("out")
                         }
                         .pickerStyle(.segmented)
-                        TextField("Adet", text: $amount).keyboardType(.decimalPad)
-                        TextField("Birim fiyat (\(Bicim.homeSymbol), boşsa bugünkü)", text: $price).keyboardType(.decimalPad)
+                        TextField(L("Adet"), text: $amount).keyboardType(.decimalPad)
+                        TextField(L("Birim fiyat ({0}, boşsa bugünkü)", Bicim.homeSymbol), text: $price).keyboardType(.decimalPad)
                     }
-                    DatePicker("Tarih", selection: $date, displayedComponents: .date).environment(\.locale, Bicim.locale)
+                    DatePicker(L("Tarih"), selection: $date, displayedComponents: .date).environment(\.locale, Bicim.locale)
                     if people.count > 1 {
-                        Picker("Kimin", selection: $person) { ForEach(people) { Text($0.name).tag($0.id) } }
+                        Picker(L("Kimin"), selection: $person) { ForEach(people) { Text($0.name).tag($0.id) } }
                     }
                 }
                 if (gercekTur == .gelir || gercekTur == .gider) && duzenle?.repeat == nil {
                     Section {
-                        Toggle("Her ay tekrarla", isOn: $monthly)
+                        Toggle(L("Her ay tekrarla"), isOn: $monthly)
                     } footer: {
-                        Text(gercekTur == .gelir ? "Maaş gibi düzenli gelirler her ay Nakit grafiğine girer." : "Kartla ödenen harcamaları Harcamalar'dan ekle; burası nakit ödemeler için.")
+                        Text(gercekTur == .gelir ? L("Maaş gibi düzenli gelirler her ay Nakit grafiğine girer.") : L("Kartla ödenen harcamaları Harcamalar'dan ekle; burası nakit ödemeler için."))
                     }
                 }
                 if gercekTur == .doviz {
                     Section {
-                        Toggle(direction == "in" ? "Parasını \(Bicim.homeShort) bakiyemden ödedim" : "Karşılığı \(Bicim.homeShort) bakiyeme geçti", isOn: $settle)
+                        Toggle(direction == "in" ? L("Parasını {0} bakiyemden ödedim", Bicim.homeShort) : L("Karşılığı {0} bakiyeme geçti", Bicim.homeShort), isOn: $settle)
                         if settle {
-                            TextField("Kur (\(Bicim.homeSymbol), boşsa bugünkü)", text: $price).keyboardType(.decimalPad)
+                            TextField(L("Kur ({0}, boşsa bugünkü)", Bicim.homeSymbol), text: $price).keyboardType(.decimalPad)
                         }
                     } footer: {
                         Text(settle
-                             ? (direction == "in" ? "Gelir sayılmaz; paran \(Bicim.homeShort)'den dövize / altına geçer." : "Gelir sayılmaz; paran dövizden / altından \(Bicim.homeShort)'ye geçer.")
-                             : "Kapalıysa \(Bicim.homeShort) ödemeden gelen ya da giden miktar (hediye, döviz maaş).")
+                             ? (direction == "in" ? L("Gelir sayılmaz; paran {0}'den dövize / altına geçer.", Bicim.homeShort) : L("Gelir sayılmaz; paran dövizden / altından {0}'ye geçer.", Bicim.homeShort))
+                             : L("Kapalıysa {0} ödemeden gelen ya da giden miktar (hediye, döviz maaş).", Bicim.homeShort))
                     }
                 }
                 HataMetni(text: error)
@@ -294,12 +294,12 @@ struct HareketFormu: View {
                 }
             }
             .tint(Tema.metin)
-            .navigationTitle(duzenle == nil ? gercekTur.baslik : "Hareketi düzenle")
+            .navigationTitle(duzenle == nil ? gercekTur.baslik : L("Hareketi düzenle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Vazgeç")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") { Task { await save() } }.fontWeight(.semibold).disabled(!valid || saving)
+                    Button(L("Kaydet")) { Task { await save() } }.fontWeight(.semibold).disabled(!valid || saving)
                 }
             }
             .onAppear(perform: hazirla)
@@ -346,9 +346,9 @@ struct HareketFormu: View {
 
     // Kaydetmek için ne eksik (alttaki düğmede yazar)
     private var eksik: String? {
-        if gercekTur == .piyasa && ticker.trimmingCharacters(in: .whitespaces).isEmpty { return kind == "FON" ? "Fon kodunu yaz" : "Hisse kodunu yaz" }
-        if (Bicim.parse(amount) ?? 0) <= 0 { return gercekTur == .piyasa ? "Adedi yaz" : "Tutarı yaz" }
-        if (gercekTur == .gelir || gercekTur == .gider) && desc.trimmingCharacters(in: .whitespaces).isEmpty { return "Açıklamayı yaz" }
+        if gercekTur == .piyasa && ticker.trimmingCharacters(in: .whitespaces).isEmpty { return kind == "FON" ? L("Fon kodunu yaz") : L("Hisse kodunu yaz") }
+        if (Bicim.parse(amount) ?? 0) <= 0 { return gercekTur == .piyasa ? L("Adedi yaz") : L("Tutarı yaz") }
+        if (gercekTur == .gelir || gercekTur == .gider) && desc.trimmingCharacters(in: .whitespaces).isEmpty { return L("Açıklamayı yaz") }
         return nil
     }
 

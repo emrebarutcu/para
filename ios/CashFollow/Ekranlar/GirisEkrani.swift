@@ -21,8 +21,8 @@ struct GirisEkrani: View {
                 if welcome {
                     Section {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("CashFollow'a hoş geldin").font(.title2.weight(.semibold))
-                            Text("Kredi kartı taksitlerini, nakit akışını ve varlıklarını takip et. Hesabınla veriler web'de ve diğer cihazlarında da olur.")
+                            Text(L("CashFollow'a hoş geldin")).font(.title2.weight(.semibold))
+                            Text(L("Kredi kartı taksitlerini, nakit akışını ve varlıklarını takip et. Hesabınla veriler web'de ve diğer cihazlarında da olur."))
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 4)
@@ -30,26 +30,26 @@ struct GirisEkrani: View {
                 }
                 Section {
                     Picker("", selection: $register) {
-                        Text("Giriş Yap").tag(false)
-                        Text("Kayıt Ol").tag(true)
+                        Text(L("Giriş Yap")).tag(false)
+                        Text(L("Kayıt Ol")).tag(true)
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: register) { _, _ in message = nil; resendFor = nil }
-                    TextField("E-posta", text: $email)
+                    TextField(L("E-posta"), text: $email)
                         .keyboardType(.emailAddress).textContentType(.emailAddress)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    SecureField("Şifre", text: $password)
+                    SecureField(L("Şifre"), text: $password)
                         .textContentType(register ? .newPassword : .password)
                     if register || welcome {
                         UlkeSecici(secim: $ulke)
                     }
                     Button { Task { await submit() } } label: {
-                        HStack { Spacer(); if busy { ProgressView() } else { Text(register ? "Kayıt Ol" : "Giriş Yap") }; Spacer() }
+                        HStack { Spacer(); if busy { ProgressView() } else { Text(register ? L("Kayıt Ol") : L("Giriş Yap")) }; Spacer() }
                     }
                     .disabled(busy || email.isEmpty || password.isEmpty)
                 } footer: {
                     if register {
-                        let metin = "Kayıt olarak [Kullanım Koşulları](\(Yapilandirma.kosullar.absoluteString))'nı ve [Gizlilik Politikası](\(Yapilandirma.gizlilik.absoluteString))'nı kabul edersin."
+                        let metin = L("Kayıt olarak [Kullanım Koşulları]({0})'nı ve [Gizlilik Politikası]({1})'nı kabul edersin.", Yapilandirma.kosullar.absoluteString, Yapilandirma.gizlilik.absoluteString)
                         Text((try? AttributedString(markdown: metin)) ?? AttributedString(metin))
                     }
                 }
@@ -57,27 +57,27 @@ struct GirisEkrani: View {
                     Section {
                         Text((m.ok ? "✓ " : "⚠ ") + m.text).foregroundStyle(m.ok ? Renk.gelir : Renk.gider)
                         if let r = resendFor {
-                            Button("Doğrulama e-postasını yeniden gönder") { Task { await resend(r) } }
+                            Button(L("Doğrulama e-postasını yeniden gönder")) { Task { await resend(r) } }
                         }
                     }
                 }
                 if !register {
                     Section {
-                        Button("Şifremi unuttum") { Task { await forgot() } }.disabled(email.isEmpty || busy)
+                        Button(L("Şifremi unuttum")) { Task { await forgot() } }.disabled(email.isEmpty || busy)
                     }
                 }
                 if welcome {
                     Section {
-                        Button("Hesap açmadan başla") { model.continueOffline(country: ulke) }
+                        Button(L("Hesap açmadan başla")) { model.continueOffline(country: ulke) }
                     } footer: {
-                        Text("Veriler yalnızca bu telefonda durur; istediğin zaman Ayarlar'dan giriş yapıp yedekleyebilirsin.")
+                        Text(L("Veriler yalnızca bu telefonda durur; istediğin zaman Ayarlar'dan giriş yapıp yedekleyebilirsin."))
                     }
                 }
             }
-            .navigationTitle(welcome ? "" : "Giriş yap")
+            .navigationTitle(welcome ? "" : L("Giriş yap"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if !welcome { ToolbarItem(placement: .cancellationAction) { Button("Kapat") { dismiss() } } }
+                if !welcome { ToolbarItem(placement: .cancellationAction) { Button(L("Kapat")) { dismiss() } } }
             }
         }
         .interactiveDismissDisabled(welcome)
@@ -99,10 +99,10 @@ struct GirisEkrani: View {
                     model.signedIn(s)
                     dismiss()
                 case .confirmEmail:
-                    message = ("Kayıt olundu! E-postana gelen bağlantıyla hesabını doğrula, sonra burada giriş yap. Gelmezse gereksiz / spam klasörüne de bak.", true)
+                    message = (L("Kayıt olundu! E-postana gelen bağlantıyla hesabını doğrula, sonra burada giriş yap. Gelmezse gereksiz / spam klasörüne de bak."), true)
                     resendFor = trimmed
                 case .alreadyExists:
-                    message = ("Bu e-postayla zaten bir hesap var. Giriş Yap'tan gir; şifreni hatırlamıyorsan \"Şifremi unuttum\".", false)
+                    message = (L("Bu e-postayla zaten bir hesap var. Giriş Yap'tan gir; şifreni hatırlamıyorsan \"Şifremi unuttum\"."), false)
                 }
             } else {
                 let s = try await Auth.signIn(email: trimmed, password: password)
@@ -113,14 +113,14 @@ struct GirisEkrani: View {
             message = (e.turkish, false)
             if e.unconfirmed { resendFor = trimmed }
         } catch {
-            message = ("Bağlanılamadı: \(error.localizedDescription)", false)
+            message = (L("Bağlanılamadı: {0}", error.localizedDescription), false)
         }
     }
 
     private func resend(_ email: String) async {
         do {
             try await Auth.resend(email: email)
-            message = ("Doğrulama e-postası yeniden gönderildi. Gelmezse gereksiz / spam klasörüne de bak.", true)
+            message = (L("Doğrulama e-postası yeniden gönderildi. Gelmezse gereksiz / spam klasörüne de bak."), true)
         } catch let e as AuthHatasi {
             message = (e.turkish, false)
         } catch {
@@ -133,7 +133,7 @@ struct GirisEkrani: View {
         defer { busy = false }
         do {
             try await Auth.recover(email: trimmed)
-            message = ("Şifre sıfırlama bağlantısı gönderildi — e-postanı kontrol et. Yeni şifreyi cashfollow.app'te belirleyip burada giriş yap.", true)
+            message = (L("Şifre sıfırlama bağlantısı gönderildi — e-postanı kontrol et. Yeni şifreyi cashfollow.app'te belirleyip burada giriş yap."), true)
         } catch let e as AuthHatasi {
             message = (e.turkish, false)
         } catch {
@@ -147,10 +147,16 @@ struct UlkeSecici: View {
     @EnvironmentObject private var model: Model
     @Binding var secim: String
 
+    private var ulkeler: [Sabitler.Ulke] {
+        let liste = model.constants?.countries ?? []
+        return Dil.ingilizce ? liste.sorted { Bicim.ulkeAdi($0.code, $0.name) < Bicim.ulkeAdi($1.code, $1.name) } : liste
+    }
+
     var body: some View {
-        Picker("Ülke", selection: $secim) {
-            ForEach(model.constants?.countries ?? []) { u in
-                Text("\(u.name) · \(model.constants?.currencies.first { $0.code == u.currency }?.short ?? u.currency)").tag(u.code)
+        Picker(L("Ülke"), selection: $secim) {
+            // İngilizcede ülke adları telefonun dilinde (Locale), alfabetik; para birimi kodla
+            ForEach(ulkeler) { u in
+                Text("\(Bicim.ulkeAdi(u.code, u.name)) · \(Dil.ingilizce ? u.currency : model.constants?.currencies.first { $0.code == u.currency }?.short ?? u.currency)").tag(u.code)
             }
         }
     }

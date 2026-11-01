@@ -12,14 +12,14 @@ struct AkisEkrani: View {
             Sayfa {
                 Okunan(tool: "get_cashflow", args: ["months": ayCount], key: "\(ayCount)") { (a: Akis) in
                     VStack(alignment: .leading, spacing: 14) {
-                        AylikOdemeGrafigi(months: Array(a.months.prefix(12)), baslik: "Önümüzdeki 12 ay")
+                        AylikOdemeGrafigi(months: Array(a.months.prefix(12)), baslik: L("Önümüzdeki 12 ay"))
                         if a.months.allSatisfy({ $0.payments.isEmpty }) {
-                            Kart { Text("Önümüzdeki aylarda ödenecek taksit yok.").foregroundStyle(Tema.metin3) }
+                            Kart { Text(L("Önümüzdeki aylarda ödenecek taksit yok.")).foregroundStyle(Tema.metin3) }
                         }
                         ForEach(a.months.filter { !$0.payments.isEmpty }) { m in ay(m) }
                         if ayCount < 60 {
                             Button { withAnimation { ayCount = min(60, ayCount + 12) } } label: {
-                                Text("Sonraki 12 ayı da göster").font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                                Text(L("Sonraki 12 ayı da göster")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
                                     .frame(maxWidth: .infinity).padding(.vertical, 13)
                                     .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                             }
@@ -28,7 +28,7 @@ struct AkisEkrani: View {
                     }
                 }
             }
-            .navigationTitle("Akış")
+            .navigationTitle(L("Akış"))
             .sayfaZemini()
             .yenilenebilir(model)
             .ekleDugmesi(.harcama)
@@ -82,10 +82,10 @@ struct OdemeSatiri: View {
                         HStack(spacing: 6) {
                             Image(systemName: p.card == "Nakit" ? "banknote" : "creditcard")
                                 .font(.footnote).foregroundStyle(model.kartRengi(p.card))
-                            Text(p.card).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(1)
+                            Text(Bicim.kartAdi(p.card)).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(1)
                         }
                         if p.notCounted == true {
-                            Text("sayılmıyor").font(.footnote).foregroundStyle(Tema.metin3)
+                            Text(L("sayılmıyor")).font(.footnote).foregroundStyle(Tema.metin3)
                         } else if let by = p.byPerson, !by.isEmpty {
                             VStack(alignment: .leading, spacing: 2) {   // web'deki gibi kişiler alt alta
                                 ForEach(Array(by.sorted { $0.key < $1.key }.enumerated()), id: \.offset) { _, k in

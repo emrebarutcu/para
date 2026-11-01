@@ -38,7 +38,7 @@
 
   // mcp/tools.js bir ES modülüdür (import / export); JavaScriptCore'un düz betiğine çevrilir. İçe aktardığı modüller
   // yukarıda yüklenmiş genel nesnelerdir.
-  const GLOBALS = { para: "Para", taksit: "Taksit", eposta: "Eposta", varlik: "Varlik", tekrar: "Tekrar", kategori: "Kategori", icgoru: "Icgoru", borc: "Borc", tablo: "Tablo" };
+  const GLOBALS = { dil: "Dil", para: "Para", taksit: "Taksit", eposta: "Eposta", varlik: "Varlik", tekrar: "Tekrar", kategori: "Kategori", icgoru: "Icgoru", borc: "Borc", tablo: "Tablo" };
   function toScript(src) {
     const body = String(src)
       .replace(/^import\s+(\w+)\s+from\s+"\.\.\/(\w+)\.js";?\s*$/gm, (line, name, file) => {

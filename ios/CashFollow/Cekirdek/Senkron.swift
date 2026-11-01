@@ -212,7 +212,7 @@ enum Piyasa {
         let (data, res) = try await URLSession.shared.data(for: req)
         guard (res as? HTTPURLResponse)?.statusCode == 200,
               (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else {
-            throw AracHatasi(message: "Kurlar şu an alınamıyor.", user: true)
+            throw AracHatasi(message: L("Kurlar şu an alınamıyor."), user: true)
         }
         return String(decoding: data, as: UTF8.self)
     }

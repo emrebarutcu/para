@@ -136,7 +136,8 @@ struct BuyukTutar: View {
         let tam = abs(v).rounded(.down)
         let kurus = Int(((abs(v) - tam) * 100).rounded())
         let tamMetin = (kurus == 100 ? tam + 1 : tam).formatted(.number.locale(Bicim.locale).precision(.fractionLength(0)))
-        return (v < 0 ? "−" : "", Bicim.homeSymbol, tamMetin, "," + String(format: "%02d", kurus == 100 ? 0 : kurus))
+        let ayirici = Bicim.locale.decimalSeparator ?? ","
+        return (v < 0 ? "−" : "", Bicim.homeSymbol, tamMetin, ayirici + String(format: "%02d", kurus == 100 ? 0 : kurus))
     }
 }
 
@@ -427,7 +428,7 @@ struct Akan: Layout {
 // Formun altındaki büyük Kaydet: eksik varsa onu yazar ve pasiftir (üstteki Kaydet'e uzanmak gerekmez)
 struct AltKaydet: View {
     let eksik: String?
-    var baslik = "Kaydet"
+    var baslik = L("Kaydet")
     let eylem: () -> Void
 
     var body: some View {

@@ -23,6 +23,7 @@
   const T = node ? require("./taksit.js") : root.Taksit;
   const V = node ? require("./varlik.js") : root.Varlik;
   const P = node ? require("./para.js") : root.Para;   // ana para birimi (state.home): kartlar, paylar ve toplamlar onunla
+  const L = (node ? require("./dil.js") : root.Dil).t;   // görünen metinler
 
   const KINDS = ["person", "loan", "payment"];
   const SIDES = ["debt", "receivable"];
@@ -549,16 +550,16 @@
   function flowText(f, state) {
     if (f.type === "share") {
       const p = state?.people?.find(x => x.id === f.payment.personId);
-      return `${p?.name ?? "?"} · kart payı`;
+      return `${p?.name ?? "?"} · ${L("kart payı")}`;
     }
     const d = f.debt;
-    const who = d.party || d.desc || (d.kind === "loan" ? "Kredi" : "Borç");
+    const who = d.party || d.desc || (d.kind === "loan" ? L("Kredi") : L("Borç"));
     const debt = side(d) === "debt";
     switch (f.type) {
-      case "open": return `${who} · ${d.kind === "loan" ? "kredi çekildi" : debt ? "borç alındı" : "borç verildi"}`;
-      case "pay": return `${who} · ${debt ? "ödeme" : "tahsilat"}`;
-      case "inst": return `${who} · taksit ${f.no}/${f.of}`;
-      case "plan": return `${who} · ${debt ? "beklenen ödeme" : "beklenen tahsilat"}${f.late ? " (gecikti)" : ""}`;
+      case "open": return `${who} · ${d.kind === "loan" ? L("kredi çekildi") : debt ? L("borç alındı") : L("borç verildi")}`;
+      case "pay": return `${who} · ${debt ? L("ödeme") : L("tahsilat")}`;
+      case "inst": return `${who} · ${L("taksit {0}/{1}", f.no, f.of)}`;
+      case "plan": return `${who} · ${debt ? L("beklenen ödeme") : L("beklenen tahsilat")}${f.late ? " " + L("(gecikti)") : ""}`;
       default: return who;
     }
   }

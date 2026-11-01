@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: ["claude/grafik*"]
-    paths: ["ios/**", "*.js", ".github/workflows/ekran.yml"]
+    paths: ["ios/**", "*.js", "dil/**", ".github/workflows/ekran.yml"]
 
 permissions:
   contents: write
@@ -60,6 +60,10 @@ jobs:
             shot bos $theme -bos -sekme 0
             for i in 0 1 2 3 4; do shot sekme$i $theme -sekme $i; done
           done
+          # İngilizce, ABD (dolar): telefonun dili İngilizce, ülke ABD
+          for i in 0 1 2 3 4; do shot en-sekme$i light -sekme $i -ulke US -AppleLanguages "(en)" -AppleLocale en_US; done
+          shot en-galeri3 light -galeri 3 -ulke US -AppleLanguages "(en)" -AppleLocale en_US
+          shot en-bos light -bos -sekme 0 -ulke US -AppleLanguages "(en)" -AppleLocale en_US
           ls -la out
       - name: Görüntüleri yaz
         run: |

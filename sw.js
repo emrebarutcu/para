@@ -3,7 +3,7 @@
 importScripts('/version.js');
 const CACHE = 'cashfollow-' + self.APP_VERSION;
 // /index.html önbelleğe alınmaz: Cloudflare onu /'a yönlendirir (307), sayfa / adresinden gelir
-const ASSETS = ['/', '/version.js', '/styles.css', '/app.js', '/para.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/borc.js', '/sync.js', '/kategori.js', '/icgoru.js', '/nakit.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg'];
+const ASSETS = ['/', '/version.js', '/styles.css', '/app.js', '/dil.js', '/para.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/borc.js', '/sync.js', '/kategori.js', '/icgoru.js', '/nakit.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

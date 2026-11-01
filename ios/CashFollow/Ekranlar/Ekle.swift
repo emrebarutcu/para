@@ -62,53 +62,53 @@ private struct EkleDugmesi: ViewModifier {
             // Dokun: harcama; basılı tut: diğerleri
             Menu {
                 Section { harcamaDugmesi }
-                Section("Para") { paraDugmeleri }
-                Section("Borç") { borcDugmeleri }
+                Section(L("Para")) { paraDugmeleri }
+                Section(L("Borç")) { borcDugmeleri }
             } label: {
                 YuzenSimge()
             } primaryAction: {
                 secim = .harcama
             }
-            .accessibilityLabel("Harcama ekle")
-            .accessibilityHint("Basılı tutunca gelir, döviz, borç ya da kart eklenir")
+            .accessibilityLabel(L("Harcama ekle"))
+            .accessibilityHint(L("Basılı tutunca gelir, döviz, borç ya da kart eklenir"))
         case .varlik:
             Menu {
                 Section { paraDugmeleri }
-                Section("Diğer") {
+                Section(L("Diğer")) {
                     harcamaDugmesi
                     borcDugmeleri
                 }
             } label: { YuzenSimge() }
-            .accessibilityLabel("Ekle: gelir, döviz / altın, fon / hisse")
+            .accessibilityLabel(L("Ekle: gelir, döviz / altın, fon / hisse"))
         case .borc:
             Menu {
                 Section { borcDugmeleri }
-                Section("Diğer") {
+                Section(L("Diğer")) {
                     harcamaDugmesi
                     paraDugmeleri
                 }
             } label: { YuzenSimge() }
-            .accessibilityLabel("Ekle: borç, kredi ya da kart")
+            .accessibilityLabel(L("Ekle: borç, kredi ya da kart"))
         }
     }
 
     private var harcamaDugmesi: some View {
-        Button { secim = .harcama } label: { Label("Harcama", systemImage: "cart") }
+        Button { secim = .harcama } label: { Label(L("Harcama"), systemImage: "cart") }
     }
 
     @ViewBuilder private var paraDugmeleri: some View {
-        Button { secim = .hareket(.gelir) } label: { Label("Gelir", systemImage: "arrow.down.circle") }
-        Button { secim = .hareket(.doviz) } label: { Label("Döviz / altın", systemImage: "dollarsign.circle") }
+        Button { secim = .hareket(.gelir) } label: { Label(L("Gelir"), systemImage: "arrow.down.circle") }
+        Button { secim = .hareket(.doviz) } label: { Label(L("Döviz / altın"), systemImage: "dollarsign.circle") }
         if model.marketsAllowed {
-            Button { secim = .hareket(.piyasa) } label: { Label("Fon / hisse", systemImage: "chart.line.uptrend.xyaxis") }
+            Button { secim = .hareket(.piyasa) } label: { Label(L("Fon / hisse"), systemImage: "chart.line.uptrend.xyaxis") }
         }
     }
 
     @ViewBuilder private var borcDugmeleri: some View {
-        Button { secim = .borc("lent") } label: { Label("Borç verdim", systemImage: "arrow.up.right.circle") }
-        Button { secim = .borc("borrowed") } label: { Label("Borç aldım", systemImage: "arrow.down.left.circle") }
-        Button { secim = .borc("loan") } label: { Label("Kredi", systemImage: "building.columns") }
-        Button { secim = .kart } label: { Label("Kredi kartı", systemImage: "creditcard") }
+        Button { secim = .borc("lent") } label: { Label(L("Borç verdim"), systemImage: "arrow.up.right.circle") }
+        Button { secim = .borc("borrowed") } label: { Label(L("Borç aldım"), systemImage: "arrow.down.left.circle") }
+        Button { secim = .borc("loan") } label: { Label(L("Kredi"), systemImage: "building.columns") }
+        Button { secim = .kart } label: { Label(L("Kredi kartı"), systemImage: "creditcard") }
     }
 }
 

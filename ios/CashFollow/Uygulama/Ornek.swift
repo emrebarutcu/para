@@ -12,16 +12,22 @@ enum Ornek {
     }
     static var sekme: Int { deger("-sekme") ?? 0 }
     static var galeri: Int? { deger("-galeri") }
+    // "-ulke US": örnek veri ABD'de (dolar; tutarlar dolar ölçeğinde)
+    static var ulke: String {
+        let a = CommandLine.arguments
+        guard let i = a.firstIndex(of: "-ulke"), i + 1 < a.count else { return "TR" }
+        return a[i + 1]
+    }
 
     static func hazirlaIfRequested() {
         guard CommandLine.arguments.contains("-ornek") else { return }
         Auth.store(nil)
         Depo.offlineChosen = true
-        Depo.offlineCountry = "TR"
+        Depo.offlineCountry = ulke
         Depo.cashDef = nil
         // "-bos": hiç verisi olmayan yeni kullanıcı (Başlarken kartı)
-        let bos: [String: Any] = ["people": [["id": "ben", "name": "Ben", "color": 0]], "cards": [], "installments": [], "entries": [], "debts": []]
-        if let data = try? JSONSerialization.data(withJSONObject: CommandLine.arguments.contains("-bos") ? bos : veri()) {
+        let bos: [String: Any] = ["people": [["id": "ben", "name": ulke == "US" ? "Me" : "Ben", "color": 0]], "cards": [], "installments": [], "entries": [], "debts": []]
+        if let data = try? JSONSerialization.data(withJSONObject: CommandLine.arguments.contains("-bos") ? bos : ulke == "US" ? veriUS() : veri()) {
             Depo.write(Depo.stateFile(nil), String(decoding: data, as: UTF8.self))
         }
     }
@@ -78,15 +84,60 @@ enum Ornek {
             ],
         ]
     }
+
+    // ABD örneği: dolar, ABD kartları (kesim / son ödeme), taksit planı (Amex Plan It gibi), maaş, kira, araba kredisi
+    private static func veriUS() -> [String: Any] {
+        let harcama: (String, String, String?, Double, Int, Int, String) -> [String: Any] = { id, desc, card, total, count, gunOnce, cat in
+            var p: [String: Any] = ["id": id, "personId": "ben", "desc": desc, "total": total, "count": count, "date": gun(-gunOnce),
+                                    "category": cat, "categoryBy": "user"]
+            if let card { p["cardId"] = card }
+            return p
+        }
+        var sam = harcama("p9", "Nike", "amex", 180, 1, 9, "alisveris")
+        sam["personId"] = "sam"
+        var kira = harcama("p10", "Rent", nil, 2400, 1, 150, "ev")
+        kira["repeat"] = 0
+        var spotify = harcama("p11", "Spotify", "chase", 11.99, 1, 120, "eglence")
+        spotify["repeat"] = 0
+        return [
+            "people": [["id": "ben", "name": "Me", "color": 0], ["id": "sam", "name": "Sam", "color": 1]],
+            "cards": [
+                ["id": "chase", "name": "Chase Sapphire", "limit": 12000, "cutoffDay": 3, "dueDay": 28, "color": 0, "trackSince": gun(-150)],
+                ["id": "amex", "name": "Amex Gold", "limit": 8000, "cutoffDay": 18, "dueDay": 12, "color": 2, "trackSince": gun(-150)],
+            ],
+            "installments": [
+                harcama("p1", "iPhone 17 Pro", "amex", 1199, 12, 40, "elektronik"),
+                harcama("p2", "Whole Foods", "chase", 142.35, 1, 4, "market"),
+                harcama("p3", "Trader Joe's", "chase", 88.20, 1, 11, "market"),
+                harcama("p4", "Delta flight", "chase", 486, 1, 25, "seyahat"),
+                harcama("p5", "Chipotle", "amex", 24.80, 1, 2, "yeme"),
+                harcama("p6", "Shell", "chase", 52.10, 1, 6, "ulasim"),
+                harcama("p7", "IKEA sofa", "amex", 1350, 6, 70, "ev"),
+                harcama("p8", "Netflix", "chase", 15.49, 1, 3, "eglence"),
+                sam, kira, spotify,
+            ],
+            "entries": [
+                ["id": "e1", "personId": "ben", "asset": "USD", "amount": 6200, "desc": "Paycheck", "date": gun(-150), "repeat": 0],
+                ["id": "e2", "personId": "ben", "asset": "USD", "amount": 9500, "desc": "Opening balance", "date": gun(-151)],
+            ],
+            "debts": [
+                ["id": "d1", "kind": "loan", "personId": "ben", "party": "Ally Auto", "asset": "USD", "amount": 465, "principal": 18000,
+                 "date": gun(-120), "due": gun(-90), "count": 48],
+                ["id": "d2", "kind": "person", "side": "receivable", "personId": "ben", "party": "Alex", "asset": "USD", "amount": 250,
+                 "principal": 250, "date": gun(-12), "due": gun(10)],
+            ],
+        ]
+    }
 }
 
 // Grafiklerin bir arada görünümü (-galeri)
 struct GrafikGalerisi: View {
     let sayfa: Int
+    private var ulke: String { Ornek.ulke }
 
     var body: some View {
         if sayfa == 3 {
-            HarcamaFormu(ornek: ("36000", "Buzdolabı", 6))
+            HarcamaFormu(ornek: ulke == "US" ? ("1800", "Refrigerator", 6) : ("36000", "Buzdolabı", 6))
         } else if sayfa == 4 {
             BorcFormu(baslangic: "loan")
         } else if sayfa == 5 {
@@ -111,7 +162,7 @@ struct GrafikGalerisi: View {
                     VarlikSeyriKarti()
                 }
             }
-            .navigationTitle("Grafikler")
+            .navigationTitle(L("Grafikler"))
         }
     }
 }

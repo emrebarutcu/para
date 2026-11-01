@@ -27,14 +27,14 @@ struct OzetEkrani: View {
                     }
                 }
             }
-            .navigationTitle("Özet")
+            .navigationTitle(L("Özet"))
             .sayfaZemini()
             .yenilenebilir(model)
             .ekleDugmesi(.harcama)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { EsitlemeDurumu() }
                 ToolbarItem(placement: .primaryAction) {
-                    Button { ayarlar = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Ayarlar")
+                    Button { ayarlar = true } label: { Image(systemName: "gearshape") }.accessibilityLabel(L("Ayarlar"))
                 }
             }
             .sheet(isPresented: $ayarlar) { AyarlarEkrani() }
@@ -47,18 +47,18 @@ struct OzetEkrani: View {
     private func ustKart(_ o: Ozet) -> some View {
         Kart {
             HStack {
-                Text("Bu ay ödenecek").font(.subheadline).foregroundStyle(Tema.metin2)
+                Text(L("Bu ay ödenecek")).font(.subheadline).foregroundStyle(Tema.metin2)
                 Spacer()
                 Text(Bicim.month(o.month)).font(.subheadline.weight(.semibold))
             }
             BuyukTutar(deger: o.dueThisMonth)
             if let d = o.debts?.dueThisMonth, d > 0.004 {
-                Text("+ \(Bicim.tl(d)) borç ödemesi").font(.subheadline).foregroundStyle(Tema.metin2).monospacedDigit()
+                Text(L("+ {0} borç ödemesi", Bicim.tl(d))).font(.subheadline).foregroundStyle(Tema.metin2).monospacedDigit()
             }
             Ayirici()
             IstatistikSatiri(ogeler: [
-                Istatistik(etiket: "Gelecek ay (\(ayAdi(o.nextMonth.month)))", deger: Bicim.tl(o.nextMonth.total)),
-                Istatistik(etiket: "Kalan bütün taksitler", deger: Bicim.tl(o.remainingTotal)),
+                Istatistik(etiket: L("Gelecek ay ({0})", ayAdi(o.nextMonth.month)), deger: Bicim.tl(o.nextMonth.total)),
+                Istatistik(etiket: L("Kalan bütün taksitler"), deger: Bicim.tl(o.remainingTotal)),
             ])
         }
     }
@@ -70,9 +70,9 @@ struct OzetEkrani: View {
     // Sıradaki ödemeler: tarih rozeti, kart / nakit, ne zaman, tutar; gecikmiş ekstrede "Ödendi"
     private func siradakiler(_ o: Ozet) -> some View {
         Kart {
-            KartBasligi("Sıradaki ödemeler")
+            KartBasligi(L("Sıradaki ödemeler"))
             if o.upcomingPayments.isEmpty {
-                Text("Ödenecek taksit yok").font(.subheadline).foregroundStyle(Tema.metin3)
+                Text(L("Ödenecek taksit yok")).font(.subheadline).foregroundStyle(Tema.metin3)
             }
             SatirListesi(veri: Array(o.upcomingPayments.prefix(5))) { p in
                 HStack(spacing: 12) {
@@ -81,16 +81,16 @@ struct OzetEkrani: View {
                         HStack(spacing: 6) {
                             Image(systemName: p.card == "Nakit" ? "banknote" : "creditcard")
                                 .font(.footnote).foregroundStyle(model.kartRengi(p.card))
-                            Text(p.card).font(.body.weight(.semibold)).lineLimit(1)
+                            Text(Bicim.kartAdi(p.card)).font(.body.weight(.semibold)).lineLimit(1)
                         }
-                        Text(p.late == true ? "gecikti · \(Bicim.day(p.date))" : "\(Bicim.relative(p.date)) · \(Bicim.day(p.date))")
+                        Text(p.late == true ? L("gecikti · {0}", Bicim.day(p.date)) : "\(Bicim.relative(p.date)) · \(Bicim.day(p.date))")
                             .font(.footnote).foregroundStyle(p.late == true ? Tema.tehlike : Tema.metin3)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 4) {
                         Text(Bicim.tl(p.total)).font(.body.weight(.semibold)).monospacedDigit().fixedSize()
                         if p.late == true, p.card != "Nakit" {
-                            Button("Ödendi") { odendi(p) }
+                            Button(L("Ödendi")) { odendi(p) }
                                 .font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin)
                                 .padding(.horizontal, 10).padding(.vertical, 4)
                                 .background(Tema.yuzey2, in: Capsule())
@@ -117,9 +117,9 @@ struct IcgoruBolumu: View {
         Okunan(tool: "get_insights") { (i: Icgoruler) in
             if !i.insights.isEmpty {
                 Kart {
-                    KartBasligi(baslik: "İçgörüler") {
+                    KartBasligi(baslik: L("İçgörüler")) {
                         if i.insights.count > 2 {
-                            Button(hepsi ? "Daha az" : "Tümü (\(i.insights.count))") { withAnimation { hepsi.toggle() } }
+                            Button(hepsi ? L("Daha az") : L("Tümü ({0})", i.insights.count)) { withAnimation { hepsi.toggle() } }
                                 .font(.subheadline).foregroundStyle(Tema.metin2)
                         }
                     }
@@ -138,9 +138,9 @@ struct EsitlemeDurumu: View {
             if model.syncing {
                 ProgressView()
             } else if model.syncError != nil {
-                Image(systemName: "exclamationmark.icloud").foregroundStyle(Renk.gider).accessibilityLabel("Eşitlenemedi")
+                Image(systemName: "exclamationmark.icloud").foregroundStyle(Renk.gider).accessibilityLabel(L("Eşitlenemedi"))
             } else {
-                Image(systemName: "checkmark.icloud").foregroundStyle(Tema.metin3).accessibilityLabel("Eşitlendi")
+                Image(systemName: "checkmark.icloud").foregroundStyle(Tema.metin3).accessibilityLabel(L("Eşitlendi"))
             }
         }
     }
@@ -168,17 +168,17 @@ struct BaslarkenKarti: View {
     var body: some View {
         let d = durum
         Kart {
-            KartBasligi(baslik: "Başlarken") {
-                Button("Gizle") { gizli = true }.font(.subheadline).foregroundStyle(Tema.metin3)
+            KartBasligi(baslik: L("Başlarken")) {
+                Button(L("Gizle")) { gizli = true }.font(.subheadline).foregroundStyle(Tema.metin3)
             }
-            Text("Üç adımda bu ay ne ödeyeceğini ve paranın yetip yetmeyeceğini görürsün.")
+            Text(L("Üç adımda bu ay ne ödeyeceğini ve paranın yetip yetmeyeceğini görürsün."))
                 .font(.subheadline).foregroundStyle(Tema.metin2)
             VStack(spacing: 0) {
-                adim(1, "Kredi kartını ekle", "Kesim ve son ödeme günüyle", d.kart) { form = .kart }
+                adim(1, L("Kredi kartını ekle"), L("Kesim ve son ödeme günüyle"), d.kart) { form = .kart }
                 Ayirici()
-                adim(2, "Bir harcama ekle", "Taksitliyse taksit sayısıyla", d.harcama) { form = .harcama }
+                adim(2, L("Bir harcama ekle"), L("Taksitliyse taksit sayısıyla"), d.harcama) { form = .harcama }
                 Ayirici()
-                adim(3, "Maaşını ekle", "Her ay tekrarlanır; nakdin hesaplanır", d.gelir) { form = .hareket(.gelir) }
+                adim(3, L("Maaşını ekle"), L("Her ay tekrarlanır; nakdin hesaplanır"), d.gelir) { form = .hareket(.gelir) }
             }
         }
         .sheet(item: $form) { EkleFormu(secim: $0) }

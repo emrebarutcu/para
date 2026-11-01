@@ -15,6 +15,8 @@
   const R = node ? require("./tekrar.js") : root.Tekrar;
   const B = node ? require("./borc.js") : root.Borc;
   const P = node ? require("./para.js") : root.Para;
+  const D = node ? require("./dil.js") : root.Dil;   // görünen metinler (iPhone İngilizcede çevirir)
+  const L = D.t;
 
   const HORIZON = 6;          // serbest nakit ve taksit yükü için bakılan ay (bu ay dahil)
   const PEAK_MONTHS = 12;     // ödeme sıçraması için bakılan ay
@@ -33,11 +35,12 @@
   let home = "TRY";
   const moneys = new Map();
   const money = () => {
-    if (!moneys.has(home)) moneys.set(home, new Intl.NumberFormat("tr-TR", { style: "currency", currency: home, maximumFractionDigits: 0 }));
-    return moneys.get(home);
+    const k = home + "|" + D.locale();
+    if (!moneys.has(k)) moneys.set(k, new Intl.NumberFormat(D.locale(), { style: "currency", currency: home, maximumFractionDigits: 0 }));
+    return moneys.get(k);
   };
   const fmt = n => money().format(Math.round(n || 0));
-  const pct = r => `%${Math.round(r * 100)}`;
+  const pct = r => D.pct(Math.round(r * 100));
   const monthLong = idx => `${T.monthName(idx)} ${T.yearOf(idx)}`;
   const round = n => Math.round((n || 0) * 100) / 100;
   const days = (from, to) => Math.round((T.toDate(to) - T.toDate(from)) / 864e5);
@@ -47,23 +50,23 @@
   function amountText(n, code) {
     if (code === home) return fmt(n);
     const a = V.asset(code);
-    const s = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: a.digits }).format(n);
-    return code === "GAU" ? `${s} gr` : `${a.symbol}${s}`;
+    const s = new Intl.NumberFormat(D.locale(), { maximumFractionDigits: a.digits }).format(n);
+    return code === "GAU" ? `${s} ${L("gr")}` : `${a.symbol}${s}`;
   }
 
   // "3 gün gecikti", "bugün", "yarın", "10 Ara, 3 gün sonra"
   function dueText(date, today, overdue) {
-    if (overdue) return `${days(date, today)} gün gecikti`;
+    if (overdue) return L("{0} gün gecikti", days(date, today));
     const n = days(today, date);
-    if (n <= 0) return "bugün";
-    if (n === 1) return "yarın";
+    if (n <= 0) return L("bugün");
+    if (n === 1) return L("yarın");
     const d = T.parseDate(date);
-    return `${d.day} ${T.monthShort(d.idx)}, ${n} gün sonra`;
+    return L("{0} {1}, {2} gün sonra", d.day, T.monthShort(d.idx), n);
   }
 
   // Borcun karşı tarafı (isimlere ek getirilmez)
   function who(d) {
-    return d.party || d.desc || (d.kind === "loan" ? "Kredi" : B.side(d) === "debt" ? "Borç" : "Alacak");
+    return d.party || d.desc || (d.kind === "loan" ? L("Kredi") : B.side(d) === "debt" ? L("Borç") : L("Alacak"));
   }
 
   // Ödeme akışına giren harcamalar: hesaba katılmayan kartın (borc.js tracked değil; ör. eşinin kartı) harcamaları girmez
@@ -247,12 +250,12 @@
   // İçgörüler: [{ id, tone: "warn" | "info" | "good", title, text, action?, data }] önem sırasıyla
   // Alış / satışların nakde etkisi metinle: ", yatırıma ₺25.000" ya da ", satışlardan +₺9.000"
   function investText(f) {
-    return (f.invest > 0.5 ? `, yatırıma ${fmt(f.invest)}` : f.invest < -0.5 ? `, satışlardan +${fmt(-f.invest)}` : "")
-      + (Math.abs(f.revalue) > 0.5 ? `, kur / fiyat farkı ${f.revalue > 0 ? "+" : "−"}${fmt(Math.abs(f.revalue))}` : "");
+    return (f.invest > 0.5 ? L(", yatırıma {0}", fmt(f.invest)) : f.invest < -0.5 ? L(", satışlardan +{0}", fmt(-f.invest)) : "")
+      + (Math.abs(f.revalue) > 0.5 ? L(", kur / fiyat farkı {0}", (f.revalue > 0 ? "+" : "−") + fmt(Math.abs(f.revalue))) : "");
   }
   // Borç alınan para serbest nakde girmez: " (₺50.000 borç alınan para hariç)"
   function borrowedText(f) {
-    return f.borrowed > 0.5 ? ` (${fmt(f.borrowed)} borç alınan para hariç)` : "";
+    return f.borrowed > 0.5 ? L(" ({0} borç alınan para hariç)", fmt(f.borrowed)) : "";
   }
 
   // cash: varlık nakit mi (serbest nakitte yatırım için; monthFlows)
@@ -274,16 +277,17 @@
       if (short) {
         add({
           id: "acik", tone: "warn",
-          title: short.idx === t ? "Bu ay açık veriyorsun" : `${T.monthName(short.idx)} ayında açık var`,
-          text: `${monthLong(short.idx)}: nakde giren ${fmt(short.cashIn)}, ödemeler ve giderler ${fmt(short.cashPayments + short.cashOut)}${investText(short)} — ${fmt(-short.net)} eksik${borrowedText(short)}.`,
+          title: short.idx === t ? L("Bu ay açık veriyorsun") : L("{0} ayında açık var", T.monthName(short.idx)),
+          text: L("{0}: nakde giren {1}, ödemeler ve giderler {2}{3} — {4} eksik{5}.", monthLong(short.idx), fmt(short.cashIn),
+            fmt(short.cashPayments + short.cashOut), investText(short), fmt(-short.net), borrowedText(short)),
           data: { month: T.monthKey(short.idx), income: round(short.cashIn), payments: round(short.cashPayments), outflow: round(short.cashOut), invest: round(short.invest), borrowed: round(short.borrowed), net: round(short.net) },
         });
       } else {
         const f = flows[0];
         add({
-          id: "serbest", tone: f.net >= 0 ? "good" : "info", title: "Bu ay serbest nakit",
-          text: `Nakde giren ${fmt(f.cashIn)}, taksit ve giderler ${fmt(f.cashPayments + f.cashOut)}${investText(f)}: `
-            + (f.net >= 0 ? `ay sonunda ${fmt(f.net)} kalıyor` : `nakdin bu ay ${fmt(-f.net)} azalıyor`) + `${borrowedText(f)}.`,
+          id: "serbest", tone: f.net >= 0 ? "good" : "info", title: L("Bu ay serbest nakit"),
+          text: L("Nakde giren {0}, taksit ve giderler {1}{2}: ", fmt(f.cashIn), fmt(f.cashPayments + f.cashOut), investText(f))
+            + (f.net >= 0 ? L("ay sonunda {0} kalıyor", fmt(f.net)) : L("nakdin bu ay {0} azalıyor", fmt(-f.net))) + `${borrowedText(f)}.`,
           data: { month: T.monthKey(t), income: round(f.cashIn), payments: round(f.cashPayments), outflow: round(f.cashOut), invest: round(f.invest), borrowed: round(f.borrowed), net: round(f.net) },
         });
       }
@@ -291,17 +295,17 @@
       if (income > 0 && paying > 0) {
         const r = paying / income;
         add({
-          id: "yuk", tone: r >= 0.5 ? "warn" : "info", title: `Taksit / gelir oranı ${pct(r)}`,
-          text: `Önümüzdeki ${HORIZON} ayın ${fmt(income)} girdisinin ${fmt(paying)} kadarı şimdiden kart, kredi ve taksit ödemelerine ayrılmış.`
-            + (r >= 0.5 ? " Yeni taksite girmeden önce bu oranın düşmesini beklemek iyi olabilir." : ""),
+          id: "yuk", tone: r >= 0.5 ? "warn" : "info", title: L("Taksit / gelir oranı {0}", pct(r)),
+          text: L("Önümüzdeki {0} ayın {1} girdisinin {2} kadarı şimdiden kart, kredi ve taksit ödemelerine ayrılmış.", HORIZON, fmt(income), fmt(paying))
+            + (r >= 0.5 ? " " + L("Yeni taksite girmeden önce bu oranın düşmesini beklemek iyi olabilir.") : ""),
           data: { months: HORIZON, income: round(income), payments: round(paying), ratio: Math.round(r * 1000) / 1000 },
         });
       }
     } else if (purchases.length) {
       add({
-        id: "gelir", tone: "info", title: "Gelirini ekle",
-        text: "Maaşını Varlıklar'da her ay tekrarlayan giriş olarak eklersen ay sonunda ne kalacağını ve taksit yükünü hesaplarım.",
-        action: { kind: "entry", label: "Gelir ekle" },
+        id: "gelir", tone: "info", title: L("Gelirini ekle"),
+        text: L("Maaşını Varlıklar'da her ay tekrarlayan giriş olarak eklersen ay sonunda ne kalacağını ve taksit yükünü hesaplarım."),
+        action: { kind: "entry", label: L("Gelir ekle") },
       });
     }
 
@@ -320,7 +324,7 @@
       if (!B.tracked(c) || !B.manual(c)) continue;
       const cd = B.cardDebt(state, c, today, debts.cardPays.get(c.id) || []);
       if (cd.overdue > EPS) {
-        due.push({ ref: { cardId: c.id }, name: `${c.name} ekstresi`, party: c.name, asset: home, amount: cd.overdue, date: cd.overdueSince, overdue: true });
+        due.push({ ref: { cardId: c.id }, name: L("{0} ekstresi", c.name), party: c.name, asset: home, amount: cd.overdue, date: cd.overdueSince, overdue: true });
       }
     }
     if (due.length) {
@@ -329,11 +333,11 @@
       add({
         id: "borc-vade", tone: "warn",
         // Tek gecikmiş kart ekstresiyse başlıkta adı (kart ekstresi "borç" başlığıyla birine borç sanılmasın)
-        title: late ? (late > 1 ? `${late} ödemen gecikti` : due[0].ref.cardId ? `${due[0].name} gecikti` : "Borç ödemen gecikti")
-          : due.length > 1 ? `${due.length} borç ödemesi yaklaşıyor` : "Borç ödemesi yaklaşıyor",
+        title: late ? (late > 1 ? L("{0} ödemen gecikti", late) : due[0].ref.cardId ? L("{0} gecikti", due[0].name) : L("Borç ödemen gecikti"))
+          : due.length > 1 ? L("{0} borç ödemesi yaklaşıyor", due.length) : L("Borç ödemesi yaklaşıyor"),
         text: due.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${dueText(x.date, today, x.overdue)})`).join(", ") + "."
-          + (late ? " Ödediysen Borçlar'da satırındaki “Ödendi”ye dokun." : ""),
-        action: { kind: "debt", label: "Borçlar" },
+          + (late ? " " + L("Ödediysen Borçlar'da satırındaki “Ödendi”ye dokun.") : ""),
+        action: { kind: "debt", label: L("Borçlar") },
         data: due.map(x => ({ ...x.ref, party: x.party ?? x.name, amount: V.round(x.amount, x.asset), asset: x.asset, date: x.date, overdue: x.overdue })),
       });
     }
@@ -343,8 +347,8 @@
       const c = x.card;
       if (!B.tracked(c) || !(c.limit > 0) || x.used / c.limit < LIMIT_WARN) continue;   // hesaba katılmayan kart uyarılmaz
       add({
-        id: `limit-${c.id}`, tone: "warn", title: x.full ? `${c.name} limiti doldu` : `${c.name} limiti ${pct(x.used / c.limit)} dolu`,
-        text: x.full ? `Kart borcu ${fmt(x.used)}, limit ${fmt(c.limit)}.` : `Kullanılabilir ${fmt(x.available)} kaldı.`,
+        id: `limit-${c.id}`, tone: "warn", title: x.full ? L("{0} limiti doldu", c.name) : L("{0} limiti {1} dolu", c.name, pct(x.used / c.limit)),
+        text: x.full ? L("Kart borcu {0}, limit {1}.", fmt(x.used), fmt(c.limit)) : L("Kullanılabilir {0} kaldı.", fmt(x.available)),
         data: { card: c.name, used: round(x.used), limit: round(c.limit) },
       });
     }
@@ -357,8 +361,8 @@
     if (peak && peak.total >= PEAK_RATIO * Math.max(current, avg) && peak.total - current >= 1000) {
       const count = peak.events.reduce((s, ev) => s + ev.items.length, 0);
       add({
-        id: "sicrama", tone: "warn", title: `${T.monthName(peak.idx)} ayında ödemeler artıyor`,
-        text: `${monthLong(peak.idx)}: ${fmt(peak.total)} (${count} taksit) — bu ay ${fmt(current)}. Önceden hazırlıklı ol.`,
+        id: "sicrama", tone: "warn", title: L("{0} ayında ödemeler artıyor", T.monthName(peak.idx)),
+        text: L("{0}: {1} ({2} taksit) — bu ay {3}. Önceden hazırlıklı ol.", monthLong(peak.idx), fmt(peak.total), count, fmt(current)),
         data: { month: T.monthKey(peak.idx), total: round(peak.total), current: round(current), installments: count },
       });
     }
@@ -371,10 +375,10 @@
         .sort((a, b) => (b.value - b.average) - (a.value - a.average))[0];
       if (jump) {
         add({
-          id: `kategori-${jump.id}`, tone: "warn", title: `${jump.name} harcaman arttı`,
+          id: `kategori-${jump.id}`, tone: "warn", title: L("{0} harcaman arttı", jump.name),
           text: jump.average > 0
-            ? `Bu ay şimdiden ${fmt(jump.value)}; önceki 3 ayın ortalaması ${fmt(jump.average)} (${pct(jump.value / jump.average - 1)} fazla).`
-            : `Bu ay ${fmt(jump.value)}; önceki 3 ayda bu kategoride harcama yoktu.`,
+            ? L("Bu ay şimdiden {0}; önceki 3 ayın ortalaması {1} ({2} fazla).", fmt(jump.value), fmt(jump.average), pct(jump.value / jump.average - 1))
+            : L("Bu ay {0}; önceki 3 ayda bu kategoride harcama yoktu.", fmt(jump.value)),
           data: { category: jump.id, month: round(jump.value), average: round(jump.average) },
         });
       }
@@ -385,8 +389,9 @@
     if (timing.length >= 2 && timing[0].days - timing[timing.length - 1].days >= CARD_GAP) {
       const best = timing[0], worst = timing[timing.length - 1];
       add({
-        id: "kart", tone: "info", title: `Bugünkü alışverişi ${best.card.name} ile yap`,
-        text: `Bugün ${best.card.name} ile harcarsan son ödeme günü ${best.days} gün sonra (${T.parseDate(best.due).day} ${T.monthShort(T.parseDate(best.due).idx)}); ${worst.card.name} ile harcarsan ${worst.days} gün sonra.`,
+        id: "kart", tone: "info", title: L("Bugünkü alışverişi {0} ile yap", best.card.name),
+        text: L("Bugün {0} ile harcarsan son ödeme günü {1} gün sonra ({2} {3}); {4} ile harcarsan {5} gün sonra.", best.card.name, best.days,
+          T.parseDate(best.due).day, T.monthShort(T.parseDate(best.due).idx), worst.card.name, worst.days),
         data: timing.map(x => ({ card: x.card.name, firstPayment: x.due, days: x.days, available: x.available == null ? null : round(x.available) })),
       });
     }
@@ -397,8 +402,8 @@
       const total = subs.reduce((s, x) => s + x.monthly, 0);
       const names = subs.slice(0, 3).map(x => x.name).join(", ") + (subs.length > 3 ? ` +${subs.length - 3}` : "");
       add({
-        id: "duzenli", tone: "info", title: `Düzenli ödemeler: aylık ${fmt(total)}`,
-        text: `${names}. Kullanmadığın abonelik varsa iptal etmek her ay bu kadar kazandırır.`,
+        id: "duzenli", tone: "info", title: L("Düzenli ödemeler: aylık {0}", fmt(total)),
+        text: L("{0}. Kullanmadığın abonelik varsa iptal etmek her ay bu kadar kazandırır.", names),
         data: subs.map(x => ({ name: x.name, monthly: round(x.monthly), kind: x.kind })),
       });
     }
@@ -417,10 +422,10 @@
       const late = owed.filter(x => x.overdue).length;
       add({
         id: "alacak", tone: late ? "warn" : "info",
-        title: late ? (late > 1 ? `${late} alacağın gecikti` : "Alacağın gecikti") : `Günü gelen alacağın ${fmt(sharesDue)}`,
-        text: owed.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${x.overdue ? dueText(x.date, today, true) : "kartındaki harcamaları"})`).join(", ")
-          + ". Sana ödediyse Borçlar > Alacaklarım'da “Ödendi”ye dokun" + (sharesDue > 0 ? "; oradan hatırlatma da gönderebilirsin." : "."),
-        action: { kind: "debt", label: "Alacaklar" },
+        title: late ? (late > 1 ? L("{0} alacağın gecikti", late) : L("Alacağın gecikti")) : L("Günü gelen alacağın {0}", fmt(sharesDue)),
+        text: owed.map(x => `${x.name} ${amountText(x.amount, x.asset)} (${x.overdue ? dueText(x.date, today, true) : L("kartındaki harcamaları")})`).join(", ")
+          + L(". Sana ödediyse Borçlar > Alacaklarım'da “Ödendi”ye dokun") + (sharesDue > 0 ? L("; oradan hatırlatma da gönderebilirsin.") : "."),
+        action: { kind: "debt", label: L("Alacaklar") },
         data: owed.map(x => ({ ...x, amount: V.round(x.amount, x.asset) })),
       });
     }
@@ -431,9 +436,9 @@
     if (others.length) {
       const total = others.reduce((s, p) => s + month.byPerson[p.id], 0);
       add({
-        id: "paylar", tone: "info", title: `Bu ay diğerlerinin payı ${fmt(total)}`,
-        text: others.map(p => `${p.name} ${fmt(month.byPerson[p.id])}`).join(", ") + ". Kişiler listesinden her birine ödeme özetini gönderebilirsin.",
-        action: { kind: "share", label: "Özet gönder" },
+        id: "paylar", tone: "info", title: L("Bu ay diğerlerinin payı {0}", fmt(total)),
+        text: others.map(p => `${p.name} ${fmt(month.byPerson[p.id])}`).join(", ") + ". " + L("Kişiler listesinden her birine ödeme özetini gönderebilirsin."),
+        action: { kind: "share", label: L("Özet gönder") },
         data: others.map(p => ({ person: p.name, personId: p.id, amount: round(month.byPerson[p.id]) })),
       });
     }
@@ -449,8 +454,8 @@
     if (lastIdx >= t) {
       const rest = T.buildCashflow(state.people, state.cards, paying(state), t, lastIdx, home).reduce((s, m) => s + m.total, 0);
       add({
-        id: "bitis", tone: "good", title: `Son taksit: ${monthLong(lastIdx)}`,
-        text: `Bu aydan son taksite kadar kart ve taksit ödemelerinin toplamı ${fmt(rest)}. Yeni harcama eklemezsen sonrasında kart ve taksit ödemen kalmaz.`,
+        id: "bitis", tone: "good", title: L("Son taksit: {0}", monthLong(lastIdx)),
+        text: L("Bu aydan son taksite kadar kart ve taksit ödemelerinin toplamı {0}. Yeni harcama eklemezsen sonrasında kart ve taksit ödemen kalmaz.", fmt(rest)),
         data: { lastMonth: T.monthKey(lastIdx), remaining: round(rest) },
       });
     }
@@ -459,9 +464,9 @@
     const loose = purchases.filter(p => !K.valid(p.category) && (T.parseDate(p.date)?.idx ?? -Infinity) >= t - 2).length;
     if (loose >= UNCATEGORIZED) {
       add({
-        id: "kategorisiz", tone: "info", title: `${loose} harcamanın kategorisi yok`,
-        text: "Yapay zekâ harcamalarını kategorilere ayırabilir; elle seçtiklerinden de öğrenir.",
-        action: { kind: "ai", label: "Kategorilere ayır" },
+        id: "kategorisiz", tone: "info", title: L("{0} harcamanın kategorisi yok", loose),
+        text: L("Yapay zekâ harcamalarını kategorilere ayırabilir; elle seçtiklerinden de öğrenir."),
+        action: { kind: "ai", label: L("Kategorilere ayır") },
       });
     }
 

@@ -21,7 +21,7 @@ struct KartSatiri: View {
                         .background(renk, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.name).font(.body.weight(.semibold)).lineLimit(1)
-                        Text(c.nextPayment.map { "\(Bicim.day($0.date)) · \(Bicim.tl($0.amount, fraction: false))" } ?? "Kesim \(c.cutoffDay) · son ödeme \(c.dueDay)")
+                        Text(c.nextPayment.map { "\(Bicim.day($0.date)) · \(Bicim.tl($0.amount, fraction: false))" } ?? L("Kesim {0} · son ödeme {1}", c.cutoffDay, c.dueDay))
                             .font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
                     }
                     Spacer(minLength: 6)
@@ -30,10 +30,10 @@ struct KartSatiri: View {
                             Text(asim ? "−" + Bicim.tl(c.used - c.limit, fraction: false) : Bicim.tl(c.available ?? 0, fraction: false))
                                 .font(.body.weight(.semibold)).monospacedDigit()
                                 .foregroundStyle(asim ? Tema.tehlike : Tema.metin)
-                            Text(asim ? "limit aşıldı" : "kullanılabilir").font(.caption).foregroundStyle(Tema.metin3)
+                            Text(asim ? L("limit aşıldı") : L("kullanılabilir")).font(.caption).foregroundStyle(Tema.metin3)
                         } else {
                             Text(Bicim.tl(c.used, fraction: false)).font(.body.weight(.semibold)).monospacedDigit()
-                            Text("borç").font(.caption).foregroundStyle(Tema.metin3)
+                            Text(L("borç")).font(.caption).foregroundStyle(Tema.metin3)
                         }
                     }
                     .fixedSize()
@@ -45,10 +45,10 @@ struct KartSatiri: View {
             if let borc, let unpaid = borc.unpaid, unpaid > 0.004 {
                 let gec = (borc.overdue ?? 0) > 0.004
                 HStack {
-                    Text("\(gec ? "Geciken" : "Ödenmemiş") ekstre \(Bicim.tl(unpaid, fraction: false))")
+                    Text(gec ? L("Geciken ekstre {0}", Bicim.tl(unpaid, fraction: false)) : L("Ödenmemiş ekstre {0}", Bicim.tl(unpaid, fraction: false)))
                         .font(.footnote.weight(.medium)).foregroundStyle(gec ? Tema.tehlike : Tema.metin2)
                     Spacer()
-                    Button("Ödendi", action: odendi)
+                    Button(L("Ödendi"), action: odendi)
                         .font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin)
                         .padding(.horizontal, 12).padding(.vertical, 5)
                         .background(Tema.yuzey2, in: Capsule())
@@ -75,25 +75,25 @@ struct KartDetayi: View {
                     KartGorseli(c: c)
                     Kart {
                         VStack(spacing: 10) {
-                            Satir(title: "Hesap kesim günü", value: "Ayın \(Bicim.gunEki(c.cutoffDay))")
-                            Satir(title: "Son ödeme günü", value: "Ayın \(Bicim.gunEki(c.dueDay))")
-                            Satir(title: "Bugün alınan ilk ödeme", value: Bicim.day(c.purchaseToday.dueDate))
-                            Satir(title: "Harcama sayısı", value: "\(c.purchaseCount)")
+                            Satir(title: L("Hesap kesim günü"), value: L("Ayın {0}", Bicim.gunEki(c.cutoffDay)))
+                            Satir(title: L("Son ödeme günü"), value: L("Ayın {0}", Bicim.gunEki(c.dueDay)))
+                            Satir(title: L("Bugün alınan ilk ödeme"), value: Bicim.day(c.purchaseToday.dueDate))
+                            Satir(title: L("Harcama sayısı"), value: "\(c.purchaseCount)")
                         }
                         .font(.subheadline)
                     }
                     if let t = c.tracking, t.unpaid > 0.004 {
-                        genisDugme("Ekstre ödendi (\(Bicim.tl(t.unpaid, fraction: false)))", simge: "checkmark.circle", renk: Tema.metin) { odendi(t.unpaid) }
+                        genisDugme(L("Ekstre ödendi ({0})", Bicim.tl(t.unpaid, fraction: false)), simge: "checkmark.circle", renk: Tema.metin) { odendi(t.unpaid) }
                     }
-                    genisDugme("Kartı düzenle", simge: "pencil", renk: Tema.metin, eylem: duzenle)
-                    genisDugme("Kartı sil", simge: "trash", renk: Tema.tehlike, eylem: sil)
+                    genisDugme(L("Kartı düzenle"), simge: "pencil", renk: Tema.metin, eylem: duzenle)
+                    genisDugme(L("Kartı sil"), simge: "trash", renk: Tema.tehlike, eylem: sil)
                 }
                 .padding(16)
             }
             .background(Tema.zemin)
             .navigationTitle(c.name)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Bitti") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Bitti")) { dismiss() } } }
         }
         .presentationDetents([.large])
     }
@@ -123,8 +123,8 @@ struct KartGorseli: View {
                 if let l4 = c.last4 { Text("•• \(l4)").font(.subheadline).opacity(0.75) }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text("Kesim \(c.cutoffDay)")
-                    Text("Son ödeme \(c.dueDay)")
+                    Text(L("Kesim {0}", c.cutoffDay))
+                    Text(L("Son ödeme {0}", c.dueDay))
                 }
                 .font(.footnote.weight(.medium)).opacity(0.85)
             }
@@ -133,18 +133,18 @@ struct KartGorseli: View {
                     .frame(width: 34, height: 24)
                     .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(.white.opacity(0.4), lineWidth: 1))
                 if asim {
-                    Text("Limit aşıldı").font(.caption.weight(.semibold))
+                    Text(L("Limit aşıldı")).font(.caption.weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(.white.opacity(0.22), in: Capsule())
                 }
                 if let t = c.tracking, !t.autoPay, t.overdue > 0 {
-                    Text("Geciken \(Bicim.tl(t.overdue, fraction: false))").font(.caption.weight(.semibold))
+                    Text(L("Geciken {0}", Bicim.tl(t.overdue, fraction: false))).font(.caption.weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(.white.opacity(0.22), in: Capsule())
                 }
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(c.limit <= 0 ? "Kullanılan" : asim ? "Limit aşımı" : "Kullanılabilir limit").font(.footnote).opacity(0.85)
+                Text(c.limit <= 0 ? L("Kullanılan") : asim ? L("Limit aşımı") : L("Kullanılabilir limit")).font(.footnote).opacity(0.85)
                 Text(Bicim.tl(c.limit <= 0 ? c.used : asim ? c.used - c.limit : (c.available ?? 0)))
                     .font(.system(size: 28, weight: .bold)).monospacedDigit()
             }
@@ -158,9 +158,9 @@ struct KartGorseli: View {
                 .frame(height: 5)
             }
             HStack {
-                if c.limit > 0 { Text("\(kisa(c.used)) / \(kisa(c.limit)) kullanıldı") }
+                if c.limit > 0 { Text(L("{0} / {1} kullanıldı", kisa(c.used), kisa(c.limit))) }
                 Spacer()
-                if let n = c.nextPayment { Text("Son ödeme \(Bicim.day(n.date)) · \(Bicim.tl(n.amount, fraction: false))") }
+                if let n = c.nextPayment { Text(L("Son ödeme {0} · {1}", Bicim.day(n.date), Bicim.tl(n.amount, fraction: false))) }
             }
             .font(.caption.weight(.medium)).opacity(0.9).monospacedDigit()
         }
@@ -199,37 +199,37 @@ struct KartFormu: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Kartın adı (ör. Bonus, Axess)", text: $name)
-                    TextField("Limit (\(Bicim.homeSymbol))", text: $limit).keyboardType(.decimalPad)
-                    TextField("Son 4 hane (isteğe bağlı)", text: $last4).keyboardType(.numberPad)
+                    TextField(L("Kartın adı (ör. Bonus, Axess)"), text: $name)
+                    TextField(L("Limit ({0})", Bicim.homeSymbol), text: $limit).keyboardType(.decimalPad)
+                    TextField(L("Son 4 hane (isteğe bağlı)"), text: $last4).keyboardType(.numberPad)
                 }
                 Section {
-                    Picker("Hesap kesim günü", selection: $cutoff) { ForEach(1...31, id: \.self) { Text("\($0)").tag($0) } }
-                    Picker("Son ödeme günü", selection: $due) { ForEach(1...31, id: \.self) { Text("\($0)").tag($0) } }
+                    Picker(L("Hesap kesim günü"), selection: $cutoff) { ForEach(1...31, id: \.self) { Text("\($0)").tag($0) } }
+                    Picker(L("Son ödeme günü"), selection: $due) { ForEach(1...31, id: \.self) { Text("\($0)").tag($0) } }
                 } footer: {
                     Text(card == nil
-                         ? "Kesim günü dahil yapılan harcama o ayın ekstresine girer; ekstre son ödeme gününde ödenir."
-                         : "Günler değişirse arada kalan harcamaların ne olacağını sorarım.")
+                         ? L("Kesim günü dahil yapılan harcama o ayın ekstresine girer; ekstre son ödeme gününde ödenir.")
+                         : L("Günler değişirse arada kalan harcamaların ne olacağını sorarım."))
                 }
                 HataMetni(text: error)
                 Section {
-                    AltKaydet(eksik: name.trimmingCharacters(in: .whitespaces).isEmpty ? "Kartın adını yaz" : nil, eylem: save)
+                    AltKaydet(eksik: name.trimmingCharacters(in: .whitespaces).isEmpty ? L("Kartın adını yaz") : nil, eylem: save)
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets())
                 }
             }
             .tint(Tema.metin)
-            .navigationTitle(card == nil ? "Kart ekle" : "Kartı düzenle")
+            .navigationTitle(card == nil ? L("Kart ekle") : L("Kartı düzenle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Vazgeç")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet", action: save).disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button(L("Kaydet"), action: save).disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            .confirmationDialog("Kartın günleri değişiyor", isPresented: $soru, titleVisibility: .visible) {
+            .confirmationDialog(L("Kartın günleri değişiyor"), isPresented: $soru, titleVisibility: .visible) {
                 ForEach(gecis, id: \.self) { g in Button(g.baslik) { save(transition: g.kod) } }
-                Button("Vazgeç", role: .cancel) {}
+                Button(L("Vazgeç"), role: .cancel) {}
             } message: {
                 Text(gecis.map { "\($0.baslik): \($0.aciklama)" }.joined(separator: "\n\n"))
             }
@@ -285,17 +285,17 @@ struct KartFormu: View {
         var out: [Gecis] = []
         if m.contains("\"old\":") {
             let d = tarih(#"cutoff (\d{4}-\d{2}-\d{2}), paid (\d{4}-\d{2}-\d{2})"#)
-            out.append(Gecis(kod: "old", baslik: "Bu ekstre eski günlerle kesilsin",
-                             aciklama: d.count == 2 ? "\(d[0]) kesilir, \(d[1]) tarihinde ödenir; sonraki ekstreler yeni günlerle." : "Açık ekstre eski günlerle; sonrakiler yeni günlerle."))
+            out.append(Gecis(kod: "old", baslik: L("Bu ekstre eski günlerle kesilsin"),
+                             aciklama: d.count == 2 ? L("{0} kesilir, {1} tarihinde ödenir; sonraki ekstreler yeni günlerle.", d[0], d[1]) : L("Açık ekstre eski günlerle; sonrakiler yeni günlerle.")))
         }
         if m.contains("\"new\":") {
             let d = tarih(#"cut on (\d{4}-\d{2}-\d{2}), paid (\d{4}-\d{2}-\d{2})"#)
-            out.append(Gecis(kod: "new", baslik: "Yeni günler hemen başlasın",
-                             aciklama: d.count == 2 ? "Kesilmiş ekstreler değişmez; henüz kesilmemiş harcamalar \(d[0]) tarihinde kesilecek ekstreye girer, son ödeme \(d[1])." : "Kesilmiş ekstreler olduğu gibi kalır; bundan sonrakiler yeni günlerle."))
+            out.append(Gecis(kod: "new", baslik: L("Yeni günler hemen başlasın"),
+                             aciklama: d.count == 2 ? L("Kesilmiş ekstreler değişmez; henüz kesilmemiş harcamalar {0} tarihinde kesilecek ekstreye girer, son ödeme {1}.", d[0], d[1]) : L("Kesilmiş ekstreler olduğu gibi kalır; bundan sonrakiler yeni günlerle.")))
         }
         if m.contains("\"fix\":") {
-            out.append(Gecis(kod: "fix", baslik: "Günleri yanlış girmiştim",
-                             aciklama: "Geçmiş ekstreler dahil hepsi yeni günlerle yeniden hesaplanır. \(Bicim.homeShort) bakiyen değişebilir."))
+            out.append(Gecis(kod: "fix", baslik: L("Günleri yanlış girmiştim"),
+                             aciklama: L("Geçmiş ekstreler dahil hepsi yeni günlerle yeniden hesaplanır. {0} bakiyen değişebilir.", Bicim.homeShort)))
         }
         return out
     }

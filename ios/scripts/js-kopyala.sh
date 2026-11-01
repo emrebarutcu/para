@@ -5,8 +5,9 @@ set -e
 ROOT="$SRCROOT/.."
 DEST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/js"
 mkdir -p "$DEST"
-for f in para tekrar taksit varlik borc kategori eposta icgoru nakit tablo; do
+for f in dil para tekrar taksit varlik borc kategori eposta icgoru nakit tablo; do
   cp "$ROOT/$f.js" "$DEST/$f.js"
 done
 cp "$ROOT/mcp/tools.js" "$DEST/tools.js"
+cp "$ROOT/dil/en.json" "$DEST/en.json"   # İngilizce sözlük (dil.js, Dil.swift)
 cp "$SRCROOT/js/kopru.js" "$DEST/kopru.js"

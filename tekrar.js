@@ -4,6 +4,7 @@
 //   every:  kaç birimde bir (varsayılan 1), unit: "day" | "week" | "month" (varsayılan "month")
 // Aylık tekrar date'in gününde yinelenir; ay kısaysa son güne çekilir (31 → 28 Şubat), sonraki ay yine 31'idir.
 (function (root) {
+  const D = typeof module === "object" && module.exports ? require("./dil.js") : root.Dil;   // görünen metinler
   const MAX_REPEAT = 600;   // en fazla tekrar
   const MAX_EVERY = 99;     // en fazla "99 günde / haftada / ayda bir"
   const UNITS = ["day", "week", "month"];
@@ -126,13 +127,15 @@
     const r = rule(x);
     if (!r) return "";
     const s = `${r.every === 1 ? "" : r.every + " "}${UNIT_IN[r.unit]} bir`;
-    return s.charAt(0).toLocaleUpperCase("tr-TR") + s.slice(1);
+    const tr = s.charAt(0).toLocaleUpperCase("tr-TR") + s.slice(1);
+    // Görünen metin uygulamanın dilinde (dil.js): "Ayda bir" → "Monthly", "2 haftada bir" → "Every 2 weeks"
+    return r.every === 1 ? D.t(tr) : D.t(`{0} ${UNIT_IN[r.unit]} bir`, r.every);
   }
 
   // Tekrarın kısa birimi: "/ay", "/hafta", "/gün" (her N'de birse "/2 ay")
   function per(x) {
     const r = rule(x);
-    return r ? `/${r.every === 1 ? "" : r.every + " "}${UNIT_NAMES[r.unit]}` : "";
+    return r ? (r.every === 1 ? D.t(`/${UNIT_NAMES[r.unit]}`) : D.t(`/{0} ${UNIT_NAMES[r.unit]}`, r.every)) : "";
   }
 
   const api = { MAX_REPEAT, MAX_EVERY, UNITS, UNIT_NAMES, UNIT_IN, count, every, unit, rule, fields, dateAt, countUntil, between, lastDate, nextDate, perMonth, label, per };

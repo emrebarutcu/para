@@ -9,7 +9,7 @@ import vm from "node:vm";
 const root = new URL("../../", import.meta.url);
 const read = p => readFileSync(new URL(p, root), "utf8");
 // Motor.swift'teki sıra
-const SCRIPTS = ["para.js", "tekrar.js", "taksit.js", "varlik.js", "borc.js", "kategori.js", "eposta.js", "icgoru.js", "nakit.js", "tablo.js", "ios/js/kopru.js"];
+const SCRIPTS = ["dil.js", "para.js", "tekrar.js", "taksit.js", "varlik.js", "borc.js", "kategori.js", "eposta.js", "icgoru.js", "nakit.js", "tablo.js", "ios/js/kopru.js"];
 
 function engine(initial = "") {
   let saved = initial;
@@ -156,4 +156,25 @@ test("ülke: euro hesabında tutarlar, kurlar ve formlar euroya göre", async ()
   await e.call("add_purchase", { description: "Brot", amount: 3, card: "nakit", date: today }, today);
   const plan = JSON.parse(K.sync.changes(K.sync.state(), "{}"));
   assert.equal(plan.purchases.upsert[0].row.asset, null);
+});
+
+// İngilizce (telefon Türkçe değilken Motor.swift Dil.setLang("en", sözlük) çağırır)
+test("İngilizce: kategoriler, tekrar etiketi, içgörüler ve ay adları sözlükten", async () => {
+  const { sandbox, call } = engine();
+  sandbox.Dil.setLang("en", read("dil/en.json"));
+  try {
+    const c = JSON.parse(sandbox.Kopru.constants());
+    assert.equal(c.categories.find(x => x.id === "market").name, "Groceries");
+    await call("add_card", { name: "Chase", cutoff_day: 10, due_day: 5, limit: 1000 });
+    await call("add_purchase", { description: "Netflix", amount: 15, card: "Chase", repeat: 0 });
+    const list = (await call("list_purchases", {})).ok.purchases;
+    assert.equal(list[0].repeat.label, "Monthly");
+    await call("add_purchase", { description: "TV", amount: 1500, installments: 3, card: "Chase" });
+    const ins = (await call("get_insights", {})).ok.insights;
+    const limit = ins.find(i => i.id.startsWith("limit-"));
+    assert.ok(limit && /Chase is maxed out|Chase is \d+% used/.test(limit.title), JSON.stringify(ins.map(i => i.title)));
+    assert.equal(sandbox.Taksit.monthName(10), "November");
+  } finally {
+    sandbox.Dil.setLang("tr");
+  }
 });
