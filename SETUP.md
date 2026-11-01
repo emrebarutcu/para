@@ -125,6 +125,16 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
+- **8.0.0** — **ABD'ye hazırlık.** **Hesap silme**: iPhone Ayarlar → Hesabı sil, web hesap penceresi → Hesabı sil
+  (App Store kuralı). **Yayından önce** `supabase/gecis/8.0.0.sql` çalıştırılır (1 Kasım 2026'da çalıştırıldı; aynısı
+  `tablolar.sql`'in son bölümünde): `delete_my_account()` (security definer; yalnızca oturumdaki kullanıcının hesabını
+  siler, tablolar `on delete cascade` ile verisini de). **Saat dilimi**: "bugün" artık İstanbul'a sabit değil — iPhone
+  cihazınkini kullanır; iPhone ve web cihazın saat dilimini hesaba yazar (`user_metadata.tz`), asistan (MCP) onu, yoksa
+  ülkenin başlıca saat dilimini kullanır (`para.js zoneOfCountry`). Türkiye'deki kullanıcılar için hiçbir şey değişmedi.
+  **İngilizce** (iPhone): telefon Türkçe değilse uygulama İngilizce (`dil.js`, `dil/en.json`, Swift `L("…")`); yeni metin
+  eklenince `node scripts/dil.mjs` eksik çeviriyi gösterir (CI'da da). Web ve asistan şimdilik Türkçe. **Gizlilik
+  politikası ve kullanım koşulları**: `privacy.html`, `terms.html` (İngilizce). **Analitik** (PostHog): anahtar boşken
+  kapalı; açmak için `config.js` `POSTHOG_KEY` ve `Yapilandirma.swift` `posthogKey` (aynı proje anahtarı, `phc_…`).
 - **7.0.0** — **Ülke ve ana para birimi** (`para.js`). Kayıtta ülke sorulur (Supabase `user_metadata.country`; girişsizken
   cihazda), hesabın ana para birimi ondan gelir (Türkiye TL, Almanya euro, ABD dolar, Birleşik Krallık sterlin…, 45 ülke,
   26 para birimi). Kartlar, nakit harcamalar, ekstreler, kişilerin payları, bütün toplamlar ve "TL" yazan metinler ana para
