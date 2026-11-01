@@ -63,13 +63,13 @@ struct GirisEkrani: View {
                 }
                 if welcome {
                     Section {
-                        Button("Çevrimdışı devam et") { model.continueOffline(country: ulke) }
+                        Button("Hesap açmadan başla") { model.continueOffline(country: ulke) }
                     } footer: {
-                        Text("Veriler yalnızca bu cihazda durur; istediğin zaman Ayarlar'dan giriş yapabilirsin.")
+                        Text("Veriler yalnızca bu telefonda durur; istediğin zaman Ayarlar'dan giriş yapıp yedekleyebilirsin.")
                     }
                 }
             }
-            .navigationTitle(welcome ? "" : "Bulut senkronizasyonu")
+            .navigationTitle(welcome ? "" : "Giriş yap")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if !welcome { ToolbarItem(placement: .cancellationAction) { Button("Kapat") { dismiss() } } }

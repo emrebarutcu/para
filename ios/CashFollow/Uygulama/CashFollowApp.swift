@@ -33,12 +33,12 @@ struct AnaEkran: View {
             } else if let g = Ornek.galeri {
                 GrafikGalerisi(sayfa: g)
             } else {
-                // iPhone'da en fazla 5 sekme: Kartlar Borçlar'da, Ayarlar Özet'teki dişlide
+                // iPhone'da en fazla 5 sekme: borç ve krediler Kartlar'da, Ayarlar Özet'teki dişlide
                 TabView(selection: $sekme) {
                     OzetEkrani().tabItem { Label("Özet", systemImage: "house") }.tag(0)
                     AkisEkrani().tabItem { Label("Akış", systemImage: "calendar") }.tag(1)
                     HarcamalarEkrani().tabItem { Label("Harcamalar", systemImage: "list.bullet.rectangle") }.tag(2)
-                    BorclarEkrani().tabItem { Label("Borçlar", systemImage: "creditcard") }.tag(3)
+                    BorclarEkrani().tabItem { Label("Kartlar", systemImage: "creditcard") }.tag(3)
                     VarliklarEkrani().tabItem { Label("Varlıklar", systemImage: "banknote") }.tag(4)
                 }
             }

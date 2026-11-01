@@ -6,8 +6,8 @@ struct BorclarEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var kartEkle = false
     @State private var kartDuzenle: KartGorunumu?
+    @State private var kartDetay: KartGorunumu?
     @State private var kartSil: KartGorunumu?
-    @State private var borcEkle = false
     @State private var secili: Borclar.Kayit?
     @State private var odeme: OdemeHedefi?
     @State private var kapananlar = false
@@ -22,58 +22,30 @@ struct BorclarEkrani: View {
                     Kart {
                         Text("Toplam borç").font(.subheadline).foregroundStyle(Tema.metin2)
                         BuyukTutar(deger: b.totals.debtsTry)
-                        Text("Kartlar, krediler ve kişilere borçlar; döviz ve altın bugünkü kurla.")
-                            .font(.footnote).foregroundStyle(Tema.metin3)
                         Ayirici()
+                        let kartBorcu = b.cards.filter(\.tracked).reduce(0) { $0 + $1.debt }
                         IstatistikSatiri(ogeler: [
-                            Istatistik(etiket: "Alacak", deger: Bicim.tl(b.totals.receivablesTry), renk: b.totals.receivablesTry > 0 ? Tema.iyi : Tema.metin),
-                            Istatistik(etiket: "Net varlık", deger: Bicim.tl(b.totals.netWorthTry)),
+                            Istatistik(etiket: "Kartlar", deger: Bicim.tl(kartBorcu, fraction: false)),
+                            Istatistik(etiket: "Kredi ve borç", deger: Bicim.tl(max(0, b.totals.debtsTry - kartBorcu), fraction: false)),
+                            Istatistik(etiket: "Alacağın", deger: Bicim.tl(b.totals.receivablesTry, fraction: false), renk: b.totals.receivablesTry > 0 ? Tema.iyi : Tema.metin),
                         ])
                     }
 
-                    BolumBasligi(baslik: "Kartlar")
                     Okunan(tool: "list_cards") { (l: KartListesi) in
-                        VStack(spacing: 12) {
-                            ForEach(l.cards) { c in
-                                let borc = b.cards.first { $0.cardId == c.id }
-                                VStack(spacing: 8) {
-                                    Button { kartDuzenle = c } label: { KartGorseli(c: c) }
-                                        .buttonStyle(.plain)
-                                        .contextMenu {
-                                            Button("Düzenle", systemImage: "pencil") { kartDuzenle = c }
-                                            Button("Sil", systemImage: "trash", role: .destructive) { kartSil = c }
-                                        }
-                                    if let borc, let unpaid = borc.unpaid, unpaid > 0.004 {
-                                        Button { odeme = .kart(id: c.id, ad: c.name, tutar: unpaid) } label: {
-                                            HStack {
-                                                Image(systemName: "checkmark.circle")
-                                                Text("Ödenmemiş ekstre \(Bicim.tl(unpaid))")
-                                                Spacer()
-                                                Text("Ödendi").font(.subheadline.weight(.semibold))
-                                            }
-                                            .font(.subheadline)
-                                            .foregroundStyle((borc.overdue ?? 0) > 0.004 ? Tema.tehlike : Tema.metin)
-                                            .padding(12)
-                                            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
+                        Kart(dolgu: 14) {
+                            KartBasligi(baslik: "Kartlar") {
+                                Button { kartEkle = true } label: { Label("Ekle", systemImage: "plus") }
+                                    .font(.subheadline.weight(.medium)).foregroundStyle(Tema.metin2)
                             }
-                            Button { kartEkle = true } label: {
-                                VStack(spacing: 6) {
-                                    Image(systemName: "plus").font(.title2)
-                                    Text("Yeni kart").font(.subheadline.weight(.medium))
-                                }
-                                .foregroundStyle(Tema.metin2)
-                                .frame(maxWidth: .infinity, minHeight: l.cards.isEmpty ? 120 : 76)
-                                .background(RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous)
-                                    .strokeBorder(Tema.cizgi2, style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
-                            }
-                            .buttonStyle(.plain)
                             if l.cards.isEmpty {
                                 Text("Kesim ve son ödeme gününü girince taksitlerin hangi ay ödeneceği hesaplanır.")
-                                    .font(.footnote).foregroundStyle(Tema.metin3)
+                                    .font(.subheadline).foregroundStyle(Tema.metin3)
+                            }
+                            SatirListesi(veri: l.cards) { c in
+                                let borc = b.cards.first { $0.cardId == c.id }
+                                KartSatiri(c: c, borc: borc,
+                                           ac: { kartDetay = c },
+                                           odendi: { odeme = .kart(id: c.id, ad: c.name, tutar: borc?.unpaid ?? 0) })
                             }
                         }
                     }
@@ -81,24 +53,26 @@ struct BorclarEkrani: View {
                     let paylar = (b.shares ?? []).filter { abs($0.owed) > 0.004 }
                     if !paylar.isEmpty {
                         Kart(dolgu: 14) {
-                            KartBasligi("Kart payları")
+                            KartBasligi("Kartından harcayanlar")
                             SatirListesi(veri: paylar) { p in
-                                Button { odeme = .pay(id: p.personId, ad: p.person, tutar: max(p.owed, 0)) } label: {
-                                    HStack(spacing: 12) {
-                                        Avatar(ad: p.person, renk: model.kisiRengi(p.personId))
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(p.person).font(.body.weight(.semibold))
-                                            Text(p.owed > 0 ? "sana borçlu · dokun, ödediğinde kaydet" : "ödendi").font(.footnote).foregroundStyle(Tema.metin3)
-                                        }
-                                        Spacer()
-                                        Text(Bicim.tl(p.owed)).font(.body.weight(.semibold)).monospacedDigit()
-                                            .foregroundStyle(p.owed > 0 ? Tema.iyi : Tema.metin3)
+                                HStack(spacing: 12) {
+                                    Avatar(ad: p.person, renk: model.kisiRengi(p.personId))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(p.person).font(.body.weight(.semibold))
+                                        Text(p.owed > 0 ? "sana \(Bicim.tl(p.owed, fraction: false)) borçlu" : "borcu yok")
+                                            .font(.footnote).foregroundStyle(Tema.metin3).monospacedDigit()
                                     }
-                                    .contentShape(Rectangle())
+                                    Spacer()
+                                    if p.owed > 0.004 {
+                                        Button("Ödedi") { odeme = .pay(id: p.personId, ad: p.person, tutar: p.owed) }
+                                            .font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin)
+                                            .padding(.horizontal, 12).padding(.vertical, 5)
+                                            .background(Tema.yuzey2, in: Capsule())
+                                            .buttonStyle(.plain)
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
-                            Text("Diğer kişilerin takipteki kartlardaki harcamaları sana borçtur.").font(.footnote).foregroundStyle(Tema.metin3)
+                            Text("Senin kartlarından yaptıkları harcamalar. Sana ödediklerinde \"Ödedi\" ile kaydet.").font(.footnote).foregroundStyle(Tema.metin3)
                         }
                     }
 
@@ -113,34 +87,24 @@ struct BorclarEkrani: View {
                         SatirListesi(veri: liste) { d in
                             Button { secili = d } label: { BorcSatiri(d: d) }.buttonStyle(.plain)
                         }
-                        Ayirici()
-                        Toggle("Kapananları da göster", isOn: $kapananlar).font(.subheadline).tint(Tema.metin)
                         HataMetni(text: hata)
                     }
+                    Button(kapananlar ? "Kapananları gizle" : "Kapananları da göster") { withAnimation { kapananlar.toggle() } }
+                        .font(.subheadline.weight(.medium)).foregroundStyle(Tema.metin2).padding(.horizontal, 4)
                 }
             }
-            .navigationTitle("Borçlar")
+            .navigationTitle("Kartlar ve borçlar")
             .sayfaZemini()
             .yenilenebilir(model)
-            .overlay(alignment: .bottomTrailing) {
-                Menu {
-                    Button { borcEkle = true } label: { Label("Borç, alacak ya da kredi", systemImage: "arrow.left.arrow.right") }
-                    Button { kartEkle = true } label: { Label("Kart", systemImage: "creditcard") }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundStyle(Tema.ustMetin)
-                        .frame(width: 58, height: 58)
-                        .background(Tema.metin, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
-                }
-                .accessibilityLabel("Ekle")
-                .padding(.trailing, 18)
-                .padding(.bottom, 14)
-            }
+            .ekleDugmesi(.borc)
             .sheet(isPresented: $kartEkle) { KartFormu(card: nil) }
             .sheet(item: $kartDuzenle) { KartFormu(card: $0) }
-            .sheet(isPresented: $borcEkle) { BorcFormu() }
+            .sheet(item: $kartDetay) { c in
+                KartDetayi(c: c,
+                           duzenle: { kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { kartDuzenle = c } },
+                           sil: { kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { kartSil = c } },
+                           odendi: { t in kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { odeme = .kart(id: c.id, ad: c.name, tutar: t) } })
+            }
             .sheet(item: $secili) { BorcDetayi(d: $0) }
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
             .confirmationDialog(kartSil.map { k in k.purchaseCount > 0 ? "\(k.name) ve \(k.purchaseCount) harcaması silinsin mi?" : "\(k.name) silinsin mi?" } ?? "",
@@ -315,7 +279,13 @@ struct OdemeFormu: View {
                     }
                 }
                 HataMetni(text: hata)
+                Section {
+                    AltKaydet(eksik: (Bicim.parse(tutar) ?? 0) > 0 ? nil : "Tutarı yaz", eylem: kaydet)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                }
             }
+            .tint(Tema.metin)
             .navigationTitle("Ödendi")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -345,83 +315,108 @@ struct OdemeFormu: View {
 struct BorcFormu: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
-    @State private var tur = "borrowed"
+    @State private var tur: String
     @State private var kim = ""
     @State private var tutar = ""
-    @State private var taksitTutari = true      // kredide tutar aylık taksit
-    @State private var taksit = 1
-    @State private var vadeli = true
+    @State private var taksitli = false         // borç verdim / aldım: taksitle geri ödenecek
+    @State private var taksit = 12
+    @State private var vadeli = false           // borç verdim / aldım: geri ödeme tarihi var
     @State private var vade = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
     @State private var tarih = Date()
     @State private var cekilen = ""
     @State private var varlik = Bicim.home
-    @State private var otomatik = false
+    @State private var otomatik = true
     @State private var not = ""
     @State private var kisi = ""
     @State private var kisiler: [Kisi] = []
+    @State private var dahaFazla = false
     @State private var hata: String?
 
+    // baslangic: + menüsünden gelen tür (borrowed, lent, loan)
+    init(baslangic: String = "borrowed") { _tur = State(initialValue: baslangic) }
+
     private var kredi: Bool { tur == "loan" }
-    private var vadeVar: Bool { kredi || vadeli || taksit > 1 }   // taksitli borçta ilk taksitin günü gerekir
+    private var taksitSayisi: Int { kredi ? taksit : (taksitli ? taksit : 1) }
+    private var vadeVar: Bool { kredi || taksitli || vadeli }
+    private var baslik: String { kredi ? "Kredi" : tur == "lent" ? "Borç verdim" : "Borç aldım" }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Picker("Tür", selection: $tur) {
-                        Text("Borç aldım").tag("borrowed")
                         Text("Borç verdim").tag("lent")
+                        Text("Borç aldım").tag("borrowed")
                         Text("Kredi").tag("loan")
                     }
                     .pickerStyle(.segmented)
-                    TextField(kredi ? "Banka (isteğe bağlı)" : tur == "borrowed" ? "Kimden" : "Kime", text: $kim)
-                    HStack {
-                        TextField(kredi && taksitTutari ? "Aylık taksit" : "Toplam tutar", text: $tutar).keyboardType(.decimalPad)
-                        Picker("", selection: $varlik) {
-                            ForEach(model.constants?.assets ?? []) { a in Text(a.code == "GAU" ? "gr" : a.symbol).tag(a.code) }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .disabled(kredi)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
+                if kredi {
+                    Section {
+                        TextField("Banka (ör. Ziraat)", text: $kim)
+                        TextField("Aylık taksit (\(Bicim.homeSymbol))", text: $tutar).keyboardType(.decimalPad)
+                        Picker("Kaç taksit", selection: $taksit) { ForEach(2...120, id: \.self) { Text("\($0)").tag($0) } }
+                        DatePicker("İlk taksit", selection: $vade, displayedComponents: .date).environment(\.locale, Bicim.locale)
+                        Toggle("Taksitler otomatik ödeniyor", isOn: $otomatik)
+                    } footer: {
+                        Text(otomatik ? "Her taksit tarihinde ödenmiş sayılır ve nakdinden düşer." : "Ödediğinde kredinin sayfasından \"Ödemeyi kaydet\" ile işlersin.")
                     }
-                    if kredi { Toggle("Tutar aylık taksit", isOn: $taksitTutari) }
-                    Picker("Taksit", selection: $taksit) {
-                        if !kredi { Text("Tek seferde").tag(1) }
-                        ForEach(2...120, id: \.self) { Text("\($0) taksit").tag($0) }
+                } else {
+                    Section {
+                        TextField(tur == "lent" ? "Kime" : "Kimden", text: $kim)
+                        HStack {
+                            TextField("Tutar", text: $tutar).keyboardType(.decimalPad)
+                            Picker("", selection: $varlik) {
+                                ForEach(model.constants?.assets ?? []) { a in Text(a.code == "GAU" ? "gr" : a.symbol).tag(a.code) }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                        }
+                        Toggle("Taksitle geri ödenecek", isOn: $taksitli.animation())
+                        if taksitli {
+                            Picker("Kaç taksit", selection: $taksit) { ForEach(2...120, id: \.self) { Text("\($0)").tag($0) } }
+                            DatePicker("İlk taksit", selection: $vade, displayedComponents: .date).environment(\.locale, Bicim.locale)
+                        } else {
+                            Toggle("Geri ödeme tarihi var", isOn: $vadeli.animation())
+                            if vadeli {
+                                DatePicker("Geri ödeme", selection: $vade, displayedComponents: .date).environment(\.locale, Bicim.locale)
+                            }
+                        }
+                    } footer: {
+                        Text(tur == "lent" ? "Verdiğin para nakdinden düşer; geri aldıkça eklenir." : "Aldığın para nakdine eklenir; geri ödedikçe düşer.")
                     }
                 }
                 Section {
-                    if !kredi && taksit == 1 { Toggle("Vadesi var", isOn: $vadeli) }
-                    if vadeVar {
-                        DatePicker(taksit > 1 ? "İlk taksit" : "Vade", selection: $vade, displayedComponents: .date).environment(\.locale, Bicim.locale)
+                    DisclosureGroup("Daha fazla", isExpanded: $dahaFazla) {
+                        DatePicker(kredi ? "Kredinin çekildiği gün" : "Tarih", selection: $tarih, displayedComponents: .date)
+                            .environment(\.locale, Bicim.locale)
+                        if kredi {
+                            TextField("Hesaba yatan tutar (isteğe bağlı)", text: $cekilen).keyboardType(.decimalPad)
+                        }
+                        if kisiler.count > 1 {
+                            Picker("Kimin", selection: $kisi) { ForEach(kisiler) { Text($0.name).tag($0.id) } }
+                        }
+                        TextField("Not (isteğe bağlı)", text: $not)
                     }
-                    DatePicker(kredi ? "Kredinin çekildiği gün" : "Paranın el değiştirdiği gün", selection: $tarih, displayedComponents: .date)
-                        .environment(\.locale, Bicim.locale)
-                    if kredi {
-                        TextField("Hesaba yatan tutar (isteğe bağlı)", text: $cekilen).keyboardType(.decimalPad)
-                    }
-                    if vadeVar {
-                        Toggle("Tarihinde ödenmiş say (otomatik)", isOn: $otomatik)
-                    }
-                    if kisiler.count > 1 {
-                        Picker("Kişi", selection: $kisi) { ForEach(kisiler) { Text($0.name).tag($0.id) } }
-                    }
-                    TextField("Not (isteğe bağlı)", text: $not)
-                } footer: {
-                    Text(kredi
-                         ? "Hesaba yatan tutar varlığına eklenir; taksitler tarihinde düşer. Toplam ile çekilen arasındaki fark faiz ve masraftır."
-                         : tur == "borrowed" ? "Alınan para varlığına eklenir; geri ödedikçe düşer." : "Verilen para varlığından düşer; geri aldıkça eklenir.")
                 }
                 HataMetni(text: hata)
+                Section {
+                    AltKaydet(eksik: eksik, eylem: kaydet)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                }
             }
-            .navigationTitle("Borç ekle")
+            .tint(Tema.metin)
+            .navigationTitle(baslik)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Vazgeç") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Kaydet", action: kaydet).disabled((Bicim.parse(tutar) ?? 0) <= 0) }
+                ToolbarItem(placement: .confirmationAction) { Button("Kaydet", action: kaydet).fontWeight(.semibold).disabled(eksik != nil) }
             }
             .onChange(of: tur) { _, yeni in
-                if yeni == "loan" { varlik = Bicim.home; otomatik = true; if taksit < 2 { taksit = 12 } } else { otomatik = false }
+                if yeni == "loan" { varlik = Bicim.home }
             }
             .onAppear {
                 kisiler = (try? model.read("list_people") as KisiListesi)?.people ?? []
@@ -430,20 +425,24 @@ struct BorcFormu: View {
         }
     }
 
+    private var eksik: String? {
+        (Bicim.parse(tutar) ?? 0) > 0 ? nil : (kredi ? "Aylık taksiti yaz" : "Tutarı yaz")
+    }
+
     private func kaydet() {
         var a: [String: Any] = [
-            "type": tur, "amount": Bicim.parse(tutar) ?? 0, "installments": taksit, "date": Bicim.key(tarih),
-            "asset": varlik, "person": kisi,
+            "type": tur, "amount": Bicim.parse(tutar) ?? 0, "installments": taksitSayisi, "date": Bicim.key(tarih),
+            "asset": kredi ? Bicim.home : varlik, "person": kisi,
         ]
         if !kim.trimmingCharacters(in: .whitespaces).isEmpty { a["party"] = kim.trimmingCharacters(in: .whitespaces) }
         if !not.trimmingCharacters(in: .whitespaces).isEmpty { a["description"] = not.trimmingCharacters(in: .whitespaces) }
         if kredi {
-            a["amount_type"] = taksitTutari ? "per_installment" : "total"
+            a["amount_type"] = "per_installment"
             if let c = Bicim.parse(cekilen), c > 0 { a["principal"] = c }
         }
         if vadeVar {
             a["due_date"] = Bicim.key(vade)
-            a["auto_pay"] = otomatik
+            a["auto_pay"] = kredi ? otomatik : false
         }
         do { try model.write("add_debt", a); dismiss() } catch { hata = error.localizedDescription }
     }

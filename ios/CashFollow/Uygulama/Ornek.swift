@@ -3,7 +3,7 @@ import SwiftUI
 
 // Örnek veriyle açılış (CI'da ekran görüntüleri: .github/workflows/ekran.yml). "-ornek" ile girişsiz, örnek veriyle açılır;
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
-// 2: aylık ödemeler ve Varlığın seyri). Gerçek kullanımda hiçbiri yoktur.
+// 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: kredi formu, 5: döviz formu, 6: Ayarlar; "-bos" ile verisiz). Gerçek kullanımda hiçbiri yoktur.
 enum Ornek {
     private static func deger(_ ad: String) -> Int? {
         let a = CommandLine.arguments
@@ -19,7 +19,9 @@ enum Ornek {
         Depo.offlineChosen = true
         Depo.offlineCountry = "TR"
         Depo.cashDef = nil
-        if let data = try? JSONSerialization.data(withJSONObject: veri()) {
+        // "-bos": hiç verisi olmayan yeni kullanıcı (Başlarken kartı)
+        let bos: [String: Any] = ["people": [["id": "ben", "name": "Ben", "color": 0]], "cards": [], "installments": [], "entries": [], "debts": []]
+        if let data = try? JSONSerialization.data(withJSONObject: CommandLine.arguments.contains("-bos") ? bos : veri()) {
             Depo.write(Depo.stateFile(nil), String(decoding: data, as: UTF8.self))
         }
     }
@@ -38,13 +40,18 @@ enum Ornek {
         }
         var es = harcama("p9", "Zara", "bonus", 3200, 2, 20, "alisveris")
         es["personId"] = "es"
+        var kitap = harcama("p11", "Kitap", "bonus", 1200, 1, 5, "egitim")
+        kitap["personId"] = "elif"
+        var market = harcama("p12", "Market", "axess", 8325, 3, 15, "market")
+        market["personId"] = "baba"
         var kira = harcama("p10", "Kira", nil, 25000, 1, 150, "ev")
         kira["repeat"] = 0
         return [
-            "people": [["id": "ben", "name": "Ben", "color": 0], ["id": "es", "name": "Ayşe", "color": 1]],
+            "people": [["id": "ben", "name": "Ben", "color": 0], ["id": "es", "name": "Ayşe", "color": 1],
+                       ["id": "elif", "name": "Elif", "color": 3], ["id": "baba", "name": "Hilal Baba", "color": 2]],
             "cards": [
                 ["id": "bonus", "name": "Bonus", "limit": 60000, "cutoffDay": 10, "dueDay": 20, "color": 0, "trackSince": gun(-150)],
-                ["id": "axess", "name": "Axess", "limit": 30000, "cutoffDay": 25, "dueDay": 5, "color": 2, "trackSince": gun(-150)],
+                ["id": "axess", "name": "Kuveyt Türk Sağlam Kart", "limit": 30000, "cutoffDay": 25, "dueDay": 5, "color": 2, "trackSince": gun(-150)],
             ],
             "installments": [
                 harcama("p1", "iPhone", "bonus", 54000, 9, 40, "elektronik"),
@@ -55,7 +62,7 @@ enum Ornek {
                 harcama("p6", "Opet", "axess", 2200, 1, 9, "ulasim"),
                 harcama("p7", "Koltuk takımı", "bonus", 42000, 12, 70, "ev"),
                 harcama("p8", "Netflix", "bonus", 230, 1, 3, "eglence"),
-                es, kira,
+                es, kira, kitap, market,
             ],
             "entries": [
                 ["id": "e1", "personId": "ben", "asset": "TRY", "amount": 85000, "desc": "Maaş", "date": gun(-150), "repeat": 0],
@@ -78,6 +85,20 @@ struct GrafikGalerisi: View {
     let sayfa: Int
 
     var body: some View {
+        if sayfa == 3 {
+            HarcamaFormu(ornek: ("36000", "Buzdolabı", 6))
+        } else if sayfa == 4 {
+            BorcFormu(baslangic: "loan")
+        } else if sayfa == 5 {
+            HareketFormu(tur: .doviz)
+        } else if sayfa == 6 {
+            AyarlarEkrani()
+        } else {
+            galeri
+        }
+    }
+
+    private var galeri: some View {
         NavigationStack {
             Sayfa {
                 if sayfa == 1 {

@@ -1,6 +1,113 @@
 import SwiftUI
 
-// Kart görseli ve kart formu; kartlar Borçlar sekmesinde listelenir (BorclarEkrani)
+// Kart satırı, kart ayrıntısı (görsel + işlemler) ve kart formu; kartlar Borçlar sekmesinde listelenir (BorclarEkrani)
+
+// Sıkışık kart satırı: renk, ad, sonraki ödeme, kalan limit, doluluk; ödenmemiş ekstrede "Ödendi"
+struct KartSatiri: View {
+    @EnvironmentObject private var model: Model
+    let c: KartGorunumu
+    let borc: Borclar.KartBorcu?
+    let ac: () -> Void
+    let odendi: () -> Void
+
+    var body: some View {
+        let renk = model.kartRengi(c.id)
+        let asim = c.limit > 0 && c.used > c.limit
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: ac) {
+                HStack(spacing: 12) {
+                    Image(systemName: "creditcard.fill").font(.system(size: 15)).foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(renk, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(c.name).font(.body.weight(.semibold)).lineLimit(1)
+                        Text(c.nextPayment.map { "\(Bicim.day($0.date)) · \(Bicim.tl($0.amount, fraction: false))" } ?? "Kesim \(c.cutoffDay) · son ödeme \(c.dueDay)")
+                            .font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if c.limit > 0 {
+                            Text(asim ? "−" + Bicim.tl(c.used - c.limit, fraction: false) : Bicim.tl(c.available ?? 0, fraction: false))
+                                .font(.body.weight(.semibold)).monospacedDigit()
+                                .foregroundStyle(asim ? Tema.tehlike : Tema.metin)
+                            Text(asim ? "limit aşıldı" : "kullanılabilir").font(.caption).foregroundStyle(Tema.metin3)
+                        } else {
+                            Text(Bicim.tl(c.used, fraction: false)).font(.body.weight(.semibold)).monospacedDigit()
+                            Text("borç").font(.caption).foregroundStyle(Tema.metin3)
+                        }
+                    }
+                    .fixedSize()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if c.limit > 0 { Doluluk(used: c.used, limit: c.limit, renk: renk).padding(.leading, 48) }
+            if let borc, let unpaid = borc.unpaid, unpaid > 0.004 {
+                let gec = (borc.overdue ?? 0) > 0.004
+                HStack {
+                    Text("\(gec ? "Geciken" : "Ödenmemiş") ekstre \(Bicim.tl(unpaid, fraction: false))")
+                        .font(.footnote.weight(.medium)).foregroundStyle(gec ? Tema.tehlike : Tema.metin2)
+                    Spacer()
+                    Button("Ödendi", action: odendi)
+                        .font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin)
+                        .padding(.horizontal, 12).padding(.vertical, 5)
+                        .background(Tema.yuzey2, in: Capsule())
+                        .buttonStyle(.plain)
+                }
+                .padding(.leading, 48)
+            }
+        }
+    }
+}
+
+// Kartın ayrıntısı: görsel, günler, bugün alınanın ödeme tarihi, ödendi / düzenle / sil
+struct KartDetayi: View {
+    @Environment(\.dismiss) private var dismiss
+    let c: KartGorunumu
+    let duzenle: () -> Void
+    let sil: () -> Void
+    let odendi: (Double) -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    KartGorseli(c: c)
+                    Kart {
+                        VStack(spacing: 10) {
+                            Satir(title: "Hesap kesim günü", value: "Ayın \(Bicim.gunEki(c.cutoffDay))")
+                            Satir(title: "Son ödeme günü", value: "Ayın \(Bicim.gunEki(c.dueDay))")
+                            Satir(title: "Bugün alınan ilk ödeme", value: Bicim.day(c.purchaseToday.dueDate))
+                            Satir(title: "Harcama sayısı", value: "\(c.purchaseCount)")
+                        }
+                        .font(.subheadline)
+                    }
+                    if let t = c.tracking, t.unpaid > 0.004 {
+                        genisDugme("Ekstre ödendi (\(Bicim.tl(t.unpaid, fraction: false)))", simge: "checkmark.circle", renk: Tema.metin) { odendi(t.unpaid) }
+                    }
+                    genisDugme("Kartı düzenle", simge: "pencil", renk: Tema.metin, eylem: duzenle)
+                    genisDugme("Kartı sil", simge: "trash", renk: Tema.tehlike, eylem: sil)
+                }
+                .padding(16)
+            }
+            .background(Tema.zemin)
+            .navigationTitle(c.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Bitti") { dismiss() } } }
+        }
+        .presentationDetents([.large])
+    }
+
+    private func genisDugme(_ ad: String, simge: String, renk: Color, eylem: @escaping () -> Void) -> some View {
+        Button(action: eylem) {
+            Label(ad, systemImage: simge)
+                .font(.body.weight(.semibold)).foregroundStyle(renk)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
 
 // Web'deki kart görseli: kartın renginde degrade, ad, kesim / son ödeme, kullanılabilir limit (ya da aşım), doluluk
 struct KartGorseli: View {
@@ -92,7 +199,7 @@ struct KartFormu: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Kart adı (ör. banka)", text: $name)
+                    TextField("Kartın adı (ör. Bonus, Axess)", text: $name)
                     TextField("Limit (\(Bicim.homeSymbol))", text: $limit).keyboardType(.decimalPad)
                     TextField("Son 4 hane (isteğe bağlı)", text: $last4).keyboardType(.numberPad)
                 }
@@ -105,7 +212,13 @@ struct KartFormu: View {
                          : "Günler değişirse arada kalan harcamaların ne olacağını sorarım.")
                 }
                 HataMetni(text: error)
+                Section {
+                    AltKaydet(eksik: name.trimmingCharacters(in: .whitespaces).isEmpty ? "Kartın adını yaz" : nil, eylem: save)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                }
             }
+            .tint(Tema.metin)
             .navigationTitle(card == nil ? "Kart ekle" : "Kartı düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

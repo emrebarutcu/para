@@ -81,8 +81,8 @@ struct CevrimdisiNotu: View {
             HStack(alignment: .center, spacing: 12) {
                 Image(systemName: "icloud.slash").font(.system(size: 18)).foregroundStyle(Tema.uyari)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Çevrimdışı kullanıyorsun").font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
-                    Text("Veriler yalnızca bu cihazda. Eşitleme ve yedek için giriş yap.").font(.footnote).foregroundStyle(Tema.metin2)
+                    Text("Verilerin yalnızca bu telefonda").font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                    Text("Yedeklemek ve web'de de görmek için giriş yap.").font(.footnote).foregroundStyle(Tema.metin2)
                 }
                 Spacer(minLength: 4)
                 KucukDugme(ad: "Giriş yap") { login = true }

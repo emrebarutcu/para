@@ -321,3 +321,21 @@ struct Borclar: Decodable {
     let shares: [Pay]?
     let debts: [Kayit]
 }
+
+// ── Alabilir miyim? (simulate_purchase) ───────────────────────────────────────
+
+struct Simulasyon: Decodable {
+    struct Ay: Decodable, Hashable {
+        let month: String
+        let paymentsBefore: Double
+        let paymentsAfter: Double
+        let freeCashBefore: Double
+        let freeCashAfter: Double
+    }
+    struct KartSonucu: Decodable { let name: String; let limit: Double; let usedAfter: Double; let availableAfter: Double? }
+    struct Karsilastirma: Decodable, Hashable { let card: String; let firstPayment: String; let daysUntilFirstPayment: Int; let available: Double? }
+    let purchase: Harcama
+    let months: [Ay]
+    let card: KartSonucu?
+    let cardsCompared: [Karsilastirma]
+}
