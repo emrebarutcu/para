@@ -4,7 +4,7 @@ import SwiftUI
 // Örnek veriyle açılış (CI'da ekran görüntüleri: .github/workflows/ekran.yml). "-ornek" ile girişsiz, örnek veriyle açılır;
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
 // 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: kredi formu, 5: döviz formu, 6: Ayarlar,
-// 7: CashFollow Premium ödeme ekranı; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
+// 7: CashFollow Premium ödeme ekranı, 8: yapay zekâ asistanı; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
 // (kilitler) görünür. Gerçek kullanımda hiçbiri yoktur.
 enum Ornek {
     private static func deger(_ ad: String) -> Int? {
@@ -180,6 +180,8 @@ struct GrafikGalerisi: View {
             AyarlarEkrani()
         } else if sayfa == 7 {
             PremiumEkrani(neden: "gallery")
+        } else if sayfa == 8 {
+            AsistanEkrani()
         } else {
             galeri
         }

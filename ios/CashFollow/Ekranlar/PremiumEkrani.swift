@@ -1,8 +1,9 @@
 import SwiftUI
 import StoreKit
 
-// CashFollow Premium ödeme ekranı: neler açılır, üç plan (yıllık seçili; ücretsiz deneme ve süresi StoreKit'ten),
-// kendiliğinden yenilenme açıklaması, Kullanım Koşulları, Gizlilik Politikası, geri yükleme (App Store yönergesi 3.1.2).
+// CashFollow Premium ödeme ekranı. Üstte yapay zekâ asistanı (Claude, ChatGPT ile örnek sohbet), hemen altında üç plan
+// (yıllık seçili; ücretsiz deneme ve süresi StoreKit'ten), öteki Premium özellikleri, altta sabit düğme. Kendiliğinden
+// yenilenme açıklaması, Kullanım Koşulları, Gizlilik Politikası ve geri yükleme (App Store yönergesi 3.1.2).
 // neden: hangi kilitten açıldığı (analitik). Fiyatlar App Store'dan; örnek modunda ABD fiyatları.
 struct PremiumEkrani: View {
     var neden = "settings"
@@ -10,59 +11,66 @@ struct PremiumEkrani: View {
     @Environment(\.dismiss) private var dismiss
     @State private var secili = Abonelik.kimlikler[0]
     @State private var denemeUygun: Set<String> = []
+    @State private var asistan = false
 
-    // Ekranda bir plan: App Store ürünü ya da (örnek modunda / ürünler gelmeden) örnek
+    // Ekranda bir plan: App Store ürünü ya da (örnek modunda) örnek
     struct Plan: Identifiable {
         let id: String
         let ad: String
         let fiyat: String
         let donem: String
-        var alt: String?
-        var deneme: String?
-        var tasarruf: String?
+        var haftalik: String?      // haftaya düşen (karşılaştırma için)
+        var deneme: String?        // "7 gün"
+        var rozet: String?         // "%52 tasarruf"
         var urun: Product?
     }
 
-    private static let ozellikler: [(String, String)] = [
-        ("creditcard", L("Sınırsız kart ve kişi")),
-        ("calendar", L("Akış: önümüzdeki ayların ödeme planı")),
-        ("cart", L("Alabilir miyim?: alışverişin bütçene etkisi")),
-        ("lightbulb", L("İçgörüler")),
-        ("chart.line.uptrend.xyaxis", L("Varlığın seyri")),
-        ("percent", L("Kart borcu geri ödeme planı")),
-        ("sparkles", L("Asistan bağlantısı (Claude, ChatGPT)")),
+    private static let ozellikler: [(simge: String, ad: String, alt: String)] = [
+        ("calendar", L("Akış"), L("Önümüzdeki ayların ödeme planı")),
+        ("cart", L("Alabilir miyim?"), L("Alışverişin bütçene etkisi")),
+        ("lightbulb", L("İçgörüler"), L("Alışkanlıkların ve yaklaşan yükler")),
+        ("chart.line.uptrend.xyaxis", L("Varlığın seyri"), L("Özvarlığın aylar içinde")),
+        ("percent", L("Borç planı"), L("Kart borcunu bitirmenin yolu")),
+        ("creditcard", L("Sınırsız"), L("Kart ve kişi sınırı yok")),
     ]
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
+            VStack(spacing: 0) {
+                kapak
                 VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Image(systemName: "star.circle.fill").font(.system(size: 40)).foregroundStyle(Tema.marka)
-                        Text(L("CashFollow Premium")).font(.system(size: 30, weight: .bold))
-                        Text(L("Bütün özellikler; sınırsız kart ve kişi.")).foregroundStyle(Tema.metin2)
-                    }
+                    if abonelik.premium { premiumAcik } else { planlar }
+                    Text(L("Premium'da ayrıca")).font(.system(size: 17, weight: .semibold)).padding(.top, 4)
                     Kart {
-                        ForEach(Self.ozellikler, id: \.1) { simge, ad in
-                            Label { Text(ad) } icon: { Image(systemName: simge).foregroundStyle(Tema.marka) }
-                                .font(.subheadline)
+                        ForEach(Array(Self.ozellikler.enumerated()), id: \.offset) { i, o in
+                            if i > 0 { Ayirici() }
+                            ozellik(o.simge, o.ad, o.alt)
                         }
                     }
-                    if abonelik.premium {
-                        Kart { Label(L("Premium açık. Teşekkürler!"), systemImage: "checkmark.seal.fill").foregroundStyle(Tema.iyi) }
-                    } else {
-                        planlar
+                    if !abonelik.premium, let p = secim {
+                        Text(uzunAciklama(p)).font(.caption).foregroundStyle(Tema.metin3)
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 20)
             }
-            .background(Tema.zemin)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Kapat")) { dismiss() } } }
-            .alert(L("Satın alınamadı"), isPresented: Binding(get: { abonelik.hata != nil }, set: { if !$0 { abonelik.hata = nil } })) {
-                Button(L("Tamam"), role: .cancel) {}
-            } message: { Text(abonelik.hata ?? "") }
         }
+        .ignoresSafeArea(edges: .top)
+        .background(Tema.zemin)
+        .overlay(alignment: .topTrailing) {
+            Button { dismiss() } label: {
+                Image(systemName: "xmark").font(.footnote.weight(.bold)).foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 30, height: 30).background(.black.opacity(0.35), in: Circle())
+            }
+            .accessibilityLabel(L("Kapat"))
+            .padding(14)
+        }
+        .safeAreaInset(edge: .bottom) { if !abonelik.premium { altCubuk } }
+        .alert(L("Satın alınamadı"), isPresented: Binding(get: { abonelik.hata != nil }, set: { if !$0 { abonelik.hata = nil } })) {
+            Button(L("Tamam"), role: .cancel) {}
+        } message: { Text(abonelik.hata ?? "") }
+        .sheet(isPresented: $asistan) { AsistanEkrani() }
         .task {
             Analitik.olay("paywall_shown", ["reason": neden])
             await abonelik.urunleriYukle()
@@ -72,90 +80,201 @@ struct PremiumEkrani: View {
         }
     }
 
+    // ── Kapak: yapay zekâ asistanı ───────────────────────────────────────────
+
+    private var kapak: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label(L("CashFollow Premium"), systemImage: "sparkles").font(.footnote.weight(.semibold)).foregroundStyle(Tema.marka)
+            Text(L("Paranı yapay zekâyla yönet")).font(.system(size: 32, weight: .bold)).foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(L("Kartların, taksitlerin ve nakit akışın Claude ve ChatGPT'de: sor, ekle, planla."))
+                .font(.subheadline).foregroundStyle(.white.opacity(0.72)).fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 8) {
+                balon(L("Bu ay ne kadar ödeyeceğim?"), ben: true)
+                balon(L("Bu ay toplam {0}: 2 kart ekstresi ve 3 nakit ödeme. En büyüğü ayın 28'inde.", Bicim.tl(4598.91)), ben: false)
+                balon(L("Karta 6 taksitle telefon ekle: {0}.", Bicim.tl(1200, fraction: false)), ben: true)
+                balon(L("Eklendi: 6 ay boyunca ayda {0}, ilk taksit gelecek ekstrede.", Bicim.tl(200, fraction: false)), ben: false)
+            }
+            .padding(.top, 4)
+            HStack(spacing: 8) {
+                ForEach(["Claude", "ChatGPT", "Gemini"], id: \.self) { ad in
+                    Text(ad).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.85))
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(.white.opacity(0.1), in: Capsule())
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 58)
+        .padding(.bottom, 26)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                Color(red: 0.035, green: 0.04, blue: 0.055)
+                RadialGradient(colors: [Tema.marka.opacity(0.5), .clear], center: .topTrailing, startRadius: 10, endRadius: 380)
+                RadialGradient(colors: [Tema.seri(0).opacity(0.22), .clear], center: .bottomLeading, startRadius: 10, endRadius: 320)
+            }
+        }
+    }
+
+    private func balon(_ metin: String, ben: Bool) -> some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            if ben {
+                Spacer(minLength: 44)
+            } else {
+                Image(systemName: "sparkles").font(.caption2.weight(.bold)).foregroundStyle(.white)
+                    .frame(width: 24, height: 24).background(Tema.marka, in: Circle())
+            }
+            Text(metin).font(.subheadline).foregroundStyle(ben ? Color.black : Color.white)
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(ben ? Color.white : Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .fixedSize(horizontal: false, vertical: true)
+            if !ben { Spacer(minLength: 28) }
+        }
+    }
+
+    // ── Planlar ─────────────────────────────────────────────────────────────
+
+    private var secim: Plan? { planListesi.first { $0.id == secili } }
+
     @ViewBuilder private var planlar: some View {
         let liste = planListesi
-        VStack(spacing: 10) {
-            ForEach(liste) { p in planSatiri(p) }
-        }
         if liste.isEmpty {
             Text(L("Fiyatlar App Store'dan alınamadı. Bağlantını kontrol edip yeniden dene."))
                 .font(.subheadline).foregroundStyle(Tema.metin3)
-        }
-        let p = liste.first { $0.id == secili }
-        AltKaydet(eksik: p == nil ? L("Plan seç") : nil, baslik: p?.deneme.map { L("{0} ücretsiz dene", $0) } ?? L("Abone ol")) {
-            if let u = p?.urun { Task { await abonelik.satinAl(u) } }
-        }
-        .disabled(abonelik.calisiyor || (p?.urun == nil && Ornek.premium == nil))
-        .overlay { if abonelik.calisiyor { ProgressView() } }
-        if let p {
-            Text((p.deneme.map { L("{0} ücretsiz, sonra {1} / {2}.", $0, p.fiyat, p.donem) } ?? L("{0} / {1}.", p.fiyat, p.donem))
-                 + " " + L("Abonelik, dönem bitmeden en az 24 saat önce iptal edilmezse kendiliğinden yenilenir; ödeme Apple hesabından alınır. iPhone Ayarlar'ında adına dokunup Abonelikler'den yönetebilir ya da iptal edebilirsin."))
-                .font(.caption).foregroundStyle(Tema.metin3)
-        }
-        VStack(spacing: 10) {
-            Button(L("Satın alımları geri yükle")) { Task { await abonelik.geriYukle() } }
-            HStack(spacing: 18) {
-                Link(L("Kullanım koşulları"), destination: Yapilandirma.kosullar)
-                Link(L("Gizlilik politikası"), destination: Yapilandirma.gizlilik)
+        } else {
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(liste) { p in planKutusu(p) }
             }
+            .padding(.top, 8)
         }
-        .font(.footnote.weight(.medium)).foregroundStyle(Tema.metin2)
-        .frame(maxWidth: .infinity)
     }
 
-    private func planSatiri(_ p: Plan) -> some View {
+    private func planKutusu(_ p: Plan) -> some View {
         let sec = p.id == secili
         return Button { secili = p.id } label: {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: sec ? "checkmark.circle.fill" : "circle").font(.title3).foregroundStyle(sec ? Tema.metin : Tema.metin3)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(p.ad).font(.body.weight(.semibold))
-                        if let t = p.tasarruf {
-                            Text(t).font(.caption2.weight(.bold)).foregroundStyle(Tema.marka)
-                                .padding(.horizontal, 7).padding(.vertical, 2)
-                                .background(Tema.marka.opacity(0.14), in: Capsule())
-                        }
-                    }
-                    if let d = p.deneme { Text(L("{0} ücretsiz", d)).font(.caption.weight(.semibold)).foregroundStyle(Tema.iyi) }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(p.fiyat) / \(p.donem)").font(.subheadline.weight(.semibold)).monospacedDigit()
-                    if let a = p.alt { Text(a).font(.caption).foregroundStyle(Tema.metin3) }
-                }
+            VStack(spacing: 4) {
+                Text(p.ad).font(.subheadline.weight(.semibold))
+                Text(p.fiyat).font(.system(size: 21, weight: .bold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                Text("/ \(p.donem)").font(.caption).foregroundStyle(Tema.metin3)
+                if let h = p.haftalik { Text(L("haftada {0}", h)).font(.caption2).foregroundStyle(Tema.metin2).lineLimit(1).minimumScaleFactor(0.8) }
+                if let d = p.deneme { Text(L("{0} ücretsiz", d)).font(.caption2.weight(.bold)).foregroundStyle(Tema.iyi).lineLimit(1).minimumScaleFactor(0.8) }
             }
             .foregroundStyle(Tema.metin)
-            .padding(14)
-            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(sec ? Tema.metin : Tema.cizgi2, lineWidth: sec ? 2 : 1))
+            .frame(maxWidth: .infinity, minHeight: 128)
+            .padding(.horizontal, 6)
+            .padding(.top, p.rozet == nil ? 0 : 6)
+            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(sec ? Tema.marka : Tema.cizgi2, lineWidth: sec ? 2.5 : 1))
+            .overlay(alignment: .top) {
+                if let r = p.rozet {
+                    Text(r).font(.caption2.weight(.bold)).foregroundStyle(.white).lineLimit(1)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Tema.marka, in: Capsule())
+                        .offset(y: -10)
+                }
+            }
         }
         .buttonStyle(.plain)
+    }
+
+    // Altta sabit: düğme, kısa fiyat satırı, geri yükleme ve bağlantılar
+    private var altCubuk: some View {
+        let p = secim
+        return VStack(spacing: 8) {
+            Button { if let u = p?.urun { Task { await abonelik.satinAl(u) } } } label: {
+                ZStack {
+                    Text(p?.deneme.map { L("{0} ücretsiz dene", $0) } ?? L("Abone ol")).opacity(abonelik.calisiyor ? 0 : 1)
+                    if abonelik.calisiyor { ProgressView().tint(.white) }
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Tema.marka, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(abonelik.calisiyor || (p?.urun == nil && Ornek.premium == nil))
+            if let p {
+                Text(kisaAciklama(p)).font(.caption).foregroundStyle(Tema.metin2).multilineTextAlignment(.center)
+            }
+            HStack(spacing: 18) {
+                Button(L("Geri yükle")) { Task { await abonelik.geriYukle() } }
+                Link(L("Koşullar"), destination: Yapilandirma.kosullar)
+                Link(L("Gizlilik"), destination: Yapilandirma.gizlilik)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(Tema.metin3)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+        .background(Tema.zemin.shadow(.drop(color: .black.opacity(0.08), radius: 12, y: -4)))
+    }
+
+    private func kisaAciklama(_ p: Plan) -> String {
+        (p.deneme.map { L("{0} ücretsiz, sonra {1} / {2}.", $0, p.fiyat, p.donem) } ?? L("{0} / {1}.", p.fiyat, p.donem))
+            + " " + L("İstediğin zaman iptal et.")
+    }
+
+    private func uzunAciklama(_ p: Plan) -> String {
+        (p.deneme.map { L("{0} ücretsiz, sonra {1} / {2}.", $0, p.fiyat, p.donem) } ?? L("{0} / {1}.", p.fiyat, p.donem))
+            + " " + L("Abonelik, dönem bitmeden en az 24 saat önce iptal edilmezse kendiliğinden yenilenir; ödeme Apple hesabından alınır. iPhone Ayarlar'ında adına dokunup Abonelikler'den yönetebilir ya da iptal edebilirsin.")
+    }
+
+    // ── Öteki özellikler, Premium açıkken ────────────────────────────────────
+
+    private func ozellik(_ simge: String, _ ad: String, _ alt: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: simge).font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin)
+                .frame(width: 32, height: 32).background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(ad).font(.subheadline.weight(.semibold))
+                Text(alt).font(.caption).foregroundStyle(Tema.metin3)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var premiumAcik: some View {
+        Kart {
+            Label(L("Premium açık. Teşekkürler!"), systemImage: "checkmark.seal.fill").foregroundStyle(Tema.iyi).font(.body.weight(.semibold))
+            AltKaydet(eksik: nil, baslik: L("Yapay zekâ asistanını bağla")) { asistan = true }
+        }
     }
 
     // Planlar App Store ürünlerinden; örnek modunda ABD fiyatlarıyla (ekran görüntüsü, App Store incelemesi)
     private var planListesi: [Plan] {
         if Ornek.premium != nil {
             return [
-                Plan(id: Abonelik.kimlikler[0], ad: L("Yıllık"), fiyat: "$39.99", donem: L("yıl"), alt: L("ayda {0}", "$3.33"),
-                     deneme: L("{0} gün", 7), tasarruf: L("%{0} tasarruf", 52)),
-                Plan(id: Abonelik.kimlikler[1], ad: L("Aylık"), fiyat: "$6.99", donem: L("ay")),
+                Plan(id: Abonelik.kimlikler[0], ad: L("Yıllık"), fiyat: "$39.99", donem: L("yıl"), haftalik: "$0.77",
+                     deneme: L("{0} gün", 7), rozet: L("%{0} tasarruf", 52)),
+                Plan(id: Abonelik.kimlikler[1], ad: L("Aylık"), fiyat: "$6.99", donem: L("ay"), haftalik: "$1.61"),
                 Plan(id: Abonelik.kimlikler[2], ad: L("Haftalık"), fiyat: "$2.99", donem: L("hafta")),
             ]
         }
         let aylik = abonelik.urunler.first { $0.subscription?.subscriptionPeriod.unit == .month && $0.subscription?.subscriptionPeriod.value == 1 }
         return abonelik.urunler.compactMap { u in
             guard let s = u.subscription else { return nil }
-            var p = Plan(id: u.id, ad: Self.planAdi(s.subscriptionPeriod), fiyat: u.displayPrice, donem: Self.donemAdi(s.subscriptionPeriod), urun: u)
-            if s.subscriptionPeriod.unit == .year {
-                p.alt = L("ayda {0}", (u.price / 12).formatted(u.priceFormatStyle))
-                if let a = aylik, a.price > 0 {
-                    let oran = 1 - NSDecimalNumber(decimal: u.price).doubleValue / (NSDecimalNumber(decimal: a.price).doubleValue * 12)
-                    if oran >= 0.1 { p.tasarruf = L("%{0} tasarruf", Int((oran * 100).rounded())) }
-                }
+            let d = s.subscriptionPeriod
+            var p = Plan(id: u.id, ad: Self.planAdi(d), fiyat: u.displayPrice, donem: Self.donemAdi(d), urun: u)
+            if let hafta = Self.haftaSayisi(d), hafta > 1 { p.haftalik = (u.price / Decimal(hafta)).formatted(u.priceFormatStyle) }
+            if d.unit == .year, let a = aylik, a.price > 0 {
+                let oran = 1 - NSDecimalNumber(decimal: u.price).doubleValue / (NSDecimalNumber(decimal: a.price).doubleValue * 12)
+                if oran >= 0.1 { p.rozet = L("%{0} tasarruf", Int((oran * 100).rounded())) }
             }
             if let o = s.introductoryOffer, o.paymentMode == .freeTrial, denemeUygun.contains(u.id) { p.deneme = Self.sure(o.period) }
             return p
+        }
+    }
+
+    // Dönemdeki hafta (fiyat karşılaştırması): yıl 52, ay 52/12
+    private static func haftaSayisi(_ d: Product.SubscriptionPeriod) -> Double? {
+        switch d.unit {
+        case .year: return 52 * Double(d.value)
+        case .month: return 52.0 / 12 * Double(d.value)
+        case .week: return Double(d.value)
+        default: return nil
         }
     }
 
@@ -227,6 +346,7 @@ struct PremiumBolumu: View {
     @EnvironmentObject private var abonelik: Abonelik
     @State private var odeme = false
     @State private var yonet = false
+    @State private var asistan = false
 
     var body: some View {
         Section {
@@ -234,13 +354,15 @@ struct PremiumBolumu: View {
                 Satir(title: L("Durum"), value: durum)
                 if abonelik.cihaz != nil { Button(L("Aboneliği yönet")) { yonet = true } }
             } else {
-                Text(L("Ücretsiz sürüm: {0} kart, yalnızca sen. Premium'da sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler, Varlığın seyri ve asistan bağlantısı.", Abonelik.ucretsizKart))
+                Text(L("Ücretsiz sürüm: {0} kart, yalnızca sen. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", Abonelik.ucretsizKart))
                     .font(.footnote).foregroundStyle(.secondary)
                 Button(L("Premium'a geç")) { odeme = true }.font(.body.weight(.semibold))
                 Button(L("Satın alımları geri yükle")) { Task { await abonelik.geriYukle() } }
             }
+            Button { asistan = true } label: { Label(L("Yapay zekâ asistanı"), systemImage: "sparkles") }
         } header: { Text(L("CashFollow Premium")) }
         .sheet(isPresented: $odeme) { PremiumEkrani(neden: "settings") }
+        .sheet(isPresented: $asistan) { AsistanEkrani() }
         .manageSubscriptionsSheet(isPresented: $yonet)
     }
 

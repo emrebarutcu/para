@@ -72,7 +72,7 @@ jobs:
           tur en-bos- light sekme0 -bos -ulke US $EN
           # CashFollow Premium ödeme ekranı ve kilitler (ücretsiz sürüm); en-ucretsiz-galeri7 App Store incelemesinin
           # her abonelik için istediği görüntü
-          tur en-ucretsiz- light galeri7,sekme0,sekme1 -ucretsiz -ulke US $EN
+          tur en-ucretsiz- light galeri7,galeri8,sekme0,sekme1 -ucretsiz -ulke US $EN
           tur ucretsiz- light galeri7 -ucretsiz $TR
           # Koyu tema yalnızca elle çalıştırınca istenirse (Actions → Ekran görüntüleri → koyu)
           if [ "${{ inputs.koyu }}" = "true" ]; then tur "" dark "$HEPSI" $TR; fi

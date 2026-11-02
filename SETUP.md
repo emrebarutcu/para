@@ -335,7 +335,9 @@ yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; ayn�
 #### Abonelik (CashFollow Premium)
 
 Haftalık, aylık, yıllık otomatik yenilenen abonelik (StoreKit 2, `Uygulama/Abonelik.swift`, ödeme ekranı
-`Ekranlar/PremiumEkrani.swift`). Fiyat ve deneme App Store Connect'te; kodda fiyat yok.
+`Ekranlar/PremiumEkrani.swift`: önde yapay zekâ asistanı). Fiyat ve deneme App Store Connect'te; kodda fiyat yok. Asistanı
+bağlama iPhone'da Ayarlar → CashFollow Premium → Yapay zekâ asistanı (`Ekranlar/AsistanEkrani.swift`; web'deki Yapay zekâ
+penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
 
 - **Ücretsiz sürüm:** 2 kart, yalnızca kullanıcının kendisi (1 kişi), Özet, harcamalar ve taksitler, borçlar
   (`Abonelik.ucretsizKart`, `ucretsizKisi`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir miyim?",
@@ -375,7 +377,7 @@ Bir kez yapılacaklar:
 
 Deneme: TestFlight'taki alımlar sandbox'tır, ücret alınmaz; yıllık 1 hafta yerine birkaç dakikada yenilenir. Satın
 alınca Supabase'te `subscriptions` satırı (`environment = Sandbox`) ve asistanın açıldığı görülür. Örnek modunda
-(`-ornek`) Premium açıktır, `-ucretsiz` ile kilitler, `-galeri 7` ile ödeme ekranı görünür.
+(`-ornek`) Premium açıktır, `-ucretsiz` ile kilitler, `-galeri 7` ile ödeme ekranı, `-galeri 8` ile asistan ekranı görünür.
 
 ---
 
