@@ -96,7 +96,8 @@ enum Ornek {
                 ["id": "e4", "personId": "ben", "asset": "GAU", "amount": 10, "desc": "Altın alımı", "date": gun(-60), "price": 5800, "settle": true],
             ],
             "debts": [
-                ["id": "d1", "kind": "loan", "personId": "ben", "party": "Ziraat", "asset": "TRY", "amount": 4500, "principal": 45000,
+                // Kredide amount geri ödenecek toplamdır (taksit × sayı; add_debt amount_type per_installment bunu hesaplar)
+                ["id": "d1", "kind": "loan", "personId": "ben", "party": "Ziraat", "asset": "TRY", "amount": 54000, "principal": 45000,
                  "date": gun(-80), "due": gun(-50), "count": 12],
                 ["id": "d2", "kind": "person", "side": "receivable", "personId": "ben", "party": "Can", "asset": "TRY", "amount": 7500,
                  "principal": 7500, "date": gun(-30), "due": gun(15)],
@@ -148,7 +149,8 @@ enum Ornek {
                 ["id": "e2", "personId": "ben", "asset": "USD", "amount": 9500, "desc": "Opening balance", "date": gun(-151)],
             ],
             "debts": [
-                ["id": "d1", "kind": "loan", "personId": "ben", "party": "Ally Auto", "asset": "USD", "amount": 465, "principal": 18000,
+                // 48 × 465 $ (amount toplamdır)
+                ["id": "d1", "kind": "loan", "personId": "ben", "party": "Ally Auto", "asset": "USD", "amount": 22320, "principal": 18000,
                  "date": gun(-120), "due": gun(-90), "count": 48],
                 ["id": "d2", "kind": "person", "side": "receivable", "personId": "ben", "party": "Alex", "asset": "USD", "amount": 250,
                  "principal": 250, "date": gun(-12), "due": gun(10)],

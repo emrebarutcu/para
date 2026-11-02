@@ -1,4 +1,4 @@
-/* Gizlilik politikası ve kullanım koşulları sayfaları (privacy.html, terms.html): uygulamanın renkleriyle sade metin */
+/* Gizlilik politikası ve kullanım koşulları sayfaları (privacy.html, terms.html, support.html): uygulamanın renkleriyle sade metin */
 :root { color-scheme: light dark; --bg: #f5f6f8; --surface: #fff; --text: #10131a; --text-2: #4a5163; --line: #e7e9ee; }
 @media (prefers-color-scheme: dark) { :root { --bg: #0b0c10; --surface: #14161c; --text: #eef0f4; --text-2: #a7adbb; --line: #22252e; } }
 * { box-sizing: border-box; }

@@ -1,5 +1,6 @@
 # iOS ekran görüntüleri: simülatörde örnek veriyle (Uygulama/Ornek.swift) her sekme, grafikler ve formlar; Türkçe ve
-# İngilizce (ABD), açık tema (koyu tema elle çalıştırınca seçilirse).
+# İngilizce (ABD), açık tema (koyu tema elle çalıştırınca seçilirse). Cihaz en yeni iPhone Pro Max: App Store 6,9 inç
+# (1320 × 2868) görüntü ister, küçükleri bundan kendisi üretir.
 # Görüntüler ekran-goruntuleri dalına yazılır (her çalışmada yeniden). claude/grafik* ve claude/abd* dallarına itilince ya da elle çalışır.
 name: Ekran görüntüleri
 
@@ -38,7 +39,7 @@ jobs:
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
           d = json.load(sys.stdin)["devices"]
-          ids = [x["udid"] for rt, xs in sorted(d.items(), reverse=True) if "iOS" in rt for x in xs if x["name"].startswith("iPhone") and "Pro" in x["name"] and "Max" not in x["name"]]
+          ids = [x["udid"] for rt, xs in sorted(d.items(), reverse=True) if "iOS" in rt for x in xs if x["name"].startswith("iPhone") and x["name"].endswith("Pro Max")]
           print(ids[0])')
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b

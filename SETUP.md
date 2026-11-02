@@ -315,6 +315,17 @@ uygulama → TestFlight'ta görünür. **Dahili test** grubuna kendini ekle (App
 uygulamasını kur, davetle yükle. Build 90 gün geçerlidir. Şifreleme sorusu sorulmaz (`ITSAppUsesNonExemptEncryption = NO`:
 yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; aynı sürümle yeniden yüklemek için yeniden çalıştırmak yeter.
 
+#### App Store sayfası
+
+- **Adresler:** destek `https://cashfollow.app/support`, gizlilik `https://cashfollow.app/privacy` (ikisi de İngilizce;
+  `support.html`, `privacy.html`). Destek e-postası `support@cashfollow.app` (Cloudflare yönlendirmesi).
+- **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
+  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir). `en-*` İngilizce (ABD örnek
+  verisi), ötekiler Türkçe.
+- **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı): e-posta adresi ve diğer finansal bilgi
+  toplanır, kullanıcıya bağlıdır, amaç uygulamanın işlevi, takip yok. PostHog anahtarı girilirse (analitik açılır) ürün
+  etkileşimi de eklenir — hem formda hem dosyada.
+
 ---
 
 Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.
