@@ -68,6 +68,13 @@
     return out.length ? out : null;
   }
 
+  // Kartın yıllık faizi (%, 0–100; iki haneye yuvarlanır), yoksa null; "şimdi al sonra öde" sağlayıcısının biçimi
+  function apr(v) {
+    const n = v == null || v === "" ? NaN : Number(v);
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.round(n * 100) / 100 : null;
+  }
+  const BNPL = /^[a-z]{1,20}$/;
+
   // Kayıt → satır (user_id'siz); tablonun kısıtlarını ihlal edecek kayıt için null (yalnızca yerelde kalır)
   const ROW = {
     people: p => ({ id: p.id, name: String(p.name ?? ""), color: int(p.color, 0, 999) ?? 0 }),
@@ -80,6 +87,7 @@
         last4: /^\d{4}$/.test(c.last4) ? c.last4 : null,
         history: history(c.history, "cutoffDay", "dueDay")?.map(h => ({ until: h.until, cutoff_day: h.c, due_day: h.d })) ?? null,
         track_since: dateKey(c.trackSince), track_off: c.trackOff === true, manual_since: dateKey(c.manualSince),
+        apr: apr(c.apr),
       };
     },
     purchases: (p, home) => {
@@ -94,6 +102,8 @@
         category_by: validCategory(p.category) && CATEGORY_BY.includes(p.categoryBy) ? p.categoryBy : null,
         asset: money(p.asset) && p.asset !== home ? p.asset : null,
         ...(date ? repeatCols(p) : repeatCols({})),
+        // Şimdi al sonra öde: tarihli, tekrarlamayan harcamada sağlayıcı (taksit.js bnpl)
+        bnpl: date && BNPL.test(p.bnpl) && repeatCols(p).repeat_count == null ? p.bnpl : null,
       };
     },
     // Fon / hisse tekrarlamaz. price birim fiyat ya da kur (TL; fon, hisse, döviz ve altında, tek seferlik), settle
@@ -150,6 +160,7 @@
       if (r.track_off === true) c.trackOff = true;
       const manual = dateKey(r.manual_since);
       if (manual) c.manualSince = manual;
+      if (apr(r.apr) != null) c.apr = apr(r.apr);
       return c;
     },
     purchases: (r, home) => {
@@ -163,6 +174,7 @@
       }
       if (money(r.asset) && r.asset !== home) p.asset = r.asset;
       repeatFields(r, p);
+      if (r.date && BNPL.test(r.bnpl) && p.repeat == null) p.bnpl = r.bnpl;
       return p;
     },
     entries: r => {
@@ -199,10 +211,10 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 7;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
+  const SCHEMA = 8;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
                       // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit;
                       // 5: cards.track_since / track_off (debts yeni tablo); 6: cards.manual_since, debts.card_id;
-                      // 7: entries.price / settle (fon, hisse, döviz ve altın)
+                      // 7: entries.price / settle (fon, hisse, döviz ve altın); 8: cards.apr, purchases.bnpl
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base, home = "TRY") {

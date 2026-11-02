@@ -100,3 +100,35 @@ test("getUser: saat dilimi hesaptan, yoksa ya da geçersizse ülkenin saat dilim
   assert.equal((await getUser({ ...args, fetch: user({ country: "US", tz: "Mars/Olympus" }) })).tz, "America/New_York");
   assert.equal((await getUser({ ...args, fetch: user({}) })).tz, "Europe/Istanbul");
 });
+
+// ── Döner kredi (APR) asistanda ─────────────────────────────────────────────────────────────────────────────────────
+test("APR: yalnızca ABD'de; elle ödenen kartta kalan devreder, asgari ve geri ödeme görünür", async () => {
+  const tr = ctxFor("TRY");
+  assert.match((await run(tr, "add_card", { name: "Bonus", cutoff_day: 3, due_day: 28, apr: 40 })).error, /only available for accounts in the US/);
+  const ctx = ctxFor("USD", "2026-09-01");
+  await run(ctx, "add_entry", { asset: "USD", direction: "in", amount: 5000, description: "Opening", date: "2026-09-01" });
+  const added = await run(ctx, "add_card", { name: "Chase", cutoff_day: 3, due_day: 28, limit: 5000, apr: 24, auto_pay: false });
+  assert.equal(added.card.apr, 24);
+  await run(ctx, "add_purchase", { description: "TV", amount: 1000, date: "2026-09-10", card: "Chase" });
+  await run(ctx, "add_purchase", { description: "Headphones", amount: 200, date: "2026-10-10", card: "Chase" });
+  ctx.today = "2026-10-20";
+  const paid = await run(ctx, "pay_debt", { card: "Chase", amount: 300 });
+  assert.equal(paid.minimumDue, 0);                     // asgari (40) ödendi
+  ctx.today = "2026-11-10";
+  const cards = await run(ctx, "list_cards");
+  const rev = cards.cards[0].tracking.revolving;
+  assert.deepEqual([rev.apr, rev.carried, rev.interestCharged, rev.minimumDue], [24, 700, 14, 40]);
+  assert.deepEqual(rev.payoff, { monthsAtMinimum: 31, interestAtMinimum: 286.44, monthlyToClearIn12: 86.43 });
+  assert.equal(cards.cards[0].used, 914);
+  assert.equal(cards.cards[0].statement.balance, 914);
+  const flow = await run(ctx, "get_cashflow", { from_month: "2026-10", months: 2 });
+  assert.equal(flow.months[0].total, 300);
+  assert.equal(flow.months[1].total, 914);
+  // APR değişince faiz yeniden hesaplanır; otomatiğe dönünce faiz harcama olarak kalır, özvarlık değişmez
+  const up = await run(ctx, "update_card", { card: "Chase", apr: 12 });
+  assert.equal(up.interestChangeTry, -7);
+  const before = (await run(ctx, "get_assets")).netWorthTry;
+  const auto = await run(ctx, "update_card", { card: "Chase", auto_pay: true });
+  assert.deepEqual(auto.interestSavedAsPurchases, { count: 1, total: 7 });
+  assert.equal((await run(ctx, "get_assets")).netWorthTry, before);
+});

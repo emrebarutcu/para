@@ -239,7 +239,20 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
 // Kartın sıradaki ekstresi (borc.js cardDebt; takipte ödenmemiş kısmı): alreadyCut kesilmiş, son ödeme günü bekleniyor
 function statementView(debt) {
   const n = debt.next;
-  return n ? { date: n.date, amount: round(n.amount), alreadyCut: n.cut } : null;
+  if (!n) return null;
+  const v = { date: n.date, amount: round(n.amount), alreadyCut: n.cut };
+  // Döner kredide: ekstre bakiyesi (devreden ve faiz dahil), asgari ödeme, faiz ve devreden
+  if (n.minimum != null) Object.assign(v, { balance: round(n.balance), minimum: round(n.minimum), interest: round(n.interest), carriedIn: round(n.carried) });
+  return v;
+}
+
+// Döner kredi (elle ödenen, APR'li kart): devreden bakiye, işlemiş faiz, sıradaki ekstrenin ödenmemiş asgarisi ve
+// yalnızca asgari ödenirse geri ödeme (bugünkü borçla; months null: 50 yılda bitmez)
+function revolvingView(debt) {
+  if (!debt.revolving) return null;
+  const v = { apr: debt.apr, carried: round(debt.carried), interestCharged: round(debt.interestCharged), minimumDue: round(debt.minimumDue) };
+  if (debt.payoff) v.payoff = { monthsAtMinimum: debt.payoff.months, interestAtMinimum: debt.payoff.interest, monthlyToClearIn12: debt.payoff.in12 };
+  return v;
 }
 
 // Elle mod başlamış mı (borc.js cardDebt manualFrom = max(manualSince, trackSince) bugün ya da önce). Kartta bugün ödeme
@@ -255,6 +268,7 @@ function trackingView(debt, today) {
   const own = x => (manualNow(debt, today) ? round(x) : 0);
   const v = { since: debt.since, autoPay: !debt.manual, unpaid: own(debt.unpaid), overdue: own(debt.overdue) };
   if (debt.manual) Object.assign(v, { manualSince: debt.manualFrom, overdueSince: debt.overdueSince });
+  if (manualNow(debt, today) && debt.revolving) v.revolving = revolvingView(debt);
   return v;
 }
 
@@ -287,8 +301,13 @@ function statementsView(debt, today) {
   const own = debt.statements.filter(x => !x.auto);
   const last = own.filter(x => x.key <= today).pop();
   const next = own.find(x => x.key > today && x.amount - x.covered > EPS);
-  return own.filter(x => (x.key <= today ? x.state !== "paid" || x === last : !next || x.key <= next.key))
-    .map(x => ({ date: x.key, amount: round(x.amount), covered: round(x.covered), state: x.state }));
+  // Döner kredide devreden ekstreler (kalanı sonrakine geçti) sonuncusu dışında listelenmez; satırda ödenen, devreden, faiz
+  // ve asgari de
+  return own.filter(x => (x.key <= today ? (x.state !== "paid" && x.state !== "carried") || x === last : !next || x.key <= next.key))
+    .map(x => ({
+      date: x.key, amount: round(x.amount), covered: round(x.covered), state: x.state,
+      ...(debt.revolving && { paid: round(x.paid), carriedIn: round(x.carryIn), interest: round(x.interest), carriedOut: round(x.carried), minimum: round(x.minimum) }),
+    }));
 }
 
 // Kartın kaydedilen ödemeleri (pay_debt card): delete_debt_payment ile silinebilir
@@ -320,6 +339,7 @@ function cardView(state, c, today) {
     available: c.limit ? round(c.limit - used) : null,
     cutoffDay: c.cutoffDay,
     dueDay: c.dueDay,
+    ...(B.revolving(c) && { apr: c.apr }),
     nextPayment: own ? (first ? { date: first.key, amount: round(first.amount - first.covered) } : null)
       : next ? { date: next, amount: round(upcoming.filter(x => x.key === next).reduce((t, x) => t + x.amount, 0)) } : null,
     purchaseCount: mine.length,
@@ -337,6 +357,10 @@ function eventView(state, ev, { items = true } = {}) {
     total: round(ev.total),
     byPerson: byName(state, ev.byPerson, personName),
   };
+  // Döner kredi: ekstreye devreden bakiye ve faizi eklendi, kalanı sonraki ekstreye devretti (borc.js cashflow)
+  if (ev.carriedIn > EPS) v.carriedIn = round(ev.carriedIn);
+  if (ev.interest > EPS) v.interest = round(ev.interest);
+  if (ev.carriedOut > EPS) v.carriedOut = round(ev.carriedOut);
   if (items) {
     v.items = ev.items.map(x => ({
       purchaseId: x.purchase.id,
@@ -436,6 +460,7 @@ function buildCard(state, args, base = null) {
     cutoffDay: args.cutoff_day !== undefined ? T.validDay(args.cutoff_day) : base?.cutoffDay,
     dueDay: args.due_day !== undefined ? T.validDay(args.due_day) : base?.dueDay,
     last4: args.last4 !== undefined ? String(args.last4 ?? "").replace(/\D/g, "") : base?.last4 ?? "",
+    apr: args.apr !== undefined ? args.apr : base?.apr ?? null,
   };
   if (!v.name) fail("name is required.");
   if (!(v.limit >= 0)) fail("limit must be zero or a positive number.");
@@ -443,8 +468,12 @@ function buildCard(state, args, base = null) {
   if (!v.dueDay) fail("due_day (son ödeme günü) must be a day between 1 and 31.");
   if (v.last4 && v.last4.length !== 4) fail("last4 must be exactly 4 digits.");
   if (v.last4 && state.cards.some(c => c.id !== base?.id && c.last4 === v.last4)) fail(`Another card already has last4 ${v.last4}.`);
-  const { last4, ...rest } = v;
-  return last4 ? { ...rest, last4 } : rest;
+  if (v.apr != null) {
+    if (typeof v.apr !== "number" || !(v.apr >= 0 && v.apr <= 100)) fail("apr must be a number from 0 to 100 (annual %), or null.");
+    if (args.apr !== undefined && !P.aprFor(homeOf(state))) fail("Card APR (carrying a balance with interest) is only available for accounts in the US for now.");
+  }
+  const { last4, apr, ...rest } = v;
+  return { ...rest, ...(last4 && { last4 }), ...(apr != null && { apr: Math.round(apr * 100) / 100 }) };
 }
 
 // Kesim / son ödeme günü değişirken kullanıcıya sorulacak seçenekler (app.js'teki kart formuyla aynı)
@@ -937,6 +966,7 @@ function cardDebtView(state, c, today) {
       manualSince: c.manualFrom, unpaid: round(c.unpaid), overdue: round(c.overdue), overdueSince: c.overdueSince,
       statements: statementsView(c, today),
     });
+    if (c.revolving) v.revolving = revolvingView(c);
   } else if (c.manual) v.manualSince = c.manualFrom;   // elle mod yarın başlıyor
   const payments = cardPaysView(state, c.card);
   if (payments.length) v.payments = payments;
@@ -1035,6 +1065,7 @@ const CARD_FIELDS = {
   cutoff_day: S.int("Statement cutoff day of month (hesap kesim günü).", 1, 31),
   due_day: S.int("Payment due day of month (son ödeme günü).", 1, 31),
   last4: S.str('Last 4 digits of the card (used to match bank e-mails). "" removes it.'),
+  apr: { type: ["number", "null"], minimum: 0, maximum: 100, description: "Annual interest rate (APR, %) for accounts in the US: on a card paid by hand (auto_pay false), what is left of a statement after its due day carries to the next statement with monthly interest (APR / 12), and is overdue only if less than the minimum payment was paid. On automatic cards (paid in full) it has no effect. null removes it. Changing it recomputes interest since paying by hand started." },
   auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call: statements since then are unpaid until marked paid); on a day a card payment is dated it starts tomorrow instead (the card stays automatic today). Switching back to true counts unpaid past statements as paid; it fails while recorded card payments would stop counting (payments for statements not past their due day yet: on a statement's due day switch the next day; for payments made ahead, delete them or wait until the day after those due days) and while the card is not tracked (an untracked card keeps its mode)."),
 };
 
@@ -1324,6 +1355,13 @@ export const TOOLS = [
         if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition, homeOf(state)));
         const chosen = transition ? change.cards[transition] : change.card;
         const built = chosen.history ? { ...v, history: chosen.history } : v;
+        const was = B.cardDebt(state, cur, ctx.today);
+        // Döner kredi (borc.js): elle moddan çıkarken (otomatiğe dönüş ya da APR'nin silinmesi) işlemiş faiz harcama olarak
+        // yazılır, özvarlık değişmez; otomatiğe dönüşün ön ödeme denetimi bu harcamalarla yapılır
+        const revolvingNow = c => B.tracked(c) && B.manual(c) && B.revolving(c);
+        const leaving = revolvingNow(cur) && B.tracked(built) && (args.auto_pay === true || !B.revolving(built));
+        const charges = leaving ? B.interestCharges(state, cur, ctx.today) : [];
+        for (const x of charges) state.installments.push({ id: uid(), ...x });
         const next = { ...built, ...payModeArgs(state, args, cur, built, ctx.today) };
         // Açıkça bugünden takibe alınan (track_since bugün) kartta bugün tarihli ödeme, ödediği ekstre takipten önce kaldığı
         // için sonraki ekstreleri kapatırdı (borc.js cardPaidToday); varsayılan başlangıç bu durumda zaten yarındır
@@ -1334,7 +1372,6 @@ export const TOOLS = [
         // Bu kartın düşülen ekstreleri (borc.js cardPaid): takip, günler ya da ödeme modu değişince bakiye değişir
         const deducted = c => B.cardPaid({ ...state, cards: [c] }, ctx.today);
         const before = deducted(cur);
-        const was = B.cardDebt(state, cur, ctx.today);
         state.cards = state.cards.map(c => (c.id === cur.id ? next : c));
         const balanceChange = round(before - deducted(next));
         const out = { saved: true, card: cardView(state, next, ctx.today) };
@@ -1356,6 +1393,18 @@ export const TOOLS = [
           const late = was.statements.filter(x => x.state === "late");
           out.note = (late.length ? `${late.length} overdue statement(s) (${round(was.overdue)} ${homeOf(state)}) now count as paid, deducted from ${payer}'s lira balance. ` : "")
             + `${next.name}'s statements count as paid the day after their due day again.`;
+        }
+        if (charges.length) {
+          const total = round(charges.reduce((t, x) => t + x.total, 0));
+          out.interestSavedAsPurchases = { count: charges.length, total };
+          out.note = `${out.note ? out.note + " " : ""}Interest charged so far (${total} ${homeOf(state)}) was saved as ${charges.length} purchase(s) on ${next.name}, so net worth doesn't change.`;
+        } else if (revolvingNow(cur) || revolvingNow(next)) {
+          // APR değişti (ya da elle moda geçildi): faiz elle modun başından yeniden hesaplandı
+          const change = round((B.cardDebt(state, next, ctx.today).interestCharged ?? 0) - (was.interestCharged ?? 0));
+          if (change) {
+            out.interestChangeTry = change;
+            out.note = `${out.note ? out.note + " " : ""}Interest since ${next.manualSince} was recomputed${B.revolving(next) ? ` at ${next.apr}% APR` : ""}: ${change > 0 ? "+" : ""}${change} ${homeOf(state)} (net worth changes by the opposite).`;
+          }
         }
         return out;
       });
@@ -1849,6 +1898,13 @@ export const TOOLS = [
           state.debts.push(x);
           const after = B.cardDebt(state, card, today);
           const out = { saved: true, payment: paymentView(x, homeOf(state)), card: cardDebtView(state, after, today) };
+          // Döner kredi: asgarinin kalanı; son ödeme gününe kadar ödenmeyen kalan faiziyle sonraki ekstreye devreder
+          if (after.revolving) {
+            out.minimumDue = round(after.minimumDue);
+            if (after.minimumDue > EPS && after.next) {
+              out.note = `Pay at least ${round(after.minimumDue)} ${homeOf(state)} more by ${after.next.date} (the minimum payment) to avoid a late payment; whatever is left after the due day carries to the next statement with interest.`;
+            }
+          }
           if (amount > cd.unpaid + cut + EPS) {
             out.warning = `This payment is ${round(amount - cd.unpaid - cut)} ${homeOf(state)} more than the statements due or already cut (${round(cd.unpaid + cut)} ${homeOf(state)}); the rest covers later statements`
               + (after.credit > EPS ? `, and ${round(after.credit)} ${homeOf(state)} is more than the card's whole debt (a credit on the card).` : ".");
@@ -2189,5 +2245,6 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
+- Revolving credit (accounts in the US): a card may have an APR (add_card / update_card apr). On a card paid by hand (auto_pay false) with an APR, what is left of a statement after its due day carries to the next statement, with interest (APR / 12) charged on the next cutoff day; a statement is overdue only if less than its minimum payment (the greater of 40 or 1% of the balance + interest, plus any past-due minimum) was paid. list_cards / list_debts show carried, interestCharged, minimumDue and payoff (months and interest if only the minimum is paid, monthly payment to clear in 12 months); statements show balance, minimum and interest. These are estimates: the bank's own figures (daily balance, fees) can differ a little. Automatic cards are paid in full each month, so no interest.
 - Bank e-mails (the *_inbox* tools and try_bank_email: Turkish bank notifications turned into purchases) are only available for accounts in Turkey for now.
 - Reply to the user in their language (the app is in Turkish and English).`;
