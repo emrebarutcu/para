@@ -544,6 +544,11 @@
             <label><input type="radio" name="payMode" value="off" /><span>Hesaba katılmasın</span></label>
           </div>
           <div class="preview" id="trackPreview" aria-live="polite"></div>
+          <label class="field" data-us hidden>
+            <span class="field-label">Yıllık faiz (APR %)</span>
+            <input name="apr" type="number" inputmode="decimal" min="0" max="100" step="0.01" placeholder="24,99" />
+            <small class="hint">“Ben işaretlerim” kartında ekstrenin ödenmeyen kalanı faiziyle sonraki ekstreye devreder; asgari ödendiyse gecikme sayılmaz.</small>
+          </label>
           <div class="card-links">
             <button type="button" class="link" id="cardPaysLink" hidden>Kart ödemelerin ›</button>
             <button type="button" class="link" id="cardDebtLink" hidden>Borçlar'da gör ›</button>

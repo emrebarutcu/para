@@ -188,6 +188,8 @@
       countries: P.COUNTRIES,
       home,
       markets: P.marketsFor(home),
+      apr: P.aprFor(home),
+      bnpl: P.bnplFor(home),
       cashDefault: V.cashDefault(home),
     });
   }

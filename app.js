@@ -599,7 +599,7 @@ function cardDueRow({ card: c, x, open, ev }, today) {
   sub.append(el("span", "", x.state === "late" ? `son ödeme ${fmtDayShort(x.key)}` : x.state === "due" ? "Son gün bugün"
     : `${relDays(x.key, today)} · ${fmtDayShort(x.key)}`));
   if (x.state === "late") sub.append(el("span", "out-text", `${lateDays(x.key, today)} gün gecikti`));
-  if (x.covered > EPS) sub.append(el("span", "", "kısmen ödendi · kalan"));
+  if ((x.paid ?? x.covered) > EPS) sub.append(el("span", "", "kısmen ödendi · kalan"));   // döner kredide covered devredeni de sayar
   main.append(title, sub);
   li.append(badge, main, el("div", "pay-amt", fmt(open)));
   const due = x.state === "late" || x.state === "due";
@@ -2760,8 +2760,10 @@ function lateDays(since, today) { return Math.round((T.toDate(today) - T.toDate(
 function statementText(x, today) {
   const open = x.amount - x.covered;
   if (x.state === "paid") return "ödendi ✓";
+  // Döner kredi (borc.js revolve): asgari ödendi, kalan faiziyle sonraki ekstreye devretti
+  if (x.state === "carried") return `${fmt(x.carried)} devretti · faiz işler`;
   const when = x.state === "late" ? `${lateDays(x.key, today)} gün gecikti` : x.state === "due" ? "son gün bugün" : "";
-  if (x.covered > EPS) return ["kısmen ödendi", `kalan ${fmt(open)}`, when].filter(Boolean).join(" · ");
+  if ((x.paid ?? x.covered) > EPS) return ["kısmen ödendi", `kalan ${fmt(open)}`, when].filter(Boolean).join(" · ");
   if (x.state === "late") return `${fmt(open)} ödenmedi · ${when}`;
   return x.state === "due" ? `Son gün bugün: ${fmt(open)}` : "";
 }
@@ -3975,6 +3977,7 @@ function openCardSheet(c) {
   }
   // Ekstre ödemesi: yeni kartta otomatik (son ödeme günü geçince ödendi sayılır)
   f.elements.payMode.value = !c ? "auto" : !B.tracked(c) ? "off" : B.manual(c) ? "manual" : "auto";
+  f.elements.apr.value = B.revolving(c) ? String(c.apr) : "";
   syncChecked(els.cardPayMode);
   renderColorSwatches(c ? c.color % SERIES_COUNT : nextColor(state.cards));
   termChange = null;
@@ -4130,7 +4133,7 @@ function autoPrepaid(card, { on, since, auto }, today) {
 // sayılır, bugün geçilirse TL bakiyesi bugünlük yüksek görünür; otomatiğe yarın geçilir.
 function prepaidText(card, since, today, lost) {
   const cs = B.cardState(state, { ...card, trackOff: false, trackSince: since }, today);
-  const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((s, x) => s + x.amount, 0);
+  const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((s, x) => s + x.amount - (x.carryIn || 0), 0);
   if (!(ahead > EPS)) {
     return "“Otomatik”e bugün geçilemiyor: son ödeme günü bugün olan ekstre “Otomatik”te ancak yarın ödenmiş sayılır; bugün "
       + `geçersen ona yaptığın ödeme yüzünden ${homeShort()} bakiyen bugünlük ${fmt(lost)} yüksek görünür. Yarın geçebilirsin.`;
@@ -4220,6 +4223,7 @@ els.cardForm.addEventListener("submit", e => {
     name: !v.name, limit: v.limit < 0,
     last4: (v.last4 !== "" && v.last4.length !== 4) || last4Taken,
     cutoffDay: !v.cutoffDay, dueDay: !v.dueDay,
+    apr: f.apr.value !== "" && !(Number(f.apr.value) >= 0 && Number(f.apr.value) <= 100),
   };
   for (const [k, isBad] of Object.entries(bad)) f[k].classList.toggle("invalid", isBad);
   const firstBad = Object.keys(bad).find(k => bad[k]);
@@ -4244,16 +4248,28 @@ els.cardForm.addEventListener("submit", e => {
     return;
   }
   if (!v.last4) delete v.last4;
+  // Yıllık faiz (ABD; borc.js döner kredi): boşsa yok
+  const apr = P.aprFor(HOME) && f.apr.value !== "" ? Math.round(Number(f.apr.value) * 100) / 100 : null;
+  const withApr = c => {
+    const { apr: _, ...rest } = c;
+    return apr != null ? { ...rest, apr } : P.aprFor(HOME) ? rest : c;
+  };
 
   // Ekstre ödemesi (trackSince / trackOff / manualSince) formdan; diğer alanlar ve günlerin geçmişi korunur
   if (editingCardId) {
+    // Elle ödenen APR'li karttan çıkarken (otomatik ya da APR silindi) işlemiş faiz harcama olarak kalır: özvarlık değişmez
+    const next = withApr(withTracking({ ...before }, track, today));
+    const revolvingNow = c => B.tracked(c) && B.manual(c) && B.revolving(c);
+    if (revolvingNow(before) && B.tracked(next) && !revolvingNow(next)) {
+      for (const x of B.interestCharges(state, before, today)) state.installments.push({ id: uid(), ...x });
+    }
     state.cards = state.cards.map(c => {
       if (c.id !== editingCardId) return c;
       const { last4, history, ...rest } = withTerms(c, v);
-      return withTracking({ ...rest, ...(v.last4 && { last4 }), ...(history && { history }) }, track, today);
+      return withApr(withTracking({ ...rest, ...(v.last4 && { last4 }), ...(history && { history }) }, track, today));
     });
   } else {
-    state.cards.push(withTracking({ id: uid(), ...v }, track, today));   // yeni kart varsayılan olarak bugünden takipte (borc.js)
+    state.cards.push(withApr(withTracking({ id: uid(), ...v }, track, today)));   // yeni kart varsayılan olarak bugünden takipte (borc.js)
   }
   saveState();
   els.cardSheet.close();
@@ -6357,6 +6373,8 @@ function applyHome() {
   const tr = P.marketsFor(HOME);
   for (const n of document.querySelectorAll("[data-tr]")) n.hidden = !tr;
   for (const n of document.querySelectorAll("[data-not-tr]")) n.hidden = tr;
+  // ABD'ye özel olanlar (P.aprFor): kartın yıllık faizi
+  for (const n of document.querySelectorAll("[data-us]")) n.hidden = !P.aprFor(HOME);
   els.importInput.accept = tr ? IMPORT_ACCEPT : ".json,application/json";
 }
 

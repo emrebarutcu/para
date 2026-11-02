@@ -84,6 +84,9 @@ struct OdemeSatiri: View {
                                 .font(.footnote).foregroundStyle(model.kartRengi(p.card))
                             Text(Bicim.kartAdi(p.card)).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(1)
                         }
+                        if let dk = doner(p) {
+                            Text(dk).font(.footnote).foregroundStyle(Tema.metin2)
+                        }
                         if p.notCounted == true {
                             Text(L("sayılmıyor")).font(.footnote).foregroundStyle(Tema.metin3)
                         } else if let by = p.byPerson, !by.isEmpty {
@@ -123,5 +126,14 @@ struct OdemeSatiri: View {
                 .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
+    }
+
+    // Döner kredi: ekstreye eklenen devreden ve faiz, sonraki ekstreye devreden ("Devreden $700 + faiz $14", "$894 devretti")
+    private func doner(_ p: Akis.Odeme) -> String? {
+        var parca: [String] = []
+        if let d = p.carriedIn, d > 0.004 { parca.append(L("Devreden {0}", Bicim.tl(d, fraction: false))) }
+        if let f = p.interest, f > 0.004 { parca.append(L("faiz {0}", Bicim.tl(f))) }
+        if let o = p.carriedOut, o > 0.004 { parca.append(L("{0} devretti", Bicim.tl(o, fraction: false))) }
+        return parca.isEmpty ? nil : parca.joined(separator: " · ")
     }
 }

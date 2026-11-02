@@ -1019,7 +1019,7 @@ function payModeArgs(state, args, cur, v, today) {
     // Erken ödenen (son ödeme günü gelmemiş ekstreler için) kısım; yoksa engel son ödeme günü bugün olan ekstreye yapılan
     // ödemeden: otomatikte o ekstre ancak yarın ödenmiş sayılır (uygulamadaki prepaidText gibi)
     const cs = B.cardState(state, { ...v, manualSince: cur.manualSince }, today);
-    const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((t, x) => t + x.amount, 0);
+    const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((t, x) => t + x.amount - (x.carryIn || 0), 0);
     if (ahead <= EPS) {
       fail(`${cur.name} can't go back to automatic today: on automatic its statement due today counts as paid only tomorrow, so ${round(lost)} ${homeOf(state)} of the card payments recorded for it would not count today, raising ${payer}'s lira balance by that much for today. Switch tomorrow; don't delete the payment.`);
     }

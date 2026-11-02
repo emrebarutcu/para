@@ -322,6 +322,8 @@ final class Model: ObservableObject {
         revision += 1
     }
     var marketsAllowed: Bool { constants?.markets ?? true }
+    var aprAllowed: Bool { constants?.apr ?? false }      // kartın APR'si (döner kredi), ABD
+    var bnplAllowed: Bool { constants?.bnpl ?? false }    // Pay in 4, ABD
 
     // Ülke değişince tutarlar çevrilmez: kayıtlar yazıldıkları para biriminde kalır
     func setCountry(_ code: String) async throws {
