@@ -128,16 +128,19 @@ final class Model: ObservableObject {
         async let market: Void = refreshMarket()
         await run { try await $0.pull(); try await $0.push() }
         await market
-        await sendZone()
+        await sendProfile()
     }
 
-    // Cihazın saat dilimi değiştiyse hesaba yazılır (asistan "bugün"ü buna göre hesaplar)
-    private func sendZone() async {
-        let tz = TimeZone.current.identifier
-        guard let uid = session?.userId, UserDefaults.standard.string(forKey: "para.tz.\(uid)") != tz,
+    // Cihazın saat dilimi ya da uygulamanın dili değiştiyse hesaba yazılır (asistan "bugün"ü saat dilimine göre
+    // hesaplar, giriş e-postaları bu dilde gider)
+    private func sendProfile() async {
+        let tz = TimeZone.current.identifier, profil = "\(tz)|\(Dil.kod)"
+        guard let uid = session?.userId, UserDefaults.standard.string(forKey: "para.profil.\(uid)") != profil,
               let t = try? await token(), var s = session, s.userId == uid else { return }
         s.accessToken = t
-        if (try? await Auth.updateZone(s, tz)) != nil { UserDefaults.standard.set(tz, forKey: "para.tz.\(uid)") }
+        if (try? await Auth.updateProfile(s, tz: tz, lang: Dil.kod)) != nil {
+            UserDefaults.standard.set(profil, forKey: "para.profil.\(uid)")
+        }
     }
 
     func schedulePush() {
@@ -283,6 +286,7 @@ final class Model: ObservableObject {
         Auth.store(nil)
         Depo.remove(Depo.stateFile(s.userId))
         Depo.remove(Depo.metaFile(s.userId))
+        UserDefaults.standard.removeObject(forKey: "para.profil.\(s.userId)")
         UserDefaults.standard.removeObject(forKey: "para.tz.\(s.userId)")
         session = nil
         syncError = nil

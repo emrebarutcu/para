@@ -1,5 +1,5 @@
-{{- /* Dil: hesabın ülkesi (user_metadata.country) Türkiye dışındaysa İngilizce; ülkesi yazılmamış eski hesap Türkçe */ -}}
-{{- $en := false -}}{{- with .Data -}}{{- with .country -}}{{- if ne . "TR" -}}{{- $en = true -}}{{- end -}}{{- end -}}{{- end -}}
+{{- /* Dil: hesabın dili (user_metadata.lang: kayıtta ve iPhone'da yazılır) "tr" değilse İngilizce; dil yazılmamışsa ülkesi (country) Türkiye dışındaysa İngilizce; ikisi de yoksa (eski hesap) Türkçe */ -}}
+{{- $en := false -}}{{- with .Data -}}{{- with .lang -}}{{- if ne . "tr" -}}{{- $en = true -}}{{- end -}}{{- else -}}{{- with .country -}}{{- if ne . "TR" -}}{{- $en = true -}}{{- end -}}{{- end -}}{{- end -}}{{- end -}}
 <!doctype html>
 <html lang="{{ if $en }}en{{ else }}tr{{ end }}">
 <head>

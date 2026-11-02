@@ -1,7 +1,7 @@
 #!/bin/sh
 # E-posta şablonlarını (supabase/eposta-sablonlari) ve konularını Supabase Auth'a yükler (Management API).
 # Önce şablonlardaki ?token_hash= bağlantılarını karşılayan sürüm (sync.js → handleEmailLink) yayında olmalı.
-# Gövde hesabın ülkesine göre İngilizce ya da Türkçedir (şablonun başı, .Data.country); konu iki dillidir.
+# Gövde kullanıcının diline (.Data.lang), dil yoksa ülkesine (.Data.country) göre İngilizce ya da Türkçedir; konu iki dillidir.
 # Erişim anahtarı ortamdan okunur (SUPABASE_ACCESS_TOKEN), repoya yazılmaz: sh supabase/sablonlar.sh
 set -eu
 : "${SUPABASE_ACCESS_TOKEN:?SUPABASE_ACCESS_TOKEN tanımlı değil}"

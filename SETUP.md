@@ -52,8 +52,10 @@ Routing MX'i (banka e-postaları, bölüm 6) ve SPF'i olduğu gibi kalır.
    | Reset password | `sifre-sifirlama.html` | Reset your CashFollow password · CashFollow şifreni sıfırla |
    | Change email address | `eposta-degisikligi.html` | Change your CashFollow email · CashFollow e-posta adresini değiştir |
 
-   Gövde hesabın ülkesine göre: `user_metadata.country` Türkiye dışındaysa İngilizce, değilse (ülkesi yazılmamış eski
-   hesaplar dahil) Türkçe (şablonun başındaki `$en`, `.Data.country`). Konu tek metin olduğu için iki dillidir.
+   Gövde kullanıcının diline göre: `user_metadata.lang` `tr` değilse İngilizce. Dil kayıtta yazılır (iPhone: uygulamanın
+   dili, Ayarlar → CashFollow → Dil ile değişebilir; web: tarayıcının dili) ve iPhone dil değişince günceller. Dili
+   yazılmamış hesapta ülkeye bakılır (`user_metadata.country` Türkiye dışındaysa İngilizce); ikisi de yoksa (eski hesap)
+   Türkçe (şablonun başındaki `$en`). Konu tek metin olduğu için iki dillidir.
 
    Bağlantılar Supabase'in adresine değil uygulamaya gider: `{{ .SiteURL }}/?token_hash={{ .TokenHash }}&type=…`. Uygulama
    (`sync.js` → `handleEmailLink`) bağlantıyı `verifyOtp` ile doğrular; şifre sıfırlamada yeni şifre formunu açar. Gönderenle
