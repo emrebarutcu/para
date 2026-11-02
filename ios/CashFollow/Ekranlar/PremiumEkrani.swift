@@ -1,10 +1,10 @@
 import SwiftUI
 import StoreKit
 
-// CashFollow Premium ödeme ekranı. Üstte yapay zekâ asistanı (Claude, ChatGPT ile örnek sohbet), hemen altında üç plan
-// (yıllık seçili; ücretsiz deneme ve süresi StoreKit'ten), öteki Premium özellikleri, altta sabit düğme. Kendiliğinden
-// yenilenme açıklaması, Kullanım Koşulları, Gizlilik Politikası ve geri yükleme (App Store yönergesi 3.1.2).
-// neden: hangi kilitten açıldığı (analitik). Fiyatlar App Store'dan; örnek modunda ABD fiyatları.
+// CashFollow Premium ödeme ekranı (her temada koyu): yapay zekâ asistanı başlığı ve örnek sohbet, Premium'un öteki
+// özellikleri, üç plan (yıllık seçili; ücretsiz deneme ve süresi StoreKit'ten), altta sabit düğme. Fiyat, dönem,
+// kendiliğinden yenilenme, Kullanım Koşulları, Gizlilik Politikası ve geri yükleme düğmenin altında (App Store yönergesi
+// 3.1.2). neden: hangi kilitten açıldığı (analitik). Fiyatlar App Store'dan; örnek modunda ABD fiyatları.
 struct PremiumEkrani: View {
     var neden = "settings"
     @EnvironmentObject private var abonelik: Abonelik
@@ -25,42 +25,47 @@ struct PremiumEkrani: View {
         var urun: Product?
     }
 
-    private static let ozellikler: [(simge: String, ad: String)] = [
-        ("calendar", L("Akış")),
-        ("cart", L("Alabilir miyim?")),
-        ("lightbulb", L("İçgörüler")),
-        ("chart.line.uptrend.xyaxis", L("Varlığın seyri")),
-        ("percent", L("Borç planı")),
-        ("creditcard", L("Sınırsız kart ve kişi")),
-    ]
+    private static let ozellikler = [L("Akış"), L("Alabilir miyim?"), L("İçgörüler"), L("Varlığın seyri"), L("Borç planı"), L("Sınırsız kart")]
+    private static let zemin = Color(red: 0.035, green: 0.04, blue: 0.055)
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                kapak
-                VStack(alignment: .leading, spacing: 18) {
-                    if abonelik.premium { premiumAcik } else { planlar }
-                    Text(L("Premium'da ayrıca")).font(.system(size: 17, weight: .semibold)).padding(.top, 4)
-                    Kart {
-                        LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 14) {
-                            ForEach(Self.ozellikler, id: \.ad) { o in
-                                Label { Text(o.ad).lineLimit(1).minimumScaleFactor(0.85) } icon: { Image(systemName: o.simge).foregroundStyle(Tema.marka) }
-                                    .font(.subheadline.weight(.medium))
-                            }
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(L("CashFollow Premium"), systemImage: "sparkles").font(.footnote.weight(.semibold)).foregroundStyle(Tema.marka)
+                    Text(L("Paranı yapay zekâyla yönet")).font(.system(size: 32, weight: .bold)).foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Claude · ChatGPT · Gemini").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.55))
+                }
+                sohbet
+                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 12) {
+                    ForEach(Self.ozellikler, id: \.self) { ad in
+                        Label { Text(ad).lineLimit(1).minimumScaleFactor(0.85) } icon: {
+                            Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Tema.marka)
                         }
+                        .font(.subheadline).foregroundStyle(.white.opacity(0.85))
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 20)
-                .padding(.bottom, 20)
+                if abonelik.premium { premiumAcik } else { planlar }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 38)
+            .padding(.bottom, 16)
         }
-        .ignoresSafeArea(edges: .top)
-        .background(Tema.zemin)
+        .scrollIndicators(.hidden)
+        .background {
+            ZStack {
+                Self.zemin
+                RadialGradient(colors: [Tema.marka.opacity(0.42), .clear], center: .topTrailing, startRadius: 10, endRadius: 420)
+                RadialGradient(colors: [Tema.seri(0).opacity(0.18), .clear], center: .leading, startRadius: 10, endRadius: 360)
+            }
+            .ignoresSafeArea()
+        }
+        .environment(\.colorScheme, .dark)
         .overlay(alignment: .topTrailing) {
             Button { dismiss() } label: {
-                Image(systemName: "xmark").font(.footnote.weight(.bold)).foregroundStyle(.white.opacity(0.85))
-                    .frame(width: 30, height: 30).background(.black.opacity(0.35), in: Circle())
+                Image(systemName: "xmark").font(.footnote.weight(.bold)).foregroundStyle(.white.opacity(0.8))
+                    .frame(width: 30, height: 30).background(.white.opacity(0.12), in: Circle())
             }
             .accessibilityLabel(L("Kapat"))
             .padding(14)
@@ -79,54 +84,33 @@ struct PremiumEkrani: View {
         }
     }
 
-    // ── Kapak: yapay zekâ asistanı ───────────────────────────────────────────
+    // ── Örnek sohbet ────────────────────────────────────────────────────────
 
-    private var kapak: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(L("CashFollow Premium"), systemImage: "sparkles").font(.footnote.weight(.semibold)).foregroundStyle(Tema.marka)
-            Text(L("Paranı yapay zekâyla yönet")).font(.system(size: 32, weight: .bold)).foregroundStyle(.white)
-                .fixedSize(horizontal: false, vertical: true)
-            VStack(spacing: 8) {
-                balon(L("Bu ay ne kadar ödeyeceğim?"), ben: true)
-                balon(L("{0} · 2 kart, 3 nakit ödeme", Bicim.tl(4598.91)), ben: false)
-                balon(L("6 taksitle telefon ekle, {0}", Bicim.tl(1200, fraction: false)), ben: true)
-                balon(L("Eklendi · ayda {0}", Bicim.tl(200, fraction: false)), ben: false)
-            }
-            .padding(.top, 4)
-            HStack(spacing: 8) {
-                ForEach(["Claude", "ChatGPT", "Gemini"], id: \.self) { ad in
-                    Text(ad).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.85))
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(.white.opacity(0.1), in: Capsule())
-                }
-            }
+    private var sohbet: some View {
+        VStack(spacing: 8) {
+            balon(L("Bu ay ne kadar ödeyeceğim?"), ben: true)
+            balon(L("{0} · 2 kart, 3 nakit ödeme", Bicim.tl(4598.91)), ben: false)
+            balon(L("6 taksitle telefon ekle, {0}", Bicim.tl(1200, fraction: false)), ben: true)
+            balon(L("Eklendi · ayda {0}", Bicim.tl(200, fraction: false)), ben: false)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 58)
-        .padding(.bottom, 26)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            ZStack {
-                Color(red: 0.035, green: 0.04, blue: 0.055)
-                RadialGradient(colors: [Tema.marka.opacity(0.5), .clear], center: .topTrailing, startRadius: 10, endRadius: 380)
-                RadialGradient(colors: [Tema.seri(0).opacity(0.22), .clear], center: .bottomLeading, startRadius: 10, endRadius: 320)
-            }
-        }
+        .padding(14)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
     }
 
     private func balon(_ metin: String, ben: Bool) -> some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
             if ben {
-                Spacer(minLength: 44)
+                Spacer(minLength: 40)
             } else {
                 Image(systemName: "sparkles").font(.caption2.weight(.bold)).foregroundStyle(.white)
                     .frame(width: 24, height: 24).background(Tema.marka, in: Circle())
             }
             Text(metin).font(.subheadline).foregroundStyle(ben ? Color.black : Color.white)
-                .padding(.horizontal, 12).padding(.vertical, 9)
-                .background(ben ? Color.white : Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(ben ? Color.white : Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .fixedSize(horizontal: false, vertical: true)
-            if !ben { Spacer(minLength: 28) }
+            if !ben { Spacer(minLength: 24) }
         }
     }
 
@@ -138,31 +122,32 @@ struct PremiumEkrani: View {
         let liste = planListesi
         if liste.isEmpty {
             Text(L("Fiyatlar App Store'dan alınamadı. Bağlantını kontrol edip yeniden dene."))
-                .font(.subheadline).foregroundStyle(Tema.metin3)
+                .font(.subheadline).foregroundStyle(.white.opacity(0.6))
         } else {
             HStack(alignment: .top, spacing: 10) {
                 ForEach(liste) { p in planKutusu(p) }
             }
-            .padding(.top, 8)
+            .padding(.top, 6)
         }
     }
 
+    // Seçili plan beyaz; rozet: ücretsiz deneme, yoksa tasarruf
     private func planKutusu(_ p: Plan) -> some View {
         let sec = p.id == secili
-        // Rozet: ücretsiz deneme, yoksa tasarruf
         let rozet = p.deneme.map { L("{0} ücretsiz", $0) } ?? p.rozet
-        return Button { secili = p.id } label: {
+        return Button { withAnimation(.snappy(duration: 0.2)) { secili = p.id } } label: {
             VStack(spacing: 4) {
                 Text(p.ad).font(.subheadline.weight(.semibold))
-                Text(p.fiyat).font(.system(size: 21, weight: .bold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-                if let h = p.haftalik { Text(L("haftada {0}", h)).font(.caption2).foregroundStyle(Tema.metin3).lineLimit(1).minimumScaleFactor(0.8) }
+                Text(p.fiyat).font(.system(size: 22, weight: .bold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                Text(p.haftalik.map { L("haftada {0}", $0) } ?? " ").font(.caption2).opacity(0.55).lineLimit(1).minimumScaleFactor(0.8)
             }
-            .foregroundStyle(Tema.metin)
-            .frame(maxWidth: .infinity, minHeight: 96)
+            .foregroundStyle(sec ? Color.black : Color.white)
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, 6)
-            .padding(.top, rozet == nil ? 0 : 6)
-            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(sec ? Tema.marka : Tema.cizgi2, lineWidth: sec ? 2.5 : 1))
+            .padding(.top, 22)
+            .padding(.bottom, 16)
+            .background(sec ? Color.white : Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(sec ? 0 : 0.14), lineWidth: 1))
             .overlay(alignment: .top) {
                 if let r = rozet {
                     Text(r).font(.caption2.weight(.bold)).foregroundStyle(.white).lineLimit(1)
@@ -175,10 +160,10 @@ struct PremiumEkrani: View {
         .buttonStyle(.plain)
     }
 
-    // Altta sabit: düğme, kısa fiyat satırı, geri yükleme ve bağlantılar
+    // Altta sabit: düğme, fiyat ve yenilenme satırı, geri yükleme ve bağlantılar
     private var altCubuk: some View {
         let p = secim
-        return VStack(spacing: 8) {
+        return VStack(spacing: 10) {
             Button { if let u = p?.urun { Task { await abonelik.satinAl(u) } } } label: {
                 ZStack {
                     Text(p?.deneme.map { L("{0} ücretsiz dene", $0) } ?? L("Abone ol")).opacity(abonelik.calisiyor ? 0 : 1)
@@ -188,12 +173,12 @@ struct PremiumEkrani: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
-                .background(Tema.marka, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(Tema.marka, in: Capsule())
             }
             .buttonStyle(.plain)
             .disabled(abonelik.calisiyor || (p?.urun == nil && Ornek.premium == nil))
             if let p {
-                Text(kisaAciklama(p)).font(.caption).foregroundStyle(Tema.metin2).multilineTextAlignment(.center)
+                Text(kisaAciklama(p)).font(.caption).foregroundStyle(.white.opacity(0.6)).multilineTextAlignment(.center)
             }
             HStack(spacing: 18) {
                 Button(L("Geri yükle")) { Task { await abonelik.geriYukle() } }
@@ -201,12 +186,16 @@ struct PremiumEkrani: View {
                 Link(L("Gizlilik"), destination: Yapilandirma.gizlilik)
             }
             .font(.caption.weight(.medium))
-            .foregroundStyle(Tema.metin3)
+            .foregroundStyle(.white.opacity(0.45))
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
         .padding(.bottom, 4)
-        .background(Tema.zemin.shadow(.drop(color: .black.opacity(0.08), radius: 12, y: -4)))
+        .background {
+            LinearGradient(colors: [Self.zemin.opacity(0), Self.zemin, Self.zemin], startPoint: .top, endPoint: .bottom)
+                .padding(.top, -14)
+                .ignoresSafeArea()
+        }
     }
 
     // Fiyat, dönem, deneme ve kendiliğinden yenilenme (App Store yönergesi 3.1.2)
@@ -218,10 +207,16 @@ struct PremiumEkrani: View {
     // ── Premium açıkken ──────────────────────────────────────────────────────
 
     private var premiumAcik: some View {
-        Kart {
-            Label(L("Premium açık. Teşekkürler!"), systemImage: "checkmark.seal.fill").foregroundStyle(Tema.iyi).font(.body.weight(.semibold))
-            AltKaydet(eksik: nil, baslik: L("Yapay zekâ asistanını bağla")) { asistan = true }
+        VStack(alignment: .leading, spacing: 14) {
+            Label(L("Premium açık. Teşekkürler!"), systemImage: "checkmark.seal.fill").foregroundStyle(Tema.marka).font(.body.weight(.semibold))
+            Button { asistan = true } label: {
+                Text(L("Yapay zekâ asistanını bağla")).font(.body.weight(.semibold)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
+                    .background(Tema.marka, in: Capsule())
+            }
+            .buttonStyle(.plain)
         }
+        .padding(.top, 6)
     }
 
     // Planlar App Store ürünlerinden; örnek modunda ABD fiyatlarıyla (ekran görüntüsü, App Store incelemesi)

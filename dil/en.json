@@ -572,7 +572,6 @@
  "MCP destekleyen asistana bu adresi özel bağlayıcı olarak ekle; açılan CashFollow sayfasında giriş yapıp İzin ver'e dokun.": "Add this address as a custom connector in any assistant that supports MCP, then sign in on the CashFollow page that opens and tap Allow.",
  "Yapay zekâ asistanı": "AI assistant",
  "Borç planı": "Payoff plan",
- "Premium'da ayrıca": "Also in Premium",
  "Paranı yapay zekâyla yönet": "Manage your money with AI",
  "Bu ay ne kadar ödeyeceğim?": "How much do I owe this month?",
  "haftada {0}": "{0}/week",
@@ -583,9 +582,9 @@
  "Ücretsiz sürüm: {0} kart, yalnızca sen. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Free version: {0} cards, just you. Premium adds the AI assistant (Claude, ChatGPT), unlimited cards and people, Cash Flow, Can I afford it?, insights and net worth over time.",
  "Asistan bulut hesabıyla çalışır: önce Ayarlar → Hesap'tan giriş yap.": "The assistant works with a cloud account: sign in first under Settings → Account.",
  "Asistan bağlantısı CashFollow Premium ile çalışır.": "The assistant connection works with CashFollow Premium.",
- "Sınırsız kart ve kişi": "Unlimited cards and people",
  "{0} · 2 kart, 3 nakit ödeme": "{0} · 2 cards, 3 cash payments",
  "6 taksitle telefon ekle, {0}": "Add a {0} phone, 6 installments",
  "Eklendi · ayda {0}": "Added · {0}/month",
- "Kendiliğinden yenilenir, istediğin zaman iptal et.": "Renews automatically; cancel anytime."
+ "Kendiliğinden yenilenir, istediğin zaman iptal et.": "Renews automatically; cancel anytime.",
+ "Sınırsız kart": "Unlimited cards"
 }
