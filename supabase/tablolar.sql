@@ -187,6 +187,18 @@ alter table purchases add constraint purchases_asset_check check (asset ~ '^[A-Z
 alter table debts drop constraint if exists debts_asset_check;
 alter table debts add constraint debts_asset_check check (asset ~ '^[A-Z]{3}$');
 
+-- Döner kredi ve Pay in 4 (8.1; borc.js, taksit.js). apr kartın yıllık faizi (%): elle ödenen kartta ekstrenin
+-- ödenmeyen kalanı faiziyle sonraki ekstreye devreder; boşsa ekstre hep tamamı ödenecek sayılır. bnpl "şimdi al sonra
+-- öde" sağlayıcısı (klarna, afterpay, …): count ödeme, ilki date günü, sonrakiler 2 haftada bir; boşsa aylık taksit.
+alter table cards add column if not exists apr numeric check (apr between 0 and 100);
+alter table purchases add column if not exists bnpl text check (bnpl ~ '^[a-z]{1,20}$');
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'purchases_bnpl_date_check') then
+    alter table purchases add constraint purchases_bnpl_date_check check (bnpl is null or date is not null);
+  end if;
+end $$;
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);
