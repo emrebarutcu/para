@@ -519,5 +519,6 @@
  "{0}. ödeme": "Payment {0}",
  "Pay in 4 (şimdi al sonra öde)": "Pay in 4 (buy now, pay later)",
  "Sağlayıcı": "Provider",
- "Bugün {0}, sonra 2 haftada bir 3 × {1}": "{0} today, then 3 × {1} every 2 weeks"
+ "Bugün {0}, sonra 2 haftada bir 3 × {1}": "{0} today, then 3 × {1} every 2 weeks",
+ "Son ödeme tarihi": "Due date"
 }

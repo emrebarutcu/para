@@ -121,7 +121,7 @@ struct KartDetayi: View {
                 if let st = c.statement {
                     Satir(title: L("Ekstre bakiyesi"), value: Bicim.tl(st.balance ?? st.amount))
                     Satir(title: L("Asgari ödeme"), value: Bicim.tl(r.minimumDue))
-                    Satir(title: L("Son ödeme"), value: Bicim.day(st.date))
+                    Satir(title: L("Son ödeme tarihi"), value: Bicim.day(st.date))
                 }
                 if r.carried > 0.004 { Satir(title: L("Devreden"), value: Bicim.tl(r.carried)) }
                 if r.interestCharged > 0.004 { Satir(title: L("İşlemiş faiz"), value: Bicim.tl(r.interestCharged)) }

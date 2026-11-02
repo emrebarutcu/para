@@ -40,6 +40,18 @@ enum Ornek {
     }
 
     // Bugünden n gün önce / sonra
+    // Ayın verilen günündeki, bugünden önceki son tarih (kartın son ekstresinin son ödeme günü) ve ondan n gün önce
+    private static func sonEkstre(_ gun: Int) -> Date {
+        let cal = Calendar.current
+        var c = cal.dateComponents([.year, .month], from: Date())
+        c.day = gun
+        let bu = cal.date(from: c) ?? Date()
+        return bu < cal.startOfDay(for: Date()) ? bu : cal.date(byAdding: .month, value: -1, to: bu) ?? bu
+    }
+    private static func gunOnce(_ d: Date, _ n: Int) -> String {
+        Bicim.key(Calendar.current.date(byAdding: .day, value: -n, to: d) ?? d)
+    }
+
     private static func gun(_ n: Int) -> String {
         Bicim.key(Calendar(identifier: .gregorian).date(byAdding: .day, value: n, to: Date()) ?? Date())
     }
@@ -106,10 +118,18 @@ enum Ornek {
         kira["repeat"] = 0
         var spotify = harcama("p11", "Spotify", "chase", 11.99, 1, 120, "eglence")
         spotify["repeat"] = 0
+        // Pay in 4 (Klarna, banka kartından) ve döner kredi: Chase elle ödeniyor (APR %24,99); son ekstresinin (son
+        // ödeme günü 28) asgarisinden fazlası ödendi, kalanı faiziyle sonraki ekstreye devretti
+        var dyson = harcama("p12", "Dyson Airwrap", nil, 499.99, 4, 10, "alisveris")
+        dyson["bnpl"] = "klarna"
+        let son = sonEkstre(28)
+        var macbook = harcama("p13", "MacBook Air", "chase", 1299, 1, 0, "elektronik")
+        macbook["date"] = gunOnce(son, 45)
         return [
             "people": [["id": "ben", "name": "Me", "color": 0], ["id": "sam", "name": "Sam", "color": 1]],
             "cards": [
-                ["id": "chase", "name": "Chase Sapphire", "limit": 12000, "cutoffDay": 3, "dueDay": 28, "color": 0, "trackSince": gun(-150)],
+                ["id": "chase", "name": "Chase Sapphire", "limit": 12000, "cutoffDay": 3, "dueDay": 28, "color": 0, "trackSince": gun(-150),
+                 "manualSince": gunOnce(son, 20), "apr": 24.99],
                 ["id": "amex", "name": "Amex Gold", "limit": 8000, "cutoffDay": 18, "dueDay": 12, "color": 2, "trackSince": gun(-150)],
             ],
             "installments": [
@@ -121,7 +141,7 @@ enum Ornek {
                 harcama("p6", "Shell", "chase", 52.10, 1, 6, "ulasim"),
                 harcama("p7", "IKEA sofa", "amex", 1350, 6, 70, "ev"),
                 harcama("p8", "Netflix", "chase", 15.49, 1, 3, "eglence"),
-                sam, kira, spotify,
+                sam, kira, spotify, dyson, macbook,
             ],
             "entries": [
                 ["id": "e1", "personId": "ben", "asset": "USD", "amount": 6200, "desc": "Paycheck", "date": gun(-150), "repeat": 0],
@@ -132,6 +152,7 @@ enum Ornek {
                  "date": gun(-120), "due": gun(-90), "count": 48],
                 ["id": "d2", "kind": "person", "side": "receivable", "personId": "ben", "party": "Alex", "asset": "USD", "amount": 250,
                  "principal": 250, "date": gun(-12), "due": gun(10)],
+                ["id": "d3", "kind": "payment", "personId": "ben", "cardId": "chase", "amount": 500, "date": gunOnce(son, 1)],
             ],
         ]
     }

@@ -370,7 +370,7 @@ struct Borclar: Decodable {
         let remaining: Double
         let paid: Int
         let payments: Int
-        let nextCharge: Odeme
+        let nextCharge: Sonraki     // Borclar.Odeme (kaydedilen ödeme) değil: tarih ve tutar
         var id: String { purchaseId }
     }
     let totals: Toplamlar
