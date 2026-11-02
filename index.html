@@ -322,9 +322,9 @@
       <div class="asset-grid" id="assetGrid"></div>
       <section id="holdWrap"></section>
       <div id="entryWrap"></div>
-      <p class="footnote"><span data-home>TL</span> karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın). Fon fiyatları TEFAS'tan
+      <p class="footnote"><span data-home>TL</span> karşılıkları güncel satış kuruyla hesaplanır (dolar, euro, gram altın).<span data-tr> Fon fiyatları TEFAS'tan
         gelir ve günde bir kez açıklanır; hisse fiyatları Borsa İstanbul'dan yaklaşık 15 dakika gecikmelidir. Kâr, alışlarda
-        girdiğin birim fiyatlara göre ortalama maliyetle hesaplanır. Kurlar ve fiyatlar internet varken
+        girdiğin birim fiyatlara göre ortalama maliyetle hesaplanır.</span> Kurlar ve fiyatlar internet varken
         birkaç dakikada bir yenilenir; çevrimdışıyken son alınanlar kullanılır. Bakiyelere borç ve alacak ödemeleri de
         girer. Kart ekstreleri <span data-home>TL</span> bakiyenden düşer: “Otomatik” kartlarda son ödeme gününün ertesi günü, “Ben işaretlerim”
         kartlarında “Ödendi”ye dokunduğunda. “Hesaba katılmasın” seçtiğin kartlar bakiyeni etkilemez.</p>
@@ -844,7 +844,7 @@
         </div>
         <div class="settings-group">
           <span class="group-label">Otomatik ekleme</span>
-          <button type="button" class="row-btn" id="inboxBtn">
+          <button type="button" class="row-btn" id="inboxBtn" data-tr>
             <svg class="ic"><use href="#i-mail"/></svg>
             <span class="row-text"><strong>Banka e-postaları</strong><small>Sana özel adrese gelen harcamalar kartına eklenir</small></span>
           </button>
@@ -857,7 +857,7 @@
           <span class="group-label">Veri</span>
           <label class="row-btn">
             <svg class="ic"><use href="#i-upload"/></svg>
-            <span class="row-text"><strong>İçe aktar</strong><small>JSON yedeği ya da Taksitler Excel dosyası</small></span>
+            <span class="row-text"><strong>İçe aktar</strong><small>JSON yedeği<span data-tr> ya da Taksitler Excel dosyası</span></small></span>
             <input type="file" id="importInput" accept=".json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
           </label>
           <button type="button" class="row-btn" id="exportBtn">
@@ -881,7 +881,7 @@
       </header>
       <div class="sheet-body">
         <p class="hint">Özet'teki Nakit grafiği yalnızca bunları sayar: bakiyeleri ve hareketleri. Hemen harcayabileceğin
-          parayı seç; varsayılan TL ve aynı gün nakde dönen (T+0) TL para piyasası fonları.</p>
+          parayı seç; varsayılan <span data-home>TL</span><span data-tr> ve aynı gün nakde dönen (T+0) TL para piyasası fonları</span>.</p>
         <div class="cash-def" id="cashDefList"></div>
       </div>
       <footer class="sheet-foot">

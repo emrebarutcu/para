@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import T from "../../taksit.js";
+import V from "../../varlik.js";
 import { TOOLS, todayKey } from "../tools.js";
 import { getUser } from "../supabase.js";
 
@@ -60,6 +61,17 @@ test("fon ve hisse yalnızca Türkiye'de", async () => {
   const tr = ctxFor("TRY");
   const ok = await run(tr, "add_entry", { asset: "FON:AFT", direction: "in", amount: 10, price: 1.5, settle: false });
   assert.notEqual(ok.error?.includes("only available"), true);
+});
+
+test("banka e-postaları ve para piyasası fonları yalnızca Türkiye'de", async () => {
+  const usd = ctxFor("USD");
+  for (const name of ["get_inbox_address", "list_inbox", "check_inbox", "try_bank_email"]) {
+    assert.match((await run(usd, name, { text: "x" })).error, /only available for accounts in Turkey/, name);
+  }
+  assert.deepEqual(V.cashDefault("USD"), ["USD"]);
+  assert.deepEqual(V.cashDef(["USD", "MMF"], "USD"), ["USD"]);
+  assert.deepEqual(V.cashDefault("TRY"), ["TRY", "MMF"]);
+  assert.deepEqual(V.cashDef(["TRY", "MMF"], "TRY"), ["TRY", "MMF"]);
 });
 
 test("Türkiye hesabı eskisi gibi", async () => {

@@ -478,5 +478,11 @@
  "Euro": "Euro",
  "Ben": "Me",
  "Kullanım verisi gönder": "Share usage data",
- "Hangi özelliklerin kullanıldığını gönderir; tutarlar, adlar ve açıklamalar gönderilmez. Uygulamayı geliştirmek için kullanılır.": "Sends which features are used, never amounts, names or descriptions. Used to improve the app."
+ "Hangi özelliklerin kullanıldığını gönderir; tutarlar, adlar ve açıklamalar gönderilmez. Uygulamayı geliştirmek için kullanılır.": "Sends which features are used, never amounts, names or descriptions. Used to improve the app.",
+ "Web'de aç": "Open on the web",
+ "Banka": "Lender",
+ "Kim": "Who",
+ "Kime": "To",
+ "Kimden": "From",
+ "Ekle: gelir, döviz / altın": "Add: income, currency / gold"
 }

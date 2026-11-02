@@ -100,7 +100,8 @@ struct AyarlarEkrani: View {
                 }
 
                 Section {
-                    Link(L("Web'de aç (içe aktarma, banka e-postaları)"), destination: Yapilandirma.site)
+                    // İçe aktarma (Excel) ve banka e-postaları yalnızca Türkiye'de
+                    Link(model.marketsAllowed ? L("Web'de aç (içe aktarma, banka e-postaları)") : L("Web'de aç"), destination: Yapilandirma.site)
                     Link(L("Gizlilik politikası"), destination: Yapilandirma.gizlilik)
                     Link(L("Kullanım koşulları"), destination: Yapilandirma.kosullar)
                     Satir(title: L("Sürüm"), value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")

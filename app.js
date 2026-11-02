@@ -1874,8 +1874,9 @@ function renderPurchases() {
   const done = mine.filter(x => !x.left).sort(order ?? ((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key)));
 
   // E-postadan gelenler sıralamanın üstünde: Sırala yalnızca altındaki listeyi dizer
-  els.inboxWrap.replaceChildren(...(inbox.length ? [inboxPanel()] : []));
-  els.inboxWrap.hidden = !inbox.length;
+  const mail = inbox.length && P.marketsFor(HOME);   // banka e-postaları yalnızca Türkiye'de
+  els.inboxWrap.replaceChildren(...(mail ? [inboxPanel()] : []));
+  els.inboxWrap.hidden = !mail;
   els.purchaseSort.value = purchaseSort;
   els.purchaseTools.hidden = mine.length < 2;
   els.purchaseWrap.replaceChildren();
@@ -2334,7 +2335,7 @@ function renderAssets() {
     btn.append(icon("plus"), document.createTextNode("Hareket ekle"));
     btn.addEventListener("click", () => openEntrySheet());
     els.entryWrap.append(emptyState("coins", "Henüz hareket yok",
-      `${homeShort()}, döviz ya da gram altın girişlerini ve çıkışlarını, fon ve hisse alışlarını ekle; bakiyeni güncel kur ve fiyatla ${homeShort()} olarak gösteririm.`, btn));
+      `${homeShort()}, döviz ya da gram altın girişlerini ve çıkışlarını${P.marketsFor(HOME) ? ", fon ve hisse alışlarını" : ""} ekle; bakiyeni güncel kur ve fiyatla ${homeShort()} olarak gösteririm.`, btn));
     return;
   }
   // Tekrarlayan hareket son işlenen tekrarının tarihiyle sıralanır (henüz işlenmediyse başlangıcıyla); nakit
@@ -2452,9 +2453,11 @@ function renderAssetChart(pid) {
       diff > EPS ? "in-text" : diff < -EPS ? "out-text" : ""),
   );
   const names = list => list.map(c => V.asset(c)?.name.toLocaleLowerCase("tr-TR") ?? c).join(", ");
-  els.assetNote.textContent = "Her gün o güne kadarki kayıtlarla ve o günün kur ve fiyatlarıyla: dolar, euro, gram altın ve "
-    + "hisseler günlük kapanışla (İş Yatırım), fonlar TEFAS fiyatıyla; bugün güncel kur ve fiyatla. Alacaklar dahil. Nakdin "
-    + "seyri Özet'teki Nakit grafiğinde."
+  els.assetNote.textContent = (P.marketsFor(HOME)
+    ? "Her gün o güne kadarki kayıtlarla ve o günün kur ve fiyatlarıyla: dolar, euro, gram altın ve "
+      + "hisseler günlük kapanışla (İş Yatırım), fonlar TEFAS fiyatıyla; bugün güncel kur ve fiyatla."
+    : "Her gün o güne kadarki kayıtlarla ve o günün kurlarıyla (günlük kapanış); bugün güncel kurla.")
+    + " Alacaklar dahil. Nakdin seyri Özet'teki Nakit grafiğinde."
     + (historyLoading && data.codes.length ? " Geçmiş fiyatlar alınıyor…" : "")
     + (!historyLoading && data.approx.length ? ` Geçmiş fiyatı alınamayan ${names(data.approx)} bugünkü fiyatla sayıldı.` : "")
     + (data.missing.length ? ` Kuru ya da fiyatı alınamayan ${names(data.missing)} dahil değil.` : "");
@@ -2570,6 +2573,9 @@ function renderHoldings(mine, bals, r) {
   const value = c => V.toTry(bals[c], c, r, HOME);
   const codes = Object.keys(bals).filter(c => V.market(c) && Math.abs(bals[c]) > 1e-9)
     .sort((a, b) => (value(b) ?? -1) - (value(a) ?? -1) || (a < b ? -1 : 1));
+  // Türkiye dışında fon ve hisse eklenmez (P.marketsFor); önceden eklenmiş olanlar görünür, Ekle yok
+  const markets = P.marketsFor(HOME);
+  if (!markets && !codes.length) { els.holdWrap.replaceChildren(); return; }
   const head = el("header", "panel-head hold-head");
   head.append(el("h2", "", "Fon ve hisse"));
   if (codes.length) head.append(el("span", "panel-note", fmt(codes.reduce((sum, c) => sum + (value(c) ?? 0), 0))));
@@ -2577,7 +2583,7 @@ function renderHoldings(mine, bals, r) {
   add.type = "button";
   add.append(icon("plus"), document.createTextNode("Ekle"));
   add.addEventListener("click", () => openEntrySheet(null, lastMarket()));
-  head.append(add);
+  if (markets) head.append(add);
   const panel = el("div", "panel list-panel");
   if (codes.length) panel.append(...codes.map(c => holdingRow(c, bals[c], pos[c], r)));
   else panel.append(el("p", "hold-empty", traded ? "Elinde fon ya da hisse kalmadı."
@@ -5568,7 +5574,7 @@ function emailItem(row) {
 }
 
 async function checkInbox({ quiet = true } = {}) {
-  if (inboxBusy || typeof window.syncInboxFetch !== "function") return;
+  if (inboxBusy || typeof window.syncInboxFetch !== "function" || !P.marketsFor(HOME)) return;   // yalnızca Türkiye'de
   // Kullanıcıya özel veri yüklenmeden harcama eklenmesin (giriş olayından önce çağrılırsa)
   if (!window.CF_USER_ID || window.CF_USER_ID !== window.syncGetUser?.()?.id) return;
   inboxBusy = true;
@@ -6004,9 +6010,9 @@ function renderCashDef() {
   const funds = codes.filter(c => V.moneyMarket(prices?.prices?.[c]));
   const others = codes.filter(c => !funds.includes(c));
   els.cashDefList.replaceChildren(
-    opt(HOME, "Türk lirası", "Ana para birimi"),
-    opt(V.MMF, "TL para piyasası fonları", funds.length ? `Elindekiler: ${funds.map(c => V.market(c).ticker).join(", ")}`
-      : "TEFAS'taki para piyasası fonları; aynı gün nakde döner (T+0)"),
+    opt(HOME, V.asset(HOME)?.name ?? HOME, "Ana para birimi"),
+    ...(P.marketsFor(HOME) ? [opt(V.MMF, "TL para piyasası fonları", funds.length ? `Elindekiler: ${funds.map(c => V.market(c).ticker).join(", ")}`
+      : "TEFAS'taki para piyasası fonları; aynı gün nakde döner (T+0)")] : []),
     ...V.assetsFor(HOME).filter(a => a.code !== HOME).map(a => opt(a.code, a.name)),
     ...(others.length ? [el("span", "group-label cash-def-head", "Elindeki diğer fon ve hisseler")] : []),
     ...others.map(c => opt(c, V.market(c).ticker, marketName(c))),
@@ -6025,7 +6031,7 @@ els.cashDefList.addEventListener("change", e => {
   if (!picked.length) { e.target.checked = true; toast("En az birini seç"); return; }
   setCashDef(picked);
 });
-els.cashDefReset.addEventListener("click", () => { setCashDef(null); renderCashDef(); toast(`Nakit: ${homeShort()} ve para piyasası fonları`); });
+els.cashDefReset.addEventListener("click", () => { setCashDef(null); renderCashDef(); toast(`Nakit: ${cashDefText()}`); });
 els.cashDefBtn.addEventListener("click", openCashDefSheet);
 if (window.APP_VERSION) $("appVersion").textContent = `CashFollow v${window.APP_VERSION}`;
 // Giriş penceresi (sync.js) ayarların üstünde açılsın diye önce ayarları kapat
@@ -6336,6 +6342,8 @@ function homeEk(kind) {
 }
 function homeSymbol() { return P.currency(HOME)?.symbol ?? HOME; }
 
+const IMPORT_ACCEPT = els.importInput.accept;   // index.html: JSON yedeği ve Excel (Excel yalnızca Türkiye'de)
+
 function applyHome() {
   HOME = P.homeOfCountry(currentCountry());
   if (state) state.home = HOME;
@@ -6345,6 +6353,11 @@ function applyHome() {
   cashDef = readCashDef();
   for (const n of document.querySelectorAll("[data-home]")) n.textContent = homeShort();
   for (const n of document.querySelectorAll("[data-home-symbol]")) n.textContent = homeSymbol();
+  // Türkiye'ye özel olanlar (P.marketsFor): banka e-postaları, Excel içe aktarma, fon / hisse ve para piyasası notları
+  const tr = P.marketsFor(HOME);
+  for (const n of document.querySelectorAll("[data-tr]")) n.hidden = !tr;
+  for (const n of document.querySelectorAll("[data-not-tr]")) n.hidden = tr;
+  els.importInput.accept = tr ? IMPORT_ACCEPT : ".json,application/json";
 }
 
 // Ülke değişir: hesapta user_metadata'ya (web, iPhone ve asistan aynısını görür), girişsizse cihaza. Tutarlar çevrilmez.

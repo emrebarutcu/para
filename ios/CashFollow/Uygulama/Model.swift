@@ -314,7 +314,8 @@ final class Model: ObservableObject {
     var home: String { Bicim.home }
 
     // Nakit sayılanlar (Özet'teki Nakit grafiği); nil varsayılana döner
-    var cashDef: [String] { Depo.cashDef ?? constants?.cashDefault ?? [home, "MMF"] }
+    // Para piyasası fonları yalnızca Türkiye'de (marketsAllowed)
+    var cashDef: [String] { (Depo.cashDef ?? constants?.cashDefault ?? [home, "MMF"]).filter { $0 != "MMF" || marketsAllowed } }
     func setCashDef(_ list: [String]?) {
         Depo.cashDef = list
         motor?.setCashDef(list)

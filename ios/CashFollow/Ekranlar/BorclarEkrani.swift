@@ -182,7 +182,7 @@ struct BorcDetayi: View {
             Form {
                 Section {
                     Satir(title: L("Tür"), value: borcTuru(d.type))
-                    if let p = d.party, !p.isEmpty { Satir(title: d.type == "loan" ? "Banka" : "Kim", value: p) }
+                    if let p = d.party, !p.isEmpty { Satir(title: d.type == "loan" ? L("Banka") : L("Kim"), value: p) }
                     if let a = d.description, !a.isEmpty { Satir(title: L("Not"), value: a) }
                     Satir(title: L("Kişi"), value: d.person)
                     Satir(title: L("Başlangıç"), value: Bicim.day(d.date))
@@ -365,7 +365,7 @@ struct BorcFormu: View {
                     }
                 } else {
                     Section {
-                        TextField(tur == "lent" ? "Kime" : "Kimden", text: $kim)
+                        TextField(tur == "lent" ? L("Kime") : L("Kimden"), text: $kim)
                         HStack {
                             TextField(L("Tutar"), text: $tutar).keyboardType(.decimalPad)
                             Picker("", selection: $varlik) {

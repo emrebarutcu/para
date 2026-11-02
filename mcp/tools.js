@@ -636,6 +636,10 @@ function buildEntry(state, args, today, base = null, quote = null) {
 function checkMarketsAllowed(code, home) {
   if (V.market(code) && !P.marketsFor(P.isCurrency(home) ? home : "TRY")) fail("Funds and stocks (TEFAS, Borsa İstanbul) are only available for accounts in Turkey for now.");
 }
+// Banka e-postaları Türk bankalarının bildirimlerini okur: yalnızca Türkiye'deki hesaplarda (P.marketsFor)
+function checkInboxAllowed(home) {
+  if (!P.marketsFor(P.isCurrency(home) ? home : "TRY")) fail("Bank e-mails (Turkish bank notifications) are only available for accounts in Turkey for now.");
+}
 
 // Fon / hisse kodu biliniyor mu (fiyat kaynağına göre); kaynak alınamadıysa doğrulanamaz, kabul edilir
 function checkMarket(code, rates) {
@@ -1932,6 +1936,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: { ...READ, readOnlyHint: false, idempotentHint: true },
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       return { address: await ctx.inbox.address(false) };
     },
   },
@@ -1942,6 +1947,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: DESTROY,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       return { address: await ctx.inbox.address(true), note: "Update the notification address at the bank." };
     },
   },
@@ -1952,6 +1958,7 @@ export const TOOLS = [
     inputSchema: obj({ include_body: S.bool("Include the e-mail text (e.g. to show a bank verification link).") }),
     annotations: READ,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       return { emails: rows.map(row => emailView(emailItem(state, row), { body: !!args.include_body })) };
     },
@@ -1963,6 +1970,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: WRITE,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       const items = rows.map(row => emailItem(state, row));
       const ready = items.filter(x => !x.reason);
@@ -1999,6 +2007,7 @@ export const TOOLS = [
     inputSchema: obj({ email_id: S.int("emailId from list_inbox."), ...PURCHASE_FIELDS }, ["email_id"]),
     annotations: WRITE,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const { email_id: emailId, ...fields } = args;
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       const row = rows.find(r => r.id === Number(emailId)) ?? fail(`No pending e-mail with id ${emailId}.`);
@@ -2032,6 +2041,7 @@ export const TOOLS = [
     inputSchema: obj({ email_id: S.int("emailId from list_inbox.") }, ["email_id"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const id = Number(args.email_id);
       const claimed = await ctx.inbox.claim([id]);
       return { dismissed: claimed.includes(id), emailId: id };
@@ -2044,6 +2054,7 @@ export const TOOLS = [
     inputSchema: obj({ text: S.str("The e-mail text.") }, ["text"]),
     annotations: READ,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const state = await ctx.load();
       const x = emailItem(state, { id: null, body: text(args.text, "text"), received_at: new Date().toISOString() });
       const v = emailView(x);
@@ -2180,16 +2191,17 @@ export const TOOLS = [
 
 // Sunucunun initialize cevabında LLM'e verilen genel bilgi
 export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (single or in installments / taksit) for one or more people, and shows when each installment is paid.
-- Amounts are in the account's currency (the currency field of the answers; TRY for accounts in Turkey, EUR, USD, GBP… elsewhere — the user picks their country at sign-up), unless an asset says otherwise. Field names ending in Try (tryValue, totalTry…) are in the account's currency. Dates are YYYY-MM-DD, months YYYY-MM, in Turkey time.
+- Amounts are in the account's currency (the currency field of the answers; TRY for accounts in Turkey, EUR, USD, GBP… elsewhere — the user picks their country at sign-up), unless an asset says otherwise. Field names ending in Try (tryValue, totalTry…) are in the account's currency. Dates are YYYY-MM-DD, months YYYY-MM, in the user's time zone.
 - A card has a statement cutoff day (hesap kesim günü) and a due day (son ödeme günü). A purchase on or before the cutoff day goes into that month's statement; the statement is paid on the due day (same month if the due day is after the cutoff, otherwise the next month). Installments fall into the following statements one month apart. Cash purchases are paid on the purchase day.
 - When a card's cutoff / due day changes, statements already cut keep their dates; update_card asks (transition) what happens to the purchases in between — ask the user, don't pick yourself.
 - A card's used limit is the sum of installments still to be paid (on a card paid by hand, also its unpaid past statements).
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
-- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums of entries dated up to today (repeating ones: the times up to today). get_assets values them in TRY at the current Turkish market rate. Buying dollars / euros / gold with lira or selling them for lira (settle true, price = the rate) is a transfer, not income or spending.
+- Asset entries track the account's currency, foreign currencies (USD, EUR, GBP…) and gold in grams (GAU) coming in or going out, once or repeating; balances are their sums of entries dated up to today (repeating ones: the times up to today). get_assets values them in the account's currency at current exchange rates. Buying foreign currency / gold with the account's currency or selling it back (settle true, price = the rate) is a transfer, not income or spending.
 - Funds and stocks (only for accounts in Turkey for now) are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
 - Deleting a card or a person also deletes their purchases (a card also its statement payments, a person also their asset entries and debts); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
-- Reply to the user in their language (the app is Turkish).`;
+- Bank e-mails (the *_inbox* tools and try_bank_email: Turkish bank notifications turned into purchases) are only available for accounts in Turkey for now.
+- Reply to the user in their language (the app is in Turkish and English).`;
