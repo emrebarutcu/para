@@ -533,7 +533,9 @@
       const { data, error } = authMode === 'login'
         ? await db.auth.signInWithPassword({ email, password })
         : await db.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin,
-          data: { country: document.getElementById('authCountry')?.value || 'TR' } } });
+          // lang: giriş e-postalarının dili; web henüz yalnızca Türkçe olduğu için tarayıcının dili (iPhone'da uygulamanın)
+          data: { country: document.getElementById('authCountry')?.value || 'TR',
+                  lang: /^tr/i.test(navigator.language || 'tr') ? 'tr' : 'en' } } });
 
       btn.disabled = false;
       btn.textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';

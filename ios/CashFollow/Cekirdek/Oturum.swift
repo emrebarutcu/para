@@ -81,7 +81,7 @@ enum Auth {
     }
 
     static func signUp(email: String, password: String, country: String) async throws -> KayitSonucu {
-        let json = try await post(endpoint("signup", redirect: true), ["email": email, "password": password, "data": ["country": country]])
+        let json = try await post(endpoint("signup", redirect: true), ["email": email, "password": password, "data": ["country": country, "lang": Dil.kod]])
         if let s = session(json) { return .session(s) }
         let user = json["user"] as? [String: Any] ?? json
         if let ids = user["identities"] as? [Any], ids.isEmpty { return .alreadyExists }
@@ -115,9 +115,10 @@ enum Auth {
         _ = try await post(URL(string: Yapilandirma.supabaseURL.absoluteString + "/rest/v1/rpc/delete_my_account")!, [:], token: s.accessToken)
     }
 
-    // Cihazın saat dilimi (user_metadata.tz): asistan "bugün"ü kullanıcının saatine göre hesaplar
-    static func updateZone(_ s: Oturum, _ tz: String) async throws {
-        _ = try await post(endpoint("user"), ["data": ["tz": tz]], token: s.accessToken, method: "PUT")
+    // Cihazın saat dilimi (user_metadata.tz) ve uygulamanın dili (lang): asistan "bugün"ü kullanıcının saatine göre
+    // hesaplar, giriş e-postaları (supabase/eposta-sablonlari) bu dilde gider
+    static func updateProfile(_ s: Oturum, tz: String, lang: String) async throws {
+        _ = try await post(endpoint("user"), ["data": ["tz": tz, "lang": lang]], token: s.accessToken, method: "PUT")
     }
 
     static func signOut(_ s: Oturum) async {
