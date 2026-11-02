@@ -188,6 +188,9 @@
       countries: P.COUNTRIES,
       home,
       markets: P.marketsFor(home),
+      apr: P.aprFor(home),
+      bnpl: P.bnplFor(home),
+      bnplProviders: T.BNPL.map(id => ({ id, name: T.bnplName({ bnpl: id }), hint: "" })),
       cashDefault: V.cashDefault(home),
     });
   }

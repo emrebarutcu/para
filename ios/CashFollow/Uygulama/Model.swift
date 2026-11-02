@@ -314,13 +314,16 @@ final class Model: ObservableObject {
     var home: String { Bicim.home }
 
     // Nakit sayılanlar (Özet'teki Nakit grafiği); nil varsayılana döner
-    var cashDef: [String] { Depo.cashDef ?? constants?.cashDefault ?? [home, "MMF"] }
+    // Para piyasası fonları yalnızca Türkiye'de (marketsAllowed)
+    var cashDef: [String] { (Depo.cashDef ?? constants?.cashDefault ?? [home, "MMF"]).filter { $0 != "MMF" || marketsAllowed } }
     func setCashDef(_ list: [String]?) {
         Depo.cashDef = list
         motor?.setCashDef(list)
         revision += 1
     }
     var marketsAllowed: Bool { constants?.markets ?? true }
+    var aprAllowed: Bool { constants?.apr ?? false }      // kartın APR'si (döner kredi), ABD
+    var bnplAllowed: Bool { constants?.bnpl ?? false }    // Pay in 4, ABD
 
     // Ülke değişince tutarlar çevrilmez: kayıtlar yazıldıkları para biriminde kalır
     func setCountry(_ code: String) async throws {

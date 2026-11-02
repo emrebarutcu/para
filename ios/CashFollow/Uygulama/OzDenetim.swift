@@ -81,6 +81,18 @@ enum OzDenetim {
             try check(eur.currency == "EUR" && abs(eur.totalTry - (1000 + 110.0 * 40 / 45)) < 0.01, "euro hesabı: \(eur.currency ?? "-") \(eur.totalTry)")
             try check(m.constants()?.markets == false && m.constants()?.assets.first?.code == "EUR", "euro formları")
             try check(m.homeOf(country: "GB") == "GBP", "ülke → para birimi")
+
+            // ABD: kartın APR'si (döner kredi) ve Pay in 4 (para.js aprFor / bnplFor)
+            m.box.json = m.defaultState
+            m.setHome(m.homeOf(country: "US"))
+            try check(m.constants()?.apr == true && m.constants()?.bnpl == true && m.constants()?.markets == false, "ABD formları")
+            try m.runJSON("add_card", ["name": "Chase", "cutoff_day": 3, "due_day": 28, "apr": 24.99, "auto_pay": false])
+            let us: HarcamaSonucu = try m.run("add_purchase", ["description": "Sneakers", "amount": 99.99, "card": "nakit",
+                                                               "bnpl": "klarna", "date": "2026-11-01"])
+            try check(us.purchase.installments == 4 && us.purchase.bnpl?.firstPayment == 25.02, "Pay in 4: \(String(describing: us.purchase.bnpl))")
+            let usCards: KartListesi = try m.run("list_cards")
+            try check(usCards.cards.first?.apr == 24.99 && usCards.cards.first?.tracking?.autoPay == false, "APR: \(usCards.cards)")
+            let _: Borclar = try m.run("list_debts")
             m.setHome("TRY")
 
             finish("OZ-DENETIM TAMAM", code: 0)

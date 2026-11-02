@@ -194,10 +194,11 @@
 
   // ---------- Nakit ----------
   // Nakit tanımı (Özet'teki Nakit grafiği): nakit sayılan varlıkların listesi. Varlık kodları ("TRY", "USD", "FON:ALE",
-  // "BIST:THYAO") ve "MMF": ana para biriminin (TL) bütün para piyasası fonları. Varsayılan TL ve para piyasası fonları.
+  // "BIST:THYAO") ve "MMF": ana para biriminin (TL) bütün para piyasası fonları. Varsayılan TL ve para piyasası fonları;
+  // fon ve hisse olmayan ülkede (P.marketsFor) yalnızca ana para birimi.
   const MMF = "MMF";
   const CASH_DEFAULT = ["TRY", MMF];
-  const cashDefault = (home = "TRY") => [home, MMF];
+  const cashDefault = (home = "TRY") => (P.marketsFor(home) ? [home, MMF] : [home]);
 
   // Para piyasası fonu: TEFAS'ta adında "para piyasası" geçen yatırım fonu (aynı gün nakde döner, T+0). Hepsi TL'dir;
   // emeklilik fonları (BES) nakit sayılmaz. fund: { name, kind } (fiyatla gelir: /api/fiyat, /api/fonlar)
@@ -208,7 +209,7 @@
   // Kayıtlı tanım → geçerli liste (geçersiz ögeler atılır); liste değilse varsayılan
   function cashDef(list, home = "TRY") {
     if (!Array.isArray(list)) return cashDefault(home);
-    return [...new Set(list.filter(c => c === MMF || money(c) || market(c)))];
+    return [...new Set(list.filter(c => (c === MMF && P.marketsFor(home)) || money(c) || market(c)))];
   }
 
   // Varlık nakit mi; fund fonun TEFAS bilgisi (para piyasası fonu mu diye)

@@ -41,9 +41,35 @@ struct Ozet: Decodable {
 
 struct KartListesi: Decodable { let cards: [KartGorunumu] }
 
+// Döner kredi (elle ödenen, APR'li kart; borc.js revolve): devreden bakiye, işlemiş faiz, sıradaki ekstrenin ödenmemiş
+// asgarisi ve yalnızca asgari ödenirse geri ödeme (monthsAtMinimum nil: 50 yılda bitmez)
+struct DonerKredi: Decodable, Hashable {
+    struct GeriOdeme: Decodable, Hashable { let monthsAtMinimum: Int?; let interestAtMinimum: Double; let monthlyToClearIn12: Double }
+    let apr: Double
+    let carried: Double
+    let interestCharged: Double
+    let minimumDue: Double
+    let payoff: GeriOdeme?
+}
+
+// Kartın sıradaki ekstresi: amount ödenecek (ödenmemiş) kısım; döner kredide bakiye (devreden ve faiz dahil), asgari, faiz
+struct KartEkstresi: Decodable, Hashable {
+    let date: String
+    let amount: Double
+    let alreadyCut: Bool?
+    let balance: Double?
+    let minimum: Double?
+    let interest: Double?
+    let carriedIn: Double?
+}
+
 struct KartGorunumu: Decodable, Identifiable, Hashable {
     struct Bugun: Decodable, Hashable { let statementCutoff: String; let dueDate: String }
-    struct Takip: Decodable, Hashable { let since: String; let autoPay: Bool; let unpaid: Double; let overdue: Double }
+    struct Takip: Decodable, Hashable {
+        let since: String; let autoPay: Bool; let unpaid: Double; let overdue: Double
+        let manualSince: String?
+        let revolving: DonerKredi?
+    }
     let id: String
     let name: String
     let last4: String?
@@ -56,6 +82,8 @@ struct KartGorunumu: Decodable, Identifiable, Hashable {
     let purchaseCount: Int
     let purchaseToday: Bugun
     let tracking: Takip?
+    let apr: Double?
+    let statement: KartEkstresi?
 }
 
 struct HarcamaListesi: Decodable { let count: Int; let purchases: [Harcama] }
@@ -85,6 +113,19 @@ struct Harcama: Decodable, Identifiable, Hashable {
     let statementCutoff: String?
     let `repeat`: Tekrar?
     let payments: [Taksit]?
+    let bnpl: SimdiAl?
+}
+
+// Şimdi al sonra öde (Pay in 4; taksit.js bnpl): sağlayıcı, ödeme sayısı, çekilenler, sağlayıcıya kalan, sıradaki çekim
+struct SimdiAl: Decodable, Hashable {
+    let provider: String
+    let name: String
+    let payments: Int
+    let paid: Int
+    let firstPayment: Double
+    let perPayment: Double
+    let owedToProvider: Double
+    let nextCharge: Odeme?
 }
 
 struct HarcamaSonucu: Decodable {
@@ -219,6 +260,9 @@ struct Akis: Decodable {
         let byPerson: [String: Double]?
         let items: [Kalem]?
         let notCounted: Bool?
+        let interest: Double?      // döner kredi: ekstreye eklenen faiz, devreden bakiye, sonrakine devreden
+        let carriedIn: Double?
+        let carriedOut: Double?
     }
     struct Ay: Decodable, Identifiable, Hashable {
         let month: String
@@ -280,6 +324,7 @@ struct Borclar: Decodable {
         let autoPay: Bool?
         let unpaid: Double?
         let overdue: Double?
+        let revolving: DonerKredi?
         var id: String { cardId }
     }
     struct Pay: Decodable, Identifiable, Hashable {
@@ -316,10 +361,23 @@ struct Borclar: Decodable {
         let status: String
         let payments: [Odeme]?
     }
+    // Şimdi al sonra öde: sağlayıcıya kalan (henüz çekilmemiş ödemeler)
+    struct SimdiAlBorcu: Decodable, Identifiable, Hashable {
+        let purchaseId: String
+        let description: String
+        let name: String
+        let card: String
+        let remaining: Double
+        let paid: Int
+        let payments: Int
+        let nextCharge: Sonraki     // Borclar.Odeme (kaydedilen ödeme) değil: tarih ve tutar
+        var id: String { purchaseId }
+    }
     let totals: Toplamlar
     let cards: [KartBorcu]
     let shares: [Pay]?
     let debts: [Kayit]
+    let bnpl: [SimdiAlBorcu]?
 }
 
 // ── Alabilir miyim? (simulate_purchase) ───────────────────────────────────────

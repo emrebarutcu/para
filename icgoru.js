@@ -263,7 +263,7 @@
     home = P.homeOf(state);
     const t = T.parseDate(today).idx;
     const { purchases, entries } = known(state);
-    const cashflow = T.buildCashflow(state.people, state.cards, paying(state), t, t + Math.max(HORIZON, PEAK_MONTHS), home);
+    const cashflow = B.cashflow(state, t, t + Math.max(HORIZON, PEAK_MONTHS), today);   // hesaba katılmayan kart toplamlarda yok
     const out = [];
     const add = x => out.push(x);
 
@@ -452,7 +452,7 @@
       return pays.length ? Math.max(m, pays[pays.length - 1].idx) : m;
     }, -Infinity);
     if (lastIdx >= t) {
-      const rest = T.buildCashflow(state.people, state.cards, paying(state), t, lastIdx, home).reduce((s, m) => s + m.total, 0);
+      const rest = B.cashflow(state, t, lastIdx, today).reduce((s, m) => s + m.total, 0);
       add({
         id: "bitis", tone: "good", title: L("Son taksit: {0}", monthLong(lastIdx)),
         text: L("Bu aydan son taksite kadar kart ve taksit ödemelerinin toplamı {0}. Yeni harcama eklemezsen sonrasında kart ve taksit ödemen kalmaz.", fmt(rest)),

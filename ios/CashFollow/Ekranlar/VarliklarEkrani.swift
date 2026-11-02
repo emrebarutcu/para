@@ -56,7 +56,9 @@ struct VarliklarEkrani: View {
                 Istatistik(etiket: L("Borçlar düşünce"), deger: Bicim.tl(v.netWorthTry, fraction: false)),
             ])
             if let r = v.rates {
-                let kodlar = ["USD", "EUR", "GAU", "GBP", "TRY"].filter { $0 != Bicim.home && r.values[$0] != nil }.prefix(3)
+                // Gram altın Türkiye'de yaygın; başka ülkede ana para birimine göre yaygın kurlar (dolarda euro, sterlin, Kanada doları)
+                let aday = model.marketsAllowed ? ["USD", "EUR", "GAU", "GBP"] : ["USD", "EUR", "GBP", "CAD", "JPY"]
+                let kodlar = aday.filter { $0 != Bicim.home && r.values[$0] != nil }.prefix(3)
                 if !kodlar.isEmpty {
                     Ayirici()
                     Text(L("Bugünkü kurlar")).font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)

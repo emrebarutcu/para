@@ -300,7 +300,7 @@ function lastPaymentIndex() {
     if (list.length) last = Math.max(last, list[list.length - 1].idx);
     if (T.endless(p)) last = Math.max(last, todayIndex() + 11);
   }
-  return last;
+  return Math.max(last, B.carryIndex(state, T.todayKey()));   // döner kredide devreden bakiyenin ekstresi
 }
 
 let toastTimer = 0;
@@ -405,7 +405,7 @@ const els = {
 // ---------- Render ----------
 // Kart ve nakit ödemeleri aylara göre (taksit.js buildCashflow). Hesaba katılmayan kartın (borc.js) ekstreleri ödeme
 // toplamlarına girmez: ay, kişi ve kart toplamlarından çıkarılır, olay listede kalır (ignored: soluk, "hesaba katılmıyor")
-function cashflow(fromIdx, toIdx) { return N.cashflow(state, fromIdx, toIdx); }
+function cashflow(fromIdx, toIdx) { return N.cashflow(state, fromIdx, toIdx, T.todayKey()); }
 
 function render() {
   const start = T.monthIndex(currentMonth);
@@ -599,7 +599,7 @@ function cardDueRow({ card: c, x, open, ev }, today) {
   sub.append(el("span", "", x.state === "late" ? `son ödeme ${fmtDayShort(x.key)}` : x.state === "due" ? "Son gün bugün"
     : `${relDays(x.key, today)} · ${fmtDayShort(x.key)}`));
   if (x.state === "late") sub.append(el("span", "out-text", `${lateDays(x.key, today)} gün gecikti`));
-  if (x.covered > EPS) sub.append(el("span", "", "kısmen ödendi · kalan"));
+  if ((x.paid ?? x.covered) > EPS) sub.append(el("span", "", "kısmen ödendi · kalan"));   // döner kredide covered devredeni de sayar
   main.append(title, sub);
   li.append(badge, main, el("div", "pay-amt", fmt(open)));
   const due = x.state === "late" || x.state === "due";
@@ -1874,8 +1874,9 @@ function renderPurchases() {
   const done = mine.filter(x => !x.left).sort(order ?? ((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key)));
 
   // E-postadan gelenler sıralamanın üstünde: Sırala yalnızca altındaki listeyi dizer
-  els.inboxWrap.replaceChildren(...(inbox.length ? [inboxPanel()] : []));
-  els.inboxWrap.hidden = !inbox.length;
+  const mail = inbox.length && P.marketsFor(HOME);   // banka e-postaları yalnızca Türkiye'de
+  els.inboxWrap.replaceChildren(...(mail ? [inboxPanel()] : []));
+  els.inboxWrap.hidden = !mail;
   els.purchaseSort.value = purchaseSort;
   els.purchaseTools.hidden = mine.length < 2;
   els.purchaseWrap.replaceChildren();
@@ -1928,7 +1929,8 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   meta.append(tag);
   if (p.date) meta.append(el("span", "", fmtDayShort(p.date) + " " + T.yearOf(T.parseDate(p.date).idx)));
   if (code !== HOME) meta.append(el("span", "", V.asset(code).name));
-  if (plan > 1 || !rule) meta.append(el("span", "", plan > 1 ? `${plan} taksit` : "Peşin"));
+  if (T.bnpl(p)) meta.append(el("span", "", `${T.bnplName(p)} · Pay in ${plan}`));   // şimdi al sonra öde: 2 haftada bir
+  else if (plan > 1 || !rule) meta.append(el("span", "", plan > 1 ? `${plan} taksit` : "Peşin"));
   if (rule) meta.append(el("span", "", R.label(p) + (rule.n ? ` · ${rule.n} kez` : "")));
   if (K.valid(p.category)) meta.append(el("span", "cat-tag" + (p.categoryBy === "user" ? "" : " ai"), K.category(p.category).name));
   main.append(meta);
@@ -1956,6 +1958,9 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
     const amount = el("span", "amount", money(T.originalTotal(p), code));
     amount.append(el("small", "", R.per(p)));
     side.append(amount, el("span", "sub", next ? `sonraki ${fmtDayShort(next)}` : "bitti"));
+  } else if (T.bnpl(p)) {
+    const rest = T.payments(p, cardById(p.cardId)).filter(x => x.key >= today).reduce((t, x) => t + x.amount, 0);
+    side.append(el("span", "amount", fmt(p.total)), el("span", "sub", rest > EPS ? `kalan ${fmt(rest)}` : "bitti"));
   } else if (plan > 1) {
     const amount = el("span", "amount", fmt(per));
     amount.append(el("small", "", "/ay"));
@@ -2334,7 +2339,7 @@ function renderAssets() {
     btn.append(icon("plus"), document.createTextNode("Hareket ekle"));
     btn.addEventListener("click", () => openEntrySheet());
     els.entryWrap.append(emptyState("coins", "Henüz hareket yok",
-      `${homeShort()}, döviz ya da gram altın girişlerini ve çıkışlarını, fon ve hisse alışlarını ekle; bakiyeni güncel kur ve fiyatla ${homeShort()} olarak gösteririm.`, btn));
+      `${homeShort()}, döviz ya da gram altın girişlerini ve çıkışlarını${P.marketsFor(HOME) ? ", fon ve hisse alışlarını" : ""} ekle; bakiyeni güncel kur ve fiyatla ${homeShort()} olarak gösteririm.`, btn));
     return;
   }
   // Tekrarlayan hareket son işlenen tekrarının tarihiyle sıralanır (henüz işlenmediyse başlangıcıyla); nakit
@@ -2452,9 +2457,11 @@ function renderAssetChart(pid) {
       diff > EPS ? "in-text" : diff < -EPS ? "out-text" : ""),
   );
   const names = list => list.map(c => V.asset(c)?.name.toLocaleLowerCase("tr-TR") ?? c).join(", ");
-  els.assetNote.textContent = "Her gün o güne kadarki kayıtlarla ve o günün kur ve fiyatlarıyla: dolar, euro, gram altın ve "
-    + "hisseler günlük kapanışla (İş Yatırım), fonlar TEFAS fiyatıyla; bugün güncel kur ve fiyatla. Alacaklar dahil. Nakdin "
-    + "seyri Özet'teki Nakit grafiğinde."
+  els.assetNote.textContent = (P.marketsFor(HOME)
+    ? "Her gün o güne kadarki kayıtlarla ve o günün kur ve fiyatlarıyla: dolar, euro, gram altın ve "
+      + "hisseler günlük kapanışla (İş Yatırım), fonlar TEFAS fiyatıyla; bugün güncel kur ve fiyatla."
+    : "Her gün o güne kadarki kayıtlarla ve o günün kurlarıyla (günlük kapanış); bugün güncel kurla.")
+    + " Alacaklar dahil. Nakdin seyri Özet'teki Nakit grafiğinde."
     + (historyLoading && data.codes.length ? " Geçmiş fiyatlar alınıyor…" : "")
     + (!historyLoading && data.approx.length ? ` Geçmiş fiyatı alınamayan ${names(data.approx)} bugünkü fiyatla sayıldı.` : "")
     + (data.missing.length ? ` Kuru ya da fiyatı alınamayan ${names(data.missing)} dahil değil.` : "");
@@ -2570,6 +2577,9 @@ function renderHoldings(mine, bals, r) {
   const value = c => V.toTry(bals[c], c, r, HOME);
   const codes = Object.keys(bals).filter(c => V.market(c) && Math.abs(bals[c]) > 1e-9)
     .sort((a, b) => (value(b) ?? -1) - (value(a) ?? -1) || (a < b ? -1 : 1));
+  // Türkiye dışında fon ve hisse eklenmez (P.marketsFor); önceden eklenmiş olanlar görünür, Ekle yok
+  const markets = P.marketsFor(HOME);
+  if (!markets && !codes.length) { els.holdWrap.replaceChildren(); return; }
   const head = el("header", "panel-head hold-head");
   head.append(el("h2", "", "Fon ve hisse"));
   if (codes.length) head.append(el("span", "panel-note", fmt(codes.reduce((sum, c) => sum + (value(c) ?? 0), 0))));
@@ -2577,7 +2587,7 @@ function renderHoldings(mine, bals, r) {
   add.type = "button";
   add.append(icon("plus"), document.createTextNode("Ekle"));
   add.addEventListener("click", () => openEntrySheet(null, lastMarket()));
-  head.append(add);
+  if (markets) head.append(add);
   const panel = el("div", "panel list-panel");
   if (codes.length) panel.append(...codes.map(c => holdingRow(c, bals[c], pos[c], r)));
   else panel.append(el("p", "hold-empty", traded ? "Elinde fon ya da hisse kalmadı."
@@ -2754,8 +2764,10 @@ function lateDays(since, today) { return Math.round((T.toDate(today) - T.toDate(
 function statementText(x, today) {
   const open = x.amount - x.covered;
   if (x.state === "paid") return "ödendi ✓";
+  // Döner kredi (borc.js revolve): asgari ödendi, kalan faiziyle sonraki ekstreye devretti
+  if (x.state === "carried") return `${fmt(x.carried)} devretti · faiz işler`;
   const when = x.state === "late" ? `${lateDays(x.key, today)} gün gecikti` : x.state === "due" ? "son gün bugün" : "";
-  if (x.covered > EPS) return ["kısmen ödendi", `kalan ${fmt(open)}`, when].filter(Boolean).join(" · ");
+  if ((x.paid ?? x.covered) > EPS) return ["kısmen ödendi", `kalan ${fmt(open)}`, when].filter(Boolean).join(" · ");
   if (x.state === "late") return `${fmt(open)} ödenmedi · ${when}`;
   return x.state === "due" ? `Son gün bugün: ${fmt(open)}` : "";
 }
@@ -3666,6 +3678,8 @@ function collectPurchase() {
   const p = { desc, cardId: foreign ? null : f.card.value || null, count, total };
   if (foreign) p.asset = asset;
   Object.assign(p, rep);
+  // Şimdi al sonra öde (iPhone / asistanda girilir): web formunda yok; tarih ve ödeme sayısı aynı kaldıkça korunur
+  if (editing?.bnpl && count === editing.count && rep.repeat == null && date) p.bnpl = editing.bnpl;
   if (K.valid(f.category.value)) Object.assign(p, { category: f.category.value, categoryBy: categorySource === "user" ? "user" : "ai" });
   if (date) {
     p.date = date;
@@ -3969,6 +3983,7 @@ function openCardSheet(c) {
   }
   // Ekstre ödemesi: yeni kartta otomatik (son ödeme günü geçince ödendi sayılır)
   f.elements.payMode.value = !c ? "auto" : !B.tracked(c) ? "off" : B.manual(c) ? "manual" : "auto";
+  f.elements.apr.value = B.revolving(c) ? String(c.apr) : "";
   syncChecked(els.cardPayMode);
   renderColorSwatches(c ? c.color % SERIES_COUNT : nextColor(state.cards));
   termChange = null;
@@ -4124,7 +4139,7 @@ function autoPrepaid(card, { on, since, auto }, today) {
 // sayılır, bugün geçilirse TL bakiyesi bugünlük yüksek görünür; otomatiğe yarın geçilir.
 function prepaidText(card, since, today, lost) {
   const cs = B.cardState(state, { ...card, trackOff: false, trackSince: since }, today);
-  const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((s, x) => s + x.amount, 0);
+  const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((s, x) => s + x.amount - (x.carryIn || 0), 0);
   if (!(ahead > EPS)) {
     return "“Otomatik”e bugün geçilemiyor: son ödeme günü bugün olan ekstre “Otomatik”te ancak yarın ödenmiş sayılır; bugün "
       + `geçersen ona yaptığın ödeme yüzünden ${homeShort()} bakiyen bugünlük ${fmt(lost)} yüksek görünür. Yarın geçebilirsin.`;
@@ -4214,6 +4229,7 @@ els.cardForm.addEventListener("submit", e => {
     name: !v.name, limit: v.limit < 0,
     last4: (v.last4 !== "" && v.last4.length !== 4) || last4Taken,
     cutoffDay: !v.cutoffDay, dueDay: !v.dueDay,
+    apr: f.apr.value !== "" && !(Number(f.apr.value) >= 0 && Number(f.apr.value) <= 100),
   };
   for (const [k, isBad] of Object.entries(bad)) f[k].classList.toggle("invalid", isBad);
   const firstBad = Object.keys(bad).find(k => bad[k]);
@@ -4238,16 +4254,28 @@ els.cardForm.addEventListener("submit", e => {
     return;
   }
   if (!v.last4) delete v.last4;
+  // Yıllık faiz (ABD; borc.js döner kredi): boşsa yok
+  const apr = P.aprFor(HOME) && f.apr.value !== "" ? Math.round(Number(f.apr.value) * 100) / 100 : null;
+  const withApr = c => {
+    const { apr: _, ...rest } = c;
+    return apr != null ? { ...rest, apr } : P.aprFor(HOME) ? rest : c;
+  };
 
   // Ekstre ödemesi (trackSince / trackOff / manualSince) formdan; diğer alanlar ve günlerin geçmişi korunur
   if (editingCardId) {
+    // Elle ödenen APR'li karttan çıkarken (otomatik ya da APR silindi) işlemiş faiz harcama olarak kalır: özvarlık değişmez
+    const next = withApr(withTracking({ ...before }, track, today));
+    const revolvingNow = c => B.tracked(c) && B.manual(c) && B.revolving(c);
+    if (revolvingNow(before) && B.tracked(next) && !revolvingNow(next)) {
+      for (const x of B.interestCharges(state, before, today)) state.installments.push({ id: uid(), ...x });
+    }
     state.cards = state.cards.map(c => {
       if (c.id !== editingCardId) return c;
       const { last4, history, ...rest } = withTerms(c, v);
-      return withTracking({ ...rest, ...(v.last4 && { last4 }), ...(history && { history }) }, track, today);
+      return withApr(withTracking({ ...rest, ...(v.last4 && { last4 }), ...(history && { history }) }, track, today));
     });
   } else {
-    state.cards.push(withTracking({ id: uid(), ...v }, track, today));   // yeni kart varsayılan olarak bugünden takipte (borc.js)
+    state.cards.push(withApr(withTracking({ id: uid(), ...v }, track, today)));   // yeni kart varsayılan olarak bugünden takipte (borc.js)
   }
   saveState();
   els.cardSheet.close();
@@ -5568,7 +5596,7 @@ function emailItem(row) {
 }
 
 async function checkInbox({ quiet = true } = {}) {
-  if (inboxBusy || typeof window.syncInboxFetch !== "function") return;
+  if (inboxBusy || typeof window.syncInboxFetch !== "function" || !P.marketsFor(HOME)) return;   // yalnızca Türkiye'de
   // Kullanıcıya özel veri yüklenmeden harcama eklenmesin (giriş olayından önce çağrılırsa)
   if (!window.CF_USER_ID || window.CF_USER_ID !== window.syncGetUser?.()?.id) return;
   inboxBusy = true;
@@ -6004,9 +6032,9 @@ function renderCashDef() {
   const funds = codes.filter(c => V.moneyMarket(prices?.prices?.[c]));
   const others = codes.filter(c => !funds.includes(c));
   els.cashDefList.replaceChildren(
-    opt(HOME, "Türk lirası", "Ana para birimi"),
-    opt(V.MMF, "TL para piyasası fonları", funds.length ? `Elindekiler: ${funds.map(c => V.market(c).ticker).join(", ")}`
-      : "TEFAS'taki para piyasası fonları; aynı gün nakde döner (T+0)"),
+    opt(HOME, V.asset(HOME)?.name ?? HOME, "Ana para birimi"),
+    ...(P.marketsFor(HOME) ? [opt(V.MMF, "TL para piyasası fonları", funds.length ? `Elindekiler: ${funds.map(c => V.market(c).ticker).join(", ")}`
+      : "TEFAS'taki para piyasası fonları; aynı gün nakde döner (T+0)")] : []),
     ...V.assetsFor(HOME).filter(a => a.code !== HOME).map(a => opt(a.code, a.name)),
     ...(others.length ? [el("span", "group-label cash-def-head", "Elindeki diğer fon ve hisseler")] : []),
     ...others.map(c => opt(c, V.market(c).ticker, marketName(c))),
@@ -6025,7 +6053,7 @@ els.cashDefList.addEventListener("change", e => {
   if (!picked.length) { e.target.checked = true; toast("En az birini seç"); return; }
   setCashDef(picked);
 });
-els.cashDefReset.addEventListener("click", () => { setCashDef(null); renderCashDef(); toast(`Nakit: ${homeShort()} ve para piyasası fonları`); });
+els.cashDefReset.addEventListener("click", () => { setCashDef(null); renderCashDef(); toast(`Nakit: ${cashDefText()}`); });
 els.cashDefBtn.addEventListener("click", openCashDefSheet);
 if (window.APP_VERSION) $("appVersion").textContent = `CashFollow v${window.APP_VERSION}`;
 // Giriş penceresi (sync.js) ayarların üstünde açılsın diye önce ayarları kapat
@@ -6336,6 +6364,8 @@ function homeEk(kind) {
 }
 function homeSymbol() { return P.currency(HOME)?.symbol ?? HOME; }
 
+const IMPORT_ACCEPT = els.importInput.accept;   // index.html: JSON yedeği ve Excel (Excel yalnızca Türkiye'de)
+
 function applyHome() {
   HOME = P.homeOfCountry(currentCountry());
   if (state) state.home = HOME;
@@ -6345,6 +6375,13 @@ function applyHome() {
   cashDef = readCashDef();
   for (const n of document.querySelectorAll("[data-home]")) n.textContent = homeShort();
   for (const n of document.querySelectorAll("[data-home-symbol]")) n.textContent = homeSymbol();
+  // Türkiye'ye özel olanlar (P.marketsFor): banka e-postaları, Excel içe aktarma, fon / hisse ve para piyasası notları
+  const tr = P.marketsFor(HOME);
+  for (const n of document.querySelectorAll("[data-tr]")) n.hidden = !tr;
+  for (const n of document.querySelectorAll("[data-not-tr]")) n.hidden = tr;
+  // ABD'ye özel olanlar (P.aprFor): kartın yıllık faizi
+  for (const n of document.querySelectorAll("[data-us]")) n.hidden = !P.aprFor(HOME);
+  els.importInput.accept = tr ? IMPORT_ACCEPT : ".json,application/json";
 }
 
 // Ülke değişir: hesapta user_metadata'ya (web, iPhone ve asistan aynısını görür), girişsizse cihaza. Tutarlar çevrilmez.

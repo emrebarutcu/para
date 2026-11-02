@@ -499,3 +499,31 @@ test("boş ekran + dolu taban: taban geçersiz (stale), yoksa changes hesaptaki 
   assert.equal(Tablo.stale({ ...blank, people: [...blank.people, { id: "x", name: "X", color: 1 }] }, base), false);
   assert.equal(Tablo.stale({ ...blank, debts: [{ id: "d" }] }, base), false);
 });
+
+test("8.x: kartın APR'si ve harcamanın BNPL sağlayıcısı; eski taban rekey ile çevrilir", () => {
+  const rows = server();
+  rows.cards[0].apr = "24.99";
+  rows.purchases.push(purchase("p3", { card_id: null, total: 100, count: 4, bnpl: "klarna" }));
+  rows.purchases.push(purchase("p4", { card_id: null, date: null, first_due: "2026-10", bnpl: "klarna" }));   // tarihsiz: yok sayılır
+  const state = toState(rows);
+  assert.equal(state.cards[0].apr, 24.99);
+  assert.equal(state.installments.find(p => p.id === "p3").bnpl, "klarna");
+  assert.equal(state.installments.find(p => p.id === "p4").bnpl, undefined);
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(state, baseOf(rows))[t].upsert.filter(x => x.row.id !== "p4"), [], t);
+  // Yazılırken: geçersiz APR ve tekrarlayan BNPL boş
+  const out = changes({ ...state, cards: [{ ...state.cards[0], apr: 120 }], installments: [{ ...state.installments[0], bnpl: "klarna", repeat: 3 }] }, {});
+  assert.equal(out.cards.upsert[0].row.apr, null);
+  assert.equal(out.purchases.upsert[0].row.bnpl, null);
+  // 7.x tabanı (apr / bnpl sütunsuz): yükseltmede yeniden yazılmaz
+  const plain = toState(server());
+  const old = baseOf(server());
+  for (const t of ["cards", "purchases"]) {
+    for (const id of Object.keys(old[t])) {
+      const { apr, bnpl, ...row } = JSON.parse(old[t][id]);
+      old[t][id] = JSON.stringify(row);
+    }
+  }
+  assert.ok(changes(plain, old).cards.upsert.length);
+  const base = rekey(old);
+  for (const t of Tablo.TABLES) assert.deepEqual(changes(plain, base)[t], { upsert: [], delete: [] }, t);
+});

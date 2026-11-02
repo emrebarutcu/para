@@ -42,21 +42,33 @@ struct KartSatiri: View {
             }
             .buttonStyle(.plain)
             if c.limit > 0 { Doluluk(used: c.used, limit: c.limit, renk: renk).padding(.leading, 48) }
+            if let r = c.tracking?.revolving, r.carried > 0.004 {
+                Text(L("Devreden {0} · APR {1}", Bicim.tl(r.carried, fraction: false), Bicim.oran(r.apr)))
+                    .font(.footnote).foregroundStyle(Tema.metin2).padding(.leading, 48)
+            }
             if let borc, let unpaid = borc.unpaid, unpaid > 0.004 {
                 let gec = (borc.overdue ?? 0) > 0.004
-                HStack {
-                    Text(gec ? L("Geciken ekstre {0}", Bicim.tl(unpaid, fraction: false)) : L("Ödenmemiş ekstre {0}", Bicim.tl(unpaid, fraction: false)))
-                        .font(.footnote.weight(.medium)).foregroundStyle(gec ? Tema.tehlike : Tema.metin2)
-                    Spacer()
-                    Button(L("Ödendi"), action: odendi)
-                        .font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin)
-                        .padding(.horizontal, 12).padding(.vertical, 5)
-                        .background(Tema.yuzey2, in: Capsule())
-                        .buttonStyle(.plain)
-                }
-                .padding(.leading, 48)
+                odemeSatiri(gec ? L("Geciken ekstre {0}", Bicim.tl(unpaid, fraction: false)) : L("Ödenmemiş ekstre {0}", Bicim.tl(unpaid, fraction: false)),
+                            renk: gec ? Tema.tehlike : Tema.metin2)
+            } else if let r = c.tracking?.revolving, let st = c.statement, st.alreadyCut == true, st.amount > 0.004 {
+                // Döner kredide kesilmiş ekstre son ödeme gününden önce ödenir: bakiye, asgari ve son gün
+                odemeSatiri(L("Ekstre {0} · asgari {1} · {2}", Bicim.tl(st.amount, fraction: false), Bicim.tl(r.minimumDue, fraction: false), Bicim.day(st.date)),
+                            renk: Tema.metin2)
             }
         }
+    }
+
+    private func odemeSatiri(_ metin: String, renk: Color) -> some View {
+        HStack {
+            Text(metin).font(.footnote.weight(.medium)).foregroundStyle(renk).lineLimit(2)
+            Spacer()
+            Button(L("Ödendi"), action: odendi)
+                .font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin)
+                .padding(.horizontal, 12).padding(.vertical, 5)
+                .background(Tema.yuzey2, in: Capsule())
+                .buttonStyle(.plain)
+        }
+        .padding(.leading, 48)
     }
 }
 
@@ -66,7 +78,7 @@ struct KartDetayi: View {
     let c: KartGorunumu
     let duzenle: () -> Void
     let sil: () -> Void
-    let odendi: (Double) -> Void
+    let odendi: (Double, Double?) -> Void   // ödenecek tutar, döner kredide asgari
 
     var body: some View {
         NavigationStack {
@@ -82,8 +94,12 @@ struct KartDetayi: View {
                         }
                         .font(.subheadline)
                     }
+                    if let r = c.tracking?.revolving { donerKredi(r) }
                     if let t = c.tracking, t.unpaid > 0.004 {
-                        genisDugme(L("Ekstre ödendi ({0})", Bicim.tl(t.unpaid, fraction: false)), simge: "checkmark.circle", renk: Tema.metin) { odendi(t.unpaid) }
+                        genisDugme(L("Ekstre ödendi ({0})", Bicim.tl(t.unpaid, fraction: false)), simge: "checkmark.circle", renk: Tema.metin) { odendi(t.unpaid, t.revolving?.minimumDue) }
+                    } else if let t = c.tracking, !t.autoPay, let st = c.statement, st.amount > 0.004 {
+                        // Elle ödenen kartta ekstre son ödeme gününden önce de ödenebilir
+                        genisDugme(L("Ödeme kaydet"), simge: "checkmark.circle", renk: Tema.metin) { odendi(st.amount, t.revolving?.minimumDue) }
                     }
                     genisDugme(L("Kartı düzenle"), simge: "pencil", renk: Tema.metin, eylem: duzenle)
                     genisDugme(L("Kartı sil"), simge: "trash", renk: Tema.tehlike, eylem: sil)
@@ -96,6 +112,37 @@ struct KartDetayi: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Bitti")) { dismiss() } } }
         }
         .presentationDetents([.large])
+    }
+
+    // Döner kredi: sıradaki ekstre (bakiye, asgari, son gün), devreden, işlemiş faiz, APR; yalnızca asgari ödenirse geri ödeme
+    @ViewBuilder private func donerKredi(_ r: DonerKredi) -> some View {
+        Kart {
+            VStack(spacing: 10) {
+                if let st = c.statement {
+                    Satir(title: L("Ekstre bakiyesi"), value: Bicim.tl(st.balance ?? st.amount))
+                    Satir(title: L("Asgari ödeme"), value: Bicim.tl(r.minimumDue))
+                    Satir(title: L("Son ödeme tarihi"), value: Bicim.day(st.date))
+                }
+                if r.carried > 0.004 { Satir(title: L("Devreden"), value: Bicim.tl(r.carried)) }
+                if r.interestCharged > 0.004 { Satir(title: L("İşlemiş faiz"), value: Bicim.tl(r.interestCharged)) }
+                Satir(title: L("Yıllık faiz (APR)"), value: Bicim.oran(r.apr))
+            }
+            .font(.subheadline)
+        }
+        if let p = r.payoff {
+            Kart {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("Borcu bitirmek")).font(.subheadline.weight(.semibold))
+                    Text(p.monthsAtMinimum.map { L("Yalnızca asgari ödersen {0} ayda biter, {1} faiz ödersin.", $0, Bicim.tl(p.interestAtMinimum, fraction: false)) }
+                         ?? L("Yalnızca asgari ödersen borç 50 yılda bitmez."))
+                    Text(L("12 ayda bitirmek için ayda {0} öde.", Bicim.tl(p.monthlyToClearIn12)))
+                    Text(L("Tahminidir: banka faizi günlük bakiyeyle hesaplar, ücretler eklenebilir."))
+                        .font(.caption).foregroundStyle(Tema.metin3)
+                }
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 
     private func genisDugme(_ ad: String, simge: String, renk: Color, eylem: @escaping () -> Void) -> some View {
@@ -177,8 +224,9 @@ struct KartGorseli: View {
     }
 }
 
-// Kart ekleme (add_card) ve düzenleme (update_card: ad, limit, son 4 hane). Kesim / son ödeme günü değişince eski
-// ekstrelerin ne olacağı sorulur (transition); bu yalnızca web'de.
+// Kart ekleme (add_card) ve düzenleme (update_card: ad, limit, son 4 hane, ödeme modu, APR). Kesim / son ödeme günü
+// değişince eski ekstrelerin ne olacağı sorulur (transition). Ödeme modu: otomatikte ekstre son ödeme gününün ertesi günü
+// tamamen ödenmiş sayılır; elle modda "Ödendi" ile işlenir. APR (ABD): elle ödenen kartta kalan faiziyle devreder.
 struct KartFormu: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
@@ -188,6 +236,8 @@ struct KartFormu: View {
     @State private var cutoff = 10
     @State private var due = 20
     @State private var last4 = ""
+    @State private var otomatik = true
+    @State private var apr = ""
     @State private var error: String?
     @State private var gecis: [Gecis] = []      // günler değişince sorulan seçenekler (update_card transition)
     @State private var soru = false
@@ -210,6 +260,18 @@ struct KartFormu: View {
                     Text(card == nil
                          ? L("Kesim günü dahil yapılan harcama o ayın ekstresine girer; ekstre son ödeme gününde ödenir.")
                          : L("Günler değişirse arada kalan harcamaların ne olacağını sorarım."))
+                }
+                Section {
+                    Toggle(L("Ekstre her ay tamamen ödeniyor"), isOn: $otomatik)
+                    if model.aprAllowed {
+                        TextField(L("Yıllık faiz (APR %)"), text: $apr).keyboardType(.decimalPad)
+                    }
+                } footer: {
+                    Text(otomatik
+                         ? L("Her ekstre son ödeme gününün ertesi günü ödenmiş sayılır ve nakdinden düşer.")
+                         : model.aprAllowed
+                            ? L("Ödediğinde \"Ödendi\" ile işlersin. En az asgari ödemeyi ödersen kalan faiziyle sonraki ekstreye devreder; daha azı gecikmedir.")
+                            : L("Ödediğinde \"Ödendi\" ile işlersin; son ödeme günü geçen ödenmemiş ekstre gecikmiş sayılır."))
                 }
                 HataMetni(text: error)
                 Section {
@@ -240,6 +302,8 @@ struct KartFormu: View {
                 cutoff = c.cutoffDay
                 due = c.dueDay
                 last4 = c.last4 ?? ""
+                otomatik = c.tracking?.autoPay ?? true
+                apr = c.apr.map { $0.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2))) } ?? ""
             }
         }
     }
@@ -248,9 +312,12 @@ struct KartFormu: View {
 
     private func save(transition: String?) {
         var a: [String: Any] = ["name": name.trimmingCharacters(in: .whitespaces), "limit": Bicim.parse(limit) ?? 0, "last4": last4]
+        let oran = model.aprAllowed ? Bicim.parse(apr) : nil
         do {
             if let c = card {
                 a["card"] = c.id
+                if otomatik != (c.tracking?.autoPay ?? true) { a["auto_pay"] = otomatik }
+                if model.aprAllowed, oran != c.apr { a["apr"] = oran.map { $0 as Any } ?? NSNull() }
                 if cutoff != c.cutoffDay || due != c.dueDay {
                     a["cutoff_day"] = cutoff
                     a["due_day"] = due
@@ -267,6 +334,8 @@ struct KartFormu: View {
             } else {
                 a["cutoff_day"] = cutoff
                 a["due_day"] = due
+                a["auto_pay"] = otomatik
+                if let oran { a["apr"] = oran }
                 try model.write("add_card", a)
             }
             Analitik.olay(card == nil ? "card_added" : "card_edited")

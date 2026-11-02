@@ -48,9 +48,12 @@ Routing MX'i (banka e-postaları, bölüm 6) ve SPF'i olduğu gibi kalır.
 
    | Supabase şablonu | Dosya | Konu |
    | --- | --- | --- |
-   | Confirm signup | `hesap-dogrulama.html` | CashFollow hesabını doğrula |
-   | Reset password | `sifre-sifirlama.html` | CashFollow şifreni sıfırla |
-   | Change email address | `eposta-degisikligi.html` | CashFollow e-posta adresini değiştir |
+   | Confirm signup | `hesap-dogrulama.html` | Confirm your CashFollow account · CashFollow hesabını doğrula |
+   | Reset password | `sifre-sifirlama.html` | Reset your CashFollow password · CashFollow şifreni sıfırla |
+   | Change email address | `eposta-degisikligi.html` | Change your CashFollow email · CashFollow e-posta adresini değiştir |
+
+   Gövde hesabın ülkesine göre: `user_metadata.country` Türkiye dışındaysa İngilizce, değilse (ülkesi yazılmamış eski
+   hesaplar dahil) Türkçe (şablonun başındaki `$en`, `.Data.country`). Konu tek metin olduğu için iki dillidir.
 
    Bağlantılar Supabase'in adresine değil uygulamaya gider: `{{ .SiteURL }}/?token_hash={{ .TokenHash }}&type=…`. Uygulama
    (`sync.js` → `handleEmailLink`) bağlantıyı `verifyOtp` ile doğrular; şifre sıfırlamada yeni şifre formunu açar. Gönderenle
@@ -125,6 +128,21 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
+- **8.1.0** — **ABD uyumu.** **Döner kredi**: kartın yıllık faizi (`cards.apr`, yalnızca ABD hesabında girilir). Elle
+  ödenen ("Ben işaretlerim") APR'li kartta ekstrenin son ödeme gününe kadar ödenmeyen kalanı sonraki ekstreye devreder,
+  sonraki kesimde aylık faiz (APR / 12) işler; asgari ödeme (40 $ ya da bakiyenin %1'i + faiz) ödendiyse gecikme sayılmaz
+  (`borc.js revolve`). Faiz özvarlığı düşürür; elle moddan çıkarken ya da APR silinince işlemiş faiz "Faiz" harcaması olarak
+  yazılır. Otomatik kartlarda ve APR'siz kartlarda hiçbir hesap değişmedi. Aylık ödemeler tek yerde: `borc.js cashflow`.
+  **Pay in 4** (şimdi al sonra öde, `purchases.bnpl`: klarna, afterpay, affirm, paypal, zip, sezzle, other): ilk ödeme
+  alışveriş günü, sonrakiler 14 günde bir; kartta her ödeme kendi gününün ekstresine girer, henüz çekilmeyen kısım
+  sağlayıcıya borçtur (`borc.js bnplDebt`, Borçlar'da). **Türkiye'ye özel olanlar** (fon / hisse, para piyasası fonları,
+  banka e-postaları, Excel içe aktarma) yalnızca TL hesapta (`para.js marketsFor`); ABD'ye özeller dolarda (`aprFor`,
+  `bnplFor`). **Giriş e-postaları** hesabın ülkesine göre İngilizce ya da Türkçe; şablonlar `sh supabase/sablonlar.sh` ile
+  yüklenir. **Yayından önce** `supabase/gecis/8.1.0.sql` çalıştırılır (`cards.apr`, `purchases.bnpl`; boş olabilen sütunlar;
+  yeni istemci bunları yazar). Eşitleme biçimi `SCHEMA = 8`; eski istemciler bu sütunları bilmez ama silmez.
+  MCP: `add_card` / `update_card` `apr`; `add_purchase` / `update_purchase` `bnpl`; `list_cards` / `list_debts` döner
+  krediyi (`revolving`: devreden, faiz, asgari, geri ödeme) ve `bnpl` listesini verir; banka e-postası araçları Türkiye
+  dışında hata verir.
 - **8.0.0** — **ABD'ye hazırlık.** **Hesap silme**: iPhone Ayarlar → Hesabı sil, web hesap penceresi → Hesabı sil
   (App Store kuralı). **Yayından önce** `supabase/gecis/8.0.0.sql` çalıştırılır (1 Kasım 2026'da çalıştırıldı; aynısı
   `tablolar.sql`'in son bölümünde): `delete_my_account()` (security definer; yalnızca oturumdaki kullanıcının hesabını

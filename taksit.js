@@ -176,9 +176,27 @@
   const FOREIGN = ["USD", "EUR", "GAU"];
   function assetOf(p, home = "TRY") { return (P.isCurrency(p?.asset) || p?.asset === "GAU") && p.asset !== home ? p.asset : home; }
 
-  function perInstallment(p) { return p.total / p.count; }
+  // ---------- Şimdi al sonra öde (BNPL, "Pay in 4") ----------
+  // bnpl sağlayıcıyla (klarna, afterpay, …) tarihli, tekrarlamayan harcama: count ödeme, ilki date günü, sonrakiler
+  // BNPL_DAYS günde bir. Kartla ödenen her ödeme kendi gününün ekstresine girer (at: çekim günü; at bugünden sonraysa
+  // henüz karta yansımadı, sağlayıcıya borçtur: borc.js bnplDebt). Kuruşlar tam bölünür, artığı ilk ödeme alır
+  // (99,99 → 25,02 + 3 × 24,99).
+  const BNPL = ["klarna", "afterpay", "affirm", "paypal", "zip", "sezzle", "other"];
+  const BNPL_NAMES = { klarna: "Klarna", afterpay: "Afterpay", affirm: "Affirm", paypal: "PayPal", zip: "Zip", sezzle: "Sezzle", other: "Diğer" };
+  const BNPL_DAYS = 14;
+  function bnpl(p) {
+    return BNPL.includes(p?.bnpl) && !!parseDate(p.date) && p.count >= 2 && R.rule(p) == null;
+  }
+  function bnplName(p) { return p?.bnpl === "other" ? D.t("Diğer") : BNPL_NAMES[p?.bnpl] ?? ""; }
+  // Ödeme tutarları (kuruşla): [ilk, …düzenli]
+  function bnplAmounts(p) {
+    const cents = Math.round(p.total * 100), base = Math.floor(cents / p.count);
+    return Array.from({ length: p.count }, (_, k) => (k ? base : cents - base * (p.count - 1)) / 100);
+  }
+
+  function perInstallment(p) { return bnpl(p) ? bnplAmounts(p).at(-1) : p.total / p.count; }
   function planLength(p)     { return Math.max(p.planCount || 0, p.count); }
-  function originalTotal(p)  { return perInstallment(p) * planLength(p); }
+  function originalTotal(p)  { return bnpl(p) ? p.total : perInstallment(p) * planLength(p); }
 
   // Tekrarlayan harcama (tarihi olan)
   function repeats(p) { return R.rule(p) != null && !!parseDate(p.date); }
@@ -197,6 +215,13 @@
   }
 
   function paymentsOnce(p, card) {
+    if (bnpl(p)) {
+      return bnplAmounts(p).map((amount, k) => {
+        const at = addDays(p.date, BNPL_DAYS * k);
+        const s = card ? statementOf(card, at) : null;
+        return { idx: s ? s.dueIdx : parseDate(at).idx, key: s ? s.due : at, no: k + 1, amount, at };
+      }).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.no - b.no));
+    }
     const amount = perInstallment(p);
     const d = parseDate(p.date);
     const paid = planLength(p) - p.count;
@@ -465,6 +490,7 @@
     monthIndex, monthKey, monthName, monthShort, yearOf, daysInMonth, dayOf, dateKey, parseDate, toDate, todayKey,
     addDays, statementIndex, dueIndex, periods, statementOf, nextStatement, retermCard, termChoices,
     FOREIGN, assetOf, perInstallment, planLength, originalTotal, repeats, payments, endless, remainingFrom, outstanding, cashSpent,
+    BNPL, BNPL_NAMES, BNPL_DAYS, bnpl, bnplName, bnplAmounts,
     buildCashflow,
     defaultState, validDay, validHistory, defaultCard, nextColor, hydrate,
     normalize, titleCase, parseStatement, fromStatement, parseSheetRows, parseWorkbook,

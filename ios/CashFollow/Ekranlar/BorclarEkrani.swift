@@ -45,7 +45,29 @@ struct BorclarEkrani: View {
                                 let borc = b.cards.first { $0.cardId == c.id }
                                 KartSatiri(c: c, borc: borc,
                                            ac: { kartDetay = c },
-                                           odendi: { odeme = .kart(id: c.id, ad: c.name, tutar: borc?.unpaid ?? 0) })
+                                           odendi: { odeme = .kart(id: c.id, ad: c.name, tutar: (borc?.unpaid ?? 0) > 0.004 ? borc?.unpaid ?? 0 : c.statement?.amount ?? 0,
+                                                                   asgari: c.tracking?.revolving?.minimumDue) })
+                            }
+                        }
+                    }
+
+                    // Şimdi al sonra öde: sağlayıcıya kalan (henüz çekilmemiş ödemeler)
+                    if let simdi = b.bnpl, !simdi.isEmpty {
+                        Kart(dolgu: 14) {
+                            KartBasligi(L("Pay in 4"))
+                            SatirListesi(veri: simdi) { x in
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(x.description).font(.body.weight(.semibold)).lineLimit(1)
+                                        Text(L("{0} · {1} · sıradaki {2} {3}", x.name, Bicim.kartAdi(x.card), Bicim.day(x.nextCharge.date), Bicim.tl(x.nextCharge.amount)))
+                                            .font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text(Bicim.tl(x.remaining)).font(.body.weight(.semibold)).monospacedDigit()
+                                        Text("\(x.paid)/\(x.payments)").font(.caption).foregroundStyle(Tema.metin3)
+                                    }
+                                }
                             }
                         }
                     }
@@ -103,7 +125,7 @@ struct BorclarEkrani: View {
                 KartDetayi(c: c,
                            duzenle: { kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { kartDuzenle = c } },
                            sil: { kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { kartSil = c } },
-                           odendi: { t in kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { odeme = .kart(id: c.id, ad: c.name, tutar: t) } })
+                           odendi: { t, asgari in kartDetay = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { odeme = .kart(id: c.id, ad: c.name, tutar: t, asgari: asgari) } })
             }
             .sheet(item: $secili) { BorcDetayi(d: $0) }
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
@@ -182,7 +204,7 @@ struct BorcDetayi: View {
             Form {
                 Section {
                     Satir(title: L("Tür"), value: borcTuru(d.type))
-                    if let p = d.party, !p.isEmpty { Satir(title: d.type == "loan" ? "Banka" : "Kim", value: p) }
+                    if let p = d.party, !p.isEmpty { Satir(title: d.type == "loan" ? L("Banka") : L("Kim"), value: p) }
                     if let a = d.description, !a.isEmpty { Satir(title: L("Not"), value: a) }
                     Satir(title: L("Kişi"), value: d.person)
                     Satir(title: L("Başlangıç"), value: Bicim.day(d.date))
@@ -249,11 +271,11 @@ struct BorcDetayi: View {
 // Kart payı ya da elle ödenen kartın ekstresi için ödeme (pay_debt person / card)
 enum OdemeHedefi: Identifiable {
     case pay(id: String, ad: String, tutar: Double)
-    case kart(id: String, ad: String, tutar: Double)
+    case kart(id: String, ad: String, tutar: Double, asgari: Double? = nil)   // asgari: döner kredide asgari ödeme
     var id: String {
         switch self {
         case .pay(let id, _, _): return "p" + id
-        case .kart(let id, _, _): return "k" + id
+        case .kart(let id, _, _, _): return "k" + id
         }
     }
 }
@@ -269,13 +291,27 @@ struct OdemeFormu: View {
     var body: some View {
         NavigationStack {
             Form {
+                if case .kart(_, _, let bakiye, let asgari?) = hedef, asgari > 0.004, bakiye > asgari + 0.004 {
+                    // Döner kredi: ekstrenin tamamı ya da asgari; kalan faiziyle sonraki ekstreye devreder
+                    Section {
+                        Picker("", selection: Binding(get: { Bicim.parse(tutar) == asgari ? 1 : Bicim.parse(tutar) == bakiye ? 0 : 2 },
+                                                      set: { if $0 < 2 { tutar = metin($0 == 0 ? bakiye : asgari) } })) {
+                            Text(L("Ekstre")).tag(0)
+                            Text(L("Asgari")).tag(1)
+                            Text(L("Diğer")).tag(2)
+                        }
+                        .pickerStyle(.segmented)
+                    } footer: {
+                        Text(L("Asgari ödersen kalan {0} faiziyle sonraki ekstreye devreder.", Bicim.tl(max(0, bakiye - (Bicim.parse(tutar) ?? 0)))))
+                    }
+                }
                 Section {
                     TextField(L("Tutar ({0})", Bicim.homeSymbol), text: $tutar).keyboardType(.decimalPad)
                     DatePicker(L("Tarih"), selection: $tarih, in: ...Date(), displayedComponents: .date).environment(\.locale, Bicim.locale)
                 } footer: {
                     switch hedef {
                     case .pay(_, let ad, _): Text(L("{0} kart payından sana ödedi.", ad))
-                    case .kart(_, let ad, _): Text(L("{0} ekstresini ödedin; tutar {1} bakiyenden düşer.", ad, Bicim.homeShort))
+                    case .kart(_, let ad, _, _): Text(L("{0} ekstresini ödedin; tutar {1} bakiyenden düşer.", ad, Bicim.homeShort))
                     }
                 }
                 HataMetni(text: hata)
@@ -294,18 +330,20 @@ struct OdemeFormu: View {
             }
             .onAppear {
                 switch hedef {
-                case .pay(_, _, let t), .kart(_, _, let t):
-                    tutar = t > 0 ? t.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2))) : ""
+                case .pay(_, _, let t), .kart(_, _, let t, _):
+                    tutar = t > 0 ? metin(t) : ""
                 }
             }
         }
     }
 
+    private func metin(_ v: Double) -> String { v.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2))) }
+
     private func kaydet() {
         var a: [String: Any] = ["amount": Bicim.parse(tutar) ?? 0, "date": Bicim.key(tarih)]
         switch hedef {
         case .pay(let id, _, _): a["person"] = id
-        case .kart(let id, _, _): a["card"] = id
+        case .kart(let id, _, _, _): a["card"] = id
         }
         do { try model.write("pay_debt", a); Analitik.olay("payment_recorded", ["kind": a["card"] != nil ? "card_statement" : "card_share"]); dismiss() } catch { hata = error.localizedDescription }
     }
@@ -365,7 +403,7 @@ struct BorcFormu: View {
                     }
                 } else {
                     Section {
-                        TextField(tur == "lent" ? "Kime" : "Kimden", text: $kim)
+                        TextField(tur == "lent" ? L("Kime") : L("Kimden"), text: $kim)
                         HStack {
                             TextField(L("Tutar"), text: $tutar).keyboardType(.decimalPad)
                             Picker("", selection: $varlik) {

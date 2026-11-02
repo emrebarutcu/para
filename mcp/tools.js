@@ -167,24 +167,10 @@ function knownPurchases(state) {
 function paymentsOf(state, p, until) { return T.payments(p, cardById(state, p.cardId), until); }
 
 // Son ödemenin ayı; süresiz tekrarlayan TL harcaması varsa en az bir yıl ileri (app.js ile aynı)
-// Kart ve nakit ödemeleri aylara göre (taksit.js buildCashflow; uygulamadaki cashflow gibi). Hesaba katılmayan kartın
-// (borc.js tracked değil; ör. eşinin kartı) ekstreleri ödeme toplamlarına girmez: ay, kişi ve kart toplamları onlarsız
-// yeniden toplanır, olay ignored ile kalır.
-function cashflow(state, from, to, people = state.people) {
-  const months = T.buildCashflow(people, state.cards, state.installments, from, to);
-  const off = new Set(state.cards.filter(c => !B.tracked(c)).map(c => c.id));
-  if (!off.size) return months;
-  return months.map(m => {
-    if (!m.events.some(ev => off.has(ev.cardId))) return m;
-    const out = { ...m, total: 0, byPerson: {}, byCard: { ...m.byCard } };
-    out.events = m.events.map(ev => {
-      if (off.has(ev.cardId)) { delete out.byCard[ev.cardId]; return { ...ev, ignored: true }; }
-      out.total += ev.total;
-      for (const [pid, v] of Object.entries(ev.byPerson)) out.byPerson[pid] = (out.byPerson[pid] || 0) + v;
-      return ev;
-    });
-    return out;
-  });
+// Kart ve nakit ödemeleri aylara göre (borc.js cashflow; uygulamadaki gibi): hesaba katılmayan kartın (ör. eşinin kartı)
+// ekstreleri toplamlara girmez (olay ignored), döner kredide devreden bakiye ve faiz ekstrelere eklenir.
+function cashflow(state, from, to, today, people = state.people) {
+  return B.cashflow(state, from, to, today, people);
 }
 
 function lastPaymentIndex(state, today) {
@@ -197,7 +183,7 @@ function lastPaymentIndex(state, today) {
     if (pays.length) last = Math.max(last, pays[pays.length - 1].idx);
     if (T.endless(p)) last = Math.max(last, T.parseDate(today).idx + 11);
   }
-  return last;
+  return Math.max(last, B.carryIndex(state, today));   // döner kredide devreden bakiyenin ekstresi
 }
 
 // Varlık bakiyesinden today'e kadar düşülenler, varlık başına: kartsız harcamaların ödenen kısmı ve borç etkileri
@@ -239,6 +225,17 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     asset: T.assetOf(p, homeOf(state)),
   };
   if (T.repeats(p)) v.repeat = repeatView(p, today);
+  if (T.bnpl(p)) {
+    // Şimdi al sonra öde: çekilen ödemeler (at bugün ya da önce), sağlayıcıya kalan ve sıradaki çekim
+    const due = pays.filter(x => x.at > today).sort((a, b) => a.no - b.no);
+    v.remainingAmount = round(left.reduce((t, x) => t + x.amount, 0));
+    v.bnpl = {
+      provider: p.bnpl, name: T.bnplName(p), payments: p.count, paid: p.count - due.length,
+      firstPayment: round(T.bnplAmounts(p)[0]), perPayment: round(per), everyDays: T.BNPL_DAYS,
+      owedToProvider: round(due.reduce((t, x) => t + x.amount, 0)),
+      nextCharge: due[0] ? { date: due[0].at, amount: round(due[0].amount) } : null,
+    };
+  }
   if (!p.date) {
     // Excel'den gelen tarihsiz kayıt: total/count kalan taksitlerdir
     v.firstDueMonth = p.firstDue;
@@ -246,14 +243,27 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     v.total = round(T.originalTotal(p));
   }
   if (card && p.date) v.statementCutoff = T.statementOf(card, p.date).cut;
-  if (schedule) v.payments = pays.map(x => ({ no: x.no, date: x.key, amount: round(x.amount), paid: x.key < today }));
+  if (schedule) v.payments = pays.map(x => ({ no: x.no, date: x.key, amount: round(x.amount), paid: x.key < today, ...(T.bnpl(p) && { chargeDate: x.at }) }));
   return v;
 }
 
 // Kartın sıradaki ekstresi (borc.js cardDebt; takipte ödenmemiş kısmı): alreadyCut kesilmiş, son ödeme günü bekleniyor
 function statementView(debt) {
   const n = debt.next;
-  return n ? { date: n.date, amount: round(n.amount), alreadyCut: n.cut } : null;
+  if (!n) return null;
+  const v = { date: n.date, amount: round(n.amount), alreadyCut: n.cut };
+  // Döner kredide: ekstre bakiyesi (devreden ve faiz dahil), asgari ödeme, faiz ve devreden
+  if (n.minimum != null) Object.assign(v, { balance: round(n.balance), minimum: round(n.minimum), interest: round(n.interest), carriedIn: round(n.carried) });
+  return v;
+}
+
+// Döner kredi (elle ödenen, APR'li kart): devreden bakiye, işlemiş faiz, sıradaki ekstrenin ödenmemiş asgarisi ve
+// yalnızca asgari ödenirse geri ödeme (bugünkü borçla; months null: 50 yılda bitmez)
+function revolvingView(debt) {
+  if (!debt.revolving) return null;
+  const v = { apr: debt.apr, carried: round(debt.carried), interestCharged: round(debt.interestCharged), minimumDue: round(debt.minimumDue) };
+  if (debt.payoff) v.payoff = { monthsAtMinimum: debt.payoff.months, interestAtMinimum: debt.payoff.interest, monthlyToClearIn12: debt.payoff.in12 };
+  return v;
 }
 
 // Elle mod başlamış mı (borc.js cardDebt manualFrom = max(manualSince, trackSince) bugün ya da önce). Kartta bugün ödeme
@@ -269,6 +279,7 @@ function trackingView(debt, today) {
   const own = x => (manualNow(debt, today) ? round(x) : 0);
   const v = { since: debt.since, autoPay: !debt.manual, unpaid: own(debt.unpaid), overdue: own(debt.overdue) };
   if (debt.manual) Object.assign(v, { manualSince: debt.manualFrom, overdueSince: debt.overdueSince });
+  if (manualNow(debt, today) && debt.revolving) v.revolving = revolvingView(debt);
   return v;
 }
 
@@ -301,8 +312,13 @@ function statementsView(debt, today) {
   const own = debt.statements.filter(x => !x.auto);
   const last = own.filter(x => x.key <= today).pop();
   const next = own.find(x => x.key > today && x.amount - x.covered > EPS);
-  return own.filter(x => (x.key <= today ? x.state !== "paid" || x === last : !next || x.key <= next.key))
-    .map(x => ({ date: x.key, amount: round(x.amount), covered: round(x.covered), state: x.state }));
+  // Döner kredide devreden ekstreler (kalanı sonrakine geçti) sonuncusu dışında listelenmez; satırda ödenen, devreden, faiz
+  // ve asgari de
+  return own.filter(x => (x.key <= today ? (x.state !== "paid" && x.state !== "carried") || x === last : !next || x.key <= next.key))
+    .map(x => ({
+      date: x.key, amount: round(x.amount), covered: round(x.covered), state: x.state,
+      ...(debt.revolving && { paid: round(x.paid), carriedIn: round(x.carryIn), interest: round(x.interest), carriedOut: round(x.carried), minimum: round(x.minimum) }),
+    }));
 }
 
 // Kartın kaydedilen ödemeleri (pay_debt card): delete_debt_payment ile silinebilir
@@ -334,6 +350,7 @@ function cardView(state, c, today) {
     available: c.limit ? round(c.limit - used) : null,
     cutoffDay: c.cutoffDay,
     dueDay: c.dueDay,
+    ...(B.revolving(c) && { apr: c.apr }),
     nextPayment: own ? (first ? { date: first.key, amount: round(first.amount - first.covered) } : null)
       : next ? { date: next, amount: round(upcoming.filter(x => x.key === next).reduce((t, x) => t + x.amount, 0)) } : null,
     purchaseCount: mine.length,
@@ -351,6 +368,10 @@ function eventView(state, ev, { items = true } = {}) {
     total: round(ev.total),
     byPerson: byName(state, ev.byPerson, personName),
   };
+  // Döner kredi: ekstreye devreden bakiye ve faizi eklendi, kalanı sonraki ekstreye devretti (borc.js cashflow)
+  if (ev.carriedIn > EPS) v.carriedIn = round(ev.carriedIn);
+  if (ev.interest > EPS) v.interest = round(ev.interest);
+  if (ev.carriedOut > EPS) v.carriedOut = round(ev.carriedOut);
   if (items) {
     v.items = ev.items.map(x => ({
       purchaseId: x.purchase.id,
@@ -378,6 +399,11 @@ function preview(state, p) {
       + `, deducted from the ${T.assetOf(p, homeOf(state))} asset balance`;
   }
   if (T.repeats(p)) out.repeat = R.label(p) + (R.rule(p).n ? ` · ${R.rule(p).n} times` : " · no end");
+  if (T.bnpl(p)) {
+    const a = T.bnplAmounts(p);
+    out.note = `${T.bnplName(p)} Pay in ${p.count}: ${round(a[0])} on ${p.date}, then ${round(a.at(-1))} every ${T.BNPL_DAYS} days`
+      + (card ? `, each on the ${card.name} statement of its date` : ", from cash");
+  }
   return out;
 }
 
@@ -387,7 +413,14 @@ function buildPurchase(state, args, today, base = null) {
   const desc = args.description !== undefined ? text(args.description, "description") : base?.desc;
   if (!desc) fail("description is required (what was bought).");
 
-  const count = intArg(args.installments, "installments", 1, MAX_COUNT, base?.count ?? 1);
+  // Şimdi al sonra öde (ABD; taksit.js bnpl): sağlayıcı; null kaldırır (aylık taksite döner)
+  const bnpl = args.bnpl !== undefined ? args.bnpl : base?.bnpl ?? null;
+  if (bnpl != null) {
+    if (!T.BNPL.includes(bnpl)) fail(`bnpl must be one of ${T.BNPL.join(", ")}, or null.`);
+    if (args.bnpl !== undefined && !P.bnplFor(homeOf(state))) fail("Buy now, pay later (Pay in 4) is only available for accounts in the US for now.");
+  }
+  const count = intArg(args.installments, "installments", 1, MAX_COUNT, args.bnpl != null && args.installments === undefined && !base?.bnpl ? 4 : base?.count ?? (bnpl ? 4 : 1));
+  if (bnpl && (count < 2 || count > 12)) fail("A buy now, pay later purchase has 2 to 12 payments (Pay in 4: 4).");
   // Döviz / altın harcaması o varlıktan ödenir: kartsız ve peşin
   const asset = args.asset !== undefined ? assetArg(args.asset) : T.assetOf(base, homeOf(state));
   const foreign = asset !== homeOf(state);
@@ -421,7 +454,9 @@ function buildPurchase(state, args, today, base = null) {
 
   const rep = repeatArgs(args, base);
   if (rep.repeat != null && !date) fail("A repeating purchase needs a date.");
-  const p = { desc, cardId: card ? card.id : null, count, total, ...(foreign && { asset }), ...rep };
+  if (bnpl && rep.repeat != null) fail("A buy now, pay later purchase doesn't repeat: leave out repeat (or pass bnpl null).");
+  if (bnpl && !date) fail("A buy now, pay later purchase needs a date (the first payment is on that day).");
+  const p = { desc, cardId: card ? card.id : null, count, total, ...(foreign && { asset }), ...rep, ...(bnpl && { bnpl }) };
   // Kategori: verilirse kullanıcının seçimi sayılır (uygulama bundan öğrenir); verilmezse düzenlenen kayıttaki kalır,
   // yeni kayıtta kullanıcının aynı işyerine daha önce verdiği kategori önerilir
   // Açıklama değişince kullanıcının seçmediği (önerilmiş) kategori yeniden önerilir (app.js'teki gibi)
@@ -450,6 +485,7 @@ function buildCard(state, args, base = null) {
     cutoffDay: args.cutoff_day !== undefined ? T.validDay(args.cutoff_day) : base?.cutoffDay,
     dueDay: args.due_day !== undefined ? T.validDay(args.due_day) : base?.dueDay,
     last4: args.last4 !== undefined ? String(args.last4 ?? "").replace(/\D/g, "") : base?.last4 ?? "",
+    apr: args.apr !== undefined ? args.apr : base?.apr ?? null,
   };
   if (!v.name) fail("name is required.");
   if (!(v.limit >= 0)) fail("limit must be zero or a positive number.");
@@ -457,8 +493,12 @@ function buildCard(state, args, base = null) {
   if (!v.dueDay) fail("due_day (son ödeme günü) must be a day between 1 and 31.");
   if (v.last4 && v.last4.length !== 4) fail("last4 must be exactly 4 digits.");
   if (v.last4 && state.cards.some(c => c.id !== base?.id && c.last4 === v.last4)) fail(`Another card already has last4 ${v.last4}.`);
-  const { last4, ...rest } = v;
-  return last4 ? { ...rest, last4 } : rest;
+  if (v.apr != null) {
+    if (typeof v.apr !== "number" || !(v.apr >= 0 && v.apr <= 100)) fail("apr must be a number from 0 to 100 (annual %), or null.");
+    if (args.apr !== undefined && !P.aprFor(homeOf(state))) fail("Card APR (carrying a balance with interest) is only available for accounts in the US for now.");
+  }
+  const { last4, apr, ...rest } = v;
+  return { ...rest, ...(last4 && { last4 }), ...(apr != null && { apr: Math.round(apr * 100) / 100 }) };
 }
 
 // Kesim / son ödeme günü değişirken kullanıcıya sorulacak seçenekler (app.js'teki kart formuyla aynı)
@@ -635,6 +675,10 @@ function buildEntry(state, args, today, base = null, quote = null) {
 // Fon ve hisse (TEFAS, Borsa İstanbul) şimdilik yalnızca Türkiye'deki hesaplarda (ana para birimi TL; para.js)
 function checkMarketsAllowed(code, home) {
   if (V.market(code) && !P.marketsFor(P.isCurrency(home) ? home : "TRY")) fail("Funds and stocks (TEFAS, Borsa İstanbul) are only available for accounts in Turkey for now.");
+}
+// Banka e-postaları Türk bankalarının bildirimlerini okur: yalnızca Türkiye'deki hesaplarda (P.marketsFor)
+function checkInboxAllowed(home) {
+  if (!P.marketsFor(P.isCurrency(home) ? home : "TRY")) fail("Bank e-mails (Turkish bank notifications) are only available for accounts in Turkey for now.");
 }
 
 // Fon / hisse kodu biliniyor mu (fiyat kaynağına göre); kaynak alınamadıysa doğrulanamaz, kabul edilir
@@ -947,6 +991,7 @@ function cardDebtView(state, c, today) {
       manualSince: c.manualFrom, unpaid: round(c.unpaid), overdue: round(c.overdue), overdueSince: c.overdueSince,
       statements: statementsView(c, today),
     });
+    if (c.revolving) v.revolving = revolvingView(c);
   } else if (c.manual) v.manualSince = c.manualFrom;   // elle mod yarın başlıyor
   const payments = cardPaysView(state, c.card);
   if (payments.length) v.payments = payments;
@@ -999,7 +1044,7 @@ function payModeArgs(state, args, cur, v, today) {
     // Erken ödenen (son ödeme günü gelmemiş ekstreler için) kısım; yoksa engel son ödeme günü bugün olan ekstreye yapılan
     // ödemeden: otomatikte o ekstre ancak yarın ödenmiş sayılır (uygulamadaki prepaidText gibi)
     const cs = B.cardState(state, { ...v, manualSince: cur.manualSince }, today);
-    const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((t, x) => t + x.amount, 0);
+    const ahead = cs.deduction - cs.statements.filter(x => x.key <= today).reduce((t, x) => t + x.amount - (x.carryIn || 0), 0);
     if (ahead <= EPS) {
       fail(`${cur.name} can't go back to automatic today: on automatic its statement due today counts as paid only tomorrow, so ${round(lost)} ${homeOf(state)} of the card payments recorded for it would not count today, raising ${payer}'s lira balance by that much for today. Switch tomorrow; don't delete the payment.`);
     }
@@ -1037,6 +1082,7 @@ const PURCHASE_FIELDS = {
     description: `Spending category: ${K.CATEGORIES.map(c => `${c.id} = ${c.name} (${c.hint})`).join("; ")}. null removes it. Omit on add to reuse the category the user gave the same merchant before.`,
   },
   asset: { type: "string", description: 'What the purchase is paid in: the account currency (default; the currency field of the answers, TRY in Turkey), another currency code (USD, EUR, GBP…) or GAU (grams of gold). Purchases in another currency are paid at once in cash from that asset (card "nakit", installments 1).' },
+  bnpl: { type: ["string", "null"], enum: [...T.BNPL, null], description: 'Buy now, pay later provider (accounts in the US): "Pay in 4" with Klarna, Afterpay, Affirm, PayPal, Zip, Sezzle or other. installments payments (default 4, 2–12), the first on date, then every 2 weeks, from the card (each payment goes on the statement of its own date) or cash. What is not paid yet is owed to the provider (list_debts bnpl). null turns it back into a regular purchase. Affirm\'s monthly plans are loans (add_debt) or regular card installments.' },
   ...REPEAT_FIELDS,
 };
 const CARD_FIELDS = {
@@ -1045,6 +1091,7 @@ const CARD_FIELDS = {
   cutoff_day: S.int("Statement cutoff day of month (hesap kesim günü).", 1, 31),
   due_day: S.int("Payment due day of month (son ödeme günü).", 1, 31),
   last4: S.str('Last 4 digits of the card (used to match bank e-mails). "" removes it.'),
+  apr: { type: ["number", "null"], minimum: 0, maximum: 100, description: "Annual interest rate (APR, %) for accounts in the US: on a card paid by hand (auto_pay false), what is left of a statement after its due day carries to the next statement with monthly interest (APR / 12), and is overdue only if less than the minimum payment was paid. On automatic cards (paid in full) it has no effect. null removes it. Changing it recomputes interest since paying by hand started." },
   auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call: statements since then are unpaid until marked paid); on a day a card payment is dated it starts tomorrow instead (the card stays automatic today). Switching back to true counts unpaid past statements as paid; it fails while recorded card payments would stop counting (payments for statements not past their due day yet: on a statement's due day switch the next day; for payments made ahead, delete them or wait until the day after those due days) and while the card is not tracked (an untracked card keeps its mode)."),
 };
 
@@ -1095,7 +1142,7 @@ export const TOOLS = [
       const start = monthArg(args.month, "month", today);
       const last = lastPaymentIndex(state, today);
       const end = Math.min(last, start + MAX_MONTHS - 1);
-      const months = end >= start ? cashflow(state, start, end) : [];
+      const months = end >= start ? cashflow(state, start, end, today) : [];
       const at = idx => months.find(m => m.idx === idx);
       const endless = knownPurchases(state).some(p => T.assetOf(p, homeOf(state)) === homeOf(state) && T.endless(p) && !(cardById(state, p.cardId) && !B.tracked(cardById(state, p.cardId))));
       const thisMonth = at(start);
@@ -1104,7 +1151,7 @@ export const TOOLS = [
       // ödenmiş olan düşer, kapanmamış kısmı; ödenmemiş geçmiş ekstre late ile en üstte), diğerleri akıştaki ödemeler
       const from = T.parseDate(today).idx, until = upcomingUntil(today);
       const events = last >= from
-        ? cashflow(state, from, Math.min(last, from + 24)).flatMap(m => m.events).filter(e => !e.ignored)   // hesaba katılmayan kart yok
+        ? cashflow(state, from, Math.min(last, from + 24), today).flatMap(m => m.events).filter(e => !e.ignored)   // hesaba katılmayan kart yok
         : [];
       const manual = new Map(state.cards.map(c => [c.id, manualStatements(state, c, today, until)]).filter(([, m]) => m));
       const upcoming = [
@@ -1158,7 +1205,7 @@ export const TOOLS = [
       const start = monthArg(args.from_month, "from_month", ctx.today);
       const count = intArg(args.months, "months", 1, MAX_MONTHS, 12);
       const people = args.person !== undefined ? [findPerson(state, args.person)] : state.people;
-      const months = cashflow(state, start, start + count - 1, people);
+      const months = cashflow(state, start, start + count - 1, ctx.today, people);
       const items = args.include_items !== false;
       return {
         months: months.map(m => ({
@@ -1334,6 +1381,13 @@ export const TOOLS = [
         if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition, homeOf(state)));
         const chosen = transition ? change.cards[transition] : change.card;
         const built = chosen.history ? { ...v, history: chosen.history } : v;
+        const was = B.cardDebt(state, cur, ctx.today);
+        // Döner kredi (borc.js): elle moddan çıkarken (otomatiğe dönüş ya da APR'nin silinmesi) işlemiş faiz harcama olarak
+        // yazılır, özvarlık değişmez; otomatiğe dönüşün ön ödeme denetimi bu harcamalarla yapılır
+        const revolvingNow = c => B.tracked(c) && B.manual(c) && B.revolving(c);
+        const leaving = revolvingNow(cur) && B.tracked(built) && (args.auto_pay === true || !B.revolving(built));
+        const charges = leaving ? B.interestCharges(state, cur, ctx.today) : [];
+        for (const x of charges) state.installments.push({ id: uid(), ...x });
         const next = { ...built, ...payModeArgs(state, args, cur, built, ctx.today) };
         // Açıkça bugünden takibe alınan (track_since bugün) kartta bugün tarihli ödeme, ödediği ekstre takipten önce kaldığı
         // için sonraki ekstreleri kapatırdı (borc.js cardPaidToday); varsayılan başlangıç bu durumda zaten yarındır
@@ -1344,7 +1398,6 @@ export const TOOLS = [
         // Bu kartın düşülen ekstreleri (borc.js cardPaid): takip, günler ya da ödeme modu değişince bakiye değişir
         const deducted = c => B.cardPaid({ ...state, cards: [c] }, ctx.today);
         const before = deducted(cur);
-        const was = B.cardDebt(state, cur, ctx.today);
         state.cards = state.cards.map(c => (c.id === cur.id ? next : c));
         const balanceChange = round(before - deducted(next));
         const out = { saved: true, card: cardView(state, next, ctx.today) };
@@ -1366,6 +1419,18 @@ export const TOOLS = [
           const late = was.statements.filter(x => x.state === "late");
           out.note = (late.length ? `${late.length} overdue statement(s) (${round(was.overdue)} ${homeOf(state)}) now count as paid, deducted from ${payer}'s lira balance. ` : "")
             + `${next.name}'s statements count as paid the day after their due day again.`;
+        }
+        if (charges.length) {
+          const total = round(charges.reduce((t, x) => t + x.total, 0));
+          out.interestSavedAsPurchases = { count: charges.length, total };
+          out.note = `${out.note ? out.note + " " : ""}Interest charged so far (${total} ${homeOf(state)}) was saved as ${charges.length} purchase(s) on ${next.name}, so net worth doesn't change.`;
+        } else if (revolvingNow(cur) || revolvingNow(next)) {
+          // APR değişti (ya da elle moda geçildi): faiz elle modun başından yeniden hesaplandı
+          const change = round((B.cardDebt(state, next, ctx.today).interestCharged ?? 0) - (was.interestCharged ?? 0));
+          if (change) {
+            out.interestChangeTry = change;
+            out.note = `${out.note ? out.note + " " : ""}Interest since ${next.manualSince} was recomputed${B.revolving(next) ? ` at ${next.apr}% APR` : ""}: ${change > 0 ? "+" : ""}${change} ${homeOf(state)} (net worth changes by the opposite).`;
+          }
         }
         return out;
       });
@@ -1404,7 +1469,7 @@ export const TOOLS = [
       const state = await ctx.load();
       const start = T.parseDate(ctx.today).idx;
       const end = Math.min(lastPaymentIndex(state, ctx.today), start + MAX_MONTHS - 1);
-      const months = end >= start ? cashflow(state, start, end) : [];
+      const months = end >= start ? cashflow(state, start, end, ctx.today) : [];
       const shares = B.shares(state, ctx.today);
       return {
         people: state.people.map(p => ({
@@ -1697,7 +1762,7 @@ export const TOOLS = [
           ...worthView(t),
           debtsByKind: {
             cards: round(t.debt.cards), cashInstallments: round(t.debt.cash), loans: round(t.debt.loans),
-            people: round(t.debt.people), overpaidCardShares: round(t.debt.overpaid),
+            people: round(t.debt.people), overpaidCardShares: round(t.debt.overpaid), bnpl: round(t.debt.bnpl),
           },
           receivablesByKind: { cardShares: round(t.receivable.cards), people: round(t.receivable.people), cardCredit: round(t.receivable.cardCredit) },
           ...(t.missing.length ? { notIncluded: t.missing } : {}),
@@ -1706,6 +1771,12 @@ export const TOOLS = [
         cashInstallments: owes && !q
           ? { totalTry: round(t.debt.cash), byAsset: Object.fromEntries(Object.entries(cash).map(([code, v]) => [code, V.round(v, code)])) }
           : null,
+        // Şimdi al sonra öde: sağlayıcıya kalan (henüz çekilmemiş ödemeler)
+        bnpl: owes ? B.bnplDebt(state, today, person?.id).items.filter(x => has(x.purchase.desc, T.bnplName(x.purchase))).map(x => ({
+          purchaseId: x.purchase.id, description: x.purchase.desc, provider: x.provider, name: T.bnplName(x.purchase),
+          card: x.cardId ? cardName(state, x.cardId) : "Nakit", remaining: round(x.remaining), paid: x.paid, payments: x.count,
+          nextCharge: { date: x.next.date, amount: round(x.next.amount) },
+        })) : [],
         // Pay ödenmemişse alacak, fazla ödenmişse kullanıcının borcu (Borçlar'daki gibi)
         shares: shares.filter(v => side === "all" || (side === "debt" ? v.owed < 0 : v.owed >= 0)),
         cardCredit,
@@ -1859,6 +1930,13 @@ export const TOOLS = [
           state.debts.push(x);
           const after = B.cardDebt(state, card, today);
           const out = { saved: true, payment: paymentView(x, homeOf(state)), card: cardDebtView(state, after, today) };
+          // Döner kredi: asgarinin kalanı; son ödeme gününe kadar ödenmeyen kalan faiziyle sonraki ekstreye devreder
+          if (after.revolving) {
+            out.minimumDue = round(after.minimumDue);
+            if (after.minimumDue > EPS && after.next) {
+              out.note = `Pay at least ${round(after.minimumDue)} ${homeOf(state)} more by ${after.next.date} (the minimum payment) to avoid a late payment; whatever is left after the due day carries to the next statement with interest.`;
+            }
+          }
           if (amount > cd.unpaid + cut + EPS) {
             out.warning = `This payment is ${round(amount - cd.unpaid - cut)} ${homeOf(state)} more than the statements due or already cut (${round(cd.unpaid + cut)} ${homeOf(state)}); the rest covers later statements`
               + (after.credit > EPS ? `, and ${round(after.credit)} ${homeOf(state)} is more than the card's whole debt (a credit on the card).` : ".");
@@ -1932,6 +2010,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: { ...READ, readOnlyHint: false, idempotentHint: true },
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       return { address: await ctx.inbox.address(false) };
     },
   },
@@ -1942,6 +2021,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: DESTROY,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       return { address: await ctx.inbox.address(true), note: "Update the notification address at the bank." };
     },
   },
@@ -1952,6 +2032,7 @@ export const TOOLS = [
     inputSchema: obj({ include_body: S.bool("Include the e-mail text (e.g. to show a bank verification link).") }),
     annotations: READ,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       return { emails: rows.map(row => emailView(emailItem(state, row), { body: !!args.include_body })) };
     },
@@ -1963,6 +2044,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: WRITE,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       const items = rows.map(row => emailItem(state, row));
       const ready = items.filter(x => !x.reason);
@@ -1999,6 +2081,7 @@ export const TOOLS = [
     inputSchema: obj({ email_id: S.int("emailId from list_inbox."), ...PURCHASE_FIELDS }, ["email_id"]),
     annotations: WRITE,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const { email_id: emailId, ...fields } = args;
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       const row = rows.find(r => r.id === Number(emailId)) ?? fail(`No pending e-mail with id ${emailId}.`);
@@ -2032,6 +2115,7 @@ export const TOOLS = [
     inputSchema: obj({ email_id: S.int("emailId from list_inbox.") }, ["email_id"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const id = Number(args.email_id);
       const claimed = await ctx.inbox.claim([id]);
       return { dismissed: claimed.includes(id), emailId: id };
@@ -2044,6 +2128,7 @@ export const TOOLS = [
     inputSchema: obj({ text: S.str("The e-mail text.") }, ["text"]),
     annotations: READ,
     async run(args, ctx) {
+      checkInboxAllowed(ctx.home);
       const state = await ctx.load();
       const x = emailItem(state, { id: null, body: text(args.text, "text"), received_at: new Date().toISOString() });
       const v = emailView(x);
@@ -2123,7 +2208,7 @@ export const TOOLS = [
       const after = { ...state, installments: [...state.installments, purchase] };
       const pays = T.payments(purchase, cardById(state, purchase.cardId), ctx.today);
       const from = pays[0].idx, to = pays[pays.length - 1].idx;
-      const flowsOf = s => cashflow(s, from, to);
+      const flowsOf = s => cashflow(s, from, to, ctx.today);
       const before = flowsOf(state), next = flowsOf(after);
       const card = cardById(state, purchase.cardId);
       return {
@@ -2180,16 +2265,19 @@ export const TOOLS = [
 
 // Sunucunun initialize cevabında LLM'e verilen genel bilgi
 export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (single or in installments / taksit) for one or more people, and shows when each installment is paid.
-- Amounts are in the account's currency (the currency field of the answers; TRY for accounts in Turkey, EUR, USD, GBP… elsewhere — the user picks their country at sign-up), unless an asset says otherwise. Field names ending in Try (tryValue, totalTry…) are in the account's currency. Dates are YYYY-MM-DD, months YYYY-MM, in Turkey time.
+- Amounts are in the account's currency (the currency field of the answers; TRY for accounts in Turkey, EUR, USD, GBP… elsewhere — the user picks their country at sign-up), unless an asset says otherwise. Field names ending in Try (tryValue, totalTry…) are in the account's currency. Dates are YYYY-MM-DD, months YYYY-MM, in the user's time zone.
 - A card has a statement cutoff day (hesap kesim günü) and a due day (son ödeme günü). A purchase on or before the cutoff day goes into that month's statement; the statement is paid on the due day (same month if the due day is after the cutoff, otherwise the next month). Installments fall into the following statements one month apart. Cash purchases are paid on the purchase day.
 - When a card's cutoff / due day changes, statements already cut keep their dates; update_card asks (transition) what happens to the purchases in between — ask the user, don't pick yourself.
 - A card's used limit is the sum of installments still to be paid (on a card paid by hand, also its unpaid past statements).
 - Cards and people can be referred to by id or name, cards also by their last 4 digits. "nakit" means cash / debit card.
-- Asset entries track lira (TRY), US dollars (USD), euros (EUR) and gold in grams (GAU) coming in or going out, once or repeating monthly; balances are their sums of entries dated up to today (repeating ones: the times up to today). get_assets values them in TRY at the current Turkish market rate. Buying dollars / euros / gold with lira or selling them for lira (settle true, price = the rate) is a transfer, not income or spending.
+- Asset entries track the account's currency, foreign currencies (USD, EUR, GBP…) and gold in grams (GAU) coming in or going out, once or repeating; balances are their sums of entries dated up to today (repeating ones: the times up to today). get_assets values them in the account's currency at current exchange rates. Buying foreign currency / gold with the account's currency or selling it back (settle true, price = the rate) is a transfer, not income or spending.
 - Funds and stocks (only for accounts in Turkey for now) are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
 - Deleting a card or a person also deletes their purchases (a card also its statement payments, a person also their asset entries and debts); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
-- Reply to the user in their language (the app is Turkish).`;
+- Revolving credit (accounts in the US): a card may have an APR (add_card / update_card apr). On a card paid by hand (auto_pay false) with an APR, what is left of a statement after its due day carries to the next statement, with interest (APR / 12) charged on the next cutoff day; a statement is overdue only if less than its minimum payment (the greater of 40 or 1% of the balance + interest, plus any past-due minimum) was paid. list_cards / list_debts show carried, interestCharged, minimumDue and payoff (months and interest if only the minimum is paid, monthly payment to clear in 12 months); statements show balance, minimum and interest. These are estimates: the bank's own figures (daily balance, fees) can differ a little. Automatic cards are paid in full each month, so no interest.
+- Buy now, pay later (accounts in the US): add_purchase bnpl (klarna, afterpay, affirm, paypal, zip, sezzle, other) = "Pay in 4": the first payment on the purchase date, then every 2 weeks, from a card (each on the statement of its own date) or cash; what is not charged yet is owed to the provider (list_debts bnpl, debtsByKind.bnpl). Affirm's monthly plans are not Pay in 4: record them as a loan or regular installments.
+- Bank e-mails (the *_inbox* tools and try_bank_email: Turkish bank notifications turned into purchases) are only available for accounts in Turkey for now.
+- Reply to the user in their language (the app is in Turkish and English).`;

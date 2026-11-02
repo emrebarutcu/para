@@ -231,6 +231,132 @@
     return out;
   }
 
+  // ---------- Döner kredi (APR) ----------
+  // Elle ödenen kartın yıllık faizi (card.apr, %) varsa ekstrenin son ödeme gününe kadar ödenmeyen kalanı sonraki ekstreye
+  // devreder (carried), sonraki ekstrenin kesim gününde aylık faiziyle (APR / 12) birlikte. Asgari ödeme ödendiyse
+  // devreden ekstre gecikmiş değildir; asgariden azı gecikmedir (asgarinin kalanı overdue). Günü gelmemiş ekstreler
+  // tam ödenecek sayılır (tahmin). Basitleştirme: ortalama günlük bakiye, faizsiz dönemin kaybı ve ücretler yok.
+  const MIN_PAYMENT = 40;   // asgari ödemenin alt sınırı (ana para biriminde; ABD'de yaygın: 40 $ ya da %1 + faiz)
+  const MIN_RATE = 0.01;
+  const r2 = v => Math.round(v * 100) / 100;
+  function revolving(card) { return Number.isFinite(card?.apr) && card.apr >= 0 && card.apr <= 100; }
+
+  // Ekstrenin asgari ödemesi: bakiyenin %1'i + faiz, en az MIN_PAYMENT; bakiyeyi aşmaz; gecikmiş asgari eklenir
+  function minimumDue(balance, interest = 0, pastDue = 0) {
+    if (!(balance > EPS)) return 0;
+    return r2(Math.min(balance, Math.max(MIN_PAYMENT, r2(MIN_RATE * balance) + interest) + pastDue));
+  }
+
+  // Yalnızca asgari ödenirse borcun bitmesi: { months, interest } (600 ayda bitmiyorsa months null) ve 12 ayda bitirmek
+  // için aylık ödeme (in12). Her ay asgari ödenir, kalan aylık faiz alır.
+  function payoff(balance, apr) {
+    const r = apr / 1200;
+    let bal = r2(balance), interest = 0, months = 0, last = 0;
+    while (bal > EPS && months < 600) {
+      bal = r2(bal - minimumDue(bal, last));
+      months++;
+      if (bal <= EPS) break;
+      last = r2(bal * r);
+      bal = r2(bal + last);
+      interest += last;
+    }
+    const in12 = r > 0 ? Math.ceil(balance * r / (1 - (1 + r) ** -12) * 100) / 100 : Math.ceil(balance / 12 * 100) / 100;
+    return { months: bal > EPS ? null : months, interest: r2(interest), in12 };
+  }
+
+  // Ekstreler eskiden yeniye (list: statements(), key son ödeme günü). cut'tan önceki ekstreler elle modun başından önce
+  // ödenmiştir. Ödemeler (pays, tarihe göre; prepay: elle moddan önceki fazla) bir ekstreye son ödeme gününe kadar
+  // tarihliyse sayılır; günü gelmemiş ekstreye bugüne kadarkilerin hepsi. Devreden bakiyenin düştüğü ekstre harcaması
+  // olmasa da açılır. Ekstre: amount bakiye (yeni + devreden + faiz), covered burada kapanan ya da devreden (amount −
+  // covered: şimdi ödenecek), paid ödenen, carryIn / carried gelen / devreden, interest faizi (interestAt kesim günü;
+  // horizon'dan sonraysa henüz yok), minimum asgari ödeme. Devreden ve faiz kart sahibinin (payer) payıdır.
+  function revolve(card, list, { cut, today, horizon, pays, prepay, payer }) {
+    const rate = card.apr / 1200;
+    const queue = list.filter(st => st.key >= cut);
+    const out = list.filter(st => st.key < cut).map(st => ({ ...st, covered: st.amount, paid: st.amount, state: "paid", auto: true }));
+    let avail = prepay, i = 0, carry = 0, pastDue = 0, charged = 0, prev = null;
+    while (i < queue.length || (carry > EPS && prev)) {
+      // Devreden varsa sıradaki ekstre önceki son ödeme gününün ertesinden sonraki ilk kesimdir
+      let st, at = null;
+      if (carry > EPS && prev) {
+        const s = T.statementOf(card, T.addDays(prev.key, 1));
+        at = s.cut;
+        st = queue[i] && queue[i].key <= s.due ? queue[i++] : { key: s.due, amount: 0, lines: [] };
+      } else st = queue[i++];
+      const limit = st.key < today ? st.key : today;
+      while (pays.length && pays[0].date <= limit) avail += pays.shift().amount;
+      const interest = carry > EPS && at <= horizon ? r2(carry * rate) : 0;
+      if (at && at <= today) charged += interest;
+      const lines = [...st.lines];
+      if (carry > EPS) lines.push({ key: st.key, amount: carry, personId: payer, carried: true });
+      if (interest) lines.push({ key: st.key, amount: interest, personId: payer, interest: true, at });
+      const balance = st.amount + carry + interest;
+      const minimum = minimumDue(balance, interest, pastDue);
+      const paid = Math.min(avail, balance);
+      avail -= paid;
+      const left = balance - paid;
+      const x = { ...st, lines, amount: balance, paid, covered: paid, carryIn: carry, carried: 0, interest, interestAt: at, minimum, auto: false };
+      if (st.key < today) {
+        x.state = left <= EPS ? "paid" : paid + EPS >= minimum ? "carried" : "late";
+        x.wasLate = x.state === "late";
+        x.carried = left > EPS ? left : 0;
+        x.covered = balance;   // kalan sonraki ekstreye geçti
+        carry = x.carried;
+        pastDue = x.wasLate ? minimum - paid : 0;
+      } else {
+        x.state = left <= EPS ? "paid" : st.key === today ? "due" : "open";
+        carry = 0;
+        pastDue = 0;
+      }
+      out.push(x);
+      prev = st.key < today ? x : null;   // günü gelmemiş ekstreden sonra devretmez (tam ödenecek sayılır)
+    }
+    // Son gecikmiş ekstre: asgarinin ödenmeyen kısmı, sonraki ekstreye yapılan ödemeyle kapanır; ikisinde iki kez sayılmaz
+    const lastPast = out.filter(x => !x.auto && x.key < today).at(-1);
+    let overdue = 0, overdueSince = null;
+    if (lastPast?.wasLate) {
+      const next = out[out.indexOf(lastPast) + 1];
+      overdue = Math.max(0, minusPaid(lastPast) - (next?.paid ?? 0));
+      if (overdue > EPS) {
+        lastPast.covered = lastPast.amount - overdue;
+        if (next) next.covered = Math.min(next.amount, next.paid + overdue);
+        for (let k = out.indexOf(lastPast); k >= 0 && out[k].wasLate; k--) overdueSince = out[k].key;
+      } else overdue = 0;
+    }
+    for (const x of out) if (x.state === "late" && x !== lastPast) x.state = "carried";
+    if (lastPast?.state === "late" && overdue <= EPS) lastPast.state = "carried";
+    const current = out.find(x => x.key >= today && !x.auto);
+    const unpaid = overdue + (current?.key === today ? Math.max(0, current.amount - current.covered) : 0);
+    const carried = lastPast?.carried ?? 0;
+    return {
+      list: out, charged, prepaid: Math.max(0, avail + sum(pays)), unpaid, overdue, overdueSince, carried,
+      minimumDue: current ? Math.max(0, r2(current.minimum - current.paid)) : 0,
+    };
+
+    function minusPaid(x) { return Math.max(0, x.minimum - x.paid); }
+  }
+
+  // Döner kredide devreden bakiyenin düştüğü son ekstrenin ayı (Özet ve Akış'ın penceresi en az buraya kadar); yoksa −∞
+  function carryIndex(state, today) {
+    let last = -Infinity;
+    for (const c of state.cards || []) {
+      if (!tracked(c) || !manual(c) || !revolving(c)) continue;
+      const x = cardState(state, c, today).statements.filter(st => st.carryIn > EPS).at(-1);
+      if (x) last = Math.max(last, T.parseDate(x.key).idx);
+    }
+    return last;
+  }
+
+  // Elle moddan çıkarken (otomatiğe dönüş, APR silinmesi) işlemiş faiz harcama olarak yazılır: kesim gününde, kart
+  // sahibinin, tek çekim. Özvarlık değişmez (faiz borç olarak kalır). [{ desc, date, total, count, cardId, personId }]
+  function interestCharges(state, card, today) {
+    if (!tracked(card) || !manual(card) || !revolving(card)) return [];
+    const cs = cardState(state, card, today);
+    const payer = state.people?.[0]?.id;
+    return cs.statements.filter(x => x.interest > EPS && x.interestAt && x.interestAt <= today)
+      .map(x => ({ desc: L("Faiz"), date: x.interestAt, total: r2(x.interest), count: 1, cardId: card.id, personId: payer, category: "diger" }));
+  }
+
   // Takipteki kartın ekstre durumu. S = trackSince, E = elle modun başladığı gün (max(manualSince, S); otomatikte yok).
   // A: E'den (otomatikte bugünden) önceki ekstreler, Pb / Pa: E'den önce / sonra kart ödemeleri (S ≤ tarih ≤ bugün).
   // D = max(A, Pb) + Pa varlıktan düşen; borç = S'den sonraki taksitler − D (eksiyse kartta artı bakiye, credit).
@@ -249,6 +375,18 @@
     const A = sum(lines.filter(x => x.key < cut));
     const Pb = sum(P.filter(p => !E || p.date < E)), Pa = E ? sum(P.filter(p => p.date >= E)) : 0;
     const D = Math.max(A, Pb) + Pa;
+    if (E && revolving(card)) {
+      const r = revolve(card, statements(until ? all : lines), {
+        cut, today, horizon: until && until > today ? until : today, pays: P.filter(p => p.date >= E),
+        prepay: Math.max(0, Pb - A), payer: state.people?.[0]?.id ?? null,
+      });
+      const debt = sum(lines) + r.charged - D;
+      return {
+        since: S, manualFrom: E, deduction: D, debt: Math.abs(debt) <= EPS ? 0 : debt, credit: Math.max(0, -debt),
+        statements: r.list, prepaid: r.prepaid, lines, unpaid: r.unpaid, overdue: r.overdue, overdueSince: r.overdueSince,
+        revolving: true, carried: r.carried, interestCharged: r.charged, minimumDue: r.minimumDue,
+      };
+    }
     let pool = D - A;
     const list = statements(until ? all : lines).map(st => {
       if (st.key < cut) return { ...st, covered: st.amount, state: "paid", auto: true };
@@ -312,12 +450,20 @@
       const nb = {};
       for (const x of st.lines) add(nb, x.personId, x.amount);
       next = { date: st.key, amount: st.amount - (st.covered || 0), byPerson: nb, cut: st.key < open.due };
+      if (cs?.revolving) Object.assign(next, { balance: st.amount, minimum: st.minimum, interest: st.interest, carried: st.carryIn });
     }
+    // Döner kredide (elle ödenen, APR'li kart): devreden bakiye, işlemiş faiz, sıradaki ekstrenin ödenmemiş asgarisi ve
+    // yalnızca asgari ödenirse geri ödeme (bugünkü borçla)
+    const rev = cs?.revolving ? {
+      revolving: true, apr: card.apr, carried: cs.carried, interestCharged: cs.interestCharged,
+      minimumDue: next?.minimum != null ? Math.max(0, r2(next.minimum - (next.balance - next.amount))) : cs.minimumDue,
+      payoff: cs.debt > EPS ? payoff(cs.debt, card.apr) : null,
+    } : { revolving: false };
     return {
       card, total: cs ? cs.debt : T.outstanding(lines, today), byPerson, next, open: { cut: open.cut, due: open.due },
       tracked: isTracked, since: isTracked ? cs.since : null, manual: isTracked && manual(card), manualFrom: cs?.manualFrom ?? null,
       unpaid: cs?.unpaid ?? 0, overdue: cs?.overdue ?? 0, overdueSince: cs?.overdueSince ?? null, credit: cs?.credit ?? 0,
-      statements: cs?.statements ?? [],
+      statements: cs?.statements ?? [], ...rev,
     };
   }
 
@@ -364,7 +510,14 @@
       if (E) for (const p of P) if (p.date >= E) push({ date: p.date, amount: -p.amount, cardId: c.id, type: "payment", planned: false, payment: p });
       const unpaid = sum(cs.statements.filter(x => x.key >= cut && x.key <= today), x => x.amount - x.covered);
       if (unpaid > EPS) push({ date: today, amount: -unpaid, cardId: c.id, type: "unpaid", planned: true });
-      // İleriki ekstreler: süresiz tekrarların ileriki tekrarları da (until'e kadar), kapanmış kısmı düşülerek
+      // İleriki ekstreler: süresiz tekrarların ileriki tekrarları da (until'e kadar), kapanmış kısmı düşülerek; döner
+      // kredide devreden bakiye ve tahmini faiziyle
+      if (cs.revolving) {
+        for (const x of cardState(state, c, today, pays, until).statements) {
+          if (x.key > today) push({ date: x.key, amount: -(x.amount - x.covered), cardId: c.id, type: "statement", planned: true });
+        }
+        continue;
+      }
       const covered = new Map(cs.statements.filter(x => x.key > today).map(x => [x.key, x.covered]));
       const future = statements(cardLines(state, c, until).filter(x => x.key > today && x.key >= cs.since));
       for (const x of future) push({ date: x.key, amount: -(x.amount - (covered.get(x.key) || 0)), cardId: c.id, type: "statement", planned: true });
@@ -388,7 +541,8 @@
       if (!tracked(c)) continue;
       const from = since(c, today);
       for (const x of cardLines(state, c, today)) {
-        if (x.personId === payer || x.key < from || x.at > today) continue;
+        // Henüz çekilmemiş tekrarlar sayılmaz; şimdi al sonra öde harcamasının ödemeleri ise alındığı günden onun borcudur
+        if (x.personId === payer || x.key < from || (x.at > today && !T.bnpl(x.purchase))) continue;
         const s = get(x.personId);
         s.charged += x.amount;
         add(s.byCard, c.id, x.amount);
@@ -430,11 +584,89 @@
     for (const p of state.installments || []) {
       if (cards.has(p.cardId) || !people.has(p.personId) || (pid && p.personId !== pid)) continue;
       if (valid(p.date) && p.date > today && !T.repeats(p)) continue;   // henüz alınmadı
+      if (T.bnpl(p)) continue;                                         // sağlayıcıya borç: bnplDebt
       for (const x of T.payments(p, null, today)) {
         if (x.key > today && !(x.at > today)) add(out, T.assetOf(p, P.homeOf(state)), x.amount);
       }
     }
     return out;
+  }
+
+  // ---------- Aylık ödemeler ----------
+  // Ay ay kart ve nakit ödemeleri (taksit.js buildCashflow; Özet, Akış, içgörüler, asistan). Hesaba katılmayan kartın
+  // (tracked değil; ör. eşinin kartı) ekstreleri toplamlara girmez, olay ignored ile kalır. Döner kredide (elle ödenen,
+  // APR'li kart) ekstrenin devreden kalanı o aydan düşer (carriedOut, kişilere oranla), devrettiği ekstreye faiziyle eklenir
+  // (carriedIn, interest; kart sahibinin); devredenin açtığı ekstre harcaması olmayan bir olaydır. Değişen ayda toplamlar
+  // sayılan olaylardan yeniden toplanır (çıkarma yuvarlama kaydırırdı). people: süzülmüş kişiler (asistanda kişiye göre).
+  function cashflow(state, fromIdx, toIdx, today = T.todayKey(), people = state.people) {
+    const cards = state.cards || [];
+    const months = T.buildCashflow(people, cards, state.installments || [], fromIdx, toIdx, P.homeOf(state));
+    const off = new Set(cards.filter(c => !tracked(c)).map(c => c.id));
+    const rev = cards.filter(c => tracked(c) && manual(c) && revolving(c));
+    if (!off.size && !rev.length) return months;
+    const byIdx = new Map(months.map(m => [m.idx, m]));
+    const changed = new Set(months.filter(m => m.events.some(ev => off.has(ev.cardId))).map(m => m.idx));
+    const ids = new Set(people.map(p => p.id));
+    const payer = state.people?.[0]?.id;
+    const until = T.dateKey(toIdx, 31);
+    for (const c of rev) {
+      for (const x of cardState(state, c, today, undefined, until).statements) {
+        if (x.auto || !(x.carryIn > EPS || x.interest > EPS || x.carried > EPS)) continue;
+        const m = byIdx.get(T.parseDate(x.key).idx);
+        if (!m) continue;
+        const key = `${x.key}|${c.id}`;
+        let ev = m.events.find(e => e.key === key);
+        if (!ev) { ev = { key, date: x.key, cardId: c.id, total: 0, byPerson: {}, items: [] }; m.events.push(ev); }
+        else ev = m.events[m.events.indexOf(ev)] = { ...ev, byPerson: { ...ev.byPerson } };
+        const into = (x.carryIn || 0) + (x.interest || 0);
+        if (into > EPS && ids.has(payer)) add(ev.byPerson, payer, into);
+        if (x.carried > EPS && x.amount > EPS) {
+          for (const pid of Object.keys(ev.byPerson)) ev.byPerson[pid] -= x.carried * ev.byPerson[pid] / x.amount;
+        }
+        Object.assign(ev, { carriedIn: x.carryIn || 0, interest: x.interest || 0, carriedOut: x.carried || 0 });
+        ev.total = sum(Object.values(ev.byPerson), v => v);
+        changed.add(m.idx);
+      }
+    }
+    const order = new Map(cards.map((c, i) => [c.id, i]));
+    const rank = id => (id == null ? Infinity : order.get(id) ?? Infinity);
+    return months.map(m => {
+      if (!changed.has(m.idx)) return m;
+      const out = { ...m, total: 0, byPerson: {}, byCard: {} };
+      out.events = m.events.map(ev => {
+        if (off.has(ev.cardId)) return { ...ev, ignored: true };
+        out.total += ev.total;
+        for (const [pid, v] of Object.entries(ev.byPerson)) out.byPerson[pid] = (out.byPerson[pid] || 0) + v;
+        add(out.byCard, ev.cardId ?? T.CASH, ev.total);
+        return ev;
+      }).sort((a, b) => a.date.localeCompare(b.date) || rank(a.cardId) - rank(b.cardId));
+      return out;
+    });
+  }
+
+  // Şimdi al sonra öde: sağlayıcıya kalan (henüz çekilmemiş ödemeler; alışverişi bugün ya da önce olan). Kartla ödenende
+  // kart sahibinin (ilk kişi; takip dışı kart sayılmaz), nakitte harcamanın sahibinin borcu. { total, items: [{ purchase,
+  // provider, cardId, remaining, paid (çekilen ödeme sayısı), count, next { date, amount } }] }
+  function bnplDebt(state, today, pid) {
+    const people = new Set((state.people || []).map(p => p.id));
+    const cards = new Map((state.cards || []).map(c => [c.id, c]));
+    const payer = state.people?.[0]?.id;
+    const items = [];
+    for (const p of state.installments || []) {
+      if (!T.bnpl(p) || !people.has(p.personId) || p.date > today || T.assetOf(p, P.homeOf(state)) !== P.homeOf(state)) continue;
+      const card = cards.get(p.cardId);
+      if (card && !tracked(card)) continue;
+      if (!inScope(pid, card ? payer : p.personId)) continue;
+      const pays = T.payments(p, card ?? null).sort((a, b) => a.no - b.no);
+      const left = pays.filter(x => x.at > today);
+      if (!left.length) continue;
+      items.push({
+        purchase: p, provider: p.bnpl, cardId: card ? card.id : null, remaining: sum(left), paid: pays.length - left.length,
+        count: pays.length, next: { date: left[0].at, amount: left[0].amount },
+      });
+    }
+    items.sort((a, b) => (a.next.date < b.next.date ? -1 : a.next.date > b.next.date ? 1 : 0));
+    return { total: sum(items, x => x.remaining), items };
   }
 
   // ---------- Varlığa etkileri ----------
@@ -509,7 +741,7 @@
     };
 
     const receivable = { people: 0, cards: 0, cardCredit: 0, total: 0 };
-    const debt = { cards: 0, cash: 0, loans: 0, people: 0, overpaid: 0, total: 0 };
+    const debt = { cards: 0, cash: 0, loans: 0, people: 0, overpaid: 0, bnpl: 0, total: 0 };
     const list = [];
     for (const d of k.items) {
       if (!inScope(pid, d.personId)) continue;
@@ -536,8 +768,9 @@
       }
     }
     for (const [code, v] of Object.entries(cashDebt(state, today, pid === "all" ? undefined : pid))) debt.cash += tl(v, code);
+    debt.bnpl = bnplDebt(state, today, pid === "all" ? undefined : pid).total;
     receivable.total = receivable.people + receivable.cards + receivable.cardCredit;
-    debt.total = debt.cards + debt.cash + debt.loans + debt.people + debt.overpaid;
+    debt.total = debt.cards + debt.cash + debt.loans + debt.people + debt.overpaid + debt.bnpl;
     const assets = cash.total + receivable.total;
     return {
       balances, cash: cash.total, receivable, debt, untracked, assets, equity: assets - debt.total,
@@ -594,6 +827,7 @@
   const api = {
     KINDS, SIDES, tracked, manual, since, ensureTracking, side, sign, auto, started, known, schedule, plan, status, modeLocked,
     flows, cardLines, cardState, cardPrepaid, cardPaidToday, cardDebt, cardUsed, cardPaid, cardMoves, shares, shareItems, cashDebt, allFlows,
+    MIN_PAYMENT, MIN_RATE, revolving, minimumDue, payoff, interestCharges, carryIndex, cashflow, bnplDebt,
     debtSpent, addSpent, spent, paymentsDue, totals, flowText, loanRate, lastIndex,
   };
   if (node) module.exports = api;

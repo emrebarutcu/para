@@ -104,7 +104,7 @@ struct OzetEkrani: View {
 
     private func odendi(_ p: Ozet.Yaklasan) {
         guard let c = (try? model.read("list_cards") as KartListesi)?.cards.first(where: { $0.name == p.card }) else { return }
-        odeme = .kart(id: c.id, ad: c.name, tutar: c.tracking?.unpaid ?? p.total)
+        odeme = .kart(id: c.id, ad: c.name, tutar: c.tracking?.unpaid ?? p.total, asgari: c.tracking?.revolving?.minimumDue)
     }
 
 }

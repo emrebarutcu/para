@@ -35,6 +35,11 @@ enum Bicim {
 
     // Tam sayı yüzde: Türkçede "%45", İngilizcede "45%"
     static func yuzde(_ n: Int) -> String { Dil.ingilizce ? "\(n)%" : "%\(n)" }
+    // Ondalıklı oran (APR): "24.99%", "%24,99"
+    static func oran(_ v: Double) -> String {
+        let s = v.formatted(.number.locale(locale).grouping(.never).precision(.fractionLength(0...2)))
+        return Dil.ingilizce ? "\(s)%" : "%\(s)"
+    }
 
     static func percent(_ v: Double) -> String {
         (v >= 0 ? "+" : "") + (v / 100).formatted(.percent.locale(locale).precision(.fractionLength(0...2)))

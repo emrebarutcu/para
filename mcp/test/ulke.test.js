@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import T from "../../taksit.js";
+import V from "../../varlik.js";
 import { TOOLS, todayKey } from "../tools.js";
 import { getUser } from "../supabase.js";
 
@@ -62,6 +63,17 @@ test("fon ve hisse yalnızca Türkiye'de", async () => {
   assert.notEqual(ok.error?.includes("only available"), true);
 });
 
+test("banka e-postaları ve para piyasası fonları yalnızca Türkiye'de", async () => {
+  const usd = ctxFor("USD");
+  for (const name of ["get_inbox_address", "list_inbox", "check_inbox", "try_bank_email"]) {
+    assert.match((await run(usd, name, { text: "x" })).error, /only available for accounts in Turkey/, name);
+  }
+  assert.deepEqual(V.cashDefault("USD"), ["USD"]);
+  assert.deepEqual(V.cashDef(["USD", "MMF"], "USD"), ["USD"]);
+  assert.deepEqual(V.cashDefault("TRY"), ["TRY", "MMF"]);
+  assert.deepEqual(V.cashDef(["TRY", "MMF"], "TRY"), ["TRY", "MMF"]);
+});
+
 test("Türkiye hesabı eskisi gibi", async () => {
   const ctx = ctxFor("TRY");
   await run(ctx, "add_entry", { asset: "TRY", direction: "in", amount: 1000, description: "Maaş", date: "2026-10-01" });
@@ -87,4 +99,61 @@ test("getUser: saat dilimi hesaptan, yoksa ya da geçersizse ülkenin saat dilim
   assert.equal((await getUser({ ...args, fetch: user({ country: "US" }) })).tz, "America/New_York");
   assert.equal((await getUser({ ...args, fetch: user({ country: "US", tz: "Mars/Olympus" }) })).tz, "America/New_York");
   assert.equal((await getUser({ ...args, fetch: user({}) })).tz, "Europe/Istanbul");
+});
+
+// ── Döner kredi (APR) asistanda ─────────────────────────────────────────────────────────────────────────────────────
+test("APR: yalnızca ABD'de; elle ödenen kartta kalan devreder, asgari ve geri ödeme görünür", async () => {
+  const tr = ctxFor("TRY");
+  assert.match((await run(tr, "add_card", { name: "Bonus", cutoff_day: 3, due_day: 28, apr: 40 })).error, /only available for accounts in the US/);
+  const ctx = ctxFor("USD", "2026-09-01");
+  await run(ctx, "add_entry", { asset: "USD", direction: "in", amount: 5000, description: "Opening", date: "2026-09-01" });
+  const added = await run(ctx, "add_card", { name: "Chase", cutoff_day: 3, due_day: 28, limit: 5000, apr: 24, auto_pay: false });
+  assert.equal(added.card.apr, 24);
+  await run(ctx, "add_purchase", { description: "TV", amount: 1000, date: "2026-09-10", card: "Chase" });
+  await run(ctx, "add_purchase", { description: "Headphones", amount: 200, date: "2026-10-10", card: "Chase" });
+  ctx.today = "2026-10-20";
+  const paid = await run(ctx, "pay_debt", { card: "Chase", amount: 300 });
+  assert.equal(paid.minimumDue, 0);                     // asgari (40) ödendi
+  ctx.today = "2026-11-10";
+  const cards = await run(ctx, "list_cards");
+  const rev = cards.cards[0].tracking.revolving;
+  assert.deepEqual([rev.apr, rev.carried, rev.interestCharged, rev.minimumDue], [24, 700, 14, 40]);
+  assert.deepEqual(rev.payoff, { monthsAtMinimum: 31, interestAtMinimum: 286.44, monthlyToClearIn12: 86.43 });
+  assert.equal(cards.cards[0].used, 914);
+  assert.equal(cards.cards[0].statement.balance, 914);
+  const flow = await run(ctx, "get_cashflow", { from_month: "2026-10", months: 2 });
+  assert.equal(flow.months[0].total, 300);
+  assert.equal(flow.months[1].total, 914);
+  // APR değişince faiz yeniden hesaplanır; otomatiğe dönünce faiz harcama olarak kalır, özvarlık değişmez
+  const up = await run(ctx, "update_card", { card: "Chase", apr: 12 });
+  assert.equal(up.interestChangeTry, -7);
+  const before = (await run(ctx, "get_assets")).netWorthTry;
+  const auto = await run(ctx, "update_card", { card: "Chase", auto_pay: true });
+  assert.deepEqual(auto.interestSavedAsPurchases, { count: 1, total: 7 });
+  assert.equal((await run(ctx, "get_assets")).netWorthTry, before);
+});
+
+// ── Pay in 4 asistanda ──────────────────────────────────────────────────────────────────────────────────────────────
+test("Pay in 4: yalnızca ABD'de; 4 ödeme 2 haftada bir, sağlayıcıya kalan Borçlar'da", async () => {
+  const tr = ctxFor("TRY");
+  assert.match((await run(tr, "add_purchase", { description: "x", amount: 100, card: "nakit", bnpl: "klarna" })).error, /only available for accounts in the US/);
+  const ctx = ctxFor("USD", "2026-11-01");
+  await run(ctx, "add_entry", { asset: "USD", direction: "in", amount: 1000, description: "Opening", date: "2026-10-01" });
+  const p = await run(ctx, "add_purchase", { description: "Sneakers", amount: 99.99, card: "nakit", bnpl: "klarna", date: "2026-11-01" });
+  assert.equal(p.purchase.installments, 4);
+  assert.deepEqual(p.purchase.bnpl, { provider: "klarna", name: "Klarna", payments: 4, paid: 1, firstPayment: 25.02, perPayment: 24.99,
+    everyDays: 14, owedToProvider: 74.97, nextCharge: { date: "2026-11-15", amount: 24.99 } });
+  assert.match(p.preview.note, /Klarna Pay in 4: 25.02 on 2026-11-01, then 24.99 every 14 days/);
+  ctx.today = "2026-11-20";
+  const d = await run(ctx, "list_debts");
+  assert.equal(d.totals.debtsByKind.bnpl, 49.98);
+  assert.deepEqual(d.bnpl.map(x => [x.name, x.remaining, x.paid, x.nextCharge.date]), [["Klarna", 49.98, 2, "2026-11-29"]]);
+  // Reddedilenler: tekrarlayan, 1 ödeme, bilinmeyen sağlayıcı
+  assert.match((await run(ctx, "add_purchase", { description: "x", amount: 40, card: "nakit", bnpl: "klarna", repeat: 3 })).error, /doesn't repeat/);
+  assert.match((await run(ctx, "add_purchase", { description: "x", amount: 40, card: "nakit", bnpl: "klarna", installments: 1 })).error, /2 to 12 payments/);
+  assert.match((await run(ctx, "add_purchase", { description: "x", amount: 40, card: "nakit", bnpl: "acme" })).error, /bnpl must be one of/);
+  // Kaldırınca normal harcama olur
+  const id = p.purchase.id;
+  const u = await run(ctx, "update_purchase", { id, bnpl: null, installments: 1 });
+  assert.equal(u.purchase.bnpl, undefined);
 });

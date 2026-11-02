@@ -60,8 +60,12 @@
   const homeOfCountry = code => country(code)?.currency ?? DEFAULT_HOME;
   // Verinin ana para birimi
   const homeOf = state => (isCurrency(state?.home) ? state.home : DEFAULT_HOME);
-  // Fon ve hisse yalnızca TL'de (TEFAS, Borsa İstanbul)
+  // Türkiye'ye özel olanlar yalnızca TL'de: fon ve hisse (TEFAS, Borsa İstanbul), para piyasası fonları, banka
+  // e-postaları (Türk bankalarının bildirimleri), Excel içe aktarma (Türkçe sayfa biçimi)
   const marketsFor = home => home === "TRY";
+  // ABD'ye özel olanlar dolarda: kartın yıllık faizi (APR; döner kredi, asgari ödeme) ve "şimdi al sonra öde" (Pay in 4)
+  const aprFor = home => home === "USD";
+  const bnplFor = home => home === "USD";
   // Formlarda önce sunulan yabancı para birimleri: ana para biriminin dışında dolar, euro, sterlin
   const commonForeign = home => ["USD", "EUR", "GBP", "TRY"].filter(c => c !== home).slice(0, 3);
 
@@ -79,7 +83,7 @@
     return out;
   }
 
-  const api = { CURRENCIES, COUNTRIES, DEFAULT_COUNTRY, DEFAULT_HOME, currency, isCurrency, country, homeOfCountry, homeOf, marketsFor, commonForeign, homeRates, zoneOfCountry, isZone };
+  const api = { CURRENCIES, COUNTRIES, DEFAULT_COUNTRY, DEFAULT_HOME, currency, isCurrency, country, homeOfCountry, homeOf, marketsFor, aprFor, bnplFor, commonForeign, homeRates, zoneOfCountry, isZone };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Para = api;
 })(this);

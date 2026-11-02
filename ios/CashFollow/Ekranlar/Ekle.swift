@@ -82,7 +82,7 @@ private struct EkleDugmesi: ViewModifier {
                     borcDugmeleri
                 }
             } label: { YuzenSimge() }
-            .accessibilityLabel(L("Ekle: gelir, döviz / altın, fon / hisse"))
+            .accessibilityLabel(model.marketsAllowed ? L("Ekle: gelir, döviz / altın, fon / hisse") : L("Ekle: gelir, döviz / altın"))
         case .borc:
             Menu {
                 Section { borcDugmeleri }
