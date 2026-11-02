@@ -29,16 +29,20 @@ struct PremiumEkrani: View {
     private static let zemin = Color(red: 0.035, green: 0.04, blue: 0.055)
 
     var body: some View {
+        // Büyük ekranda artan boşluk bölümler arasına eşit dağılır; planlar düğmenin hemen üstünde
+        GeometryReader { alan in
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(L("CashFollow Premium"), systemImage: "sparkles").font(.footnote.weight(.semibold)).foregroundStyle(Tema.marka)
-                    Text(L("Paranı yapay zekâyla yönet")).font(.system(size: 32, weight: .bold)).foregroundStyle(.white)
+                    Text(L("Paranı yapay zekâyla yönet")).font(.system(size: 30, weight: .bold)).foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("Claude · ChatGPT · Gemini").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.55))
                 }
+                Spacer(minLength: 0)
                 sohbet
-                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 12) {
+                Spacer(minLength: 0)
+                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 10) {
                     ForEach(Self.ozellikler, id: \.self) { ad in
                         Label { Text(ad).lineLimit(1).minimumScaleFactor(0.85) } icon: {
                             Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Tema.marka)
@@ -46,13 +50,16 @@ struct PremiumEkrani: View {
                         .font(.subheadline).foregroundStyle(.white.opacity(0.85))
                     }
                 }
+                Spacer(minLength: 0)
                 if abonelik.premium { premiumAcik } else { planlar }
             }
             .padding(.horizontal, 20)
             .padding(.top, 38)
             .padding(.bottom, 16)
+            .frame(minHeight: alan.size.height, alignment: .top)
         }
         .scrollIndicators(.hidden)
+        }
         .background {
             ZStack {
                 Self.zemin
@@ -93,7 +100,7 @@ struct PremiumEkrani: View {
             balon(L("6 taksitle telefon ekle, {0}", Bicim.tl(1200, fraction: false)), ben: true)
             balon(L("Eklendi · ayda {0}", Bicim.tl(200, fraction: false)), ben: false)
         }
-        .padding(14)
+        .padding(12)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
     }
@@ -107,7 +114,7 @@ struct PremiumEkrani: View {
                     .frame(width: 24, height: 24).background(Tema.marka, in: Circle())
             }
             Text(metin).font(.subheadline).foregroundStyle(ben ? Color.black : Color.white)
-                .padding(.horizontal, 12).padding(.vertical, 8)
+                .padding(.horizontal, 12).padding(.vertical, 7)
                 .background(ben ? Color.white : Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .fixedSize(horizontal: false, vertical: true)
             if !ben { Spacer(minLength: 24) }
@@ -192,8 +199,8 @@ struct PremiumEkrani: View {
         .padding(.top, 14)
         .padding(.bottom, 4)
         .background {
-            LinearGradient(colors: [Self.zemin.opacity(0), Self.zemin, Self.zemin], startPoint: .top, endPoint: .bottom)
-                .padding(.top, -14)
+            // Üstü saydamdan koyuya: kaydırılan içerik düğmenin altına yumuşak girer, planların üstüne taşmaz
+            LinearGradient(stops: [.init(color: Self.zemin.opacity(0), location: 0), .init(color: Self.zemin, location: 0.06)], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
         }
     }
