@@ -460,3 +460,65 @@ test("döner kredi: elle moddan çıkarken faiz harcama olarak yazılır, özvar
   const after = { ...s, cards: [auto], installments: [...s.installments, ...charges.map((c, i) => ({ id: "faiz" + i, ...c }))] };
   near(B.totals(after, day, USD).equity, before, "özvarlık");
 });
+
+// ── Şimdi al sonra öde (Pay in 4) ───────────────────────────────────────────────────────────────────────────────────
+function bnplState(extra = {}) {
+  return {
+    home: "USD",
+    people: [{ id: "ben", name: "Me", color: 0 }, { id: "alex", name: "Alex", color: 1 }],
+    cards: [{ id: "chase", name: "Chase", limit: 5000, cutoffDay: 3, dueDay: 28, color: 0, trackSince: "2026-10-01" }],
+    installments: [],
+    entries: [{ id: "e1", personId: "ben", asset: "USD", amount: 1000, desc: "Opening", date: "2026-10-01" }],
+    debts: [],
+    ...extra,
+  };
+}
+
+test("Pay in 4 nakitle: ilk ödeme bugün, kalanı sağlayıcıya borç; özvarlık hemen düşer", () => {
+  const s = bnplState();
+  s.installments.push({ id: "b", personId: "ben", cardId: null, desc: "Sneakers", total: 99.99, count: 4, date: "2026-11-01", bnpl: "klarna" });
+  assert.deepEqual(T.payments(s.installments[0], null).map(x => [x.key, x.amount]),
+    [["2026-11-01", 25.02], ["2026-11-15", 24.99], ["2026-11-29", 24.99], ["2026-12-13", 24.99]]);
+  let t = B.totals(s, "2026-11-01", USD);
+  near(t.cash, 1000 - 25.02, "nakit");
+  near(t.debt.bnpl, 74.97, "BNPL");
+  near(t.debt.cash, 0, "nakit taksit çift sayılmaz");
+  near(t.equity, 1000 - 99.99, "özvarlık");
+  const d = B.bnplDebt(s, "2026-11-20");
+  assert.deepEqual([d.items[0].paid, d.items[0].next.date, d.items[0].next.amount], [2, "2026-11-29", 24.99]);
+  near(d.total, 49.98);
+  t = B.totals(s, "2026-12-14", USD);
+  near(t.debt.bnpl, 0);
+  near(t.equity, 1000 - 99.99);
+});
+
+test("Pay in 4 kartla: her ödeme kendi gününün ekstresine; çekilmeyen kısım kartta değil sağlayıcıda", () => {
+  const s = bnplState();
+  s.installments.push({ id: "b", personId: "ben", cardId: "chase", desc: "TV", total: 100, count: 4, date: "2026-11-01", bnpl: "afterpay" });
+  const card = s.cards[0];
+  let t = B.totals(s, "2026-11-10", USD);
+  near(B.cardUsed(s, card, "2026-11-10"), 25, "kart");
+  near(t.debt.bnpl, 75, "BNPL");
+  near(t.equity, 900, "özvarlık");
+  t = B.totals(s, "2026-11-20", USD);
+  near(B.cardUsed(s, card, "2026-11-20"), 50);
+  near(t.debt.bnpl, 50);
+  near(t.equity, 900);
+  // Başkasının kartındaki Pay in 4: alındığı gün tamamı ondan alacak, kart sahibinin özvarlığı değişmez
+  const o = bnplState();
+  o.installments.push({ id: "b", personId: "alex", cardId: "chase", desc: "Phone", total: 100, count: 4, date: "2026-11-01", bnpl: "klarna" });
+  const ot = B.totals(o, "2026-11-10", USD, "ben");
+  near(ot.equity, 1000, "kart sahibinin özvarlığı");
+  near(B.shares(o, "2026-11-10").get("alex").remaining, 100);
+});
+
+test("Pay in 4: takip dışı kartta sayılmaz, tekrarlayanla olmaz, taksit tutarı düzenli ödeme", () => {
+  const s = bnplState({ cards: [{ id: "chase", name: "Chase", limit: 5000, cutoffDay: 3, dueDay: 28, color: 0, trackOff: true }] });
+  s.installments.push({ id: "b", personId: "ben", cardId: "chase", desc: "TV", total: 100, count: 4, date: "2026-11-01", bnpl: "klarna" });
+  near(B.bnplDebt(s, "2026-11-10").total, 0);
+  const rep = { total: 100, count: 4, date: "2026-11-01", bnpl: "klarna", repeat: 3 };
+  assert.equal(T.bnpl(rep), false);
+  const p = { total: 99.99, count: 4, date: "2026-11-01", bnpl: "klarna" };
+  near(T.perInstallment(p), 24.99);
+  near(T.originalTotal(p), 99.99);
+});

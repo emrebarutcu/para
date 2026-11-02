@@ -541,7 +541,8 @@
       if (!tracked(c)) continue;
       const from = since(c, today);
       for (const x of cardLines(state, c, today)) {
-        if (x.personId === payer || x.key < from || x.at > today) continue;
+        // Henüz çekilmemiş tekrarlar sayılmaz; şimdi al sonra öde harcamasının ödemeleri ise alındığı günden onun borcudur
+        if (x.personId === payer || x.key < from || (x.at > today && !T.bnpl(x.purchase))) continue;
         const s = get(x.personId);
         s.charged += x.amount;
         add(s.byCard, c.id, x.amount);
@@ -583,6 +584,7 @@
     for (const p of state.installments || []) {
       if (cards.has(p.cardId) || !people.has(p.personId) || (pid && p.personId !== pid)) continue;
       if (valid(p.date) && p.date > today && !T.repeats(p)) continue;   // henüz alınmadı
+      if (T.bnpl(p)) continue;                                         // sağlayıcıya borç: bnplDebt
       for (const x of T.payments(p, null, today)) {
         if (x.key > today && !(x.at > today)) add(out, T.assetOf(p, P.homeOf(state)), x.amount);
       }
@@ -640,6 +642,31 @@
       }).sort((a, b) => a.date.localeCompare(b.date) || rank(a.cardId) - rank(b.cardId));
       return out;
     });
+  }
+
+  // Şimdi al sonra öde: sağlayıcıya kalan (henüz çekilmemiş ödemeler; alışverişi bugün ya da önce olan). Kartla ödenende
+  // kart sahibinin (ilk kişi; takip dışı kart sayılmaz), nakitte harcamanın sahibinin borcu. { total, items: [{ purchase,
+  // provider, cardId, remaining, paid (çekilen ödeme sayısı), count, next { date, amount } }] }
+  function bnplDebt(state, today, pid) {
+    const people = new Set((state.people || []).map(p => p.id));
+    const cards = new Map((state.cards || []).map(c => [c.id, c]));
+    const payer = state.people?.[0]?.id;
+    const items = [];
+    for (const p of state.installments || []) {
+      if (!T.bnpl(p) || !people.has(p.personId) || p.date > today || T.assetOf(p, P.homeOf(state)) !== P.homeOf(state)) continue;
+      const card = cards.get(p.cardId);
+      if (card && !tracked(card)) continue;
+      if (!inScope(pid, card ? payer : p.personId)) continue;
+      const pays = T.payments(p, card ?? null).sort((a, b) => a.no - b.no);
+      const left = pays.filter(x => x.at > today);
+      if (!left.length) continue;
+      items.push({
+        purchase: p, provider: p.bnpl, cardId: card ? card.id : null, remaining: sum(left), paid: pays.length - left.length,
+        count: pays.length, next: { date: left[0].at, amount: left[0].amount },
+      });
+    }
+    items.sort((a, b) => (a.next.date < b.next.date ? -1 : a.next.date > b.next.date ? 1 : 0));
+    return { total: sum(items, x => x.remaining), items };
   }
 
   // ---------- Varlığa etkileri ----------
@@ -714,7 +741,7 @@
     };
 
     const receivable = { people: 0, cards: 0, cardCredit: 0, total: 0 };
-    const debt = { cards: 0, cash: 0, loans: 0, people: 0, overpaid: 0, total: 0 };
+    const debt = { cards: 0, cash: 0, loans: 0, people: 0, overpaid: 0, bnpl: 0, total: 0 };
     const list = [];
     for (const d of k.items) {
       if (!inScope(pid, d.personId)) continue;
@@ -741,8 +768,9 @@
       }
     }
     for (const [code, v] of Object.entries(cashDebt(state, today, pid === "all" ? undefined : pid))) debt.cash += tl(v, code);
+    debt.bnpl = bnplDebt(state, today, pid === "all" ? undefined : pid).total;
     receivable.total = receivable.people + receivable.cards + receivable.cardCredit;
-    debt.total = debt.cards + debt.cash + debt.loans + debt.people + debt.overpaid;
+    debt.total = debt.cards + debt.cash + debt.loans + debt.people + debt.overpaid + debt.bnpl;
     const assets = cash.total + receivable.total;
     return {
       balances, cash: cash.total, receivable, debt, untracked, assets, equity: assets - debt.total,
@@ -799,7 +827,7 @@
   const api = {
     KINDS, SIDES, tracked, manual, since, ensureTracking, side, sign, auto, started, known, schedule, plan, status, modeLocked,
     flows, cardLines, cardState, cardPrepaid, cardPaidToday, cardDebt, cardUsed, cardPaid, cardMoves, shares, shareItems, cashDebt, allFlows,
-    MIN_PAYMENT, MIN_RATE, revolving, minimumDue, payoff, interestCharges, carryIndex, cashflow,
+    MIN_PAYMENT, MIN_RATE, revolving, minimumDue, payoff, interestCharges, carryIndex, cashflow, bnplDebt,
     debtSpent, addSpent, spent, paymentsDue, totals, flowText, loanRate, lastIndex,
   };
   if (node) module.exports = api;
