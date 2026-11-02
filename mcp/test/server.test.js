@@ -732,7 +732,7 @@ test("borçlar: borç aldım / borç verdim / kredi ekleme, listeleme, düzenlem
   assert.deepEqual(all.debts.map(d => d.party), ["Garanti", "Ali", "Mehmet", "Can"]);   // sıradaki ödemeye göre
   assert.deepEqual(all.totals, {
     cashTry: 24000, receivablesTry: 3000, debtsTry: 18200, totalAssetsTry: 27000, netWorthTry: 8800, untrackedCardDebtTry: 0,
-    debtsByKind: { cards: 0, cashInstallments: 0, loans: 13200, people: 5000, overpaidCardShares: 0 },
+    debtsByKind: { cards: 0, cashInstallments: 0, loans: 13200, people: 5000, overpaidCardShares: 0, bnpl: 0 },
     receivablesByKind: { cardShares: 0, people: 3000, cardCredit: 0 },
   });
   assert.deepEqual([all.cards, all.shares, all.cashInstallments], [[], [], { totalTry: 0, byAsset: {} }]);

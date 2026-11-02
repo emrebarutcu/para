@@ -132,3 +132,28 @@ test("APR: yalnızca ABD'de; elle ödenen kartta kalan devreder, asgari ve geri 
   assert.deepEqual(auto.interestSavedAsPurchases, { count: 1, total: 7 });
   assert.equal((await run(ctx, "get_assets")).netWorthTry, before);
 });
+
+// ── Pay in 4 asistanda ──────────────────────────────────────────────────────────────────────────────────────────────
+test("Pay in 4: yalnızca ABD'de; 4 ödeme 2 haftada bir, sağlayıcıya kalan Borçlar'da", async () => {
+  const tr = ctxFor("TRY");
+  assert.match((await run(tr, "add_purchase", { description: "x", amount: 100, card: "nakit", bnpl: "klarna" })).error, /only available for accounts in the US/);
+  const ctx = ctxFor("USD", "2026-11-01");
+  await run(ctx, "add_entry", { asset: "USD", direction: "in", amount: 1000, description: "Opening", date: "2026-10-01" });
+  const p = await run(ctx, "add_purchase", { description: "Sneakers", amount: 99.99, card: "nakit", bnpl: "klarna", date: "2026-11-01" });
+  assert.equal(p.purchase.installments, 4);
+  assert.deepEqual(p.purchase.bnpl, { provider: "klarna", name: "Klarna", payments: 4, paid: 1, firstPayment: 25.02, perPayment: 24.99,
+    everyDays: 14, owedToProvider: 74.97, nextCharge: { date: "2026-11-15", amount: 24.99 } });
+  assert.match(p.preview.note, /Klarna Pay in 4: 25.02 on 2026-11-01, then 24.99 every 14 days/);
+  ctx.today = "2026-11-20";
+  const d = await run(ctx, "list_debts");
+  assert.equal(d.totals.debtsByKind.bnpl, 49.98);
+  assert.deepEqual(d.bnpl.map(x => [x.name, x.remaining, x.paid, x.nextCharge.date]), [["Klarna", 49.98, 2, "2026-11-29"]]);
+  // Reddedilenler: tekrarlayan, 1 ödeme, bilinmeyen sağlayıcı
+  assert.match((await run(ctx, "add_purchase", { description: "x", amount: 40, card: "nakit", bnpl: "klarna", repeat: 3 })).error, /doesn't repeat/);
+  assert.match((await run(ctx, "add_purchase", { description: "x", amount: 40, card: "nakit", bnpl: "klarna", installments: 1 })).error, /2 to 12 payments/);
+  assert.match((await run(ctx, "add_purchase", { description: "x", amount: 40, card: "nakit", bnpl: "acme" })).error, /bnpl must be one of/);
+  // Kaldırınca normal harcama olur
+  const id = p.purchase.id;
+  const u = await run(ctx, "update_purchase", { id, bnpl: null, installments: 1 });
+  assert.equal(u.purchase.bnpl, undefined);
+});

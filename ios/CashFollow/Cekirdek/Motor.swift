@@ -222,6 +222,7 @@ struct Sabitler: Decodable {
     let markets: Bool             // fon ve hisse (yalnızca Türkiye)
     let apr: Bool?                // kartın yıllık faizi, döner kredi (ABD)
     let bnpl: Bool?               // şimdi al sonra öde, Pay in 4 (ABD)
+    let bnplProviders: [Kategori]?    // sağlayıcılar (id, name)
     let cashDefault: [String]     // nakit tanımının varsayılanı
 }
 

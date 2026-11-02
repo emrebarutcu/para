@@ -1929,7 +1929,8 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   meta.append(tag);
   if (p.date) meta.append(el("span", "", fmtDayShort(p.date) + " " + T.yearOf(T.parseDate(p.date).idx)));
   if (code !== HOME) meta.append(el("span", "", V.asset(code).name));
-  if (plan > 1 || !rule) meta.append(el("span", "", plan > 1 ? `${plan} taksit` : "Peşin"));
+  if (T.bnpl(p)) meta.append(el("span", "", `${T.bnplName(p)} · Pay in ${plan}`));   // şimdi al sonra öde: 2 haftada bir
+  else if (plan > 1 || !rule) meta.append(el("span", "", plan > 1 ? `${plan} taksit` : "Peşin"));
   if (rule) meta.append(el("span", "", R.label(p) + (rule.n ? ` · ${rule.n} kez` : "")));
   if (K.valid(p.category)) meta.append(el("span", "cat-tag" + (p.categoryBy === "user" ? "" : " ai"), K.category(p.category).name));
   main.append(meta);
@@ -1957,6 +1958,9 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
     const amount = el("span", "amount", money(T.originalTotal(p), code));
     amount.append(el("small", "", R.per(p)));
     side.append(amount, el("span", "sub", next ? `sonraki ${fmtDayShort(next)}` : "bitti"));
+  } else if (T.bnpl(p)) {
+    const rest = T.payments(p, cardById(p.cardId)).filter(x => x.key >= today).reduce((t, x) => t + x.amount, 0);
+    side.append(el("span", "amount", fmt(p.total)), el("span", "sub", rest > EPS ? `kalan ${fmt(rest)}` : "bitti"));
   } else if (plan > 1) {
     const amount = el("span", "amount", fmt(per));
     amount.append(el("small", "", "/ay"));
@@ -3674,6 +3678,8 @@ function collectPurchase() {
   const p = { desc, cardId: foreign ? null : f.card.value || null, count, total };
   if (foreign) p.asset = asset;
   Object.assign(p, rep);
+  // Şimdi al sonra öde (iPhone / asistanda girilir): web formunda yok; tarih ve ödeme sayısı aynı kaldıkça korunur
+  if (editing?.bnpl && count === editing.count && rep.repeat == null && date) p.bnpl = editing.bnpl;
   if (K.valid(f.category.value)) Object.assign(p, { category: f.category.value, categoryBy: categorySource === "user" ? "user" : "ai" });
   if (date) {
     p.date = date;

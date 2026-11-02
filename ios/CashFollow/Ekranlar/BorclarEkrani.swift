@@ -51,6 +51,27 @@ struct BorclarEkrani: View {
                         }
                     }
 
+                    // Şimdi al sonra öde: sağlayıcıya kalan (henüz çekilmemiş ödemeler)
+                    if let simdi = b.bnpl, !simdi.isEmpty {
+                        Kart(dolgu: 14) {
+                            KartBasligi(L("Pay in 4"))
+                            SatirListesi(veri: simdi) { x in
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(x.description).font(.body.weight(.semibold)).lineLimit(1)
+                                        Text(L("{0} · {1} · sıradaki {2} {3}", x.name, Bicim.kartAdi(x.card), Bicim.day(x.nextCharge.date), Bicim.tl(x.nextCharge.amount)))
+                                            .font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text(Bicim.tl(x.remaining)).font(.body.weight(.semibold)).monospacedDigit()
+                                        Text("\(x.paid)/\(x.payments)").font(.caption).foregroundStyle(Tema.metin3)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     let paylar = (b.shares ?? []).filter { abs($0.owed) > 0.004 }
                     if !paylar.isEmpty {
                         Kart(dolgu: 14) {

@@ -113,6 +113,19 @@ struct Harcama: Decodable, Identifiable, Hashable {
     let statementCutoff: String?
     let `repeat`: Tekrar?
     let payments: [Taksit]?
+    let bnpl: SimdiAl?
+}
+
+// Şimdi al sonra öde (Pay in 4; taksit.js bnpl): sağlayıcı, ödeme sayısı, çekilenler, sağlayıcıya kalan, sıradaki çekim
+struct SimdiAl: Decodable, Hashable {
+    let provider: String
+    let name: String
+    let payments: Int
+    let paid: Int
+    let firstPayment: Double
+    let perPayment: Double
+    let owedToProvider: Double
+    let nextCharge: Odeme?
 }
 
 struct HarcamaSonucu: Decodable {
@@ -348,10 +361,23 @@ struct Borclar: Decodable {
         let status: String
         let payments: [Odeme]?
     }
+    // Şimdi al sonra öde: sağlayıcıya kalan (henüz çekilmemiş ödemeler)
+    struct SimdiAlBorcu: Decodable, Identifiable, Hashable {
+        let purchaseId: String
+        let description: String
+        let name: String
+        let card: String
+        let remaining: Double
+        let paid: Int
+        let payments: Int
+        let nextCharge: Odeme
+        var id: String { purchaseId }
+    }
     let totals: Toplamlar
     let cards: [KartBorcu]
     let shares: [Pay]?
     let debts: [Kayit]
+    let bnpl: [SimdiAlBorcu]?
 }
 
 // ── Alabilir miyim? (simulate_purchase) ───────────────────────────────────────

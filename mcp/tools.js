@@ -225,6 +225,17 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     asset: T.assetOf(p, homeOf(state)),
   };
   if (T.repeats(p)) v.repeat = repeatView(p, today);
+  if (T.bnpl(p)) {
+    // Şimdi al sonra öde: çekilen ödemeler (at bugün ya da önce), sağlayıcıya kalan ve sıradaki çekim
+    const due = pays.filter(x => x.at > today).sort((a, b) => a.no - b.no);
+    v.remainingAmount = round(left.reduce((t, x) => t + x.amount, 0));
+    v.bnpl = {
+      provider: p.bnpl, name: T.bnplName(p), payments: p.count, paid: p.count - due.length,
+      firstPayment: round(T.bnplAmounts(p)[0]), perPayment: round(per), everyDays: T.BNPL_DAYS,
+      owedToProvider: round(due.reduce((t, x) => t + x.amount, 0)),
+      nextCharge: due[0] ? { date: due[0].at, amount: round(due[0].amount) } : null,
+    };
+  }
   if (!p.date) {
     // Excel'den gelen tarihsiz kayıt: total/count kalan taksitlerdir
     v.firstDueMonth = p.firstDue;
@@ -232,7 +243,7 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     v.total = round(T.originalTotal(p));
   }
   if (card && p.date) v.statementCutoff = T.statementOf(card, p.date).cut;
-  if (schedule) v.payments = pays.map(x => ({ no: x.no, date: x.key, amount: round(x.amount), paid: x.key < today }));
+  if (schedule) v.payments = pays.map(x => ({ no: x.no, date: x.key, amount: round(x.amount), paid: x.key < today, ...(T.bnpl(p) && { chargeDate: x.at }) }));
   return v;
 }
 
@@ -388,6 +399,11 @@ function preview(state, p) {
       + `, deducted from the ${T.assetOf(p, homeOf(state))} asset balance`;
   }
   if (T.repeats(p)) out.repeat = R.label(p) + (R.rule(p).n ? ` · ${R.rule(p).n} times` : " · no end");
+  if (T.bnpl(p)) {
+    const a = T.bnplAmounts(p);
+    out.note = `${T.bnplName(p)} Pay in ${p.count}: ${round(a[0])} on ${p.date}, then ${round(a.at(-1))} every ${T.BNPL_DAYS} days`
+      + (card ? `, each on the ${card.name} statement of its date` : ", from cash");
+  }
   return out;
 }
 
@@ -397,7 +413,14 @@ function buildPurchase(state, args, today, base = null) {
   const desc = args.description !== undefined ? text(args.description, "description") : base?.desc;
   if (!desc) fail("description is required (what was bought).");
 
-  const count = intArg(args.installments, "installments", 1, MAX_COUNT, base?.count ?? 1);
+  // Şimdi al sonra öde (ABD; taksit.js bnpl): sağlayıcı; null kaldırır (aylık taksite döner)
+  const bnpl = args.bnpl !== undefined ? args.bnpl : base?.bnpl ?? null;
+  if (bnpl != null) {
+    if (!T.BNPL.includes(bnpl)) fail(`bnpl must be one of ${T.BNPL.join(", ")}, or null.`);
+    if (args.bnpl !== undefined && !P.bnplFor(homeOf(state))) fail("Buy now, pay later (Pay in 4) is only available for accounts in the US for now.");
+  }
+  const count = intArg(args.installments, "installments", 1, MAX_COUNT, args.bnpl != null && args.installments === undefined && !base?.bnpl ? 4 : base?.count ?? (bnpl ? 4 : 1));
+  if (bnpl && (count < 2 || count > 12)) fail("A buy now, pay later purchase has 2 to 12 payments (Pay in 4: 4).");
   // Döviz / altın harcaması o varlıktan ödenir: kartsız ve peşin
   const asset = args.asset !== undefined ? assetArg(args.asset) : T.assetOf(base, homeOf(state));
   const foreign = asset !== homeOf(state);
@@ -431,7 +454,9 @@ function buildPurchase(state, args, today, base = null) {
 
   const rep = repeatArgs(args, base);
   if (rep.repeat != null && !date) fail("A repeating purchase needs a date.");
-  const p = { desc, cardId: card ? card.id : null, count, total, ...(foreign && { asset }), ...rep };
+  if (bnpl && rep.repeat != null) fail("A buy now, pay later purchase doesn't repeat: leave out repeat (or pass bnpl null).");
+  if (bnpl && !date) fail("A buy now, pay later purchase needs a date (the first payment is on that day).");
+  const p = { desc, cardId: card ? card.id : null, count, total, ...(foreign && { asset }), ...rep, ...(bnpl && { bnpl }) };
   // Kategori: verilirse kullanıcının seçimi sayılır (uygulama bundan öğrenir); verilmezse düzenlenen kayıttaki kalır,
   // yeni kayıtta kullanıcının aynı işyerine daha önce verdiği kategori önerilir
   // Açıklama değişince kullanıcının seçmediği (önerilmiş) kategori yeniden önerilir (app.js'teki gibi)
@@ -1057,6 +1082,7 @@ const PURCHASE_FIELDS = {
     description: `Spending category: ${K.CATEGORIES.map(c => `${c.id} = ${c.name} (${c.hint})`).join("; ")}. null removes it. Omit on add to reuse the category the user gave the same merchant before.`,
   },
   asset: { type: "string", description: 'What the purchase is paid in: the account currency (default; the currency field of the answers, TRY in Turkey), another currency code (USD, EUR, GBP…) or GAU (grams of gold). Purchases in another currency are paid at once in cash from that asset (card "nakit", installments 1).' },
+  bnpl: { type: ["string", "null"], enum: [...T.BNPL, null], description: 'Buy now, pay later provider (accounts in the US): "Pay in 4" with Klarna, Afterpay, Affirm, PayPal, Zip, Sezzle or other. installments payments (default 4, 2–12), the first on date, then every 2 weeks, from the card (each payment goes on the statement of its own date) or cash. What is not paid yet is owed to the provider (list_debts bnpl). null turns it back into a regular purchase. Affirm\'s monthly plans are loans (add_debt) or regular card installments.' },
   ...REPEAT_FIELDS,
 };
 const CARD_FIELDS = {
@@ -1736,7 +1762,7 @@ export const TOOLS = [
           ...worthView(t),
           debtsByKind: {
             cards: round(t.debt.cards), cashInstallments: round(t.debt.cash), loans: round(t.debt.loans),
-            people: round(t.debt.people), overpaidCardShares: round(t.debt.overpaid),
+            people: round(t.debt.people), overpaidCardShares: round(t.debt.overpaid), bnpl: round(t.debt.bnpl),
           },
           receivablesByKind: { cardShares: round(t.receivable.cards), people: round(t.receivable.people), cardCredit: round(t.receivable.cardCredit) },
           ...(t.missing.length ? { notIncluded: t.missing } : {}),
@@ -1745,6 +1771,12 @@ export const TOOLS = [
         cashInstallments: owes && !q
           ? { totalTry: round(t.debt.cash), byAsset: Object.fromEntries(Object.entries(cash).map(([code, v]) => [code, V.round(v, code)])) }
           : null,
+        // Şimdi al sonra öde: sağlayıcıya kalan (henüz çekilmemiş ödemeler)
+        bnpl: owes ? B.bnplDebt(state, today, person?.id).items.filter(x => has(x.purchase.desc, T.bnplName(x.purchase))).map(x => ({
+          purchaseId: x.purchase.id, description: x.purchase.desc, provider: x.provider, name: T.bnplName(x.purchase),
+          card: x.cardId ? cardName(state, x.cardId) : "Nakit", remaining: round(x.remaining), paid: x.paid, payments: x.count,
+          nextCharge: { date: x.next.date, amount: round(x.next.amount) },
+        })) : [],
         // Pay ödenmemişse alacak, fazla ödenmişse kullanıcının borcu (Borçlar'daki gibi)
         shares: shares.filter(v => side === "all" || (side === "debt" ? v.owed < 0 : v.owed >= 0)),
         cardCredit,
@@ -2246,5 +2278,6 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
 - Revolving credit (accounts in the US): a card may have an APR (add_card / update_card apr). On a card paid by hand (auto_pay false) with an APR, what is left of a statement after its due day carries to the next statement, with interest (APR / 12) charged on the next cutoff day; a statement is overdue only if less than its minimum payment (the greater of 40 or 1% of the balance + interest, plus any past-due minimum) was paid. list_cards / list_debts show carried, interestCharged, minimumDue and payoff (months and interest if only the minimum is paid, monthly payment to clear in 12 months); statements show balance, minimum and interest. These are estimates: the bank's own figures (daily balance, fees) can differ a little. Automatic cards are paid in full each month, so no interest.
+- Buy now, pay later (accounts in the US): add_purchase bnpl (klarna, afterpay, affirm, paypal, zip, sezzle, other) = "Pay in 4": the first payment on the purchase date, then every 2 weeks, from a card (each on the statement of its own date) or cash; what is not charged yet is owed to the provider (list_debts bnpl, debtsByKind.bnpl). Affirm's monthly plans are not Pay in 4: record them as a loan or regular installments.
 - Bank e-mails (the *_inbox* tools and try_bank_email: Turkish bank notifications turned into purchases) are only available for accounts in Turkey for now.
 - Reply to the user in their language (the app is in Turkish and English).`;
