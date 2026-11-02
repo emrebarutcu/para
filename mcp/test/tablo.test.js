@@ -527,3 +527,15 @@ test("8.x: kartın APR'si ve harcamanın BNPL sağlayıcısı; eski taban rekey 
   const base = rekey(old);
   for (const t of Tablo.TABLES) assert.deepEqual(changes(plain, base)[t], { upsert: [], delete: [] }, t);
 });
+
+test("Premium: etkin ya da ek sürede ve süresi bitmemiş; expires_at boş süresiz (8.2)", () => {
+  const now = Date.parse("2026-11-02T12:00:00Z");
+  const { premium } = Tablo;
+  assert.equal(premium(null, now), false);
+  assert.equal(premium({ source: "grandfathered", status: "active", expires_at: null }, now), true);
+  assert.equal(premium({ status: "active", expires_at: "2026-11-09T12:00:00+00:00" }, now), true);
+  assert.equal(premium({ status: "active", expires_at: "2026-11-01T12:00:00+00:00" }, now), false);
+  assert.equal(premium({ status: "grace", expires_at: "2026-11-03T00:00:00Z" }, now), true);
+  for (const status of ["billing_retry", "expired", "revoked"]) assert.equal(premium({ status, expires_at: null }, now), false, status);
+  assert.equal(premium({ status: "active", expires_at: "yarın" }, now), false);
+});

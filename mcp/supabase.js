@@ -27,6 +27,13 @@ export async function getUser({ url, key, token, fetch: f = fetch }) {
   return u?.id ? { id: u.id, email: u.email ?? null, country, home: P.homeOfCountry(country), tz } : null;
 }
 
+// CashFollow Premium: hesabın abonelik satırı (subscriptions, kullanıcı yalnızca kendisininkini okur; tablo.js premium)
+export async function getPremium({ url, key, token, fetch: f = fetch, now = Date.now() }) {
+  const res = await f(`${url}/rest/v1/subscriptions?select=source,status,expires_at`, { headers: { apikey: key, Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new StoreError(res.status, await res.text());
+  return Tablo.premium((await res.json())[0], now);
+}
+
 const PAGE = 1000;   // PostgREST'in bir cevapta döndürdüğü en fazla satır
 const BATCH = 200;   // bir istekte yazılan / silinen en fazla satır
 const quote = v => `"${String(v).replace(/["\\]/g, "\\$&")}"`;   // PostgREST in.(…) değeri
