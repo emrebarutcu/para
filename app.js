@@ -300,7 +300,7 @@ function lastPaymentIndex() {
     if (list.length) last = Math.max(last, list[list.length - 1].idx);
     if (T.endless(p)) last = Math.max(last, todayIndex() + 11);
   }
-  return last;
+  return Math.max(last, B.carryIndex(state, T.todayKey()));   // döner kredide devreden bakiyenin ekstresi
 }
 
 let toastTimer = 0;
@@ -405,7 +405,7 @@ const els = {
 // ---------- Render ----------
 // Kart ve nakit ödemeleri aylara göre (taksit.js buildCashflow). Hesaba katılmayan kartın (borc.js) ekstreleri ödeme
 // toplamlarına girmez: ay, kişi ve kart toplamlarından çıkarılır, olay listede kalır (ignored: soluk, "hesaba katılmıyor")
-function cashflow(fromIdx, toIdx) { return N.cashflow(state, fromIdx, toIdx); }
+function cashflow(fromIdx, toIdx) { return N.cashflow(state, fromIdx, toIdx, T.todayKey()); }
 
 function render() {
   const start = T.monthIndex(currentMonth);

@@ -41,24 +41,9 @@
     return (c.manualSince > since ? c.manualSince : since) <= today;
   }
 
-  // Ay ay ödemeler (taksit.js buildCashflow); hesaba katılmayan kartın (borc.js tracked değil) ekstreleri toplamlara
-  // girmez: ay, kişi ve kart toplamları onlarsız yeniden toplanır, olay ignored ile kalır
-  function cashflow(state, fromIdx, toIdx) {
-    const months = T.buildCashflow(state.people, state.cards, state.installments, fromIdx, toIdx, P.homeOf(state));
-    const off = new Set(state.cards.filter(c => !B.tracked(c)).map(c => c.id));
-    if (!off.size) return months;
-    // Etkilenen ayda toplamlar sayılan olaylardan yeniden toplanır (çıkarma yuvarlama kaydırırdı)
-    return months.map(m => {
-      if (!m.events.some(ev => off.has(ev.cardId))) return m;
-      const out = { ...m, total: 0, byPerson: {}, byCard: { ...m.byCard } };
-      out.events = m.events.map(ev => {
-        if (off.has(ev.cardId)) { delete out.byCard[ev.cardId]; return { ...ev, ignored: true }; }
-        out.total += ev.total;
-        for (const [pid, v] of Object.entries(ev.byPerson)) out.byPerson[pid] = (out.byPerson[pid] || 0) + v;
-        return ev;
-      });
-      return out;
-    });
+  // Ay ay ödemeler (borc.js cashflow: hesaba katılmayan kart toplamlara girmez, döner kredide devreden ve faiz)
+  function cashflow(state, fromIdx, toIdx, today = T.todayKey()) {
+    return B.cashflow(state, fromIdx, toIdx, today);
   }
 
   // ── Nakit ──────────────────────────────────────────────────────────────────
@@ -126,7 +111,7 @@
     // hareketidir, ikinci kez düşülmez)
     for (const [code, amount] of Object.entries(B.debtSpent(state, today))) if (cash(code)) anchor -= toTry(amount, code) ?? 0;
     const since = new Map(state.cards.filter(B.tracked).map(c => [c.id, B.since(c, today)]));
-    for (const m of lira ? cashflow(state, loIdx, hiIdx) : []) {
+    for (const m of lira ? cashflow(state, loIdx, hiIdx, today) : []) {
       for (const ev of m.events) {
         // Hesaba katılmayan kartın ekstresi TL bakiyesinden düşmez
         if (ev.ignored || ev.date < lo || ev.date > hi || (since.has(ev.cardId) && ev.date >= since.get(ev.cardId))) continue;

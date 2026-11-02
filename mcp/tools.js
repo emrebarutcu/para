@@ -167,24 +167,10 @@ function knownPurchases(state) {
 function paymentsOf(state, p, until) { return T.payments(p, cardById(state, p.cardId), until); }
 
 // Son ödemenin ayı; süresiz tekrarlayan TL harcaması varsa en az bir yıl ileri (app.js ile aynı)
-// Kart ve nakit ödemeleri aylara göre (taksit.js buildCashflow; uygulamadaki cashflow gibi). Hesaba katılmayan kartın
-// (borc.js tracked değil; ör. eşinin kartı) ekstreleri ödeme toplamlarına girmez: ay, kişi ve kart toplamları onlarsız
-// yeniden toplanır, olay ignored ile kalır.
-function cashflow(state, from, to, people = state.people) {
-  const months = T.buildCashflow(people, state.cards, state.installments, from, to);
-  const off = new Set(state.cards.filter(c => !B.tracked(c)).map(c => c.id));
-  if (!off.size) return months;
-  return months.map(m => {
-    if (!m.events.some(ev => off.has(ev.cardId))) return m;
-    const out = { ...m, total: 0, byPerson: {}, byCard: { ...m.byCard } };
-    out.events = m.events.map(ev => {
-      if (off.has(ev.cardId)) { delete out.byCard[ev.cardId]; return { ...ev, ignored: true }; }
-      out.total += ev.total;
-      for (const [pid, v] of Object.entries(ev.byPerson)) out.byPerson[pid] = (out.byPerson[pid] || 0) + v;
-      return ev;
-    });
-    return out;
-  });
+// Kart ve nakit ödemeleri aylara göre (borc.js cashflow; uygulamadaki gibi): hesaba katılmayan kartın (ör. eşinin kartı)
+// ekstreleri toplamlara girmez (olay ignored), döner kredide devreden bakiye ve faiz ekstrelere eklenir.
+function cashflow(state, from, to, today, people = state.people) {
+  return B.cashflow(state, from, to, today, people);
 }
 
 function lastPaymentIndex(state, today) {
@@ -197,7 +183,7 @@ function lastPaymentIndex(state, today) {
     if (pays.length) last = Math.max(last, pays[pays.length - 1].idx);
     if (T.endless(p)) last = Math.max(last, T.parseDate(today).idx + 11);
   }
-  return last;
+  return Math.max(last, B.carryIndex(state, today));   // döner kredide devreden bakiyenin ekstresi
 }
 
 // Varlık bakiyesinden today'e kadar düşülenler, varlık başına: kartsız harcamaların ödenen kısmı ve borç etkileri
@@ -1099,7 +1085,7 @@ export const TOOLS = [
       const start = monthArg(args.month, "month", today);
       const last = lastPaymentIndex(state, today);
       const end = Math.min(last, start + MAX_MONTHS - 1);
-      const months = end >= start ? cashflow(state, start, end) : [];
+      const months = end >= start ? cashflow(state, start, end, today) : [];
       const at = idx => months.find(m => m.idx === idx);
       const endless = knownPurchases(state).some(p => T.assetOf(p, homeOf(state)) === homeOf(state) && T.endless(p) && !(cardById(state, p.cardId) && !B.tracked(cardById(state, p.cardId))));
       const thisMonth = at(start);
@@ -1108,7 +1094,7 @@ export const TOOLS = [
       // ödenmiş olan düşer, kapanmamış kısmı; ödenmemiş geçmiş ekstre late ile en üstte), diğerleri akıştaki ödemeler
       const from = T.parseDate(today).idx, until = upcomingUntil(today);
       const events = last >= from
-        ? cashflow(state, from, Math.min(last, from + 24)).flatMap(m => m.events).filter(e => !e.ignored)   // hesaba katılmayan kart yok
+        ? cashflow(state, from, Math.min(last, from + 24), today).flatMap(m => m.events).filter(e => !e.ignored)   // hesaba katılmayan kart yok
         : [];
       const manual = new Map(state.cards.map(c => [c.id, manualStatements(state, c, today, until)]).filter(([, m]) => m));
       const upcoming = [
@@ -1162,7 +1148,7 @@ export const TOOLS = [
       const start = monthArg(args.from_month, "from_month", ctx.today);
       const count = intArg(args.months, "months", 1, MAX_MONTHS, 12);
       const people = args.person !== undefined ? [findPerson(state, args.person)] : state.people;
-      const months = cashflow(state, start, start + count - 1, people);
+      const months = cashflow(state, start, start + count - 1, ctx.today, people);
       const items = args.include_items !== false;
       return {
         months: months.map(m => ({
@@ -1408,7 +1394,7 @@ export const TOOLS = [
       const state = await ctx.load();
       const start = T.parseDate(ctx.today).idx;
       const end = Math.min(lastPaymentIndex(state, ctx.today), start + MAX_MONTHS - 1);
-      const months = end >= start ? cashflow(state, start, end) : [];
+      const months = end >= start ? cashflow(state, start, end, ctx.today) : [];
       const shares = B.shares(state, ctx.today);
       return {
         people: state.people.map(p => ({
@@ -2134,7 +2120,7 @@ export const TOOLS = [
       const after = { ...state, installments: [...state.installments, purchase] };
       const pays = T.payments(purchase, cardById(state, purchase.cardId), ctx.today);
       const from = pays[0].idx, to = pays[pays.length - 1].idx;
-      const flowsOf = s => cashflow(s, from, to);
+      const flowsOf = s => cashflow(s, from, to, ctx.today);
       const before = flowsOf(state), next = flowsOf(after);
       const card = cardById(state, purchase.cardId);
       return {

@@ -348,3 +348,115 @@ test("elle kredi: taksit günü geçince gecikir, ödenince kapanır; takipten �
   const late = { id: "x", kind: "person", side: "debt", personId: "ben", party: "Can", asset: "TRY", amount: 500, date: "2026-11-10", due: "2026-11-01" };
   near(B.status(late, [], "2026-11-10").overdue, 500);
 });
+
+// ── Döner kredi (APR): elle ödenen kartta ekstrenin kalanı faiziyle devreder ────────────────────────────────────────
+// Ben 5.000 $; Chase (kesim 3, son ödeme 28, APR %24) 1 Eyl'den beri elle ödeniyor; 10 Eyl 1.000 $ (Ekim ekstresi,
+// 28 Eki), 10 Eki 200 $ (Kasım ekstresi, 28 Kas); 20 Eki 300 $ ödeme
+function faizli() {
+  return {
+    home: "USD",
+    people: [{ id: "ben", name: "Me", color: 0 }],
+    cards: [{ id: "chase", name: "Chase", limit: 5000, cutoffDay: 3, dueDay: 28, color: 0, trackSince: "2026-09-01",
+      manualSince: "2026-09-01", apr: 24 }],
+    installments: [
+      { id: "tv", personId: "ben", cardId: "chase", desc: "TV", total: 1000, count: 1, date: "2026-09-10" },
+      { id: "kulaklik", personId: "ben", cardId: "chase", desc: "Headphones", total: 200, count: 1, date: "2026-10-10" },
+    ],
+    entries: [{ id: "e1", personId: "ben", asset: "USD", amount: 5000, desc: "Opening", date: "2026-09-01" }],
+    debts: [{ id: "p1", kind: "payment", personId: "ben", cardId: "chase", amount: 300, date: "2026-10-20" }],
+  };
+}
+const USD = { TRY: 1, USD: 1 };
+
+test("döner kredi: asgari ödenince kalan devreder, sonraki kesimde faiz işler", () => {
+  const s = faizli(), card = s.cards[0];
+  // 31 Eki: Ekim ekstresi 1.000, 300 ödendi (asgari 40) → 700 devreder, gecikmiş değil
+  let cs = B.cardState(s, card, "2026-10-31");
+  const oct = cs.statements.find(x => x.key === "2026-10-28");
+  assert.equal(oct.state, "carried");
+  near(oct.carried, 700);
+  near(oct.minimum, 40);
+  near(cs.debt, 900);
+  near(cs.overdue, 0);
+  let t = B.totals(s, "2026-10-31", USD);
+  near(t.equity, 3800, "özvarlık");
+  // Kasım ekstresinin tahmini (28 Kas'a kadar): 200 + 700 + %2 faiz 14 = 914
+  const nov = B.cardState(s, card, "2026-10-31", undefined, "2026-11-28").statements.find(x => x.key === "2026-11-28");
+  near(nov.amount, 914);
+  near(nov.interest, 14);
+  // 10 Kas: faiz 3 Kas'ta işledi → borç 914, özvarlık 14 azaldı, nakit aynı
+  cs = B.cardState(s, card, "2026-11-10");
+  near(cs.interestCharged, 14);
+  near(cs.debt, 914);
+  near(B.cardUsed(s, card, "2026-11-10"), 914);
+  t = B.totals(s, "2026-11-10", USD);
+  near(t.cash, 4700, "nakit");
+  near(t.equity, 3786, "özvarlık");
+  near(t.assets, t.equity + t.debt.total, "Varlık = Özvarlık + Borç");
+  const d = B.cardDebt(s, card, "2026-11-10");
+  near(d.next.amount, 914);
+  near(d.next.minimum, 40);
+  near(d.minimumDue, 40);
+  near(d.carried, 700);
+});
+
+test("döner kredi: asgariden az ödeme gecikmedir, asgarinin kalanı sonraki asgariye eklenir", () => {
+  const s = faizli(), card = s.cards[0];
+  s.debts.push({ id: "p2", kind: "payment", personId: "ben", cardId: "chase", amount: 20, date: "2026-11-28" });
+  let cs = B.cardState(s, card, "2026-12-01");
+  const nov = cs.statements.find(x => x.key === "2026-11-28");
+  assert.equal(nov.state, "late");
+  near(cs.overdue, 20);
+  assert.equal(cs.overdueSince, "2026-11-28");
+  near(cs.unpaid, 20);
+  const decSt = cs.statements.find(x => x.key === "2026-12-28");   // harcaması yok, devredenle açıldı
+  near(decSt.carryIn, 894);
+  near(decSt.minimum, 60);                                           // 40 + gecikmiş 20
+  // Nakit hareketleri: bugün gecikmiş 20, 28 Ara'da 894 + faiz 17,88 − gecikmiş 20; geçmişte ödenenler D'ye eşit
+  const moves = B.cardMoves(s, "2026-12-01", "2026-09-01", "2027-01-31");
+  near(moves.find(m => m.type === "unpaid").amount, -20);
+  near(moves.find(m => m.date === "2026-12-28").amount, -891.88);
+  near(-moves.filter(m => !m.planned).reduce((a, m) => a + m.amount, 0), B.cardPaid(s, "2026-12-01"));
+  // Aylık ödemeler: devreden o aydan düşer, faiziyle sonraki aya eklenir; toplam = harcamalar + faiz
+  const months = B.cashflow(s, T.monthIndex("2026-09"), T.monthIndex("2027-01"), "2026-12-01");
+  assert.deepEqual(months.map(m => Math.round(m.total * 100) / 100), [0, 300, 20, 911.88, 0]);
+  const dec = months[3].events.find(e => e.cardId === "chase");
+  near(dec.carriedIn, 894);
+  near(dec.interest, 17.88);
+  near(months[2].events[0].carriedOut, 894);
+  // 2 Ara'da 20 ödenince gecikme kapanır
+  s.debts.push({ id: "p3", kind: "payment", personId: "ben", cardId: "chase", amount: 20, date: "2026-12-02" });
+  cs = B.cardState(s, card, "2026-12-02");
+  near(cs.overdue, 0);
+  assert.equal(cs.statements.find(x => x.key === "2026-11-28").state, "carried");
+});
+
+test("döner kredi: APR'siz ya da otomatik kartta hesap değişmez; asgari ve geri ödeme", () => {
+  const s = faizli();
+  const { apr, ...plain } = s.cards[0];
+  const old = B.cardState({ ...s, cards: [plain] }, plain, "2026-10-31");
+  assert.equal(old.statements.find(x => x.key === "2026-10-28").state, "late");
+  near(old.overdue, 700);
+  const { manualSince, ...auto } = s.cards[0];
+  const a = B.cardState({ ...s, cards: [auto] }, auto, "2026-11-10");
+  const b = B.cardState({ ...s, cards: [plain] }, { ...plain, manualSince: undefined }, "2026-11-10");
+  near(a.debt, b.debt);
+  near(B.minimumDue(914, 14), 40);
+  near(B.minimumDue(911.88, 17.88, 20), 60);
+  near(B.minimumDue(25, 0), 25);
+  assert.deepEqual(B.payoff(914, 24), { months: 31, interest: 286.44, in12: 86.43 });
+  assert.deepEqual(B.payoff(5000, 24.99), { months: 187, interest: 8337.43, in12: 475.2 });
+  assert.equal(B.payoff(1000, 0).interest, 0);
+});
+
+test("döner kredi: elle moddan çıkarken faiz harcama olarak yazılır, özvarlık değişmez", () => {
+  const s = faizli();
+  s.debts.push({ id: "p2", kind: "payment", personId: "ben", cardId: "chase", amount: 20, date: "2026-11-28" });
+  const day = "2026-12-10";
+  const before = B.totals(s, day, USD).equity;
+  const charges = B.interestCharges(s, s.cards[0], day);
+  assert.deepEqual(charges.map(c => [c.date, c.total]), [["2026-11-03", 14], ["2026-12-03", 17.88]]);
+  const { manualSince, ...auto } = s.cards[0];
+  const after = { ...s, cards: [auto], installments: [...s.installments, ...charges.map((c, i) => ({ id: "faiz" + i, ...c }))] };
+  near(B.totals(after, day, USD).equity, before, "özvarlık");
+});
