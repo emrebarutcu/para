@@ -75,6 +75,7 @@ struct KartSatiri: View {
 // Kartın ayrıntısı: görsel, günler, bugün alınanın ödeme tarihi, ödendi / düzenle / sil
 struct KartDetayi: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var abonelik: Abonelik
     let c: KartGorunumu
     let duzenle: () -> Void
     let sil: () -> Void
@@ -129,7 +130,9 @@ struct KartDetayi: View {
             }
             .font(.subheadline)
         }
-        if let p = r.payoff {
+        if r.payoff != nil, !abonelik.premium {
+            PremiumKilidi(baslik: L("Borcu bitirmek"), aciklama: L("Yalnızca asgari ödersen borcun ne zaman biteceği, ne kadar faiz ödeyeceğin ve 12 ayda bitirmek için aylık ödeme."), neden: "payoff")
+        } else if let p = r.payoff {
             Kart {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(L("Borcu bitirmek")).font(.subheadline.weight(.semibold))

@@ -279,6 +279,14 @@
     return error ? null : data;
   };
 
+  // CashFollow Premium: hesabın abonelik satırı (subscriptions; tablo.js premium). Asistan bağlantısı Premium ister
+  // (mcp/server.js); okunamazsa null
+  window.syncPremium = async function () {
+    if (!db || !user) return null;
+    const { data, error } = await db.from('subscriptions').select('source,status,expires_at').maybeSingle();
+    return error ? null : Tablo.premium(data);
+  };
+
   // İzni kaldırır: uygulamanın oturumları ve yenileme token'ları geçersiz olur
   window.syncOAuthRevoke = async function (clientId) {
     const { error } = await db.auth.oauth.revokeGrant({ clientId });

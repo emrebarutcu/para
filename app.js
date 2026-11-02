@@ -389,7 +389,7 @@ const els = {
   cashDefReset: $("cashDefReset"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
   inboxAddress: $("inboxAddress"),
-  aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"),
+  aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"), aiPremiumNote: $("aiPremiumNote"),
   aiAppsGroup: $("aiAppsGroup"), aiApps: $("aiApps"),
   aiLocalTitle: $("aiLocalTitle"), aiLocalSub: $("aiLocalSub"), aiModeSeg: $("aiModeSeg"), aiProgress: $("aiProgress"),
   aiBackfill: $("aiBackfill"), aiAddNote: $("aiAddNote"), aiOther: $("aiOther"),
@@ -5922,9 +5922,14 @@ async function openAiSheet() {
   els.mcpUrl.textContent = mcpAddress();
   const loggedIn = !!window.syncGetUser?.();
   els.aiLoginNote.hidden = loggedIn;
+  els.aiPremiumNote.hidden = true;
   els.aiAppsGroup.hidden = true;
   openSheet(els.aiSheet);
-  if (loggedIn) await renderAiApps();
+  if (loggedIn) {
+    // Asistan Premium ister (mcp/server.js); ilk kullanıcılar Premium'dur, bu not yalnızca yeni hesaplara çıkar
+    window.syncPremium?.().then(p => { els.aiPremiumNote.hidden = p !== false; });
+    await renderAiApps();
+  }
 }
 
 async function renderAiApps() {

@@ -4,28 +4,33 @@ import SwiftUI
 // Hesaba katılmayan kartın (ör. eşin kartı) ekstreleri "sayılmıyor" diye görünür, toplamlara girmez.
 struct AkisEkrani: View {
     @EnvironmentObject private var model: Model
+    @EnvironmentObject private var abonelik: Abonelik
     @State private var ayCount = 12
     @State private var acik: Set<String> = []
 
     var body: some View {
         NavigationStack {
             Sayfa {
-                Okunan(tool: "get_cashflow", args: ["months": ayCount], key: "\(ayCount)") { (a: Akis) in
-                    VStack(alignment: .leading, spacing: 14) {
-                        AylikOdemeGrafigi(months: Array(a.months.prefix(12)), baslik: L("Önümüzdeki 12 ay"))
-                        if a.months.allSatisfy({ $0.payments.isEmpty }) {
-                            Kart { Text(L("Önümüzdeki aylarda ödenecek taksit yok.")).foregroundStyle(Tema.metin3) }
-                        }
-                        ForEach(a.months.filter { !$0.payments.isEmpty }) { m in ay(m) }
-                        if ayCount < 60 {
-                            Button { withAnimation { ayCount = min(60, ayCount + 12) } } label: {
-                                Text(L("Sonraki 12 ayı da göster")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
-                                    .frame(maxWidth: .infinity).padding(.vertical, 13)
-                                    .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                if abonelik.premium {
+                    Okunan(tool: "get_cashflow", args: ["months": ayCount], key: "\(ayCount)") { (a: Akis) in
+                        VStack(alignment: .leading, spacing: 14) {
+                            AylikOdemeGrafigi(months: Array(a.months.prefix(12)), baslik: L("Önümüzdeki 12 ay"))
+                            if a.months.allSatisfy({ $0.payments.isEmpty }) {
+                                Kart { Text(L("Önümüzdeki aylarda ödenecek taksit yok.")).foregroundStyle(Tema.metin3) }
                             }
-                            .buttonStyle(.plain)
+                            ForEach(a.months.filter { !$0.payments.isEmpty }) { m in ay(m) }
+                            if ayCount < 60 {
+                                Button { withAnimation { ayCount = min(60, ayCount + 12) } } label: {
+                                    Text(L("Sonraki 12 ayı da göster")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                                        .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
+                } else {
+                    PremiumKilidi(baslik: L("Akış"), aciklama: L("Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler, kişilerin payı ve 12 aylık grafik."), neden: "cash_flow")
                 }
             }
             .navigationTitle(L("Akış"))

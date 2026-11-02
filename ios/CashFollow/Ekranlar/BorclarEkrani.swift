@@ -119,7 +119,7 @@ struct BorclarEkrani: View {
             .sayfaZemini()
             .yenilenebilir(model)
             .ekleDugmesi(.borc)
-            .sheet(isPresented: $kartEkle) { KartFormu(card: nil) }
+            .sheet(isPresented: $kartEkle) { YeniKart() }
             .sheet(item: $kartDuzenle) { KartFormu(card: $0) }
             .sheet(item: $kartDetay) { c in
                 KartDetayi(c: c,

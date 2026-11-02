@@ -111,11 +111,14 @@ struct OzetEkrani: View {
 
 // İçgörüler: en önemlileri, "Tümü" ile hepsi (get_insights)
 struct IcgoruBolumu: View {
+    @EnvironmentObject private var abonelik: Abonelik
     @State private var hepsi = false
 
     var body: some View {
         Okunan(tool: "get_insights") { (i: Icgoruler) in
-            if !i.insights.isEmpty {
+            if !i.insights.isEmpty, !abonelik.premium {
+                PremiumKilidi(baslik: L("İçgörüler"), aciklama: L("{0} içgörü hazır: harcama alışkanlıkların, yaklaşan yükler ve öneriler.", i.insights.count), neden: "insights")
+            } else if !i.insights.isEmpty {
                 Kart {
                     KartBasligi(baslik: L("İçgörüler")) {
                         if i.insights.count > 2 {

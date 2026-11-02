@@ -4,13 +4,15 @@ import SwiftUI
 // (get_assets, list_entries; web'deki Varlıklar sekmesi)
 struct VarliklarEkrani: View {
     @EnvironmentObject private var model: Model
+    @EnvironmentObject private var abonelik: Abonelik
 
     var body: some View {
         NavigationStack {
             Okunan(tool: "get_assets") { (v: Varliklar) in
                 Sayfa {
                     ustKart(v)
-                    VarlikSeyriKarti()
+                    if abonelik.premium { VarlikSeyriKarti() }
+                    else { PremiumKilidi(baslik: L("Varlığın seyri"), aciklama: L("Varlığın, borcun ve özvarlığın aylar içinde nasıl değiştiği."), neden: "net_worth") }
                     let bakiyeler = v.assets.filter { $0.balance != 0 || $0.asset == Bicim.home }
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                         ForEach(bakiyeler, id: \.self) { a in varlikKutusu(a) }

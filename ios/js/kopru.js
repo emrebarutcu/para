@@ -224,6 +224,8 @@
       return JSON.stringify({ state, base, changed });
     },
     combine: (accountJson, localJson) => JSON.stringify(Tablo.combine(withHome(accountJson), withHome(localJson))),
+    // CashFollow Premium: hesabın subscriptions satırı (Abonelik.swift; web ve asistanla aynı kural)
+    premium: (rowJson, now) => Tablo.premium(rowJson ? JSON.parse(rowJson) : null, now),
   };
 
   root.Kopru = {

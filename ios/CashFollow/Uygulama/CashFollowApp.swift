@@ -14,6 +14,7 @@ struct CashFollowApp: App {
         WindowGroup {
             AnaEkran()
                 .environmentObject(model)
+                .environmentObject(model.abonelik)
                 .tint(Tema.metin)
         }
         .onChange(of: scenePhase) { _, phase in

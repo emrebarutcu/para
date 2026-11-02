@@ -3,7 +3,9 @@ import SwiftUI
 
 // Örnek veriyle açılış (CI'da ekran görüntüleri: .github/workflows/ekran.yml). "-ornek" ile girişsiz, örnek veriyle açılır;
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
-// 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: kredi formu, 5: döviz formu, 6: Ayarlar; "-bos" ile verisiz). Gerçek kullanımda hiçbiri yoktur.
+// 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: kredi formu, 5: döviz formu, 6: Ayarlar,
+// 7: CashFollow Premium ödeme ekranı; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
+// (kilitler) görünür. Gerçek kullanımda hiçbiri yoktur.
 enum Ornek {
     private static func deger(_ ad: String) -> Int? {
         let a = CommandLine.arguments
@@ -12,6 +14,8 @@ enum Ornek {
     }
     static var sekme: Int { deger("-sekme") ?? 0 }
     static var galeri: Int? { deger("-galeri") }
+    // Örnek modunda Premium (App Store'a sorulmaz): açık, "-ucretsiz" ile kapalı; gerçek kullanımda nil
+    static let premium: Bool? = CommandLine.arguments.contains("-ucretsiz") ? false : CommandLine.arguments.contains("-ornek") ? true : nil
     // "-tur galeri1,sekme0,…": ekran görüntüsü turu — tek açılışta ekranlar sırayla gösterilir (TurEkrani)
     static var tur: [String]? {
         let a = CommandLine.arguments
@@ -174,6 +178,8 @@ struct GrafikGalerisi: View {
             HareketFormu(tur: .doviz)
         } else if sayfa == 6 {
             AyarlarEkrani()
+        } else if sayfa == 7 {
+            PremiumEkrani(neden: "gallery")
         } else {
             galeri
         }
