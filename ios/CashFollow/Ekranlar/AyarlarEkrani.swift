@@ -5,14 +5,20 @@ struct AyarlarEkrani: View {
     @EnvironmentObject private var model: Model
     @EnvironmentObject private var abonelik: Abonelik
     @Environment(\.dismiss) private var dismiss
-    @State private var login = false
+    // Ayarlar'dan açılan pencereler tek .sheet'ten: listedeki bir bölüme bağlanan pencere o bölümün her satırına ayrı
+    // bağlanır, açılır açılmaz kapanır
+    enum Sayfa: String, Identifiable {
+        case giris, premium, kisiSiniri, asistan
+        var id: String { rawValue }
+    }
+    @State private var sayfa: Sayfa?
+    @State private var aboneligiYonet = false
     @State private var confirmLogout = false
     @State private var hesapSil = false
     @State private var siliniyor = false
     @State private var silmeHatasi: String?
     @State private var newPerson = ""
     @State private var addingPerson = false
-    @State private var kisiSiniri = false
     @State private var renaming: Kisi?
     @State private var renameText = ""
     @State private var deleting: Kisi?
@@ -24,7 +30,7 @@ struct AyarlarEkrani: View {
     var body: some View {
         NavigationStack {
             List {
-                PremiumBolumu()
+                PremiumBolumu(sayfa: $sayfa, yonet: $aboneligiYonet)
 
                 Section {
                     if let s = model.session {
@@ -41,7 +47,7 @@ struct AyarlarEkrani: View {
                     } else {
                         Text(L("Veriler yalnızca bu telefonda. Giriş yapınca yedeklenir; web'de (cashfollow.app) ve diğer cihazlarında da görürsün."))
                             .font(.footnote).foregroundStyle(.secondary)
-                        Button(L("Giriş yap / Kayıt ol")) { login = true }
+                        Button(L("Giriş yap / Kayıt ol")) { sayfa = .giris }
                     }
                 } header: { Text(L("Hesap")) }
 
@@ -93,7 +99,7 @@ struct AyarlarEkrani: View {
                         Button(L("Kişi ekle")) {
                             // Ücretsiz sürümde yalnızca kullanıcının kendisi (Abonelik.ucretsizKisi)
                             if abonelik.premium || l.people.count < Abonelik.ucretsizKisi { newPerson = ""; addingPerson = true }
-                            else { kisiSiniri = true }
+                            else { sayfa = .kisiSiniri }
                         }
                     }
                     HataMetni(text: error)
@@ -118,8 +124,15 @@ struct AyarlarEkrani: View {
             }
             .navigationTitle(L("Ayarlar"))
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Bitti")) { dismiss() } } }
-            .sheet(isPresented: $login) { GirisEkrani(welcome: false) }
-            .sheet(isPresented: $kisiSiniri) { PremiumEkrani(neden: "person_limit") }
+            .sheet(item: $sayfa) { s in
+                switch s {
+                case .giris: GirisEkrani(welcome: false)
+                case .premium: PremiumEkrani(neden: "settings")
+                case .kisiSiniri: PremiumEkrani(neden: "person_limit")
+                case .asistan: AsistanEkrani()
+                }
+            }
+            .manageSubscriptionsSheet(isPresented: $aboneligiYonet)
             .confirmationDialog(L("Hesabın ve bütün verilerin silinsin mi?"), isPresented: $hesapSil, titleVisibility: .visible) {
                 Button(L("Hesabı kalıcı olarak sil"), role: .destructive) {
                     siliniyor = true

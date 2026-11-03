@@ -324,12 +324,12 @@ struct YeniKart: View {
     }
 }
 
-// Ayarlar'ın üstü: Premium durumu, abone olma, yönetme, geri yükleme
+// Ayarlar'ın üstü: Premium durumu, abone olma, yönetme, geri yükleme, yapay zekâ asistanı. Pencereleri Ayarlar açar
+// (AyarlarEkrani.Sayfa): bölüme bağlanan pencere listede her satıra ayrı bağlanıp kapanır.
 struct PremiumBolumu: View {
     @EnvironmentObject private var abonelik: Abonelik
-    @State private var odeme = false
-    @State private var yonet = false
-    @State private var asistan = false
+    @Binding var sayfa: AyarlarEkrani.Sayfa?
+    @Binding var yonet: Bool
 
     var body: some View {
         Section {
@@ -339,14 +339,11 @@ struct PremiumBolumu: View {
             } else {
                 Text(L("Ücretsiz sürüm: {0} kart, yalnızca sen. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", Abonelik.ucretsizKart))
                     .font(.footnote).foregroundStyle(.secondary)
-                Button(L("Premium'a geç")) { odeme = true }.font(.body.weight(.semibold))
+                Button(L("Premium'a geç")) { sayfa = .premium }.font(.body.weight(.semibold))
                 Button(L("Satın alımları geri yükle")) { Task { await abonelik.geriYukle() } }
             }
-            Button { asistan = true } label: { Label(L("Yapay zekâ asistanı"), systemImage: "sparkles") }
+            Button { sayfa = .asistan } label: { Label(L("Yapay zekâ asistanı"), systemImage: "sparkles") }
         } header: { Text(L("CashFollow Premium")) }
-        .sheet(isPresented: $odeme) { PremiumEkrani(neden: "settings") }
-        .sheet(isPresented: $asistan) { AsistanEkrani() }
-        .manageSubscriptionsSheet(isPresented: $yonet)
     }
 
     private var durum: String {
