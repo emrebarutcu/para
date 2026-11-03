@@ -13,6 +13,9 @@ const DEFAULTS = {
   SUPABASE_URL: "https://bffqfhgctlgexjdyvaup.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_KoF5Tfi74v8RSWvszPeuxQ_LWwKZGDo",
   INBOX_DOMAIN: "cashfollow.app",
+  // Ürün analitiği (PostHog, ABD bölgesi; config.js POSTHOG_KEY ile aynı herkese açık proje anahtarı); boşken gönderilmez
+  POSTHOG_KEY: "",
+  POSTHOG_HOST: "https://us.i.posthog.com",
 };
 
 const SERVER_INFO = { name: "cashfollow", title: "CashFollow", version: "1.0.0" };
@@ -35,6 +38,8 @@ export function config(env = {}) {
     url: (env.SUPABASE_URL || DEFAULTS.SUPABASE_URL).replace(/\/+$/, ""),
     key: env.SUPABASE_ANON_KEY || DEFAULTS.SUPABASE_ANON_KEY,
     domain: env.INBOX_DOMAIN || DEFAULTS.INBOX_DOMAIN,
+    posthogKey: env.POSTHOG_KEY ?? DEFAULTS.POSTHOG_KEY,
+    posthogHost: (env.POSTHOG_HOST || DEFAULTS.POSTHOG_HOST).replace(/\/+$/, ""),
   };
 }
 

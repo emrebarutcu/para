@@ -20,10 +20,15 @@ const ENV = { SUPABASE_SERVICE_KEY: "sb_secret_test", APPSTORE_KEY_ID: "KEY123",
 function world({ apple = {}, rows = [] } = {}) {
   const db = rows.map(r => ({ ...r }));
   const calls = [];
+  const events = [];   // PostHog'a giden olaylar
   const users = { tok1: U1, tok2: U2 };
   async function f(url, init = {}) {
     const u = new URL(url);
     calls.push(`${init.method || "GET"} ${u.host}${u.pathname}`);
+    if (u.host === "us.i.posthog.com") {
+      events.push(JSON.parse(init.body));
+      return new Response("{}");
+    }
     if (u.pathname === "/auth/v1/user") {
       const id = users[init.headers.Authorization.replace("Bearer ", "")];
       return id ? new Response(JSON.stringify({ id, user_metadata: { country: "US" } })) : new Response("{}", { status: 401 });
@@ -53,7 +58,7 @@ function world({ apple = {}, rows = [] } = {}) {
     }
     throw new Error(`beklenmeyen istek ${url}`);
   }
-  return { f, db, calls };
+  return { f, db, calls, events };
 }
 const tx = (id, extra = {}) => ({ transactionId: id, originalTransactionId: "1000", productId: YEARLY, bundleId: BUNDLE_ID, expiresDate: NOW + 7 * DAY, ...extra });
 
@@ -162,4 +167,43 @@ test("/api/appstore: hesap appAccountToken'dan; bilinmeyen işlem, TEST ve başk
   assert.equal(w2.db.length, 0);
   // Anahtarlar yoksa 503: Apple sonra yeniden gönderir
   assert.equal((await notify(w, notice("SUBSCRIBED", tx("4000")), { ...ENV, SUPABASE_SERVICE_KEY: "" })).status, 503);
+});
+
+test("/api/appstore: abonelik olayları PostHog'a; gelir yalnızca production'daki tahsilatta", async () => {
+  const apple = { Production: {}, Sandbox: {} };
+  const w = world({ apple, rows: [{ user_id: U1, source: "appstore", original_transaction_id: "1000", status: "active" }] });
+  const env = { ...ENV, POSTHOG_KEY: "phc_test" };
+  const send = async (type, t, environment = "Production", subtype) => {
+    apple[environment][t.transactionId] = { status: type === "REFUND" ? 5 : 1, tx: t };
+    const n = notice(type, t, environment);
+    if (subtype) n.subtype = subtype;
+    const res = await handleNotification(post("/api/appstore", { signedPayload: jws(n) }), env, { fetch: w.f, now: NOW });
+    assert.equal(res.status, 200);
+    return w.events.at(-1);
+  };
+  // Deneme başladı: ücret yok
+  let e = await send("SUBSCRIBED", tx("7000", { price: 0, currency: "USD", offerDiscountType: "FREE_TRIAL" }), "Production", "INITIAL_BUY");
+  assert.equal(e.event, "subscription_subscribed");
+  assert.equal(e.api_key, "phc_test");
+  assert.equal(e.properties.distinct_id, U1);
+  assert.equal(e.properties.subtype, "INITIAL_BUY");
+  assert.equal(e.properties.trial, true);
+  assert.equal(e.properties.revenue, undefined);
+  assert.equal(e.properties.$geoip_disable, true);
+  // Denemeden sonra ilk tahsilat: gelir
+  e = await send("DID_RENEW", tx("7001", { price: 39990, currency: "USD" }));
+  assert.equal(e.event, "subscription_did_renew");
+  assert.deepEqual([e.properties.revenue, e.properties.currency, e.properties.product], [39.99, "USD", YEARLY]);
+  // Sandbox tahsilatı gelir sayılmaz
+  e = await send("DID_RENEW", tx("7002", { price: 39990, currency: "USD" }), "Sandbox");
+  assert.equal(e.properties.environment, "Sandbox");
+  assert.equal(e.properties.revenue, undefined);
+  // İade
+  e = await send("REFUND", tx("7003", { price: 39990, currency: "USD", revocationDate: NOW }));
+  assert.deepEqual([e.event, e.properties.refund_amount, e.properties.status], ["subscription_refund", 39.99, "revoked"]);
+  // Anahtar yoksa gönderilmez
+  const before = w.events.length;
+  apple.Production["7004"] = { status: 1, tx: tx("7004") };
+  await handleNotification(post("/api/appstore", { signedPayload: jws(notice("DID_RENEW", tx("7004"))) }), { ...ENV, POSTHOG_KEY: "" }, { fetch: w.f, now: NOW });
+  assert.equal(w.events.length, before);
 });

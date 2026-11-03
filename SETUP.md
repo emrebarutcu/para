@@ -328,9 +328,29 @@ yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; ayn�
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
   6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir). `en-*` İngilizce (ABD örnek
   verisi), ötekiler Türkçe.
-- **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı): e-posta adresi, diğer finansal bilgi ve
-  satın alma geçmişi (Purchases: Premium aboneliği) toplanır, kullanıcıya bağlıdır, amaç uygulamanın işlevi, takip yok.
-  PostHog anahtarı girilirse (analitik açılır) ürün etkileşimi de eklenir — hem formda hem dosyada.
+- **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı; hepsi kullanıcıya bağlı, takip yok):
+  - Contact Info → E-posta adresi: App Functionality.
+  - Financial Info → Other Financial Info: App Functionality.
+  - Purchases → Purchase History (Premium aboneliği): App Functionality, Analytics.
+  - Usage Data → Product Interaction (PostHog olayları): Analytics.
+  - Identifiers → User ID (hesabın kimliği): App Functionality, Analytics.
+  Konum toplanmaz: PostHog'a IP'den konum çıkarmaması söylenir (`$geoip_disable`).
+
+#### Analitik
+
+İki kaynak birlikte: **App Store Connect** (kurulum yok) mağaza sayfası, indirme, dönüşüm, kaynak (Analytics) ve deneme,
+yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulama içi olaylar, dönüşüm hunisi, A/B.
+
+- PostHog (ABD bölgesi) projesinin herkese açık anahtarı (`phc_…`) üç yere yazılır: `config.js` `POSTHOG_KEY` (web),
+  `ios/CashFollow/Cekirdek/Yapilandirma.swift` `posthogKey` (iPhone), `mcp/server.js` `DEFAULTS.POSTHOG_KEY` (sunucu: abonelik
+  olayları). Boşken hiçbir şey gönderilmez; kullanıcı Ayarlar → "Kullanım verisi gönder" ile kapatabilir.
+- PostHog proje ayarlarında **Discard client IP data** açılır (IP saklanmaz).
+- Ödeme ekranı hunisi (iPhone): `paywall_shown` / `paywall_closed` (`reason`: hangi kilit; `plan`), `purchase_started`,
+  `purchase_completed` (`trial`, `price`, `currency`), `purchase_cancelled`, `purchase_pending`, `purchase_failed`, `restore`
+  (`found`).
+- Abonelik olayları sunucudan (`mcp/abonelik.js`, App Store bildirimleri): `subscription_subscribed`, `subscription_did_renew`,
+  `subscription_did_change_renewal_status` (iptal), `subscription_expired`, `subscription_refund`… Production'daki tahsilatta
+  `revenue` ve `currency` (PostHog → Revenue analytics'te bu özellik seçilir); sandbox gelir sayılmaz.
 
 #### Abonelik (CashFollow Premium)
 

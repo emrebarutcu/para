@@ -4,7 +4,8 @@ import UIKit
 // Ürün analitiği ve A/B denemeleri (PostHog, HTTP API; SDK yok). Anahtar Yapilandirma.posthogKey'de; boşsa hiçbir şey
 // gönderilmez. Olaylar tutar, ad, açıklama gibi kullanıcının girdiği bilgileri içermez: yalnızca ne yapıldığı ("harcama
 // eklendi, 6 taksit, kartla") ve uygulama sürümü, dil, ülke, cihaz. Kimlik rastgele bir cihaz kimliğidir; giriş yapınca
-// hesabın kimliğiyle birleştirilir (web'deki olaylarla aynı kişi). Ayarlar → "Kullanım verisi gönder" kapatılabilir.
+// hesabın kimliğiyle birleştirilir (web'deki olaylarla aynı kişi). PostHog IP adresinden konum çıkarmaz ($geoip_disable).
+// Ayarlar → "Kullanım verisi gönder" kapatılabilir. Abonelik yenileme, iptal ve iadeleri sunucu gönderir (mcp/abonelik.js).
 //
 // A/B: bayrak("deneme_adi") PostHog'daki özellik bayrağının değerini (ör. "control", "test") verir; ilk okumada
 // $feature_flag_called olayı gider, deneme sonuçları bununla ölçülür.
@@ -39,7 +40,7 @@ enum Analitik {
         [
             "$app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
             "$os": "iOS", "$os_version": UIDevice.current.systemVersion, "$device_type": "Mobile",
-            "platform": "ios", "lang": Dil.kod, "country": ulke, "$lib": "cashfollow-ios",
+            "platform": "ios", "lang": Dil.kod, "country": ulke, "$lib": "cashfollow-ios", "$geoip_disable": true,
         ]
     }
 

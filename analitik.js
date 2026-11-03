@@ -1,6 +1,7 @@
 // Ürün analitiği ve A/B denemeleri (PostHog, HTTP API; kütüphane yok) — iPhone'daki Analitik.swift ile aynı olaylar ve
 // kimlik: girişten sonra hesabın kimliği, böylece web ve iPhone'daki olaylar aynı kişide birleşir. Anahtar config.js'te
-// (POSTHOG_KEY); boşsa ya da Ayarlar'da kapatıldıysa hiçbir şey gönderilmez. Olaylar tutar, ad ya da açıklama içermez.
+// (POSTHOG_KEY); boşsa ya da Ayarlar'da kapatıldıysa hiçbir şey gönderilmez. Olaylar tutar, ad ya da açıklama içermez;
+// PostHog IP adresinden konum çıkarmaz ($geoip_disable).
 (function (root) {
   const KEY = () => root.POSTHOG_KEY || "";
   const HOST = () => (root.POSTHOG_HOST || "https://us.i.posthog.com").replace(/\/$/, "");
@@ -21,7 +22,7 @@
   }
   const who = () => store.get("para.analitik.hesap") || anonId();
   const common = () => ({
-    $app_version: root.APP_VERSION || "", $lib: "cashfollow-web", platform: "web",
+    $app_version: root.APP_VERSION || "", $lib: "cashfollow-web", platform: "web", $geoip_disable: true,
     lang: (document.documentElement.lang || "tr").slice(0, 2), $current_url: location.origin + location.pathname,
   });
 
