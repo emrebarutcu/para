@@ -14,7 +14,7 @@ const DEFAULTS = {
   SUPABASE_ANON_KEY: "sb_publishable_KoF5Tfi74v8RSWvszPeuxQ_LWwKZGDo",
   INBOX_DOMAIN: "cashfollow.app",
   // Ürün analitiği (PostHog, ABD bölgesi; config.js POSTHOG_KEY ile aynı herkese açık proje anahtarı); boşken gönderilmez
-  POSTHOG_KEY: "",
+  POSTHOG_KEY: "phc_sEWqvuL259ZcLYGHQXWpnusXvLPMRPF8L4SvAsWHWfPY",
   POSTHOG_HOST: "https://us.i.posthog.com",
 };
 
