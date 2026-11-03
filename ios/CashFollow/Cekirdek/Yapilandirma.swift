@@ -10,7 +10,7 @@ enum Yapilandirma {
     static let kosullar = URL(string: "https://cashfollow.app/terms.html")!
     static let destek = URL(string: "https://cashfollow.app/support.html")!
     // Ürün analitiği ve A/B (PostHog, ABD bölgesi). Proje anahtarı herkese açıktır (phc_…); boşken analitik kapalı
-    static let posthogKey = ""
+    static let posthogKey = "phc_sEWqvuL259ZcLYGHQXWpnusXvLPMRPF8L4SvAsWHWfPY"
     static let posthogHost = URL(string: "https://us.i.posthog.com")!
     // Günler cihazın saat diliminde (ABD'de akşam "bugün" yarına kaymasın); hesaba da yazılır (Model.refresh)
     static var timeZone: TimeZone { .current }

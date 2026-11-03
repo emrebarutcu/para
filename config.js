@@ -13,5 +13,5 @@ window.INBOX_DOMAIN = 'cashfollow.app';
 
 // ─── Ürün analitiği ve A/B (PostHog, ABD bölgesi) ─────────────────────────────
 // Proje anahtarı herkese açıktır (phc_…). Boşsa analitik kapalı (hiçbir şey gönderilmez). iPhone: Yapilandirma.swift.
-window.POSTHOG_KEY  = '';
+window.POSTHOG_KEY  = 'phc_sEWqvuL259ZcLYGHQXWpnusXvLPMRPF8L4SvAsWHWfPY';
 window.POSTHOG_HOST = 'https://us.i.posthog.com';

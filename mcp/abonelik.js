@@ -5,6 +5,8 @@
 // gelen JWS'lerin imza zincirini doğrulamak gerekmez; bildirim yalnızca hangi işleme bakılacağını söyler.
 // Satırı service role yazar (SUPABASE_SERVICE_KEY, eposta Worker'ındakiyle aynı); Apple'a In-App Purchase anahtarıyla
 // gidilir (APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_KEY_P8). Biri eksikse 503: uygulama cihazdaki aboneliğe güvenir.
+// Bildirimler ürün analitiğine de gider (PostHog, anahtar varsa): subscription_did_renew, subscription_refund… ve
+// production'daki ücretli işlemde gelir (revenue).
 import Tablo from "../tablo.js";
 import { config, userFor } from "./server.js";
 
@@ -57,6 +59,7 @@ function rowOf(item, environment, now) {
       auto_renew: r.autoRenewStatus == null ? null : r.autoRenewStatus === 1, updated_at: new Date(now).toISOString(),
     },
     token: typeof t.appAccountToken === "string" && UUID.test(t.appAccountToken.toLowerCase()) ? t.appAccountToken.toLowerCase() : null,
+    tx: t,
   };
 }
 
@@ -114,6 +117,31 @@ export async function save(userId, row, env, f = fetch) {
   return { row: next };
 }
 
+// Abonelik olayı PostHog'a (Analitik.swift ile aynı kişi: hesabın kimliği). Gelir yalnızca production'da tahsil edilen
+// işlemde (ücretsiz deneme 0, sandbox sayılmaz); iadede tutar refund_amount. Gönderilemezse bildirim yine işlenmiş sayılır.
+const CHARGES = ["SUBSCRIBED", "DID_RENEW", "OFFER_REDEEMED"];
+async function analitik(userId, hint, st, cfg, f, now) {
+  if (!cfg.posthogKey || !hint.type) return;
+  const t = st.tx || {};
+  const amount = Number(t.price) > 0 ? Number(t.price) / 1000 : 0;   // App Store: binde bir para birimi
+  const props = {
+    distinct_id: userId, $lib: "cashfollow-server", platform: "ios", $geoip_disable: true,
+    subtype: hint.subtype ?? null, product: st.row.product_id, environment: st.environment, status: st.row.status,
+    auto_renew: st.row.auto_renew, trial: t.offerDiscountType === "FREE_TRIAL", price: amount, currency: t.currency ?? null,
+  };
+  if (st.environment === "Production" && amount > 0 && CHARGES.includes(hint.type)) props.revenue = amount;
+  if (hint.type === "REFUND") props.refund_amount = amount;
+  try {
+    await f(`${cfg.posthogHost}/capture/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: cfg.posthogKey, event: `subscription_${String(hint.type).toLowerCase()}`, properties: props, timestamp: new Date(now).toISOString() }),
+    });
+  } catch (err) {
+    console.error("analitik:", err);
+  }
+}
+
 // POST /api/abonelik { transactionId } (Authorization: Bearer <Supabase oturumu>) → { premium, expiresAt, source }
 export async function handleSubscription(request, env = {}, { fetch: f = fetch, now = Date.now() } = {}) {
   if (request.method !== "POST") return json({ error: "POST" }, 405);
@@ -148,7 +176,7 @@ export async function handleNotification(request, env = {}, { fetch: f = fetch, 
   let hint = null;
   try {
     const p = jwsPayload((await request.json())?.signedPayload);
-    hint = { environment: p?.data?.environment, bundleId: p?.data?.bundleId, tx: jwsPayload(p?.data?.signedTransactionInfo) };
+    hint = { type: p?.notificationType, subtype: p?.subtype, environment: p?.data?.environment, bundleId: p?.data?.bundleId, tx: jwsPayload(p?.data?.signedTransactionInfo) };
   } catch {}
   // TEST bildirimi ve başka uygulamanınki: işlem yok
   if (!hint?.tx?.transactionId || hint.bundleId !== BUNDLE_ID) return json({ ok: true });
@@ -157,7 +185,10 @@ export async function handleNotification(request, env = {}, { fetch: f = fetch, 
     const st = await appleStatus(String(hint.tx.transactionId), env, { fetch: f, prefer: hint.environment, now });
     if (!st) return json({ ok: true });
     const userId = st.token ?? (await rowWhere("original_transaction_id", st.row.original_transaction_id, env, f))?.user_id;
-    if (userId) await save(userId, st.row, env, f);
+    if (userId) {
+      await save(userId, st.row, env, f);
+      await analitik(userId, hint, st, config(env), f, now);
+    }
     return json({ ok: true });
   } catch (err) {
     console.error("appstore:", err);

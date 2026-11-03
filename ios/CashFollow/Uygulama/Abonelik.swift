@@ -72,20 +72,29 @@ final class Abonelik: ObservableObject {
         do {
             switch try await urun.purchase(options: secenekler) {
             case .success(let sonuc):
-                guard case .verified(let t) = sonuc else { hata = L("App Store satın alımı doğrulanamadı."); return }
+                guard case .verified(let t) = sonuc else {
+                    hata = L("App Store satın alımı doğrulanamadı.")
+                    Analitik.olay("purchase_failed", ["product": urun.id, "error": "unverified"])
+                    return
+                }
                 await t.finish()
                 await cihaziYenile()
-                Analitik.olay("purchase_completed", ["product": urun.id])
+                // Fiyat bilgi içindir (gelir değil): deneme başlangıcında ücret alınmaz; gerçek tahsilatı sunucu gönderir
+                Analitik.olay("purchase_completed", ["product": urun.id, "trial": Self.deneme(t),
+                                                     "price": NSDecimalNumber(decimal: urun.price).doubleValue,
+                                                     "currency": urun.priceFormatStyle.currencyCode])
                 await hesabaBagla()
             case .pending:
                 hata = L("Satın alma onay bekliyor (ör. Aile Paylaşımı'nda ebeveyn onayı). Onaylanınca Premium kendiliğinden açılır.")
+                Analitik.olay("purchase_pending", ["product": urun.id])
             case .userCancelled:
-                break
+                Analitik.olay("purchase_cancelled", ["product": urun.id])
             @unknown default:
                 break
             }
         } catch {
             hata = error.localizedDescription
+            Analitik.olay("purchase_failed", ["product": urun.id, "error": String(String(describing: error).prefix(80))])
         }
     }
 
@@ -93,13 +102,20 @@ final class Abonelik: ObservableObject {
         calisiyor = true
         defer { calisiyor = false }
         hata = nil
-        Analitik.olay("restore")
         do { try await AppStore.sync() } catch StoreKitError.userCancelled { return } catch {
             hata = error.localizedDescription
+            Analitik.olay("restore", ["found": false, "error": true])
             return
         }
         await yenile()
+        Analitik.olay("restore", ["found": premium])
         if !premium { hata = L("Bu Apple hesabında CashFollow Premium aboneliği bulunamadı.") }
+    }
+
+    // İşlem ücretsiz denemeyle mi başladı (tanıtım teklifi)
+    private static func deneme(_ t: Transaction) -> Bool {
+        if #available(iOS 17.2, *) { return t.offer?.type == .introductory }
+        return t.offerType == .introductory
     }
 
     // ── Durum ─────────────────────────────────────────────────────────────────

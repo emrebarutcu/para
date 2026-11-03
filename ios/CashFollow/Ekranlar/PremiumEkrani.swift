@@ -82,6 +82,10 @@ struct PremiumEkrani: View {
             Button(L("Tamam"), role: .cancel) {}
         } message: { Text(abonelik.hata ?? "") }
         .sheet(isPresented: $asistan) { AsistanEkrani() }
+        // Satın almadan kapatılırsa: hangi kilitten açıldığı ve son seçili plan
+        .onDisappear {
+            if !abonelik.premium { Analitik.olay("paywall_closed", ["reason": neden, "plan": secili.components(separatedBy: ".").last ?? secili]) }
+        }
         .task {
             Analitik.olay("paywall_shown", ["reason": neden])
             await abonelik.urunleriYukle()
