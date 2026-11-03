@@ -397,3 +397,26 @@ struct Simulasyon: Decodable {
     let card: KartSonucu?
     let cardsCompared: [Karsilastirma]
 }
+
+// Banka e-postaları (list_inbox, check_inbox)
+struct EpostaListesi: Decodable { let emails: [Eposta] }
+struct EpostaSonucu: Decodable { let added: [Harcama] }
+
+struct Eposta: Decodable, Identifiable, Hashable {
+    struct Okunan: Decodable, Hashable {
+        let amount: Double?
+        let currency: String?
+        let date: String?
+        let installments: Int?
+        let merchant: String?
+        let cardLast4: String?
+    }
+    let emailId: Int
+    let sender: String?
+    let subject: String?
+    let parsed: Okunan
+    let matchedCard: String?
+    let needsReview: String?   // neden kendiliğinden eklenemedi (eposta.js / tools.js emailItem)
+    let body: String?
+    var id: Int { emailId }
+}

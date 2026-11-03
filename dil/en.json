@@ -601,5 +601,16 @@
  "Sırala": "Sort",
  "Kategorisiz": "Uncategorized",
  "Sırala ve süz": "Sort and filter",
- "Sıfırla": "Reset"
+ "Sıfırla": "Reset",
+ "E-postadan gelenler": "From bank emails",
+ "{0} onay bekliyor": "{0} to review",
+ "Banka e-postası": "Bank email",
+ "Göster": "Show",
+ "Yok say": "Ignore",
+ "•••• {0} ile biten kart tanımlı değil": "No card ending in {0}",
+ "Kart okunamadı": "Card couldn't be read",
+ "Yabancı para ({0})": "Foreign currency ({0})",
+ "Tutar okunamadı": "Amount couldn't be read",
+ "Tarih okunamadı": "Date couldn't be read",
+ "İade / iptal bildirimi": "Refund / cancellation"
 }

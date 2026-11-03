@@ -13,6 +13,7 @@ final class Model: ObservableObject {
     @Published var showWelcome = false
     @Published var askMove = false          // girişsiz kullanımın verisi hesaba taşınsın mı (sync.js "Hesabıma taşı")
     @Published private(set) var country = "TR"   // hesabın ülkesi; ana para birimi ondan (para.js)
+    @Published private(set) var epostalar: [Eposta] = []   // banka e-postalarından onay bekleyenler (Harcamalar)
     let motor: Motor?
     let startupError: String?
     let abonelik: Abonelik                       // CashFollow Premium (ekranlara ayrı environmentObject olarak verilir)
@@ -45,6 +46,7 @@ final class Model: ObservableObject {
     private func open(_ userId: String?) {
         guard let motor else { return }
         let file = Depo.stateFile(userId)
+        epostalar = []
         motor.box.json = Depo.read(file) ?? motor.defaultState
         motor.box.onSave = { [weak self] json in
             Depo.write(file, json)
@@ -130,6 +132,7 @@ final class Model: ObservableObject {
     func refresh() async {
         async let market: Void = refreshMarket()
         await run { try await $0.pull(); try await $0.push() }
+        await checkInbox()
         await market
         await sendProfile()
         await abonelik.yenile()
@@ -145,6 +148,42 @@ final class Model: ObservableObject {
         if (try? await Auth.updateProfile(s, tz: tz, lang: Dil.kod)) != nil {
             UserDefaults.standard.set(profil, forKey: "para.profil.\(uid)")
         }
+    }
+
+    // ── Banka e-postaları (yalnızca Türkiye; web'deki checkInbox) ──────────────
+
+    // Okunabilen ve kartı bulunan e-postalar harcama olarak eklenir (ilk kişiye); kalanlar Harcamalar'da onaya bekler.
+    // Önce sunucuda işlendi yapılır: başka cihaz aynı anda okuduysa harcama iki kez eklenmez.
+    private var inboxBusy = false
+    private func checkInbox() async {
+        guard marketsAllowed, let motor, let s = senkron, s.pulled, !inboxBusy else { return }
+        inboxBusy = true
+        defer { inboxBusy = false }
+        do {
+            let rows = try await s.inboxPending()
+            guard senkron === s else { return }
+            motor.setInbox(rows: rows)
+            let ready = (try motor.run("list_inbox") as EpostaListesi).emails.filter { $0.needsReview == nil }.map(\.emailId)
+            if !ready.isEmpty {
+                let granted = try await s.inboxClaim(ready)
+                guard senkron === s else { try? await s.inboxRelease(granted); return }
+                motor.setInbox(rows: rows, granted: granted)
+                if let out = try? motor.run("check_inbox") as EpostaSonucu, !out.added.isEmpty {
+                    Analitik.olay("inbox_added", ["count": out.added.count])
+                }
+                let released = motor.inboxReleased()
+                if !released.isEmpty { try? await s.inboxRelease(released) }
+            }
+            epostalar = (try motor.run("list_inbox", ["include_body": true]) as EpostaListesi).emails
+        } catch {
+            // Tablo kurulmamış ya da ağ yok: sonraki yenilemede yeniden denenir
+        }
+    }
+
+    // Onay bekleyen e-posta eklendi ya da yok sayıldı: sunucuda işlendi yapılır
+    func epostaBitti(_ id: Int) async {
+        epostalar.removeAll { $0.emailId == id }
+        _ = try? await senkron?.inboxClaim([id])
     }
 
     func schedulePush() {
