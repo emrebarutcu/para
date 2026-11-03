@@ -1,7 +1,8 @@
 import SwiftUI
 
 // Harcamalar: kişiye göre süzme, süren / biten taksitler, arama, ekleme ve silme (list_purchases, add_purchase,
-// delete_purchase; web'deki Harcamalar sekmesi)
+// delete_purchase; web'deki Harcamalar sekmesi). Sağ üstteki filtre düğmesi sıralama ve süzgeçleri alttan açar
+// (HarcamaFiltresi).
 struct HarcamalarEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var search = ""
@@ -10,6 +11,11 @@ struct HarcamalarEkrani: View {
     @State private var bitenler = false
     @State private var gorunum = "liste"           // liste | kategori
     @State private var silinecek: Harcama?
+    @State private var filtre = false
+    @AppStorage("harcama.sirala") private var sirala = "next_payment"
+    @AppStorage("harcama.yon") private var yon = "asc"
+    @State private var kart: String?             // kartın kimliği ya da "nakit"
+    @State private var tur: String?              // installment | single | repeat | bnpl
 
     var body: some View {
         NavigationStack {
@@ -36,11 +42,11 @@ struct HarcamalarEkrani: View {
                         }
                     }
                 } else {
-                    if let k = kategori {
+                    if let ozet = suzgecOzeti {
                         HStack {
-                            Text(L("Kategori: {0}", k.ad)).font(.subheadline.weight(.semibold))
+                            Text(ozet).font(.subheadline.weight(.semibold)).lineLimit(1)
                             Spacer()
-                            Button { withAnimation { kategori = nil } } label: {
+                            Button { withAnimation { kategori = nil; kart = nil; tur = nil } } label: {
                                 Label(L("Hepsini göster"), systemImage: "xmark.circle.fill").font(.subheadline)
                             }
                             .foregroundStyle(Tema.metin2)
@@ -63,6 +69,17 @@ struct HarcamalarEkrani: View {
             }
             .navigationTitle(L("Harcamalar"))
             .sayfaZemini()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { filtre = true } label: {
+                        Image(systemName: suzgecOzeti != nil ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityLabel(L("Sırala ve süz"))
+                }
+            }
+            .sheet(isPresented: $filtre) {
+                HarcamaFiltresi(sirala: $sirala, yon: $yon, kart: $kart, tur: $tur, kategori: $kategori)
+            }
             .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
             .searchable(text: $search, prompt: Text(L("Ara")))
             .yenilenebilir(model)
@@ -78,7 +95,8 @@ struct HarcamalarEkrani: View {
     }
 
     private func liste(durum: String, bos: String) -> some View {
-        Okunan(tool: "list_purchases", args: args(durum), key: "\(durum)|\(search)|\(kisi)|\(kategori?.id ?? "-")") { (l: HarcamaListesi) in
+        Okunan(tool: "list_purchases", args: args(durum),
+               key: "\(durum)|\(search)|\(kisi)|\(kategori?.id ?? "-")|\(kategori == nil)|\(sirala)|\(yon)|\(kart ?? "-")|\(tur ?? "-")") { (l: HarcamaListesi) in
             if l.purchases.isEmpty {
                 Kart { Text(bos).foregroundStyle(Tema.metin3) }
             } else {
@@ -100,7 +118,22 @@ struct HarcamalarEkrani: View {
         if !search.trimmingCharacters(in: .whitespaces).isEmpty { a["search"] = search }
         if !kisi.isEmpty { a["person"] = kisi }
         if let k = kategori { a["category"] = k.id.map { $0 as Any } ?? NSNull() }
+        if let kart { a["card"] = kart }
+        if let tur { a["kind"] = tur }
+        a["sort"] = sirala
+        a["order"] = yon
         return a
+    }
+
+    // Seçili süzgeçler tek satırda: "Bonus · Taksitli · Market"; yoksa nil
+    private var suzgecOzeti: String? {
+        var parca: [String] = []
+        if let kart {
+            parca.append(kart == "nakit" ? L("Nakit") : ((try? model.read("list_cards") as KartListesi)?.cards.first { $0.id == kart }?.name ?? kart))
+        }
+        if let tur { parca.append(HarcamaFiltresi.turAdi(tur)) }
+        if let k = kategori { parca.append(k.ad) }
+        return parca.isEmpty ? nil : parca.joined(separator: " · ")
     }
 }
 
