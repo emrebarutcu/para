@@ -159,6 +159,23 @@ function defaultCardFor(state) {
 }
 
 // ---------- Görünümler ----------
+// Harcamanın türü (list_purchases kind): tekrarlayan, şimdi al sonra öde, taksitli ya da tek çekim
+const PURCHASE_KINDS = ["installment", "single", "repeat", "bnpl"];
+function purchaseKind(p) {
+  if (T.repeats(p)) return "repeat";
+  if (T.bnpl(p)) return "bnpl";
+  return T.planLength(p) > 1 ? "installment" : "single";
+}
+
+// list_purchases sort: artan yönde karşılaştırma (order "desc" tersine çevirir). Sıradaki ödemesi olmayan (biten)
+// harcama, artan sırada sona kalır; tarihsiz (Excel'den gelen) harcamanın alışveriş tarihi en eski sayılır.
+const PURCHASE_SORTS = {
+  next_payment: (a, b) => (a.nextPayment?.date ?? "9").localeCompare(b.nextPayment?.date ?? "9"),
+  added: (a, b, added) => (added.get(a.id) ?? 0) - (added.get(b.id) ?? 0),
+  date: (a, b) => (a.date ?? "").localeCompare(b.date ?? ""),
+  amount: (a, b) => a.total - b.total,
+};
+
 function knownPurchases(state) {
   const known = new Set(state.people.map(p => p.id));
   return state.installments.filter(p => known.has(p.personId));
@@ -1231,6 +1248,9 @@ export const TOOLS = [
       card: { type: ["string", "null"], description: 'Only this card (id, name or last 4); "nakit" for cash.' },
       search: S.str("Case-insensitive text to look for in the description."),
       category: { ...PURCHASE_FIELDS.category, description: 'Only this category (id); null = purchases without a category.' },
+      kind: { type: "string", enum: PURCHASE_KINDS, description: 'Only this kind: "installment" (2+ monthly installments), "single" (one payment), "repeat" (recurring) or "bnpl" (Pay in 4).' },
+      sort: { type: "string", enum: Object.keys(PURCHASE_SORTS), description: 'Order: "next_payment" (default; soonest first), "added" (when it was entered; newest first), "date" (purchase date; newest first) or "amount" (largest first).' },
+      order: { type: "string", enum: ["asc", "desc"], description: 'Reverse the default direction of sort: "asc" = oldest / smallest / soonest first, "desc" = newest / largest / latest first.' },
       limit: S.int("Maximum number of purchases (default 100).", 1, 1000),
     }),
     annotations: READ,
@@ -1238,18 +1258,28 @@ export const TOOLS = [
       const state = await ctx.load();
       const status = args.status ?? "active";
       if (!["active", "done", "all"].includes(status)) fail('status must be "active", "done" or "all".');
+      const kind = args.kind ?? null;
+      if (kind !== null && !PURCHASE_KINDS.includes(kind)) fail(`kind must be one of ${PURCHASE_KINDS.join(", ")}.`);
+      const sort = args.sort ?? "next_payment";
+      if (!PURCHASE_SORTS[sort]) fail(`sort must be one of ${Object.keys(PURCHASE_SORTS).join(", ")}.`);
+      const order = args.order ?? (sort === "next_payment" ? "asc" : "desc");
+      if (order !== "asc" && order !== "desc") fail('order must be "asc" or "desc".');
       const person = args.person !== undefined ? findPerson(state, args.person) : null;
       const card = args.card !== undefined ? findCard(state, args.card) : undefined;
       const q = args.search ? T.normalize(args.search) : "";
       const category = args.category !== undefined ? categoryArg(args.category) : undefined;
+      // Eklenme sırası: veri dizisindeki yer (yeni harcama sona eklenir; eşitlemede tablolar oluşturulma sırasıyla gelir)
+      const added = new Map(state.installments.map((p, i) => [p.id, i]));
+      const dir = order === "asc" ? 1 : -1;
       const all = knownPurchases(state)
         .filter(p => category === undefined || (category ? p.category === category : !K.valid(p.category)))
         .filter(p => !person || p.personId === person.id)
         .filter(p => card === undefined || (card ? p.cardId === card.id : !cardById(state, p.cardId)))
         .filter(p => !q || T.normalize(p.desc).includes(q))
+        .filter(p => !kind || purchaseKind(p) === kind)
         .map(p => purchaseView(state, p, ctx.today))
         .filter(v => status === "all" || v.status === status)
-        .sort((a, b) => (a.nextPayment?.date ?? "9").localeCompare(b.nextPayment?.date ?? "9")
+        .sort((a, b) => dir * PURCHASE_SORTS[sort](a, b, added)
           || (b.lastPaymentDate ?? "").localeCompare(a.lastPaymentDate ?? "")
           || a.description.localeCompare(b.description, "tr"));
       const limit = intArg(args.limit, "limit", 1, 1000, 100);

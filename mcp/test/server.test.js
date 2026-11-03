@@ -1445,3 +1445,30 @@ test("asistan Premium ister: abonesi olmayana araç çağrısı açıklar, bağl
   // Bilinmeyen araç Premium'dan önce söylenir
   assert.equal((await client(sb, "free").rpc("tools/call", { name: "yok" })).body.error.code, -32602);
 });
+
+test("list_purchases: sıralama (sıradaki ödeme, eklenme, alışveriş tarihi, tutar) ve tür süzgeci", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  await c.call("add_card", { name: "A", cutoff_day: 12, due_day: 22 });
+  // Eklenme sırası: Telefon, Kahve, Kira (tekrarlayan), Ayakkabı
+  await c.call("add_purchase", { description: "Telefon", amount: 1200, card: "A", date: "2026-09-01", installments: 6 });
+  await c.call("add_purchase", { description: "Kahve", amount: 50, card: "A", date: "2026-10-15" });
+  assert.ok((await c.call("add_purchase", { description: "Kira", amount: 900, card: "nakit", date: "2026-10-01", repeat: 0 })).purchase);
+  await c.call("add_purchase", { description: "Ayakkabı", amount: 300, card: "A", date: "2026-08-20", installments: 3 });
+  const names = async args => (await c.call("list_purchases", { status: "all", ...args })).purchases.map(p => p.description);
+
+  assert.deepEqual(await names({ sort: "added" }), ["Ayakkabı", "Kira", "Kahve", "Telefon"]);
+  assert.deepEqual(await names({ sort: "added", order: "asc" }), ["Telefon", "Kahve", "Kira", "Ayakkabı"]);
+  assert.deepEqual(await names({ sort: "date" }), ["Kahve", "Kira", "Telefon", "Ayakkabı"]);
+  assert.deepEqual(await names({ sort: "amount" }), ["Telefon", "Kira", "Ayakkabı", "Kahve"]);
+  assert.deepEqual(await names({ sort: "amount", order: "asc" }), ["Kahve", "Ayakkabı", "Kira", "Telefon"]);
+  const next = (await c.call("list_purchases", { status: "all" })).purchases.map(p => p.nextPayment?.date ?? "9");
+  assert.deepEqual(next, [...next].sort());
+
+  assert.deepEqual(await names({ kind: "installment", sort: "added" }), ["Ayakkabı", "Telefon"]);
+  assert.deepEqual(await names({ kind: "single" }), ["Kahve"]);
+  assert.deepEqual(await names({ kind: "repeat" }), ["Kira"]);
+  assert.deepEqual(await names({ kind: "bnpl" }), []);
+  assert.match((await c.call("list_purchases", { kind: "x" })).error, /kind must be one of/);
+  assert.match((await c.call("list_purchases", { sort: "x" })).error, /sort must be one of/);
+});
