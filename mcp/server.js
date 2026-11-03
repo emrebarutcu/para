@@ -4,7 +4,7 @@
 // /.well-known/oauth-protected-resource'tan Supabase'in yetkilendirme sunucusunu bulur, kullanıcı
 // cashfollow.app/oauth/consent'te izin verir. Bağımlılığı yoktur; sitenin Worker'ından çağrılır (worker.js).
 import { TOOLS, INSTRUCTIONS, ToolError, todayKey } from "./tools.js";
-import { createStore, getUser } from "./supabase.js";
+import { createStore, getUser, getPremium } from "./supabase.js";
 import { getRates } from "./kur.js";
 import { getPrices, searchFunds } from "./piyasa.js";
 
@@ -69,6 +69,20 @@ export async function userFor(token, cfg, f) {
   return user;
 }
 
+// Asistan bağlantısı CashFollow Premium ister (abonelik.js; iPhone'da cihazdaki araç çağrıları bunun dışında). Sonuç
+// token başına bir dakika saklanır: yeni alınan abonelik en geç bir dakikada açılır.
+const premiums = new Map();
+async function premiumFor(token, cfg, f) {
+  const now = Date.now();
+  const hit = premiums.get(token);
+  if (hit && hit.exp > now) return hit.premium;
+  const premium = await getPremium({ ...cfg, token, fetch: f, now });
+  if (premiums.size > 500) premiums.clear();
+  premiums.set(token, { premium, exp: now + USER_TTL });
+  return premium;
+}
+export const PREMIUM_REQUIRED = "Using CashFollow through an assistant needs CashFollow Premium. The user can subscribe in the CashFollow iPhone app (Settings → CashFollow Premium), then try again.";
+
 const rpcError = (id, code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });
 
 async function callTool(params, ctx) {
@@ -76,6 +90,7 @@ async function callTool(params, ctx) {
   if (!tool) return { error: [-32602, `Unknown tool: ${params?.name}`] };
   const args = params.arguments ?? {};
   if (typeof args !== "object" || Array.isArray(args)) return { error: [-32602, "arguments must be an object"] };
+  if (!(await ctx.premium())) return { result: { content: [{ type: "text", text: PREMIUM_REQUIRED }], isError: true } };
   try {
     const out = await tool.run(args, ctx);
     return { result: { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] } };
@@ -144,6 +159,7 @@ export async function handle(request, env = {}, { fetch: f = fetch, now = () => 
     today: todayKey(now(), user.tz),   // kullanıcının saat diliminde "bugün"
     user,
     home,
+    premium: () => premiumFor(token, cfg, f),
     load: store.load,
     mutate: store.mutate,
     inbox: { ...store.inbox, address: renew => store.inbox.address(renew, cfg.domain) },

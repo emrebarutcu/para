@@ -15,6 +15,7 @@ final class Model: ObservableObject {
     @Published private(set) var country = "TR"   // hesabın ülkesi; ana para birimi ondan (para.js)
     let motor: Motor?
     let startupError: String?
+    let abonelik: Abonelik                       // CashFollow Premium (ekranlara ayrı environmentObject olarak verilir)
     private(set) var constants: Sabitler?
 
     private var senkron: Senkron?
@@ -26,6 +27,7 @@ final class Model: ObservableObject {
         do { motor = try Motor() } catch { failure = error.localizedDescription }
         self.motor = motor
         self.startupError = failure
+        abonelik = Abonelik { [motor] row in motor?.premium(row: row) ?? false }
         constants = motor?.constants()
         motor?.setRates(Depo.read(Depo.url("kur.json")))
         motor?.setPrices(Depo.read(Depo.url("fiyat.json")))
@@ -34,6 +36,7 @@ final class Model: ObservableObject {
         applyCountry()
         showWelcome = session == nil && !Depo.offlineChosen
         if session != nil, let local = Depo.read(Depo.stateFile(nil)), motor?.isBlank(local) == false { askMove = true }
+        abonelik.hesap = { [weak self] in await self?.hesapAnahtari() }
     }
 
     // ── Veri ────────────────────────────────────────────────────────────────────
@@ -129,6 +132,7 @@ final class Model: ObservableObject {
         await run { try await $0.pull(); try await $0.push() }
         await market
         await sendProfile()
+        await abonelik.yenile()
     }
 
     // Cihazın saat dilimi ya da uygulamanın dili değiştiyse hesaba yazılır (asistan "bugün"ü saat dilimine göre
@@ -214,8 +218,15 @@ final class Model: ObservableObject {
         return s.accessToken
     }
 
+    // Girişliyse hesabın kimliği ve geçerli anahtar (Abonelik: hesabın Premium satırı, aboneliği hesaba bağlama)
+    func hesapAnahtari() async -> (id: String, token: String)? {
+        guard let id = session?.userId, let t = try? await token(), session?.userId == id else { return nil }
+        return (id, t)
+    }
+
     // Oturum geçersiz: veri cihazda kalır, aynı hesapla girince kaldığı yerden eşitlenir
     private func expire() {
+        abonelik.cikis()
         Auth.store(nil)
         session = nil
         open(nil)
@@ -265,6 +276,7 @@ final class Model: ObservableObject {
         guard let s = session else { return }
         await Auth.signOut(s)
         Auth.store(nil)
+        abonelik.cikis(s.userId)
         // Hesabın verisi cihazdan silinir (bulutta durur)
         Depo.remove(Depo.stateFile(s.userId))
         Depo.remove(Depo.metaFile(s.userId))
@@ -288,6 +300,7 @@ final class Model: ObservableObject {
         Depo.remove(Depo.metaFile(s.userId))
         UserDefaults.standard.removeObject(forKey: "para.profil.\(s.userId)")
         UserDefaults.standard.removeObject(forKey: "para.tz.\(s.userId)")
+        abonelik.cikis(s.userId)
         session = nil
         syncError = nil
         lastSync = nil

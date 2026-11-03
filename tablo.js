@@ -380,7 +380,16 @@
     return out;
   }
 
-  const api = { TABLES, FIELD, SCHEMA, keyOf, rekey, toState, baseOf, stale, changes, merge, combine };
+  // CashFollow Premium (subscriptions satırı, supabase/tablolar.sql): etkin ya da ödeme ek süresinde ve erişimi
+  // bitmemiş (expires_at boş: süresiz, ör. ilk kullanıcılar). Web, asistan ve iPhone aynı kuralı kullanır.
+  function premium(row, now = Date.now()) {
+    if (!row || (row.status !== "active" && row.status !== "grace")) return false;
+    if (row.expires_at == null) return true;
+    const t = Date.parse(row.expires_at);
+    return Number.isFinite(t) && t > now;
+  }
+
+  const api = { TABLES, FIELD, SCHEMA, keyOf, rekey, toState, baseOf, stale, changes, merge, combine, premium };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Tablo = api;
 })(this);

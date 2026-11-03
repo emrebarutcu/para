@@ -124,7 +124,7 @@ struct EkleFormu: View {
         case .harcama: HarcamaFormu()
         case .hareket(let t): HareketFormu(tur: t)
         case .borc(let t): BorcFormu(baslangic: t)
-        case .kart: KartFormu(card: nil)
+        case .kart: YeniKart()
         }
     }
 }

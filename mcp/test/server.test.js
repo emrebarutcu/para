@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handle } from "../server.js";
+import { handle, PREMIUM_REQUIRED } from "../server.js";
 import { clearMarket } from "../piyasa.js";
 import Tablo from "../../tablo.js";
 
@@ -18,7 +18,10 @@ const FUNDS = {
 };
 const STOCKS = { THYAO: { symbol: "THYAO", last: 250, basePrice: 240, dayClose: 240, updateDate: "2026-10-16T18:10:00.000+03" } };
 function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { id: "u2", email: "x@y.z" } } } = {}) {
-  const db = { people: [], cards: [], purchases: [], entries: [], debts: [], inbox_messages: [], inbox_addresses: [] };
+  const db = {
+    people: [], cards: [], purchases: [], entries: [], debts: [], inbox_messages: [], inbox_addresses: [],
+    subscriptions: [{ user_id: "u1", source: "grandfathered", status: "active", expires_at: null }, { user_id: "u2", source: "grandfathered", status: "active", expires_at: null }],
+  };
   const rates = { down: false };
   let clock = 0;
   const stamp = () => new Date(Date.UTC(2026, 9, 18, 9, 0, 0, ++clock)).toISOString().replace("Z", "+00:00");
@@ -1423,4 +1426,22 @@ test("aktarımlar: alış / satış gelir değil; serbest nakitte para piyasası
   const before = (await c.call("get_assets")).totalAssetsTry;
   await c.call("add_entry", { asset: "TRY", direction: "in", amount: 7000, description: "Prim", date: "2026-11-02" });
   assert.equal((await c.call("get_assets")).totalAssetsTry, before);
+});
+
+test("asistan Premium ister: abonesi olmayana araç çağrısı açıklar, bağlantı ve araç listesi çalışır (8.2)", async () => {
+  const sb = fakeSupabase({ users: { free: { id: "u3" }, ended: { id: "u4" }, paid: { id: "u5" } } });
+  const day = 86_400_000;
+  sb.db.subscriptions.push(
+    { user_id: "u4", source: "appstore", status: "expired", expires_at: new Date(Date.now() - day).toISOString() },
+    { user_id: "u5", source: "appstore", status: "active", expires_at: new Date(Date.now() + 30 * day).toISOString() },
+  );
+  for (const token of ["free", "ended"]) {
+    const c = client(sb, token);
+    assert.ok((await c.rpc("initialize", {})).body.result.instructions.includes("CashFollow Premium"));
+    assert.ok((await c.rpc("tools/list", {})).body.result.tools.length > 10);
+    assert.deepEqual(await c.call("list_cards"), { error: PREMIUM_REQUIRED });
+  }
+  assert.ok(Array.isArray((await client(sb, "paid").call("list_cards")).cards));
+  // Bilinmeyen araç Premium'dan önce söylenir
+  assert.equal((await client(sb, "free").rpc("tools/call", { name: "yok" })).body.error.code, -32602);
 });

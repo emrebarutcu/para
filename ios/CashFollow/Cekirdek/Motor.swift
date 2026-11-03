@@ -205,6 +205,9 @@ final class Motor {
     func fromRows(state: String, rows: String) throws -> String { try sync("fromRows", [state, rows]).toString() }
     func merge(state: String, base: String, rows: String) throws -> String { try sync("merge", [state, base, rows]).toString() }
     func combine(account: String, local: String) throws -> String { try sync("combine", [account, local]).toString() }
+    func premium(row: String?, now: Date = Date()) -> Bool {
+        (try? sync("premium", [row.map { $0 as Any } ?? NSNull(), now.timeIntervalSince1970 * 1000]).toBool()) ?? false
+    }
 }
 
 struct Sabitler: Decodable {

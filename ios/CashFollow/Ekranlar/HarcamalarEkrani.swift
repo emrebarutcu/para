@@ -262,6 +262,7 @@ struct HarcamaDetayi: View {
 // önce → sonra, boşta kalan nakit, kalan limit ve ilk ödemesi en geç gelen kart önerisi.
 struct HarcamaFormu: View {
     @EnvironmentObject private var model: Model
+    @EnvironmentObject private var abonelik: Abonelik
     @Environment(\.dismiss) private var dismiss
     var duzenle: Harcama? = nil
     var ornek: (tutar: String, ad: String, taksit: Int)? = nil   // yalnızca ekran görüntüleri (-galeri 3)
@@ -360,7 +361,10 @@ struct HarcamaFormu: View {
                         }
                     }
 
-                    if duzenle == nil, let sim { AlabilirMiyim(sim: sim, secili: card, tekrar: tekrar, cards: cards) { card = $0 } }
+                    if duzenle == nil, let sim {
+                        if abonelik.premium { AlabilirMiyim(sim: sim, secili: card, tekrar: tekrar, cards: cards) { card = $0 } }
+                        else { PremiumKilidi(baslik: L("Alabilir miyim?"), aciklama: L("Bu harcamanın önümüzdeki aylara ve boşta kalan nakdine etkisi; ilk ödemesi en geç gelen kart."), neden: "afford") }
+                    }
                     else if let p = preview { duzenlemeOnizlemesi(p) }
                     Kart {
                         DatePicker(L("Tarih"), selection: $date, displayedComponents: .date)
@@ -500,7 +504,7 @@ struct HarcamaFormu: View {
             if duzenle == nil { sonKart = card }
             if bnpl { sonBnpl = saglayici }
             Analitik.olay(duzenle == nil ? "purchase_added" : "purchase_edited",
-                          ["installments": tekrar ? 1 : bnpl ? 4 : count, "repeat": tekrar, "bnpl": bnpl, "cash": card == "nakit", "afford_shown": sim != nil])
+                          ["installments": tekrar ? 1 : bnpl ? 4 : count, "repeat": tekrar, "bnpl": bnpl, "cash": card == "nakit", "afford_shown": sim != nil && abonelik.premium])
             dismiss()
         } catch {
             self.error = error.localizedDescription

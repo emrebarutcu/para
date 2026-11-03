@@ -130,6 +130,12 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
+- **8.2.0** — **CashFollow Premium** (haftalık / aylık / yıllık App Store aboneliği; yıllıkta 1 hafta ücretsiz).
+  Ücretsiz sürüm 2 kart ve 1 kişi; Akış, "Alabilir miyim?", içgörüler, Varlığın seyri, geri ödeme planı ve asistan
+  bağlantısı Premium. **Yayından önce** `supabase/gecis/8.2.0.sql` çalıştırılır: `subscriptions` tablosu (kullanıcı
+  yalnızca okur) ve o ana kadar açılmış bütün hesaplara ömür boyu Premium. Çalışmazsa asistan herkese "Premium gerekli"
+  der. Worker'a gizli anahtarlar ve App Store Connect kurulumu: yukarıda "Abonelik". MCP: araç çağrısı Premium ister
+  (`initialize` ve `tools/list` çalışır); yönergelerde satır var.
 - **8.1.0** — **ABD uyumu.** **Döner kredi**: kartın yıllık faizi (`cards.apr`, yalnızca ABD hesabında girilir). Elle
   ödenen ("Ben işaretlerim") APR'li kartta ekstrenin son ödeme gününe kadar ödenmeyen kalanı sonraki ekstreye devreder,
   sonraki kesimde aylık faiz (APR / 12) işler; asgari ödeme (40 $ ya da bakiyenin %1'i + faiz) ödendiyse gecikme sayılmaz
@@ -322,9 +328,56 @@ yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; ayn�
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
   6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir). `en-*` İngilizce (ABD örnek
   verisi), ötekiler Türkçe.
-- **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı): e-posta adresi ve diğer finansal bilgi
-  toplanır, kullanıcıya bağlıdır, amaç uygulamanın işlevi, takip yok. PostHog anahtarı girilirse (analitik açılır) ürün
-  etkileşimi de eklenir — hem formda hem dosyada.
+- **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı): e-posta adresi, diğer finansal bilgi ve
+  satın alma geçmişi (Purchases: Premium aboneliği) toplanır, kullanıcıya bağlıdır, amaç uygulamanın işlevi, takip yok.
+  PostHog anahtarı girilirse (analitik açılır) ürün etkileşimi de eklenir — hem formda hem dosyada.
+
+#### Abonelik (CashFollow Premium)
+
+Haftalık, aylık, yıllık otomatik yenilenen abonelik (StoreKit 2, `Uygulama/Abonelik.swift`, ödeme ekranı
+`Ekranlar/PremiumEkrani.swift`: önde yapay zekâ asistanı). Fiyat ve deneme App Store Connect'te; kodda fiyat yok. Asistanı
+bağlama iPhone'da Ayarlar → CashFollow Premium → Yapay zekâ asistanı (`Ekranlar/AsistanEkrani.swift`; web'deki Yapay zekâ
+penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
+
+- **Ücretsiz sürüm:** 2 kart, yalnızca kullanıcının kendisi (1 kişi), Özet, harcamalar ve taksitler, borçlar
+  (`Abonelik.ucretsizKart`, `ucretsizKisi`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir miyim?",
+  içgörüler, Varlığın seyri, kart borcu geri ödeme planı, asistan (MCP) bağlantısı. Sınırı aşan eski kart ve kişiler kalır;
+  yalnızca yenisi eklenemez. Web şimdilik kilitsiz (Stripe sonra).
+- **Premium kimde:** cihazdaki geçerli App Store aboneliği (girişsiz de) ya da hesabın `subscriptions` satırı (kural
+  `tablo.js premium`: etkin ya da ödeme ek süresinde ve bitiş tarihi geçmemiş; bitişi boş satır süresiz). 8.2.0'dan önce
+  açılmış hesaplar ömür boyu Premium'dur (`source = grandfathered`).
+- **Sunucu** (`mcp/abonelik.js`): uygulama satın alma / geri yüklemeden sonra işlem kimliğini `POST /api/abonelik`'e
+  gönderir; App Store `POST /api/appstore`'a bildirim (Server Notifications V2) yollar. İkisinde de durum App Store Server
+  API'ye sorulur (önce production, yoksa sandbox) ve satırı service role yazar. Girişliyken alınan abonelik hesaba
+  `appAccountToken` (kullanıcı kimliği) ile bağlıdır; aynı abonelik başka hesaba bağlanamaz (409).
+- **Asistan** araç çağrısında Premium'a bakar (`mcp/server.js`, bir dakika önbellek); iPhone'un cihazdaki araç çağrıları
+  bunun dışındadır.
+
+Bir kez yapılacaklar:
+
+1. App Store Connect → İş → **Anlaşmalar**: Paid Applications (banka ve vergi bilgisi). Bu olmadan sandbox'ta bile ürün gelmez.
+2. Uygulama → Abonelikler → grup **CashFollow Premium** (EN ve TR görünen ad). Ürünler, seviye sırasıyla:
+   | Ürün kimliği | Süre | ABD fiyatı | Tanıtım teklifi |
+   | --- | --- | --- | --- |
+   | `app.cashfollow.ios.premium.yearly` | 1 yıl | $39.99 | 1 hafta ücretsiz |
+   | `app.cashfollow.ios.premium.monthly` | 1 ay | $6.99 | — |
+   | `app.cashfollow.ios.premium.weekly` | 1 hafta | $2.99 | — |
+
+   Her ürüne EN ve TR ad / açıklama ve inceleme görüntüsü (`ekran-goruntuleri` dalında `en-ucretsiz-galeri7-light.png`).
+   Öteki ülkelerin fiyatlarını App Store ABD fiyatından kendisi hesaplar.
+3. Uygulama → App Information → **App Store Server Notifications**: production ve sandbox adresi
+   `https://cashfollow.app/api/appstore`, sürüm 2.
+4. Kullanıcılar ve Erişim → Entegrasyonlar → **In-App Purchase** → anahtar oluştur, `.p8`'i indir. Cloudflare → Workers →
+   `para` → Settings → Variables and Secrets'a **Secret** olarak: `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID` (Issuer ID,
+   App Store Connect API sayfasında), `APPSTORE_KEY_P8` (`.p8`'in bütün içeriği), `SUPABASE_SERVICE_KEY` (Supabase →
+   Settings → API Keys → secret / service_role; eposta Worker'ındakiyle aynı). Biri eksikse uçlar 503 verir; uygulama
+   cihazdaki aboneliğe güvenir, asistan açılmaz.
+5. İlk abonelikler uygulama sürümüyle birlikte incelemeye gönderilir (sürüm sayfasında "In-App Purchases and
+   Subscriptions" bölümüne eklenir).
+
+Deneme: TestFlight'taki alımlar sandbox'tır, ücret alınmaz; yıllık 1 hafta yerine birkaç dakikada yenilenir. Satın
+alınca Supabase'te `subscriptions` satırı (`environment = Sandbox`) ve asistanın açıldığı görülür. Örnek modunda
+(`-ornek`) Premium açıktır, `-ucretsiz` ile kilitler, `-galeri 7` ile ödeme ekranı, `-galeri 8` ile asistan ekranı görünür.
 
 ---
 

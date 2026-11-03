@@ -3,6 +3,7 @@ import SwiftUI
 // Ayarlar: hesap ve eşitleme, ülke, nakit (dönem başı, nakit sayılanlar), kişiler, sürüm
 struct AyarlarEkrani: View {
     @EnvironmentObject private var model: Model
+    @EnvironmentObject private var abonelik: Abonelik
     @Environment(\.dismiss) private var dismiss
     @State private var login = false
     @State private var confirmLogout = false
@@ -11,6 +12,7 @@ struct AyarlarEkrani: View {
     @State private var silmeHatasi: String?
     @State private var newPerson = ""
     @State private var addingPerson = false
+    @State private var kisiSiniri = false
     @State private var renaming: Kisi?
     @State private var renameText = ""
     @State private var deleting: Kisi?
@@ -22,6 +24,8 @@ struct AyarlarEkrani: View {
     var body: some View {
         NavigationStack {
             List {
+                PremiumBolumu()
+
                 Section {
                     if let s = model.session {
                         Satir(title: L("Hesap"), value: s.email)
@@ -86,7 +90,11 @@ struct AyarlarEkrani: View {
                                 if l.people.count > 1 { Button(L("Sil"), role: .destructive) { deleting = p } }
                             }
                         }
-                        Button(L("Kişi ekle")) { newPerson = ""; addingPerson = true }
+                        Button(L("Kişi ekle")) {
+                            // Ücretsiz sürümde yalnızca kullanıcının kendisi (Abonelik.ucretsizKisi)
+                            if abonelik.premium || l.people.count < Abonelik.ucretsizKisi { newPerson = ""; addingPerson = true }
+                            else { kisiSiniri = true }
+                        }
                     }
                     HataMetni(text: error)
                 } header: { Text(L("Kişiler")) } footer: {
@@ -111,6 +119,7 @@ struct AyarlarEkrani: View {
             .navigationTitle(L("Ayarlar"))
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Bitti")) { dismiss() } } }
             .sheet(isPresented: $login) { GirisEkrani(welcome: false) }
+            .sheet(isPresented: $kisiSiniri) { PremiumEkrani(neden: "person_limit") }
             .confirmationDialog(L("Hesabın ve bütün verilerin silinsin mi?"), isPresented: $hesapSil, titleVisibility: .visible) {
                 Button(L("Hesabı kalıcı olarak sil"), role: .destructive) {
                     siliniyor = true

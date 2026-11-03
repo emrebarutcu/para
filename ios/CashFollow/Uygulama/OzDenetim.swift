@@ -95,6 +95,16 @@ enum OzDenetim {
             let _: Borclar = try m.run("list_debts")
             m.setHome("TRY")
 
+            // CashFollow Premium: hesabın satırı (tablo.js premium, köprüden), ürünler ve ücretsiz sürümün sınırları
+            let gun: TimeInterval = 86_400
+            let iso = { (d: Date) in ISO8601DateFormatter().string(from: d) }
+            try check(m.premium(row: #"{"source":"grandfathered","status":"active","expires_at":null}"#), "Premium: ilk kullanıcı")
+            try check(m.premium(row: #"{"source":"appstore","status":"active","expires_at":"\#(iso(Date().addingTimeInterval(7 * gun)))"}"#), "Premium: etkin")
+            try check(!m.premium(row: #"{"source":"appstore","status":"active","expires_at":"\#(iso(Date().addingTimeInterval(-gun)))"}"#), "Premium: süresi bitmiş")
+            try check(!m.premium(row: #"{"source":"appstore","status":"revoked","expires_at":null}"#) && !m.premium(row: nil), "Premium: iade / satır yok")
+            try check(Abonelik.kimlikler.count == 3 && Abonelik.kimlikler.allSatisfy { $0.hasPrefix("app.cashfollow.ios.premium.") }, "Premium ürünleri")
+            try check(Abonelik.ucretsizKart == 2 && Abonelik.ucretsizKisi == 1, "ücretsiz sürümün sınırları")
+
             finish("OZ-DENETIM TAMAM", code: 0)
         } catch {
             finish("OZ-DENETIM HATA: \(error)", code: 1)

@@ -397,6 +397,25 @@ select d.user_id,
 from cashflow_data d;
 */
 
+-- ── Abonelik (8.2) ───────────────────────────────────────────────────────────
+-- CashFollow Premium: hesap başına bir satır. Kullanıcı yalnızca okur; App Store'dan gelen durumu Worker yazar
+-- (service role, mcp/abonelik.js). expires_at erişimin bittiği an (boş: süresiz); Premium kuralı tablo.js premium.
+-- 8.2.0'dan önce açılmış hesaplar ömür boyu Premium'dur (grandfathered; supabase/gecis/8.2.0.sql).
+create table if not exists subscriptions (
+  user_id                 uuid primary key references auth.users on delete cascade,
+  source                  text not null check (source in ('appstore', 'grandfathered', 'stripe')),
+  product_id              text,
+  original_transaction_id text unique,
+  environment             text check (environment in ('Production', 'Sandbox')),
+  status                  text not null check (status in ('active', 'grace', 'billing_retry', 'expired', 'revoked')),
+  expires_at              timestamptz,
+  auto_renew              boolean,
+  updated_at              timestamptz not null default now()
+);
+alter table subscriptions enable row level security;
+drop policy if exists "own subscription read" on subscriptions;
+create policy "own subscription read" on subscriptions for select using (auth.uid() = user_id);
+
 -- ── Hesap silme (8.x) ─────────────────────────────────────────────────────────
 create or replace function public.delete_my_account() returns void
 language plpgsql
