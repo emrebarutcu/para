@@ -93,7 +93,8 @@ struct HarcamaFiltresi: View {
                 ToolbarItem(placement: .confirmationAction) { Button(L("Bitti")) { dismiss() } }
             }
         }
-        .presentationDetents([.medium, .large])
+        // Neredeyse tam ekran açılır; üstte arkadaki listenin bir şeridi görünür kalır
+        .presentationDetents([.fraction(0.88)])
         .presentationDragIndicator(.visible)
     }
 
