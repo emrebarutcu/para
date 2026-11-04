@@ -387,7 +387,7 @@ const els = {
   countrySelect: $("countrySelect"), authCountry: $("authCountry"),
   cashDefBtn: $("cashDefBtn"), cashDefText: $("cashDefText"), cashDefSheet: $("cashDefSheet"), cashDefList: $("cashDefList"),
   cashDefReset: $("cashDefReset"),
-  inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"),
+  inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"), inboxBanks: $("inboxBanks"),
   inboxAddress: $("inboxAddress"),
   aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"), aiPremiumNote: $("aiPremiumNote"),
   aiAppsGroup: $("aiAppsGroup"), aiApps: $("aiApps"),
@@ -5697,7 +5697,14 @@ function emailBody(body) {
   return pre;
 }
 
+// Desteklenen bankalar eposta.js'ten (BANKS): tutar, tarih, son 4 hane ve işyeri okunanlar
+function inboxBanksText() {
+  return `Şimdilik desteklenen bankalar: ${E.BANKS.join(", ")}. Diğer bankaların e-postaları da okunmaya çalışılır; `
+    + "okunamayan Harcamalar'da onaya düşer. Aşağıdaki Bir e-postayı dene ile bankanın e-postasını deneyebilirsin.";
+}
+
 async function openInboxSheet() {
+  els.inboxBanks.textContent = inboxBanksText();
   const loggedIn = !!window.syncGetUser?.();
   els.inboxLoginNote.hidden = loggedIn;
   els.inboxSetup.hidden = !loggedIn;
