@@ -9,6 +9,8 @@ enum Yapilandirma {
     static let gizlilik = URL(string: "https://cashfollow.app/privacy.html")!
     static let kosullar = URL(string: "https://cashfollow.app/terms.html")!
     static let destek = URL(string: "https://cashfollow.app/support.html")!
+    // Banka e-postalarının geldiği alan adı (config.js INBOX_DOMAIN): "<adres>@cashfollow.app"
+    static let inboxDomain = "cashfollow.app"
     // Ürün analitiği ve A/B (PostHog, ABD bölgesi). Proje anahtarı herkese açıktır (phc_…); boşken analitik kapalı
     static let posthogKey = "phc_sEWqvuL259ZcLYGHQXWpnusXvLPMRPF8L4SvAsWHWfPY"
     static let posthogHost = URL(string: "https://us.i.posthog.com")!

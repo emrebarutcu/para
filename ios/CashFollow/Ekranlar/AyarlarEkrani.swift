@@ -107,6 +107,15 @@ struct AyarlarEkrani: View {
                     Text(L("Adını değiştirmek için dokun, silmek için sola kaydır. İlk kişi sensin; diğerlerinin senin kartlarındaki harcamaları sana borç sayılır."))
                 }
 
+                // Banka e-postaları yalnızca Türkiye'de
+                if model.marketsAllowed {
+                    Section {
+                        NavigationLink { EpostaAyarlari() } label: { Text(L("Banka e-postaları")) }
+                    } footer: {
+                        Text(L("Bankanın harcama bildirimleri kendiliğinden harcama olarak eklenir."))
+                    }
+                }
+
                 Section {
                     Toggle(L("Kullanım verisi gönder"), isOn: Binding(get: { Analitik.acik }, set: { Analitik.acik = $0 }))
                 } footer: {
@@ -114,8 +123,8 @@ struct AyarlarEkrani: View {
                 }
 
                 Section {
-                    // İçe aktarma (Excel) ve banka e-postaları yalnızca Türkiye'de
-                    Link(model.marketsAllowed ? L("Web'de aç (içe aktarma, banka e-postaları)") : L("Web'de aç"), destination: Yapilandirma.site)
+                    // İçe aktarma (Excel) yalnızca Türkiye'de
+                    Link(model.marketsAllowed ? L("Web'de aç (içe aktarma)") : L("Web'de aç"), destination: Yapilandirma.site)
                     Link(L("Gizlilik politikası"), destination: Yapilandirma.gizlilik)
                     Link(L("Kullanım koşulları"), destination: Yapilandirma.kosullar)
                     Link(L("Destek"), destination: Yapilandirma.destek)
@@ -217,5 +226,129 @@ struct NakitTanimi: View {
         }
         .navigationTitle(L("Nakit sayılanlar"))
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// Ayarlar → Banka e-postaları (web'deki Banka e-postaları penceresi): kullanıcıya özel adres, desteklenen bankalar,
+// kurulum adımları, şimdi kontrol et, adresi yenile ve bir e-postayı dene (try_bank_email)
+struct EpostaAyarlari: View {
+    @EnvironmentObject private var model: Model
+    @State private var adres: String?
+    @State private var hata: String?
+    @State private var kopyalandi = false
+    @State private var yenileSor = false
+    @State private var kontrol: String?
+    @State private var kontrolEdiliyor = false
+    @State private var deneme = ""
+    @State private var sonuc: Deneme?
+
+    struct Deneme: Decodable {
+        let parsed: Eposta.Okunan
+        let matchedCard: String?
+        let needsReview: String?
+        let wouldAutoAdd: Bool
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Text(L("Sana özel e-posta adresini bankana harcama bildirim adresi olarak ver. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur."))
+                    .font(.footnote).foregroundStyle(Tema.metin2)
+                if let b = model.constants?.inboxBanks, !b.isEmpty {
+                    Text(L("Şimdilik desteklenen bankalar: {0}. Diğer bankaların e-postaları da okunmaya çalışılır; okunamayan Harcamalar'da onaya düşer.", b.joined(separator: ", ")))
+                        .font(.footnote).foregroundStyle(Tema.metin2)
+                }
+            }
+
+            if model.session == nil {
+                Section {
+                    Text(L("Bu özellik bulut senkronizasyonuyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.")).font(.footnote).foregroundStyle(Tema.uyari)
+                }
+            } else {
+                Section {
+                    if let adres {
+                        Text(adres).font(.body.monospaced()).textSelection(.enabled)
+                        Button(kopyalandi ? L("Kopyalandı") : L("Kopyala")) {
+                            UIPasteboard.general.string = adres
+                            kopyalandi = true
+                        }
+                    } else if hata == nil {
+                        ProgressView()
+                    }
+                    HataMetni(text: hata)
+                } header: { Text(L("Adresin")) } footer: {
+                    Text(L("Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir."))
+                }
+
+                Section {
+                    Text(L("1. Kartlar'da her kartın son 4 hanesini gir."))
+                    Text(L("2. Bankanın internet ya da mobil şubesinde harcama bildirimlerinin gideceği e-posta adresini bu adres yap."))
+                    Text(L("3. Banka adresi doğrulamak için e-posta gönderirse Harcamalar'da \"E-postadan gelenler\" altında görünür; Göster ile açıp bağlantıya dokun."))
+                } header: { Text(L("Kurulum")) }
+                .font(.footnote)
+
+                Section {
+                    Button(kontrolEdiliyor ? L("Kontrol ediliyor…") : L("Şimdi kontrol et")) {
+                        kontrolEdiliyor = true
+                        Task {
+                            let n = await model.epostaKontrol()
+                            kontrolEdiliyor = false
+                            kontrol = n == nil ? L("E-postalar okunamadı")
+                                : n! > 0 ? L("E-postadan {0} harcama eklendi", n!)
+                                : model.epostalar.isEmpty ? L("Yeni e-posta yok") : L("{0} e-posta onay bekliyor · Harcamalar", model.epostalar.count)
+                        }
+                    }
+                    .disabled(kontrolEdiliyor)
+                    if let kontrol { Text(kontrol).font(.footnote).foregroundStyle(Tema.metin2) }
+                    Button(L("Adresi yenile"), role: .destructive) { yenileSor = true }
+                }
+            }
+
+            Section {
+                TextEditor(text: $deneme).frame(minHeight: 110).font(.footnote)
+                Button(L("Dene")) { dene() }.disabled(deneme.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if let s = sonuc { denemeSonucu(s) }
+            } header: { Text(L("Bir e-postayı dene")) } footer: {
+                Text(L("Bankadan gelen harcama e-postasının metnini yapıştır; hiçbir şey kaydedilmez."))
+            }
+        }
+        .navigationTitle(L("Banka e-postaları"))
+        .navigationBarTitleDisplayMode(.inline)
+        .task { if model.session != nil, adres == nil { await adresAl(yenile: false) } }
+        .confirmationDialog(L("Adres yenilensin mi? Eski adrese gelen e-postalar artık alınmaz; bankadaki adresi de değiştirmen gerekir."),
+                            isPresented: $yenileSor, titleVisibility: .visible) {
+            Button(L("Adresi yenile"), role: .destructive) { Task { await adresAl(yenile: true) } }
+        }
+    }
+
+    private func adresAl(yenile: Bool) async {
+        hata = nil
+        kopyalandi = false
+        do { adres = try await model.epostaAdresi(yenile: yenile) }
+        catch { hata = (error as? AuthHatasi)?.turkish ?? error.localizedDescription }
+    }
+
+    private func dene() {
+        do {
+            sonuc = try model.read("try_bank_email", ["text": deneme]) as Deneme
+            hata = nil
+        } catch {
+            sonuc = nil
+            hata = error.localizedDescription
+        }
+    }
+
+    @ViewBuilder private func denemeSonucu(_ s: Deneme) -> some View {
+        let o = s.parsed
+        VStack(alignment: .leading, spacing: 6) {
+            Satir(title: L("Tutar"), value: o.amount.map { o.currency == nil || o.currency == Bicim.home ? Bicim.tl($0) : "\($0) \(o.currency ?? "")" } ?? "—")
+            Satir(title: L("Tarih"), value: o.date.map { Bicim.day($0) } ?? "—")
+            Satir(title: L("Taksit"), value: (o.installments ?? 1) > 1 ? L("{0} taksit", o.installments ?? 1) : L("Peşin"))
+            Satir(title: L("İşyeri"), value: o.merchant ?? "—")
+            Satir(title: L("Kart"), value: s.matchedCard ?? o.cardLast4.map { "•••• \($0)" } ?? "—")
+            Text(s.wouldAutoAdd ? L("Kendiliğinden eklenir.") : L("Onaya düşer: {0}", EpostaKarti.neden(s.needsReview, o) ?? ""))
+                .font(.footnote).foregroundStyle(s.wouldAutoAdd ? Tema.iyi : Tema.uyari)
+        }
+        .font(.subheadline)
     }
 }
