@@ -4,8 +4,7 @@ import { handleEmail } from "../src/index.js";
 
 const ENV = { SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_KEY: "sb_secret_abc" };
 
-function mime({ html = false } = {}) {
-  const text = "1234 ile biten kartınızdan 17.10.2026 tarihinde MIGROS işyerinde 1.250,00 TL tutarında harcama yapılmıştır.";
+function mime({ html = false, text = "1234 ile biten kartınızdan 17.10.2026 tarihinde MIGROS işyerinde 1.250,00 TL tutarında harcama yapılmıştır." } = {}) {
   const b64 = Buffer.from(html ? `<html><body><p>${text}</p></body></html>` : text).toString("base64");
   return [
     "From: Banka <bildirim@banka.com.tr>",
@@ -62,6 +61,13 @@ test("HTML e-posta düz metne çevrilir", async () => {
   await handleEmail(message("abc123def456@para.example", mime({ html: true })), ENV, f);
   assert.doesNotMatch(f.calls[0].body.body, /<p>|<html>/);
   assert.match(f.calls[0].body.body, /MIGROS/);
+});
+
+test("adlı HTML varlıkları çözülür; &amp; ile kaçırılan varlık metin olarak kalır", async () => {
+  const f = fakeFetch();
+  const text = "1234 ile biten kartınız ile AK BUFE firmasından 17.10.2026 tarihinde 150,00 TL tutarında işlem ger&ccedil;ekleştirilmiştir. &amp;uuml; &bilinmeyen;";
+  await handleEmail(message("abc123def456@para.example", mime({ html: true, text })), ENV, f);
+  assert.match(f.calls[0].body.body, /işlem gerçekleştirilmiştir\. &uuml; &bilinmeyen;$/);
 });
 
 test("JWT biçimli anahtar Authorization başlığıyla da gönderilir", async () => {

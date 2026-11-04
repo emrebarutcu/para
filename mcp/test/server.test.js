@@ -451,6 +451,18 @@ test("banka e-postaları: otomatik ekleme, onay bekleyen, elle ekleme, yok sayma
   assert.equal(linked.parsed.amount, 99.9);
   assert.equal(linked.parsed.cardLast4, "1234");
   assert.equal(linked.parsed.date, "2026-10-01");
+
+  // Yapı Kredi: işyeri "… kartınız ile X firmasından …" kalıbında; metinde adlı HTML varlıkları (&ccedil;) kalır
+  const yk = await c.call("try_bank_email", {
+    text: "Akıllı Asistan Bilgilendirmesi\nSayın AYŞE YILMAZ,\n1234 ile biten KoçAilem kartınız ile OPET 9000001650-BANPET PE firmasından 01.10.2026 tarihinde 21:00 saatinde 1.500,00 TL tutarında işlem ger&ccedil;ekleştirilmiştir.\nKredi Kartı Kullanılabilir Limitiniz: 99.999,00 TL\nİyi g&uuml;nler dileriz.",
+  });
+  assert.equal(yk.parsed.merchant, "OPET 9000001650-BANPET PE");
+  assert.equal(yk.parsed.amount, 1500);
+  assert.equal(yk.parsed.cardLast4, "1234");
+  assert.equal(yk.parsed.date, "2026-10-01");
+  assert.equal(yk.wouldAutoAdd, true);
+  const yk2 = await c.call("try_bank_email", { text: "1234 ile biten KoçAilem kartınız ile AK BUFE VE KAFETERYA I firmasından 01.10.2026 tarihinde 15:43 saatinde 150,00 TL tutarında işlem gerçekleştirilmiştir." });
+  assert.equal(yk2.parsed.merchant, "AK BUFE VE KAFETERYA I");
 });
 
 test("e-posta adresi ve yenileme", async () => {
