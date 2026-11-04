@@ -612,5 +612,12 @@
  "Yabancı para ({0})": "Foreign currency ({0})",
  "Tutar okunamadı": "Amount couldn't be read",
  "Tarih okunamadı": "Date couldn't be read",
- "İade / iptal bildirimi": "Refund / cancellation"
+ "İade / iptal bildirimi": "Refund / cancellation",
+ "Dönem harcamaları": "Spending by statement",
+ "{0} – {1} · son ödeme {2}": "{0} – {1} · due {2}",
+ "Harcanan": "Spent",
+ "Ekstreye düşen": "On this statement",
+ "Bu dönemde harcama yok.": "No spending in this period.",
+ "Bu dönem": "This period",
+ "Geçen dönem": "Last period"
 }

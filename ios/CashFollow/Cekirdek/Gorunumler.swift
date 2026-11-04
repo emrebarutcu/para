@@ -116,6 +116,35 @@ struct Harcama: Decodable, Identifiable, Hashable {
     let bnpl: SimdiAl?
 }
 
+// Kartın dönem dönem harcamaları (card_statements): yeniden eskiye; ilki bugünün dönemi
+struct KartDonemleri: Decodable {
+    struct Kalem: Decodable, Identifiable, Hashable {
+        let id: String              // harcamanın kimliği (tekrarlayanda her tekrar aynı)
+        let description: String
+        let person: String
+        let personId: String
+        let date: String            // dönemdeki tarihi (tekrarda o tekrarın)
+        let amount: Double          // tam fiyatı
+        let asset: String
+        let installments: Int
+        let categoryName: String?
+        let `repeat`: Harcama.Tekrar?
+        let bnpl: SimdiAl?
+    }
+    struct Donem: Decodable, Identifiable, Hashable {
+        let from: String
+        let cut: String
+        let due: String
+        let current: Bool
+        let spent: Double
+        let statementAmount: Double
+        let count: Int
+        let purchases: [Kalem]
+        var id: String { cut }
+    }
+    let periods: [Donem]
+}
+
 // Şimdi al sonra öde (Pay in 4; taksit.js bnpl): sağlayıcı, ödeme sayısı, çekilenler, sağlayıcıya kalan, sıradaki çekim
 struct SimdiAl: Decodable, Hashable {
     let provider: String

@@ -378,6 +378,46 @@ function cardView(state, c, today) {
   };
 }
 
+// Kartın ekstre dönemleri, yeniden eskiye: { from, cut, due } — from önceki kesimin ertesi günü; kart günleri
+// değiştiyse (history) dönem kendi günleriyle kesilir. Bugünün dönemi ilk sıradadır.
+function cardPeriods(card, today, count) {
+  const out = [];
+  let s = T.statementOf(card, today);
+  for (let i = 0; i < count; i++) {
+    // Önceki ekstrenin kesimi: kesimden geriye, başka ekstreye düşen ilk gün (dönem bir aydan uzun olabilir)
+    let d = T.addDays(s.cut, -1);
+    for (let n = 0; n < 400 && T.statementOf(card, d).cut === s.cut; n++) d = T.addDays(d, -1);
+    out.push({ from: T.addDays(d, 1), cut: s.cut, due: s.due });
+    s = T.statementOf(card, d);
+  }
+  return out;
+}
+
+// Dönemde karta yapılan harcamalar (tarihine göre; tekrarlayanın o dönemdeki tekrarları, bugünden sonrakiler hariç) ve
+// ekstreye düşen taksitler. Döviz / altın harcaması listelenir, toplamlara girmez (buildCashflow gibi).
+function cardPeriodView(state, card, per, today) {
+  const home = homeOf(state);
+  const mine = knownPurchases(state).filter(p => p.cardId === card.id);
+  const items = [];
+  let spent = 0, statement = 0;
+  for (const p of mine) {
+    const homeAsset = T.assetOf(p, home) === home;
+    for (const { date } of R.between(p, per.from, per.cut)) {
+      if (T.repeats(p) && date > today) continue;
+      const amount = T.originalTotal(p);
+      items.push({ ...purchaseView(state, p, today), date, amount: round(amount) });
+      if (homeAsset) spent += amount;
+    }
+    if (homeAsset) statement += T.payments(p, card, per.cut).filter(x => x.key === per.due).reduce((t, x) => t + x.amount, 0);
+  }
+  items.sort((a, b) => b.date.localeCompare(a.date) || a.description.localeCompare(b.description, "tr"));
+  return {
+    from: per.from, cut: per.cut, due: per.due,
+    current: per.from <= today && today <= per.cut,
+    spent: round(spent), statementAmount: round(statement), count: items.length, purchases: items,
+  };
+}
+
 function eventView(state, ev, { items = true } = {}) {
   const v = {
     date: ev.date,
@@ -1367,6 +1407,25 @@ export const TOOLS = [
     async run(args, ctx) {
       const state = await ctx.load();
       return { cards: state.cards.map(c => cardView(state, c, ctx.today)), currency: homeOf(state) };
+    },
+  },
+  {
+    name: "card_statements",
+    title: "Card spending by statement period",
+    description: "A card's spending period by period (dönem dönem), newest first: the current statement period (from the day after the last cutoff to the next cutoff) and past ones. Each period: from, cut (cutoff), due (due date), current, spent (purchases made in the period, in the home currency; a recurring purchase counts each repeat up to today), statementAmount (installments falling on that statement, from all purchases), purchases (each with date = when it was made in the period and amount = its full price).",
+    inputSchema: obj({
+      card: S.str("Card (id, name or last 4)."),
+      periods: S.int("How many periods, current included (default 6).", 1, 36),
+    }, ["card"]),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const card = findCard(state, args.card) ?? fail('card_statements needs a credit card, not "nakit".');
+      const count = intArg(args.periods, "periods", 1, 36, 6);
+      return {
+        card: card.name, cardId: card.id, currency: homeOf(state),
+        periods: cardPeriods(card, ctx.today, count).map(per => cardPeriodView(state, card, per, ctx.today)),
+      };
     },
   },
   {

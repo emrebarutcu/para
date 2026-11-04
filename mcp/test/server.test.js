@@ -1484,3 +1484,32 @@ test("list_purchases: sıralama (sıradaki ödeme, eklenme, alışveriş tarihi,
   assert.match((await c.call("list_purchases", { kind: "x" })).error, /kind must be one of/);
   assert.match((await c.call("list_purchases", { sort: "x" })).error, /sort must be one of/);
 });
+
+test("kartın dönem dönem harcamaları (card_statements)", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);   // bugün 18 Eki 2026
+  await c.call("add_card", { name: "Bonus", cutoff_day: 12, due_day: 22, limit: 50000, last4: "1234" });
+  await c.call("add_purchase", { description: "Telefon", amount: 3000, installments: 3, card: "Bonus", date: "2026-09-20" });
+  await c.call("add_purchase", { description: "Market", amount: 400, card: "Bonus", date: "2026-10-13" });
+  await c.call("add_purchase", { description: "Kitap", amount: 100, card: "Bonus", date: "2026-10-12" });
+  await c.call("add_purchase", { description: "Dizi", amount: 50, card: "Bonus", date: "2026-08-15", repeat: 0 });
+  await c.call("add_purchase", { description: "Nakit", amount: 80, card: "nakit", date: "2026-10-14" });
+
+  const r = await c.call("card_statements", { card: "1234", periods: 3 });
+  assert.equal(r.card, "Bonus");
+  const [cur, prev, old] = r.periods;
+  // Bu dönem: 13 Eki – 12 Kas; Dizi'nin 15 Eki tekrarı var, 15 Kas tekrarı bugünden sonra (dönem dışı da)
+  assert.deepEqual([cur.from, cur.cut, cur.due, cur.current], ["2026-10-13", "2026-11-12", "2026-11-22", true]);
+  assert.deepEqual(cur.purchases.map(p => [p.description, p.date]), [["Dizi", "2026-10-15"], ["Market", "2026-10-13"]]);
+  assert.equal(cur.spent, 450);
+  assert.equal(cur.statementAmount, 1450);   // Telefon'un 2. taksiti + Market + Dizi
+  // Geçen dönem: 13 Eyl – 12 Eki; Telefon tamamıyla, Dizi'nin 15 Eyl tekrarı, Kitap (kesim günü dahil)
+  assert.deepEqual([prev.from, prev.cut, prev.current], ["2026-09-13", "2026-10-12", false]);
+  assert.deepEqual(prev.purchases.map(p => [p.description, p.date, p.amount]), [["Kitap", "2026-10-12", 100], ["Telefon", "2026-09-20", 3000], ["Dizi", "2026-09-15", 50]]);
+  assert.equal(prev.spent, 3150);
+  assert.equal(prev.statementAmount, 1150);
+  assert.deepEqual([old.from, old.cut], ["2026-08-13", "2026-09-12"]);
+  assert.deepEqual(old.purchases.map(p => p.description), ["Dizi"]);
+
+  assert.match((await c.call("card_statements", { card: "nakit" })).error, /credit card/);
+});

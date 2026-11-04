@@ -72,7 +72,7 @@ struct KartSatiri: View {
     }
 }
 
-// Kartın ayrıntısı: görsel, günler, bugün alınanın ödeme tarihi, ödendi / düzenle / sil
+// Kartın ayrıntısı: görsel, günler, bugün alınanın ödeme tarihi, dönem dönem harcamalar, ödendi / düzenle / sil
 struct KartDetayi: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var abonelik: Abonelik
@@ -102,6 +102,7 @@ struct KartDetayi: View {
                         // Elle ödenen kartta ekstre son ödeme gününden önce de ödenebilir
                         genisDugme(L("Ödeme kaydet"), simge: "checkmark.circle", renk: Tema.metin) { odendi(st.amount, t.revolving?.minimumDue) }
                     }
+                    DonemHarcamalari(kartId: c.id)
                     genisDugme(L("Kartı düzenle"), simge: "pencil", renk: Tema.metin, eylem: duzenle)
                     genisDugme(L("Kartı sil"), simge: "trash", renk: Tema.tehlike, eylem: sil)
                 }
@@ -110,6 +111,7 @@ struct KartDetayi: View {
             .background(Tema.zemin)
             .navigationTitle(c.name)
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Bitti")) { dismiss() } } }
         }
         .presentationDetents([.large])
@@ -156,6 +158,70 @@ struct KartDetayi: View {
                 .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+}
+
+// Kartın dönem dönem harcamaları (card_statements): dönem seçilir (bu dönem, geçen dönem, daha eskiler kesim ayıyla);
+// dönemde harcanan, ekstreye düşen taksitler ve dönemde yapılan harcamalar. Harcamaya dokununca taksitleri (HarcamaDetayi).
+struct DonemHarcamalari: View {
+    @EnvironmentObject private var model: Model
+    let kartId: String
+    @State private var secili = 0
+
+    var body: some View {
+        Okunan(tool: "card_statements", args: ["card": kartId, "periods": 12], key: kartId) { (d: KartDonemleri) in
+            if !d.periods.isEmpty {
+                let p = d.periods[min(secili, d.periods.count - 1)]
+                Kart {
+                    KartBasligi(L("Dönem harcamaları"))
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(d.periods.enumerated()), id: \.element.id) { i, x in
+                                Cip(ad: ad(i, x), secili: x.id == p.id) { withAnimation(.snappy(duration: 0.2)) { secili = i } }
+                            }
+                        }
+                    }
+                    Text(L("{0} – {1} · son ödeme {2}", Bicim.day(p.from), Bicim.day(p.cut), Bicim.day(p.due)))
+                        .font(.footnote).foregroundStyle(Tema.metin3)
+                    IstatistikSatiri(ogeler: [
+                        Istatistik(etiket: L("Harcanan"), deger: Bicim.tl(p.spent)),
+                        Istatistik(etiket: L("Ekstreye düşen"), deger: Bicim.tl(p.statementAmount)),
+                    ])
+                    if p.purchases.isEmpty {
+                        Text(L("Bu dönemde harcama yok.")).font(.subheadline).foregroundStyle(Tema.metin3)
+                    } else {
+                        Ayirici()
+                        SatirListesi(veri: p.purchases) { k in
+                            NavigationLink(value: k.id) { satir(k) }.buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // "Bu dönem", "Geçen dönem", daha eskilerde kesimin ayı ("Eylül 2026")
+    private func ad(_ i: Int, _ p: KartDonemleri.Donem) -> String {
+        if p.current { return L("Bu dönem") }
+        if i == 1 { return L("Geçen dönem") }
+        return Bicim.month(String(p.cut.prefix(7)))
+    }
+
+    private func satir(_ k: KartDonemleri.Kalem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Avatar(ad: k.person, renk: model.kisiRengi(k.personId))
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(k.description).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(Bicim.amount(k.amount, asset: k.asset)).font(.body.weight(.semibold)).monospacedDigit().foregroundStyle(Tema.metin)
+                }
+                let plan = k.bnpl.map { "\($0.name) · Pay in \($0.payments)" } ?? k.repeat?.label ?? (k.installments > 1 ? L("{0} taksit", k.installments) : L("Peşin"))
+                Text([Bicim.day(k.date), plan, k.categoryName].compactMap { $0 }.joined(separator: " · "))
+                    .font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 

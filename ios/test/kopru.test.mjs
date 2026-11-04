@@ -38,7 +38,7 @@ function engine(initial = "") {
 
 test("araçlar düz betiğe çevrilip yüklenir", () => {
   const { names, sandbox } = engine();
-  for (const n of ["get_overview", "list_cards", "add_card", "list_purchases", "add_purchase", "get_assets", "add_entry", "list_people"]) {
+  for (const n of ["get_overview", "list_cards", "card_statements", "add_card", "list_purchases", "add_purchase", "get_assets", "add_entry", "list_people"]) {
     assert.ok(names.includes(n), n);
   }
   assert.equal(typeof sandbox.module, "undefined");
