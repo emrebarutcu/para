@@ -163,6 +163,23 @@ final class Senkron {
                            method: "PATCH", body: try JSONSerialization.data(withJSONObject: ["processed_at": NSNull()]), prefer: "return=minimal")
     }
 
+    // Kullanıcıya özel adresin yerel kısmı (inbox_addresses); yoksa ya da renew ile yenisi oluşturulur
+    func inboxAddress(renew: Bool) async throws -> String {
+        let mine = ("user_id", "eq.\(userId)")
+        if renew {
+            _ = try await rest("inbox_addresses", query: [mine], method: "DELETE", prefer: "return=minimal")
+        } else {
+            let data = try await rest("inbox_addresses", query: [("select", "address"), mine])
+            if let a = ((try JSONSerialization.jsonObject(with: data)) as? [[String: Any]])?.first?["address"] as? String { return a }
+        }
+        let data = try await rest("inbox_addresses", query: [("select", "address")], method: "POST",
+                                  body: try JSONSerialization.data(withJSONObject: ["user_id": userId]), prefer: "return=representation")
+        guard let a = ((try JSONSerialization.jsonObject(with: data)) as? [[String: Any]])?.first?["address"] as? String else {
+            throw AracHatasi(message: L("Adres oluşturulamadı"), user: true)
+        }
+        return a
+    }
+
     // ── PostgREST ───────────────────────────────────────────────────────────────
 
     private func rest(_ table: String, query: [(String, String)], method: String = "GET", body: Data? = nil, prefer: String? = nil) async throws -> Data {

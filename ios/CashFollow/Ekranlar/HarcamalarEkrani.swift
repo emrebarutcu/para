@@ -159,7 +159,7 @@ struct EpostaKarti: View {
             let bilgi = [tutar(e.parsed), e.parsed.date.map { Bicim.day($0) }, (e.parsed.installments ?? 1) > 1 ? L("{0} taksit", e.parsed.installments ?? 1) : nil]
                 .compactMap { $0 }
             if !bilgi.isEmpty { Text(bilgi.joined(separator: " · ")).font(.footnote).monospacedDigit().foregroundStyle(Tema.metin2) }
-            if let n = neden(e) { Text(n).font(.footnote).foregroundStyle(Tema.uyari) }
+            if let n = Self.neden(e.needsReview, e.parsed) { Text(n).font(.footnote).foregroundStyle(Tema.uyari) }
             if let s = e.sender { Text(s).font(.caption).foregroundStyle(Tema.metin3).lineLimit(1) }
             HStack(spacing: 16) {
                 Button(L("Ekle")) { taslak = e }.fontWeight(.semibold)
@@ -181,11 +181,11 @@ struct EpostaKarti: View {
     }
 
     // tools.js emailItem'in nedeni (kart için İngilizce, okuma için eposta.js'in Türkçesi) uygulamanın dilinde
-    private func neden(_ e: Eposta) -> String? {
-        guard let r = e.needsReview else { return nil }
-        if r.hasPrefix("No card with last4"), let l = e.parsed.cardLast4 { return L("•••• {0} ile biten kart tanımlı değil", l) }
+    static func neden(_ r: String?, _ o: Eposta.Okunan) -> String? {
+        guard let r else { return nil }
+        if r.hasPrefix("No card with last4"), let l = o.cardLast4 { return L("•••• {0} ile biten kart tanımlı değil", l) }
         if r == "Card could not be read" { return L("Kart okunamadı") }
-        if r.hasPrefix("Yabancı para"), let c = e.parsed.currency { return L("Yabancı para ({0})", c) }
+        if r.hasPrefix("Yabancı para"), let c = o.currency { return L("Yabancı para ({0})", c) }
         switch r {
         case "Tutar okunamadı": return L("Tutar okunamadı")
         case "Tarih okunamadı": return L("Tarih okunamadı")

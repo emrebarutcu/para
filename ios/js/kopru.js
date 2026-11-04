@@ -216,6 +216,7 @@
       bnpl: P.bnplFor(home),
       bnplProviders: T.BNPL.map(id => ({ id, name: T.bnplName({ bnpl: id }), hint: "" })),
       cashDefault: V.cashDefault(home),
+      inboxBanks: root.Eposta.BANKS,   // banka e-postaları: denenmiş bankalar (eposta.js)
     });
   }
 
