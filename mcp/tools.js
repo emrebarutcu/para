@@ -2095,7 +2095,7 @@ export const TOOLS = [
   {
     name: "get_inbox_address",
     title: "Bank e-mail address",
-    description: "The user's personal address for bank spending notifications. Spending e-mails sent to it are turned into purchases on the card with the matching last 4 digits.",
+    description: `The user's personal address for bank spending notifications. Spending e-mails sent to it are turned into purchases on the card with the matching last 4 digits. Supported banks for now (amount, date, last 4 digits and merchant are read): ${E.BANKS.join(", ")}. Other banks' e-mails are still tried; what cannot be read waits for review (list_inbox), and try_bank_email tests one.`,
     inputSchema: obj(),
     annotations: { ...READ, readOnlyHint: false, idempotentHint: true },
     async run(args, ctx) {

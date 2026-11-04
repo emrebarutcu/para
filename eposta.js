@@ -165,7 +165,11 @@
     return r;
   }
 
-  const api = { parse, plainText, fold, toAmount };
+  // Gerçek harcama bildirimleriyle denenmiş, tutar, tarih, kartın son 4 hanesi ve işyeri okunan bankalar. Diğer bankaların
+  // e-postaları da okunmaya çalışılır; okunamayan onaya düşer. Web'deki Banka e-postaları penceresi ve asistan buradan okur.
+  const BANKS = ["Yapı Kredi"];
+
+  const api = { parse, plainText, fold, toAmount, BANKS };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Eposta = api;
 })(this);
