@@ -238,6 +238,7 @@ struct Sabitler: Decodable {
     let bnpl: Bool?               // şimdi al sonra öde, Pay in 4 (ABD)
     let bnplProviders: [Kategori]?    // sağlayıcılar (id, name)
     let cashDefault: [String]     // nakit tanımının varsayılanı
+    let inboxBanks: [String]?     // banka e-postaları: desteklenen bankalar
 }
 
 struct Renkler: Decodable {

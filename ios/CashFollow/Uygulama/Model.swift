@@ -154,30 +154,50 @@ final class Model: ObservableObject {
 
     // Okunabilen ve kartı bulunan e-postalar harcama olarak eklenir (ilk kişiye); kalanlar Harcamalar'da onaya bekler.
     // Önce sunucuda işlendi yapılır: başka cihaz aynı anda okuduysa harcama iki kez eklenmez.
+    // Eklenen harcama sayısı; denenemediyse (giriş yok, ağ, başka kontrol sürüyor) nil
     private var inboxBusy = false
-    private func checkInbox() async {
-        guard marketsAllowed, let motor, let s = senkron, s.pulled, !inboxBusy else { return }
+    @discardableResult
+    private func checkInbox() async -> Int? {
+        guard marketsAllowed else { epostalar = []; return nil }   // ülke Türkiye değilse onay bekleyenler de gizlenir
+        guard let motor, let s = senkron, s.pulled, !inboxBusy else { return nil }
         inboxBusy = true
         defer { inboxBusy = false }
+        var eklenen = 0
         do {
             let rows = try await s.inboxPending()
-            guard senkron === s else { return }
+            guard senkron === s else { return nil }
             motor.setInbox(rows: rows)
             let ready = (try motor.run("list_inbox") as EpostaListesi).emails.filter { $0.needsReview == nil }.map(\.emailId)
             if !ready.isEmpty {
                 let granted = try await s.inboxClaim(ready)
-                guard senkron === s else { try? await s.inboxRelease(granted); return }
+                guard senkron === s else { try? await s.inboxRelease(granted); return nil }
                 motor.setInbox(rows: rows, granted: granted)
                 if let out = try? motor.run("check_inbox") as EpostaSonucu, !out.added.isEmpty {
-                    Analitik.olay("inbox_added", ["count": out.added.count])
+                    eklenen = out.added.count
+                    Analitik.olay("inbox_added", ["count": eklenen])
                 }
                 let released = motor.inboxReleased()
                 if !released.isEmpty { try? await s.inboxRelease(released) }
             }
             epostalar = (try motor.run("list_inbox", ["include_body": true]) as EpostaListesi).emails
+            return eklenen
         } catch {
             // Tablo kurulmamış ya da ağ yok: sonraki yenilemede yeniden denenir
+            return nil
         }
+    }
+
+    // Ayarlar → Banka e-postaları: "Şimdi kontrol et"; önce eşitlenir (kartların son 4 hanesi güncel olsun)
+    func epostaKontrol() async -> Int? {
+        await run { try await $0.pull() }
+        return await checkInbox()
+    }
+
+    // "<adres>@cashfollow.app"; renew eskisini siler (bankadaki adres de değişmeli)
+    func epostaAdresi(yenile: Bool) async throws -> String {
+        _ = try await token()
+        guard let s = senkron else { throw AracHatasi(message: L("Önce giriş yap"), user: true) }
+        return "\(try await s.inboxAddress(renew: yenile))@\(Yapilandirma.inboxDomain)"
     }
 
     // Onay bekleyen e-posta eklendi ya da yok sayıldı: sunucuda işlendi yapılır
@@ -364,6 +384,7 @@ final class Model: ObservableObject {
         Bicim.homeSymbol = c?.symbol ?? home
         // Kısa ad metinlerde ("TL bakiyemden"): İngilizcede para birimi kodu (USD), TL hariç
         Bicim.homeShort = Dil.ingilizce ? (home == "TRY" ? "TL" : home) : (c?.short ?? home)
+        if !marketsAllowed { epostalar = [] }   // banka e-postaları yalnızca Türkiye'de
         revision += 1
     }
 
