@@ -25,6 +25,9 @@ enum OzDenetim {
             let cards: KartListesi = try m.run("list_cards")
             try check(cards.cards.first?.limit == 50000 && cards.cards.first?.purchaseCount == 1, "kart: \(cards.cards)")
             let _: HarcamaListesi = try m.run("list_purchases", ["status": "all"])
+            let donemler: KartDonemleri = try m.run("card_statements", ["card": cards.cards.first?.id ?? ""])
+            try check(donemler.periods.count == 6 && donemler.periods.first?.current == true
+                      && donemler.periods.flatMap(\.purchases).allSatisfy { $0.id == p.purchase.id }, "dönemler: \(donemler.periods)")
             let assets: Varliklar = try m.run("get_assets")
             try check(assets.assets.first { $0.asset == "USD" }?.tryValue == 4000, "dolar: \(assets.assets)")
             let _: HareketListesi = try m.run("list_entries")

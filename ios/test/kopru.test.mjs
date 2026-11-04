@@ -38,7 +38,7 @@ function engine(initial = "") {
 
 test("araçlar düz betiğe çevrilip yüklenir", () => {
   const { names, sandbox } = engine();
-  for (const n of ["get_overview", "list_cards", "add_card", "list_purchases", "add_purchase", "get_assets", "add_entry", "list_people"]) {
+  for (const n of ["get_overview", "list_cards", "card_statements", "add_card", "list_purchases", "add_purchase", "get_assets", "add_entry", "list_people"]) {
     assert.ok(names.includes(n), n);
   }
   assert.equal(typeof sandbox.module, "undefined");
@@ -177,4 +177,27 @@ test("İngilizce: kategoriler, tekrar etiketi, içgörüler ve ay adları sözl�
   } finally {
     sandbox.Dil.setLang("tr");
   }
+});
+
+test("banka e-postaları: Swift'in verdiği liste; yalnızca sunucuda işaretlenenler eklenir", async () => {
+  const e = engine();
+  await e.call("add_card", { name: "Bonus", limit: 50000, cutoff_day: 10, due_day: 20, last4: "1234" });
+  const rows = [
+    { id: 1, sender: "banka", subject: null, received_at: "2026-10-17T10:00:00Z", body: "1234 ile biten kartınızdan 17.10.2026 tarihinde MIGROS işyerinde 1.250,00 TL tutarında harcama yapılmıştır." },
+    { id: 2, sender: "banka", subject: null, received_at: "2026-10-17T11:00:00Z", body: "1234 ile biten kartınızdan 17.10.2026 tarihinde A101 işyerinde 99,00 TL tutarında harcama yapılmıştır." },
+    { id: 3, sender: "banka", subject: null, received_at: "2026-10-17T12:00:00Z", body: "9999 ile biten kartınızdan 17.10.2026 tarihinde AMAZON işyerinde 600,00 TL tutarında harcama yapılmıştır." },
+  ];
+  e.sandbox.Kopru.setInbox(JSON.stringify(rows), "[]");
+  const list = await e.call("list_inbox");
+  assert.deepEqual(list.ok.emails.filter(x => !x.needsReview).map(x => x.emailId), [1, 2]);
+  // 2'yi başka cihaz önce işledi: sunucu yalnızca 1'i verdi
+  e.sandbox.Kopru.setInbox(JSON.stringify(rows), "[1]");
+  const out = await e.call("check_inbox");
+  assert.deepEqual(out.ok.added.map(p => p.description), ["MIGROS"]);
+  assert.deepEqual(out.ok.needsReview.map(x => x.emailId), [3]);
+  assert.equal(JSON.parse(e.saved()).installments.length, 1);
+  const rest = await e.call("list_inbox", { include_body: true });
+  assert.deepEqual(rest.ok.emails.map(x => x.emailId), [2, 3]);
+  assert.match(rest.ok.emails[1].body, /AMAZON/);
+  assert.equal(e.sandbox.Kopru.inboxReleased(), "[]");
 });

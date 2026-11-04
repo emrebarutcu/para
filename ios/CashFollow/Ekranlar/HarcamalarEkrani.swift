@@ -32,6 +32,7 @@ struct HarcamalarEkrani: View {
                         }
                     }
                 }
+                if search.isEmpty, !model.epostalar.isEmpty { EpostaKarti() }
                 if search.isEmpty {
                     Secici(secim: $gorunum, ogeler: [("liste", L("Liste")), ("kategori", L("Kategoriler"))])
                 }
@@ -134,6 +135,75 @@ struct HarcamalarEkrani: View {
         if let tur { parca.append(HarcamaFiltresi.turAdi(tur)) }
         if let k = kategori { parca.append(k.ad) }
         return parca.isEmpty ? nil : parca.joined(separator: " · ")
+    }
+}
+
+// Banka e-postalarından kendiliğinden eklenemeyenler (kart tanımlı değil, tutar okunamadı…; web'deki inboxPanel):
+// Ekle formu doldurur, Göster e-postanın metnini açar (bankanın doğrulama bağlantısı), Yok say işlendi yapar
+struct EpostaKarti: View {
+    @EnvironmentObject private var model: Model
+    @State private var acik: Int?
+    @State private var taslak: Eposta?
+
+    var body: some View {
+        Kart(dolgu: 14) {
+            KartBasligi(baslik: L("E-postadan gelenler"), alt: L("{0} onay bekliyor", model.epostalar.count)) { EmptyView() }
+            SatirListesi(veri: model.epostalar) { e in satir(e) }
+        }
+        .sheet(item: $taslak) { HarcamaFormu(eposta: $0) }
+    }
+
+    private func satir(_ e: Eposta) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(e.parsed.merchant ?? e.subject ?? L("Banka e-postası")).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(2)
+            let bilgi = [tutar(e.parsed), e.parsed.date.map { Bicim.day($0) }, (e.parsed.installments ?? 1) > 1 ? L("{0} taksit", e.parsed.installments ?? 1) : nil]
+                .compactMap { $0 }
+            if !bilgi.isEmpty { Text(bilgi.joined(separator: " · ")).font(.footnote).monospacedDigit().foregroundStyle(Tema.metin2) }
+            if let n = neden(e) { Text(n).font(.footnote).foregroundStyle(Tema.uyari) }
+            if let s = e.sender { Text(s).font(.caption).foregroundStyle(Tema.metin3).lineLimit(1) }
+            HStack(spacing: 16) {
+                Button(L("Ekle")) { taslak = e }.fontWeight(.semibold)
+                Button(acik == e.id ? L("Gizle") : L("Göster")) { withAnimation { acik = acik == e.id ? nil : e.id } }
+                Button(L("Yok say")) { Task { await model.epostaBitti(e.emailId) } }
+                Spacer()
+            }
+            .font(.subheadline).foregroundStyle(Tema.metin).padding(.top, 4)
+            if acik == e.id, let b = e.body {
+                Text(Self.baglantili(b)).font(.footnote).foregroundStyle(Tema.metin2).textSelection(.enabled).padding(.top, 4)
+            }
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private func tutar(_ o: Eposta.Okunan) -> String? {
+        guard let t = o.amount else { return nil }
+        return o.currency == nil || o.currency == Bicim.home ? Bicim.tl(t) : "\(t.formatted(.number.locale(Bicim.locale))) \(o.currency ?? "")"
+    }
+
+    // tools.js emailItem'in nedeni (kart için İngilizce, okuma için eposta.js'in Türkçesi) uygulamanın dilinde
+    private func neden(_ e: Eposta) -> String? {
+        guard let r = e.needsReview else { return nil }
+        if r.hasPrefix("No card with last4"), let l = e.parsed.cardLast4 { return L("•••• {0} ile biten kart tanımlı değil", l) }
+        if r == "Card could not be read" { return L("Kart okunamadı") }
+        if r.hasPrefix("Yabancı para"), let c = e.parsed.currency { return L("Yabancı para ({0})", c) }
+        switch r {
+        case "Tutar okunamadı": return L("Tutar okunamadı")
+        case "Tarih okunamadı": return L("Tarih okunamadı")
+        case "İade / iptal bildirimi": return L("İade / iptal bildirimi")
+        default: return r
+        }
+    }
+
+    // Metindeki bağlantılar dokunulabilir
+    private static func baglantili(_ s: String) -> AttributedString {
+        var out = AttributedString(s)
+        guard let d = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return out }
+        for m in d.matches(in: s, range: NSRange(s.startIndex..., in: s)) {
+            guard let url = m.url, let r = Range(m.range, in: s),
+                  let a = AttributedString.Index(r.lowerBound, within: out), let b = AttributedString.Index(r.upperBound, within: out) else { continue }
+            out[a..<b].link = url
+        }
+        return out
     }
 }
 
@@ -299,6 +369,7 @@ struct HarcamaFormu: View {
     @Environment(\.dismiss) private var dismiss
     var duzenle: Harcama? = nil
     var ornek: (tutar: String, ad: String, taksit: Int)? = nil   // yalnızca ekran görüntüleri (-galeri 3)
+    var eposta: Eposta? = nil   // onay bekleyen banka e-postasından önceden doldurulur
     @AppStorage("harcama.sonKart") private var sonKart = ""
     @AppStorage("harcama.sonBnpl") private var sonBnpl = "klarna"
     @State private var bnpl = false            // Pay in 4 (ABD): 4 ödeme, 2 haftada bir
@@ -496,10 +567,26 @@ struct HarcamaFormu: View {
             // Son kullanılan kart; yoksa ilk kart
             if cards.contains(where: { $0.id == sonKart }) || sonKart == "nakit" { card = sonKart }
             else if let first = cards.first { card = first.id }
-            if let o = ornek { amount = o.tutar; desc = o.ad; count = o.taksit } else { tutarOdak = true }
+            if let e = eposta { doldur(e) }
+            else if let o = ornek { amount = o.tutar; desc = o.ad; count = o.taksit } else { tutarOdak = true }
         }
         yuklendi = true
         if person.isEmpty { person = people.first?.id ?? "ben" }
+    }
+
+    // E-postadan okunanlar; okunamayan alan boş kalır (yabancı para tutarı yazılmaz)
+    private func doldur(_ e: Eposta) {
+        let o = e.parsed
+        desc = o.merchant ?? ""
+        if let t = o.amount, o.currency == nil || o.currency == Bicim.home {
+            amount = t.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2)))
+        }
+        count = min(max(o.installments ?? 1, 1), 60)
+        if let d = o.date.flatMap(Bicim.date) { date = d }
+        if let c = cards.first(where: { o.cardLast4 != nil && $0.last4 == o.cardLast4 }) ?? cards.first(where: { $0.name == e.matchedCard }) {
+            card = c.id
+        }
+        if amount.isEmpty { tutarOdak = true }
     }
 
     private var args: [String: Any] {
@@ -535,6 +622,7 @@ struct HarcamaFormu: View {
         do {
             _ = try model.write(duzenle == nil ? "add_purchase" : "update_purchase", args, as: HarcamaSonucu.self)
             if duzenle == nil { sonKart = card }
+            if let e = eposta { Task { await model.epostaBitti(e.emailId) } }
             if bnpl { sonBnpl = saglayici }
             Analitik.olay(duzenle == nil ? "purchase_added" : "purchase_edited",
                           ["installments": tekrar ? 1 : bnpl ? 4 : count, "repeat": tekrar, "bnpl": bnpl, "cash": card == "nakit", "afford_shown": sim != nil && abonelik.premium])

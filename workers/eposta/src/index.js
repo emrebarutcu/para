@@ -174,6 +174,12 @@ function decodeWords(value) {
     });
 }
 
+// Adlı HTML varlıkları (Yapı Kredi "ger&ccedil;ekleştirilmiştir" yazar); &amp; &lt; &gt; ayrıca, en sonda çözülür
+const ENTITY = {
+  ccedil: "ç", Ccedil: "Ç", uuml: "ü", Uuml: "Ü", ouml: "ö", Ouml: "Ö", quot: '"', apos: "'",
+  rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", ndash: "–", mdash: "—", euro: "€", pound: "£",
+};
+
 // <a href="https://…">Doğrula</a> → "Doğrula (https://…)": uygulama bağlantıyı tıklanabilir gösterir
 const LINK = /<a\b[^>]*?\bhref\s*=\s*["']?(https?:[^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/a>/gi;
 function linkText(_, url, label) {
@@ -188,6 +194,7 @@ function htmlToText(s) {
     .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|table)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
+    .replace(/&([a-z]+);/gi, (m, ad) => ENTITY[ad] ?? m)
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")

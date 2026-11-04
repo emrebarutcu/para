@@ -139,6 +139,30 @@ final class Senkron {
         }
     }
 
+    // ── Banka e-postaları (supabase/eposta.sql; web'deki sync.js syncInbox*) ────────
+
+    // İşlenmemiş e-postalar (JSON dizisi): id, sender, subject, body, received_at
+    func inboxPending() async throws -> String {
+        let data = try await rest("inbox_messages", query: [("select", "id,sender,subject,body,received_at"), ("processed_at", "is.null"),
+                                                            ("order", "received_at"), ("limit", "50")])
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    // İşlenmemişleri işlendi yapar; başka cihaz önce davrandıysa o id dönmez (harcama iki kez eklenmez)
+    func inboxClaim(_ ids: [Int]) async throws -> [Int] {
+        guard !ids.isEmpty else { return [] }
+        let data = try await rest("inbox_messages", query: [("id", "in.(\(ids.map(String.init).joined(separator: ",")))"), ("processed_at", "is.null"), ("select", "id")],
+                                  method: "PATCH", body: try JSONSerialization.data(withJSONObject: ["processed_at": Self.iso(Date())]), prefer: "return=representation")
+        let rows = (try JSONSerialization.jsonObject(with: data)) as? [[String: Any]] ?? []
+        return rows.compactMap { ($0["id"] as? NSNumber)?.intValue }
+    }
+
+    func inboxRelease(_ ids: [Int]) async throws {
+        guard !ids.isEmpty else { return }
+        _ = try await rest("inbox_messages", query: [("id", "in.(\(ids.map(String.init).joined(separator: ",")))")],
+                           method: "PATCH", body: try JSONSerialization.data(withJSONObject: ["processed_at": NSNull()]), prefer: "return=minimal")
+    }
+
     // ── PostgREST ───────────────────────────────────────────────────────────────
 
     private func rest(_ table: String, query: [(String, String)], method: String = "GET", body: Data? = nil, prefer: String? = nil) async throws -> Data {

@@ -116,6 +116,35 @@ struct Harcama: Decodable, Identifiable, Hashable {
     let bnpl: SimdiAl?
 }
 
+// Kartın dönem dönem harcamaları (card_statements): yeniden eskiye; ilki bugünün dönemi
+struct KartDonemleri: Decodable {
+    struct Kalem: Decodable, Identifiable, Hashable {
+        let id: String              // harcamanın kimliği (tekrarlayanda her tekrar aynı)
+        let description: String
+        let person: String
+        let personId: String
+        let date: String            // dönemdeki tarihi (tekrarda o tekrarın)
+        let amount: Double          // tam fiyatı
+        let asset: String
+        let installments: Int
+        let categoryName: String?
+        let `repeat`: Harcama.Tekrar?
+        let bnpl: SimdiAl?
+    }
+    struct Donem: Decodable, Identifiable, Hashable {
+        let from: String
+        let cut: String
+        let due: String
+        let current: Bool
+        let spent: Double
+        let statementAmount: Double
+        let count: Int
+        let purchases: [Kalem]
+        var id: String { cut }
+    }
+    let periods: [Donem]
+}
+
 // Şimdi al sonra öde (Pay in 4; taksit.js bnpl): sağlayıcı, ödeme sayısı, çekilenler, sağlayıcıya kalan, sıradaki çekim
 struct SimdiAl: Decodable, Hashable {
     let provider: String
@@ -396,4 +425,27 @@ struct Simulasyon: Decodable {
     let months: [Ay]
     let card: KartSonucu?
     let cardsCompared: [Karsilastirma]
+}
+
+// Banka e-postaları (list_inbox, check_inbox)
+struct EpostaListesi: Decodable { let emails: [Eposta] }
+struct EpostaSonucu: Decodable { let added: [Harcama] }
+
+struct Eposta: Decodable, Identifiable, Hashable {
+    struct Okunan: Decodable, Hashable {
+        let amount: Double?
+        let currency: String?
+        let date: String?
+        let installments: Int?
+        let merchant: String?
+        let cardLast4: String?
+    }
+    let emailId: Int
+    let sender: String?
+    let subject: String?
+    let parsed: Okunan
+    let matchedCard: String?
+    let needsReview: String?   // neden kendiliğinden eklenemedi (eposta.js / tools.js emailItem)
+    let body: String?
+    var id: Int { emailId }
 }

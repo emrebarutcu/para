@@ -10,6 +10,12 @@
     return s.toLocaleLowerCase("tr-TR").replace(/[ışğüöç]/g, ch => FOLD[ch]);
   }
 
+  // Adlı HTML varlıkları (Yapı Kredi "ger&ccedil;ekleştirilmiştir" yazar); &amp; &lt; &gt; ayrıca, en sonda çözülür
+  const ENTITY = {
+    ccedil: "ç", Ccedil: "Ç", uuml: "ü", Uuml: "Ü", ouml: "ö", Ouml: "Ö", quot: '"', apos: "'",
+    rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", ndash: "–", mdash: "—", euro: "€", pound: "£",
+  };
+
   // <a href="https://…">Doğrula</a> → "Doğrula (https://…)": bağlantı metinde kalır, uygulamada tıklanabilir
   const LINK = /<a\b[^>]*?\bhref\s*=\s*["']?(https?:[^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/a>/gi;
   function linkText(_, url, label) {
@@ -24,6 +30,7 @@
       .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|table)>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
       .replace(/&nbsp;/gi, " ")
+      .replace(/&([a-z]+);/gi, (m, ad) => ENTITY[ad] ?? m)
       .replace(/&amp;/gi, "&")
       .replace(/&lt;/gi, "<")
       .replace(/&gt;/gi, ">")
@@ -113,7 +120,8 @@
   function findMerchant(f, text) {
     const label = /(?:uye )?isyeri(?: adi)?\s*:\s*([^\n]+?)(?=\s{2,}|\n|$|\s(?:tarih|tutar|islem))/.exec(f);
     if (label) return cleanMerchant(text.substr(label.index + label[0].length - label[1].length, label[1].length));
-    const before = /([^\n:;]{2,60}?)\s+(?:uye\s+)?isyerinde(?:n)?\b/.exec(f);
+    // "… X işyerinde" ya da Yapı Kredi: "… kartınız ile X firmasından 28.10.2026 tarihinde …"
+    const before = /([^\n:;]{2,60}?)\s+(?:(?:uye\s+)?isyerinde(?:n)?|firmasinda(?:n)?)\b/.exec(f);
     if (before) {
       const start = before.index;
       let part = text.substr(start, before[1].length);

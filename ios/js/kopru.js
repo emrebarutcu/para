@@ -10,6 +10,7 @@
 //   native.save(json)      veriyi kaydeder (araç değiştirdiyse)
 //   native.random(n)       → n rastgele bayt (dizi)
 //   native.log(level, msg)
+// Banka e-postaları (check_inbox, list_inbox): Swift işlenmemişleri setInbox ile verir (yukarıda inbox).
 (function (root) {
   const T = root.Taksit, V = root.Varlik, K = root.Kategori, Tablo = root.Tablo, N = root.Nakit, P = root.Para;
 
@@ -69,6 +70,29 @@
     pricesFailed = x.failed || [];
   }
 
+  // ── Banka e-postaları: Swift çeker ve işaretler (Senkron.swift inbox*), araçlar hazır listeyle çalışır ──
+  // rows: işlenmemiş e-postalar (inbox_messages); granted: Swift'in sunucuda işlendi yaptığı id'ler (başka cihaz önce
+  // davrandıysa orada yoktur, harcama iki kez eklenmez); released: araç geri bıraktı, Swift sunucuda geri açar.
+  let inbox = { rows: [], granted: new Set(), released: [] };
+  function setInbox(rowsJson, grantedJson) {
+    inbox = { rows: rowsJson ? JSON.parse(rowsJson) : [], granted: new Set(grantedJson ? JSON.parse(grantedJson) : []), released: [] };
+  }
+  function inboxReleased() {
+    const out = inbox.released;
+    inbox.released = [];
+    return JSON.stringify(out);
+  }
+  const inboxCtx = {
+    pending: async () => inbox.rows,
+    claim: async ids => {
+      const ok = ids.map(Number).filter(id => inbox.granted.has(id));
+      inbox.rows = inbox.rows.filter(r => !ok.includes(r.id));
+      return ok;
+    },
+    release: async ids => { inbox.released.push(...ids.map(Number)); },
+    address: async () => { throw Object.assign(new Error("Banka e-postası adresi web'de (Ayarlar → E-postadan harcama)."), { userFacing: true }); },
+  };
+
   function loadState() {
     const raw = root.native?.load ? root.native.load() : "";
     let data = null;
@@ -102,7 +126,7 @@
         return out;
       },
       searchFunds: async () => { throw Object.assign(new Error("Fon araması uygulamada henüz yok."), { userFacing: true }); },
-      inbox: new Proxy({}, { get: () => async () => { throw Object.assign(new Error("Banka e-postaları uygulamada henüz yok."), { userFacing: true }); } }),
+      inbox: inboxCtx,
     };
   }
 
@@ -229,7 +253,7 @@
   };
 
   root.Kopru = {
-    loadTools, toScript, setRates, setPrices, setHome, setCashDef, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
+    loadTools, toScript, setRates, setPrices, setHome, setCashDef, setInbox, inboxReleased, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
     defaultState: () => JSON.stringify(T.defaultState()),
   };
 })(this);
