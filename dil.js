@@ -1,6 +1,6 @@
 // Dil: kullanıcıya görünen metinler Türkçe yazılır; başka dilde gösterilecekse sözlükten (dil/en.json) çevrilir.
 // Anahtar Türkçe metnin kendisidir; değişken yerleri {0}, {1}… ile yazılır: t("{0} limiti doldu", ad).
-// Web ve asistan (MCP) şimdilik Türkçe kalır (dil "tr"); iPhone telefon Türkçe değilse "en" ayarlar (Motor).
+// iPhone telefon, web tarayıcı Türkçe değilse "en" ayarlar (Motor.swift, dil-sayfa.js).
 // Sözlükte olmayan metin Türkçe gösterilir; scripts/dil.mjs her t("…") ve L("…") için çeviri var mı denetler.
 (function (root) {
   let lang = "tr";
