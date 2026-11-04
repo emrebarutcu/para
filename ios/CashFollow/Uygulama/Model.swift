@@ -158,7 +158,8 @@ final class Model: ObservableObject {
     private var inboxBusy = false
     @discardableResult
     private func checkInbox() async -> Int? {
-        guard marketsAllowed, let motor, let s = senkron, s.pulled, !inboxBusy else { return nil }
+        guard marketsAllowed else { epostalar = []; return nil }   // ülke Türkiye değilse onay bekleyenler de gizlenir
+        guard let motor, let s = senkron, s.pulled, !inboxBusy else { return nil }
         inboxBusy = true
         defer { inboxBusy = false }
         var eklenen = 0
@@ -383,6 +384,7 @@ final class Model: ObservableObject {
         Bicim.homeSymbol = c?.symbol ?? home
         // Kısa ad metinlerde ("TL bakiyemden"): İngilizcede para birimi kodu (USD), TL hariç
         Bicim.homeShort = Dil.ingilizce ? (home == "TRY" ? "TL" : home) : (c?.short ?? home)
+        if !marketsAllowed { epostalar = [] }   // banka e-postaları yalnızca Türkiye'de
         revision += 1
     }
 
