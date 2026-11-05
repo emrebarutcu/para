@@ -381,6 +381,7 @@ final class Model: ObservableObject {
         let c = constants?.currencies.first { $0.code == home }
         Bicim.home = home
         Bicim.homeSymbol = c?.symbol ?? home
+        Bicim.homeDigits = c?.digits ?? 2
         // Kısa ad metinlerde ("TL bakiyemden"): İngilizcede para birimi kodu (USD), TL hariç
         Bicim.homeShort = Dil.turkceDegil ? (home == "TRY" ? "TL" : home) : (c?.short ?? home)
         if !bankEmailsAllowed { epostalar = [] }   // banka e-postaları yalnızca Türkiye'de

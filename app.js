@@ -190,7 +190,9 @@ function viewFromHash() {
   return VIEWS.includes(v) ? v : "ozet";
 }
 
-let moneyFmt = new Intl.NumberFormat(D.locale(), { style: "currency", currency: HOME, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Kuruş hanesi para birimine göre (para.js digits): yen 0, Kuveyt dinarı 3
+const homeDigits = () => P.CURRENCIES.find(c => c.code === HOME)?.digits ?? 2;
+let moneyFmt = new Intl.NumberFormat(D.locale(), { style: "currency", currency: HOME, minimumFractionDigits: homeDigits(), maximumFractionDigits: homeDigits() });
 const numFmt = new Intl.NumberFormat(D.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function fmt(n) { return moneyFmt.format(n || 0); }
 function fmtNum(n) { return numFmt.format(n || 0); }
@@ -6539,7 +6541,7 @@ function applyHome() {
   HOME = P.homeOfCountry(currentCountry());
   FEAT = P.features(currentCountry());
   if (state) state.home = HOME;
-  moneyFmt = new Intl.NumberFormat(D.locale(), { style: "currency", currency: HOME, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  moneyFmt = new Intl.NumberFormat(D.locale(), { style: "currency", currency: HOME, minimumFractionDigits: homeDigits(), maximumFractionDigits: homeDigits() });
   wholeMoney = new Intl.NumberFormat(D.locale(), { style: "currency", currency: HOME, maximumFractionDigits: 0 });
   tileMoney = new Intl.NumberFormat(D.locale(), { style: "currency", currency: HOME, maximumFractionDigits: 0 });
   cashDef = readCashDef();

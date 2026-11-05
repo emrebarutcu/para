@@ -130,6 +130,7 @@ struct NakitKarti: View {
             }
         }
         .frame(height: 190)
+        .environment(\.layoutDirection, .leftToRight)   // zaman soldan sağa akar, sağdan sola dillerde de (web'deki gibi)
         .grafikTakvimi()
     }
 
@@ -277,6 +278,7 @@ struct AylikOdemeGrafigi: View {
                 }
                 .chartXScale(domain: months.map(\.month))
                 .frame(height: 190)
+                .environment(\.layoutDirection, .leftToRight)   // zaman soldan sağa akar, sağdan sola dillerde de (web'deki gibi)
             }
         }
     }
@@ -418,6 +420,7 @@ struct VarlikSeyriKarti: View {
                     }
                 }
                 .frame(height: 190)
+                .environment(\.layoutDirection, .leftToRight)   // zaman soldan sağa akar, sağdan sola dillerde de (web'deki gibi)
                 .grafikTakvimi()
                 if !s.approx.isEmpty {
                     Text(L("Geçmiş fiyatı alınamayanlar bugünkü fiyatla: {0}", s.approx.joined(separator: ", ")))

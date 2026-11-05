@@ -133,12 +133,16 @@ struct BuyukTutar: View {
         .accessibilityLabel(Bicim.tl(deger))
     }
 
+    // Kuruş hanesi para birimine göre (Bicim.homeDigits): yende kesir yok, Kuveyt dinarında 3 hane
     private func parcala(_ v: Double) -> (isaret: String, simge: String, tam: String, kesir: String) {
-        let tam = abs(v).rounded(.down)
-        let kurus = Int(((abs(v) - tam) * 100).rounded())
-        let tamMetin = (kurus == 100 ? tam + 1 : tam).formatted(.number.locale(Bicim.locale).precision(.fractionLength(0)))
+        let hane = Bicim.homeDigits, olcek = pow(10, Double(hane))
+        let yuvarli = (abs(v) * olcek).rounded() / olcek
+        let tam = yuvarli.rounded(.down)
+        let kurus = Int(((yuvarli - tam) * olcek).rounded())
+        let tamMetin = tam.formatted(.number.locale(Bicim.locale).precision(.fractionLength(0)))
         let ayirici = Bicim.locale.decimalSeparator ?? ","
-        return (v < 0 ? "−" : "", Bicim.homeSymbol, tamMetin, ayirici + String(format: "%02d", kurus == 100 ? 0 : kurus))
+        let kesir = hane > 0 ? ayirici + String(format: "%0\(hane)d", kurus) : ""
+        return (v < 0 ? "−" : "", Bicim.homeSymbol, tamMetin, kesir)
     }
 }
 
