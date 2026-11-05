@@ -85,9 +85,20 @@ enum OzDenetim {
             try check(m.constants()?.markets == false && m.constants()?.assets.first?.code == "EUR", "euro formları")
             try check(m.homeOf(country: "GB") == "GBP", "ülke → para birimi")
 
-            // ABD: kartın APR'si (döner kredi) ve Pay in 4 (para.js aprFor / bnplFor)
+            // Ülkeye göre özellikler (para.js features): Birleşik Krallık'ta Clearpay ve taksit ikinci planda, Japonya'da
+            // taksit öne çıkar ve Pay in 4 yok
             m.box.json = m.defaultState
-            m.setHome(m.homeOf(country: "US"))
+            try check(m.setCountry("GB") == "GBP", "ülke → para birimi (setCountry)")
+            let gb = m.constants()
+            try check(gb?.installments == "secondary" && gb?.bnplProviders?.map(\.id) == ["klarna", "clearpay", "paypal", "other"]
+                      && gb?.apr == true && gb?.bankEmails == false, "Birleşik Krallık formları")
+            m.setCountry("JP")
+            let jp = m.constants()
+            try check(jp?.installments == "primary" && jp?.bnpl == false && jp?.apr == true, "Japonya formları")
+
+            // ABD: kartın APR'si (döner kredi) ve Pay in 4 (para.js features)
+            m.box.json = m.defaultState
+            m.setCountry("US")
             try check(m.constants()?.apr == true && m.constants()?.bnpl == true && m.constants()?.markets == false, "ABD formları")
             try m.runJSON("add_card", ["name": "Chase", "cutoff_day": 3, "due_day": 28, "apr": 24.99, "auto_pay": false])
             let us: HarcamaSonucu = try m.run("add_purchase", ["description": "Sneakers", "amount": 99.99, "card": "nakit",
@@ -96,7 +107,7 @@ enum OzDenetim {
             let usCards: KartListesi = try m.run("list_cards")
             try check(usCards.cards.first?.apr == 24.99 && usCards.cards.first?.tracking?.autoPay == false, "APR: \(usCards.cards)")
             let _: Borclar = try m.run("list_debts")
-            m.setHome("TRY")
+            m.setCountry("TR")
 
             // CashFollow Premium: hesabın satırı (tablo.js premium, köprüden), ürünler ve ücretsiz sürümün sınırları
             let gun: TimeInterval = 86_400

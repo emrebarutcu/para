@@ -17,6 +17,9 @@ const L = D.t;
 // Hesabın ana para birimi: ülkesinden (girişliyse hesabın user_metadata.country, girişsizse cihazda; para.js). Kartlar,
 // nakit harcamalar, toplamlar ve "TL" yazan her yer ondadır; state.home'a da yazılır (hesap modülleri oradan okur).
 let HOME = "TRY";
+// Hesabın ülkesinin özellikleri (para.js features: taksit öne çıkıyor mu, Pay in 4 sağlayıcıları, kartın faizi, fon /
+// hisse, banka e-postaları, Excel içe aktarma); applyHome ülkeden yazar. Ülkede olmayan özellik görünmez.
+let FEAT = P.features(P.DEFAULT_COUNTRY);
 const STORAGE_KEY_BASE = "cashflow.v1";
 function getStorageKey() {
   return window.CF_USER_ID ? `${STORAGE_KEY_BASE}.${window.CF_USER_ID}` : STORAGE_KEY_BASE;
@@ -71,6 +74,7 @@ let convertingEntryId = null; // harcama formunda açılan eski varlık çıkı�
 let editingCardId = null;     // düzenlenen kart
 let termChange = null;        // kartın günleri değişiyorsa arada kalanlar için seçenekler (T.termChoices)
 let lastCardId = null;        // formda son seçilen kart ("" = nakit)
+let lastBnpl = null;          // formda son seçilen Pay in 4 sağlayıcısı
 let lastPersonId = null;
 let chartMonths = [];
 let inbox = [];               // e-postadan gelen, kendiliğinden eklenemeyen kayıtlar
@@ -396,6 +400,7 @@ const els = {
   dateRow: $("dateRow"), dateVal: $("dateVal"), categoryRow: $("categoryRow"), categoryVal: $("categoryVal"), personVal: $("personVal"),
   repeatRow: $("repeatRow"), repeatVal: $("repeatVal"), purchaseRepeat: $("purchaseRepeat"), assetRow: $("assetRow"), assetVal: $("assetVal"),
   purchaseAssetChips: $("purchaseAssetChips"), countField: $("countField"), cardField: $("cardField"),
+  planSeg: $("planSeg"), bnplField: $("bnplField"), bnplChips: $("bnplChips"), bnplHint: $("bnplHint"),
   cardSheet: $("cardSheet"), cardForm: $("cardForm"), cardTitle: $("cardTitle"),
   cardDelete: $("cardDelete"), cardPreview: $("cardPreview"), cardHint: $("cardHint"), cardColors: $("cardColors"),
   cardDebt: $("cardDebt"), cardPayMode: $("cardPayMode"), trackPreview: $("trackPreview"),
@@ -1902,7 +1907,7 @@ function renderPurchases() {
   const done = mine.filter(x => !x.left).sort(order ?? ((a, b) => b.pays[b.pays.length - 1].key.localeCompare(a.pays[a.pays.length - 1].key)));
 
   // E-postadan gelenler sıralamanın üstünde: Sırala yalnızca altındaki listeyi dizer
-  const mail = inbox.length && P.marketsFor(HOME);   // banka e-postaları yalnızca Türkiye'de
+  const mail = inbox.length && FEAT.bankEmails;   // banka e-postaları yalnızca Türkiye'de
   els.inboxWrap.replaceChildren(...(mail ? [inboxPanel()] : []));
   els.inboxWrap.hidden = !mail;
   els.purchaseSort.value = purchaseSort;
@@ -2367,7 +2372,7 @@ function renderAssets() {
     btn.append(icon("plus"), document.createTextNode(L("Hareket ekle")));
     btn.addEventListener("click", () => openEntrySheet());
     els.entryWrap.append(emptyState("coins", L("Henüz hareket yok"),
-      P.marketsFor(HOME)
+      FEAT.markets
         ? L("{0}, döviz ya da gram altın girişlerini ve çıkışlarını, fon ve hisse alışlarını ekle; bakiyeni güncel kur ve fiyatla {0} olarak gösteririm.", homeShort())
         : L("{0}, döviz ya da gram altın girişlerini ve çıkışlarını ekle; bakiyeni güncel kur ve fiyatla {0} olarak gösteririm.", homeShort()), btn));
     return;
@@ -2487,7 +2492,7 @@ function renderAssetChart(pid) {
       diff > EPS ? "in-text" : diff < -EPS ? "out-text" : ""),
   );
   const names = list => list.map(c => (V.asset(c) ? lowerName(V.asset(c).name) : c)).join(", ");
-  els.assetNote.textContent = (P.marketsFor(HOME)
+  els.assetNote.textContent = (FEAT.markets
     ? L("Her gün o güne kadarki kayıtlarla ve o günün kur ve fiyatlarıyla: dolar, euro, gram altın ve hisseler günlük kapanışla (İş Yatırım), fonlar TEFAS fiyatıyla; bugün güncel kur ve fiyatla.")
     : L("Her gün o güne kadarki kayıtlarla ve o günün kurlarıyla (günlük kapanış); bugün güncel kurla."))
     + " " + L("Alacaklar dahil. Nakdin seyri Özet'teki Nakit grafiğinde.")
@@ -2606,8 +2611,8 @@ function renderHoldings(mine, bals, r) {
   const value = c => V.toTry(bals[c], c, r, HOME);
   const codes = Object.keys(bals).filter(c => V.market(c) && Math.abs(bals[c]) > 1e-9)
     .sort((a, b) => (value(b) ?? -1) - (value(a) ?? -1) || (a < b ? -1 : 1));
-  // Türkiye dışında fon ve hisse eklenmez (P.marketsFor); önceden eklenmiş olanlar görünür, Ekle yok
-  const markets = P.marketsFor(HOME);
+  // Türkiye dışında fon ve hisse eklenmez (FEAT.markets); önceden eklenmiş olanlar görünür, Ekle yok
+  const markets = FEAT.markets;
   if (!markets && !codes.length) { els.holdWrap.replaceChildren(); return; }
   const head = el("header", "panel-head hold-head");
   head.append(el("h2", "", L("Fon ve hisse")));
@@ -3460,6 +3465,14 @@ function openPurchaseSheet(p, draft) {
   els.countChips.replaceChildren(...[...COUNT_PRESETS, "other"].map(n => countTile(n, n === "other" ? other : n === count)));
   f.elements.count.value = count;
   els.countOther.hidden = !other;
+  // Taksidin öne çıkmadığı ülkede peşin başlar; taksitli harcama düzenlenirken Taksitli açık
+  f.elements.plan.value = count > 1 ? "1" : "";
+  // Şimdi al sonra öde: ülkenin sağlayıcıları; düzenlenen harcamanın sağlayıcısı listede yoksa o da (ülke değişmiş olabilir)
+  const provider = p && T.bnpl(p) ? p.bnpl : null;
+  const providers = provider && !FEAT.bnpl.includes(provider) ? [provider, ...FEAT.bnpl] : FEAT.bnpl;
+  const chosen = provider ?? (providers.includes(lastBnpl) ? lastBnpl : providers[0]);
+  els.bnplChips.replaceChildren(...providers.map(id => radioChip("bnplProvider", id, T.bnplName({ bnpl: id }), id === chosen)));
+  f.elements.bnpl.checked = !!provider;
 
   const cardId = p ? (p.cardId && cardById(p.cardId) ? p.cardId : "")
     : draft?.cardId && cardById(draft.cardId) ? draft.cardId
@@ -3701,9 +3714,13 @@ function collectPurchase() {
   const foreign = asset !== HOME;   // döviz / altın: kartsız, peşin
   const desc = f.desc.value.trim();
   const amount = V.round(parseAmount(f.amount.value), asset);
-  const count = foreign ? 1 : Math.round(Number(f.count.value || 1));
+  // Şimdi al sonra öde (ülkede varsa): 4 ödeme, 2 haftada bir; tekrarlamaz
+  const bnpl = !foreign && els.bnplChips.children.length && f.bnpl.checked ? f.bnplProvider.value || null : null;
+  // Taksidin öne çıkmadığı ülkede "Peşin" seçiliyse tek ödeme
+  const single = FEAT.installments === "secondary" && f.plan.value !== "1";
+  const count = foreign ? 1 : bnpl ? 4 : single ? 1 : Math.round(Number(f.count.value || 1));
   const date = T.parseDate(f.date.value) ? f.date.value : "";
-  const { rep, error } = readRepeat(f);
+  const { rep, error } = bnpl ? { rep: {}, error: null } : readRepeat(f);
   const errors = [];
   if (!(amount > 0)) errors.push("amount");
   if (!desc) errors.push("desc");
@@ -3712,12 +3729,14 @@ function collectPurchase() {
   if (error) errors.push(error);
   if (!personById(f.person.value)) errors.push("person");
 
-  const total = f.per.value === "1" && count > 1 ? Math.round(amount * count * 100) / 100 : amount;
+  const total = f.per.value === "1" && count > 1 && !bnpl ? Math.round(amount * count * 100) / 100 : amount;
   const p = { desc, cardId: foreign ? null : f.card.value || null, count, total };
   if (foreign) p.asset = asset;
   Object.assign(p, rep);
-  // Şimdi al sonra öde (iPhone / asistanda girilir): web formunda yok; tarih ve ödeme sayısı aynı kaldıkça korunur
-  if (editing?.bnpl && count === editing.count && rep.repeat == null && date) p.bnpl = editing.bnpl;
+  if (bnpl) {
+    p.bnpl = bnpl;
+    if (!date && !errors.includes("date")) errors.push("date");   // ilk ödeme harcama günü
+  }
   if (K.valid(f.category.value)) Object.assign(p, { category: f.category.value, categoryBy: categorySource === "user" ? "user" : "ai" });
   if (date) {
     p.date = date;
@@ -3745,10 +3764,24 @@ function updatePurchasePreview() {
   for (const b of els.dateChips.querySelectorAll("[data-day]")) {
     b.classList.toggle("on", els.purchaseForm.elements.date.value === T.addDays(today, Number(b.dataset.day)));
   }
-  els.countField.hidden = els.cardField.hidden = code !== HOME;
+  els.cardField.hidden = code !== HOME;
+  // Taksit: Pay in 4'te yok; taksidin öne çıkmadığı ülkede Peşin / Taksitli, taksit seçimi Taksitli'de
+  const secondary = FEAT.installments === "secondary";
+  const picking = !secondary || els.purchaseForm.elements.plan.value === "1";
+  els.countField.hidden = code !== HOME || !!p.bnpl;
+  els.planSeg.hidden = !secondary;
+  els.countChips.hidden = !picking;
+  els.countOther.hidden = !picking || els.countChips.querySelector('input[value="other"]')?.checked !== true;
+  const one = els.countChips.querySelector('input[value="1"]')?.closest(".count-tile");
+  if (one) one.hidden = secondary;   // Taksitli'de Peşin kutusu yok
+  els.repeatRow.hidden = !!p.bnpl;
+  els.bnplField.hidden = code !== HOME || !els.bnplChips.children.length;
+  els.bnplChips.hidden = !p.bnpl;
+  const parts = p.bnpl && p.total > 0 && p.date ? T.bnplAmounts(p) : null;
+  els.bnplHint.textContent = parts ? L("Bugün {0}, sonra 2 haftada bir 3 × {1}", fmt(parts[0]), fmt(parts.at(-1))) : "";
   els.purchaseForm.querySelector(".amount-input .cur").textContent = a.symbol;
   els.purchaseForm.elements.amount.dataset.amount = a.digits;
-  els.perRow.hidden = !(p.count > 1);
+  els.perRow.hidden = !(p.count > 1) || !!p.bnpl;
   renderCountTiles();
   renderRowValues();
   renderCardTip(p.cardId, p.date);
@@ -3836,6 +3869,11 @@ function updatePurchasePreview() {
 els.purchaseForm.addEventListener("input", e => {
   e.target.classList?.remove("invalid");
   const f = els.purchaseForm.elements;
+  // Peşin / Taksitli: Taksitli'ye geçince Peşin seçiliyse 3 taksit
+  if (e.target.name === "plan" && e.target.value === "1" && Math.round(Number(f.count.value)) <= 1) {
+    f.count.value = 3;
+    els.countChips.querySelector('input[value="3"]').checked = true;
+  }
   if (e.target.name === "countPreset") {
     const other = e.target.value === "other";
     els.countOther.hidden = !other;
@@ -3928,6 +3966,7 @@ els.purchaseForm.addEventListener("submit", e => {
   inboxDraftId = null;
   if (p.categoryBy === "user") unsure.clear();   // yeni örnekle emin olunamayanlar yeniden denenebilir
   if (!p.asset) lastCardId = p.cardId || "";
+  if (p.bnpl) lastBnpl = p.bnpl;
   lastPersonId = personId;
   saveState();
   els.purchaseSheet.close();
@@ -4292,11 +4331,11 @@ els.cardForm.addEventListener("submit", e => {
     return;
   }
   if (!v.last4) delete v.last4;
-  // Yıllık faiz (ABD; borc.js döner kredi): boşsa yok
-  const apr = P.aprFor(HOME) && f.apr.value !== "" ? Math.round(Number(f.apr.value) * 100) / 100 : null;
+  // Yıllık faiz (döner kredi olan ülkelerde, FEAT.apr; borc.js): boşsa yok; ülkede yoksa kayıtlı olan kalır
+  const apr = FEAT.apr && f.apr.value !== "" ? Math.round(Number(f.apr.value) * 100) / 100 : null;
   const withApr = c => {
     const { apr: _, ...rest } = c;
-    return apr != null ? { ...rest, apr } : P.aprFor(HOME) ? rest : c;
+    return apr != null ? { ...rest, apr } : FEAT.apr ? rest : c;
   };
 
   // Ekstre ödemesi (trackSince / trackOff / manualSince) formdan; diğer alanlar ve günlerin geçmişi korunur
@@ -4377,7 +4416,7 @@ els.cardDebtLink.addEventListener("click", () => {
 // "Bakiye gir")
 // Hareket formundaki varlıklar: ana para birimi, sık kullanılan yabancılar, altın; fon ve hisse yalnızca Türkiye'de
 const entryKinds = () => [...V.assetsFor(HOME).map(a => ({ code: a.code, name: L(a.name) })),
-  ...(P.marketsFor(HOME) ? Object.entries(V.MARKETS).map(([code, m]) => ({ code, name: m.name })) : [])];
+  ...(FEAT.markets ? Object.entries(V.MARKETS).map(([code, m]) => ({ code, name: m.name })) : [])];
 
 function openEntrySheet(e, asset, draft) {
   if (!state.people.length) { openPeopleSheet(); toast(L("Önce bir kişi ekle")); return; }
@@ -5657,7 +5696,7 @@ function emailItem(row) {
 }
 
 async function checkInbox({ quiet = true } = {}) {
-  if (inboxBusy || typeof window.syncInboxFetch !== "function" || !P.marketsFor(HOME)) return;   // yalnızca Türkiye'de
+  if (inboxBusy || typeof window.syncInboxFetch !== "function" || !FEAT.bankEmails) return;   // yalnızca Türkiye'de
   // Kullanıcıya özel veri yüklenmeden harcama eklenmesin (giriş olayından önce çağrılırsa)
   if (!window.CF_USER_ID || window.CF_USER_ID !== window.syncGetUser?.()?.id) return;
   inboxBusy = true;
@@ -6115,7 +6154,7 @@ function renderCashDef() {
   const others = codes.filter(c => !funds.includes(c));
   els.cashDefList.replaceChildren(
     opt(HOME, V.asset(HOME) ? L(V.asset(HOME).name) : HOME, L("Ana para birimi")),
-    ...(P.marketsFor(HOME) ? [opt(V.MMF, L("TL para piyasası fonları"), funds.length ? L("Elindekiler: {0}", funds.map(c => V.market(c).ticker).join(", "))
+    ...(FEAT.markets ? [opt(V.MMF, L("TL para piyasası fonları"), funds.length ? L("Elindekiler: {0}", funds.map(c => V.market(c).ticker).join(", "))
       : L("TEFAS'taki para piyasası fonları; aynı gün nakde döner (T+0)"))] : []),
     ...V.assetsFor(HOME).filter(a => a.code !== HOME).map(a => opt(a.code, L(a.name))),
     ...(others.length ? [el("span", "group-label cash-def-head", L("Elindeki diğer fon ve hisseler"))] : []),
@@ -6457,6 +6496,7 @@ const IMPORT_ACCEPT = els.importInput.accept;   // index.html: JSON yedeği ve E
 
 function applyHome() {
   HOME = P.homeOfCountry(currentCountry());
+  FEAT = P.features(currentCountry());
   if (state) state.home = HOME;
   moneyFmt = new Intl.NumberFormat(D.locale(), { style: "currency", currency: HOME, minimumFractionDigits: 2, maximumFractionDigits: 2 });
   wholeMoney = new Intl.NumberFormat(D.locale(), { style: "currency", currency: HOME, maximumFractionDigits: 0 });
@@ -6464,13 +6504,14 @@ function applyHome() {
   cashDef = readCashDef();
   for (const n of document.querySelectorAll("[data-home]")) n.textContent = homeShort();
   for (const n of document.querySelectorAll("[data-home-symbol]")) n.textContent = homeSymbol();
-  // Türkiye'ye özel olanlar (P.marketsFor): banka e-postaları, Excel içe aktarma, fon / hisse ve para piyasası notları
-  const tr = P.marketsFor(HOME);
+  // Türkiye'ye özel olanlar (FEAT markets / bankEmails / excelImport): banka e-postaları, Excel içe aktarma, fon / hisse
+  // ve para piyasası notları
+  const tr = FEAT.markets;
   for (const n of document.querySelectorAll("[data-tr]")) n.hidden = !tr;
   for (const n of document.querySelectorAll("[data-not-tr]")) n.hidden = tr;
-  // ABD'ye özel olanlar (P.aprFor): kartın yıllık faizi
-  for (const n of document.querySelectorAll("[data-us]")) n.hidden = !P.aprFor(HOME);
-  els.importInput.accept = tr ? IMPORT_ACCEPT : ".json,application/json";
+  // Kartın yıllık faizi (FEAT.apr; döner kredi olan ülkeler)
+  for (const n of document.querySelectorAll("[data-apr]")) n.hidden = !FEAT.apr;
+  els.importInput.accept = FEAT.excelImport ? IMPORT_ACCEPT : ".json,application/json";
 }
 
 // Ülke değişir: hesapta user_metadata'ya (web, iPhone ve asistan aynısını görür), girişsizse cihaza. Tutarlar çevrilmez.

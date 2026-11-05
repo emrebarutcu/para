@@ -192,9 +192,13 @@
   // bnpl sağlayıcıyla (klarna, afterpay, …) tarihli, tekrarlamayan harcama: count ödeme, ilki date günü, sonrakiler
   // BNPL_DAYS günde bir. Kartla ödenen her ödeme kendi gününün ekstresine girer (at: çekim günü; at bugünden sonraysa
   // henüz karta yansımadı, sağlayıcıya borçtur: borc.js bnplDebt). Kuruşlar tam bölünür, artığı ilk ödeme alır
-  // (99,99 → 25,02 + 3 × 24,99).
-  const BNPL = ["klarna", "afterpay", "affirm", "paypal", "zip", "sezzle", "other"];
-  const BNPL_NAMES = { klarna: "Klarna", afterpay: "Afterpay", affirm: "Affirm", paypal: "PayPal", zip: "Zip", sezzle: "Sezzle", other: "Diğer" };
+  // (99,99 → 25,02 + 3 × 24,99). Bütün sağlayıcılar; bir ülkede sunulanlar para.js features(ülke).bnpl. Başka ülkenin
+  // sağlayıcısıyla kayıtlı harcama da geçerlidir (ülke değişse de kayıt bozulmaz).
+  const BNPL = ["klarna", "afterpay", "affirm", "paypal", "zip", "sezzle", "clearpay", "alma", "scalapay", "tabby", "tamara", "other"];
+  const BNPL_NAMES = {
+    klarna: "Klarna", afterpay: "Afterpay", affirm: "Affirm", paypal: "PayPal", zip: "Zip", sezzle: "Sezzle",
+    clearpay: "Clearpay", alma: "Alma", scalapay: "Scalapay", tabby: "Tabby", tamara: "Tamara", other: "Diğer",
+  };
   const BNPL_DAYS = 14;
   function bnpl(p) {
     return BNPL.includes(p?.bnpl) && !!parseDate(p.date) && p.count >= 2 && R.rule(p) == null;

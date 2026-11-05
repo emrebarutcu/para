@@ -23,8 +23,7 @@ enum Ornek {
         return a[i + 1].split(separator: ",").map(String.init)
     }
 
-    // "-ulke US": örnek veri ABD'de (dolar; tutarlar dolar ölçeğinde). Türkiye dışındaki her ülke (AE, SA…) aynı veriyi
-    // kendi para biriminde kullanır.
+    // "-ulke US": örnek veri o ülkede (Türkiye dışında İngilizce adlar, tutarlar dolar ölçeğinde: veriUS)
     static var ulke: String {
         let a = CommandLine.arguments
         guard let i = a.firstIndex(of: "-ulke"), i + 1 < a.count else { return "TR" }
