@@ -9,7 +9,7 @@ const YZ = window.YZ;
 const B = window.Borc;
 const N = window.Nakit;   // Nakit grafiği ve Varlığın seyri (nakit.js)
 const P = window.Para;    // ülkeler ve para birimleri (para.js)
-// Görünen metinler Türkçe yazılır, L(metin) ile gösterilir: tarayıcı Türkçe değilse dil/en.json'dan İngilizcesi (dil.js;
+// Görünen metinler Türkçe yazılır, L(metin) ile gösterilir: tarayıcı Türkçe değilse dilinin sözlüğünden (dil/<kod>.json, dil.js;
 // sözlük index.html'de app.js'ten önce dil-sayfa.js yükler, üst düzeydeki sabitler de çevrilir). Değişken yerleri {0}, {1}…
 const D = window.Dil;
 const L = D.t;
@@ -199,16 +199,30 @@ function fmtShort(n) {
   return s + Math.round(abs).toLocaleString(D.locale());
 }
 
-// "2026-10-22" → "22 Eki 2026" / "22 Eki"; ay indeksi → "Ekim 2026"
+// "2026-10-22" → "22 Eki 2026" / "22 Eki"; ay indeksi → "Ekim 2026". Türkçe ve İngilizce dışında yerel yazımla (Intl):
+// de "22. Okt. 2026", ja "2026年10月22日"
+const dateFmts = new Map();
+function intlDate(key, opts) {
+  const k = JSON.stringify(opts);
+  if (!dateFmts.has(k)) dateFmts.set(k, new Intl.DateTimeFormat(D.locale(), { ...opts, timeZone: "UTC" }));
+  const [y, m, d] = key.split("-").map(Number);
+  return dateFmts.get(k).format(new Date(Date.UTC(y, m - 1, d || 15)));
+}
+const ownDates = () => D.lang === "tr" || D.lang === "en";
 function fmtDay(key) {
+  if (!ownDates()) return intlDate(key, { day: "numeric", month: "short", year: "numeric" });
   const d = T.parseDate(key);
   return `${d.day} ${T.monthShort(d.idx)} ${T.yearOf(d.idx)}`;
 }
 function fmtDayShort(key) {
+  if (!ownDates()) return intlDate(key, { day: "numeric", month: "short" });
   const d = T.parseDate(key);
   return `${d.day} ${T.monthShort(d.idx)}`;
 }
-function monthLong(idx) { return `${T.monthName(idx)} ${T.yearOf(idx)}`; }
+function monthLong(idx) {
+  if (!ownDates()) return intlDate(T.monthKey(idx), { month: "long", year: "numeric" });
+  return `${T.monthName(idx)} ${T.yearOf(idx)}`;
+}
 
 function relDays(key, today) {
   const d = Math.round((T.toDate(key) - T.toDate(today)) / 864e5);
@@ -1446,9 +1460,10 @@ function cashSeries(from, to, today) {
   return out;
 }
 
-// Ayın günü iyelik ekiyle: 1'i, 6'sı, 15'i, 20'si, 30'u (İngilizcede sıra sayısı: 1st, 2nd, 3rd, 15th)
+// Ayın günü iyelik ekiyle: 1'i, 6'sı, 15'i, 20'si, 30'u (İngilizcede sıra sayısı: 1st, 2nd, 3rd, 15th; diğer dillerde sayı)
 function dayWithSuffix(n) {
   if (D.lang === "en") return n + (n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th");
+  if (D.lang !== "tr") return String(n);   // diğer dillerde ek cümlede: "Am {0}. des Monats", "毎月{0}日"
   const last = n % 10;
   const suffix = last ? ["i", "si", "ü", "ü", "i", "sı", "si", "i", "u"][last - 1] : n === 20 ? "si" : "u";
   return `${n}'${suffix}`;
@@ -3395,12 +3410,14 @@ let planOpen = false;         // önizlemedeki ödeme planı açık
 let categoryFor = null;       // kullanıcı seçmediyse formdaki kategorinin hangi açıklamaya göre verildiği
 let aiNudged = false;         // kategorisiz kayıtta yapay zekâyı açma önerisi bu oturumda gösterildi
 
-// "1.250,50", "1250,5", "1250.50", "1.250" → sayı (Türkçe yazımda nokta binlik, virgül ondalık). İngilizcede virgül binlik,
-// nokta ondalık: "1,250.50", "1250.5". Para birimi işaretleri ve boşluklar atılır.
+// "1.250,50", "1250,5", "1250.50", "1.250" → sayı (Türkçe yazımda nokta binlik, virgül ondalık; Almanca, Fransızca,
+// İspanyolca, İtalyanca, Felemenkçe, Portekizce de virgüllü). İngilizce, Japonca, Korecede virgül binlik, nokta ondalık:
+// "1,250.50", "1250.5". Para birimi işaretleri ve boşluklar (Fransızcanın binlik boşluğu da) atılır.
+const DECIMAL = (1.5).toLocaleString(D.locale()).charAt(1);
 function parseAmount(v) {
   const t = String(v ?? "").replace(/[\s\p{Sc}]/gu, "");
   if (!t) return NaN;
-  if (D.lang !== "tr") return Number(t.replace(/,/g, ""));
+  if (DECIMAL !== ",") return Number(t.replace(/,/g, ""));
   if (t.includes(",")) return Number(t.replace(/\./g, "").replace(",", "."));
   if (/^\d{1,3}(\.\d{3})+$/.test(t)) return Number(t.replace(/\./g, ""));
   return Number(t);

@@ -73,7 +73,9 @@ final class Motor {
             if let failure { throw AracHatasi(message: "\(name).js: \(failure)", user: false) }
         }
         // Paylaşılan modüllerin metinleri (içgörüler, kategoriler, tekrar…) uygulamanın dilinde (dil.js)
-        if Dil.ingilizce { context.objectForKeyedSubscript("Dil")?.invokeMethod("setLang", withArguments: ["en", Dil.sozlukJSON]) }
+        if Dil.turkceDegil {
+            context.objectForKeyedSubscript("Dil")?.invokeMethod("setLang", withArguments: [Dil.kod, Dil.sozlukJSON, Dil.yedekJSON])
+        }
         guard let kopru = context.objectForKeyedSubscript("Kopru"), kopru.isObject else {
             throw AracHatasi(message: "Kopru yüklenemedi", user: false)
         }

@@ -1,8 +1,13 @@
 import SwiftUI
 
-// Tutar ve tarih biçimleri: Türkçede web'deki gibi (tr_TR), İngilizcede telefonun bölgesine göre (ABD: $1,234.56, Nov 20)
+// Tutar ve tarih biçimleri: Türkçede web'deki gibi (tr_TR), diğer dillerde uygulamanın dili ve telefonun bölgesiyle
+// (en_US: $1,234.56, Nov 20; de_DE: 1.234,56 $, 20. Nov.; ja_JP: 11月20日)
 enum Bicim {
-    static let locale = Dil.ingilizce ? Locale.current : Locale(identifier: "tr_TR")
+    static let locale: Locale = {
+        guard Dil.turkceDegil else { return Locale(identifier: "tr_TR") }
+        let bolge = Locale.current.region?.identifier
+        return Locale(identifier: bolge.map { "\(Dil.kod)_\($0)" } ?? Dil.kod)
+    }()
 
     // Hesabın ana para birimi (ülkesinden; Model.applyCountry ayarlar). tl() ana para biriminde yazar.
     static var home = "TRY"
@@ -16,7 +21,7 @@ enum Bicim {
     // Varlığın kendi biriminde: "100 $", "12,500 gr", fon / hissede adet
     static func amount(_ v: Double, asset: String) -> String {
         if asset == home { return tl(v) }
-        if asset == "GAU" { return v.formatted(.number.locale(locale).precision(.fractionLength(0...3))) + (Dil.ingilizce ? " g" : " gr") }
+        if asset == "GAU" { return v.formatted(.number.locale(locale).precision(.fractionLength(0...3))) + (Dil.turkceDegil ? " g" : " gr") }
         if asset.count == 3, asset.allSatisfy(\.isUppercase) { return v.formatted(.currency(code: asset).locale(locale)) }
         return L("{0} adet", v.formatted(.number.locale(locale).precision(.fractionLength(0...4))))
     }
@@ -26,19 +31,19 @@ enum Bicim {
 
     // Ülke ve para birimi adı: İngilizcede telefonun dilinde (Apple'ın adları), Türkçede para.js'teki ad
     static func ulkeAdi(_ code: String, _ tr: String) -> String {
-        Dil.ingilizce ? (Locale.current.localizedString(forRegionCode: code) ?? tr) : tr
+        Dil.turkceDegil ? (Locale.current.localizedString(forRegionCode: code) ?? tr) : tr
     }
     static func paraAdi(_ code: String, _ tr: String) -> String {
         if code == "GAU" { return L("Gram altın") }
-        return Dil.ingilizce ? (Locale.current.localizedString(forCurrencyCode: code).map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? tr) : tr
+        return Dil.turkceDegil ? (Locale.current.localizedString(forCurrencyCode: code).map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? tr) : tr
     }
 
     // Tam sayı yüzde: Türkçede "%45", İngilizcede "45%"
-    static func yuzde(_ n: Int) -> String { Dil.ingilizce ? "\(n)%" : "%\(n)" }
+    static func yuzde(_ n: Int) -> String { Dil.turkceDegil ? "\(n)%" : "%\(n)" }
     // Ondalıklı oran (APR): "24.99%", "%24,99"
     static func oran(_ v: Double) -> String {
         let s = v.formatted(.number.locale(locale).grouping(.never).precision(.fractionLength(0...2)))
-        return Dil.ingilizce ? "\(s)%" : "%\(s)"
+        return Dil.turkceDegil ? "\(s)%" : "%\(s)"
     }
 
     static func percent(_ v: Double) -> String {
@@ -73,7 +78,7 @@ enum Bicim {
         f.locale = locale
         f.timeZone = Yapilandirma.timeZone
         let sablon = key.prefix(4) == Bicim.key(Date()).prefix(4) ? "dMMMM" : "dMMMMyyyy"
-        f.dateFormat = Dil.ingilizce ? DateFormatter.dateFormat(fromTemplate: sablon, options: 0, locale: locale) : (sablon == "dMMMM" ? "d MMMM" : "d MMMM yyyy")
+        f.dateFormat = Dil.turkceDegil ? DateFormatter.dateFormat(fromTemplate: sablon, options: 0, locale: locale) : (sablon == "dMMMM" ? "d MMMM" : "d MMMM yyyy")
         return f.string(from: d)
     }
 
@@ -83,7 +88,7 @@ enum Bicim {
         let f = DateFormatter()
         f.locale = locale
         f.timeZone = Yapilandirma.timeZone
-        f.dateFormat = "LLLL yyyy"
+        f.dateFormat = Dil.turkceDegil ? DateFormatter.dateFormat(fromTemplate: "yMMMM", options: 0, locale: locale) : "LLLL yyyy"
         return f.string(from: d)
     }
 
@@ -99,9 +104,11 @@ enum Bicim {
         }
     }
 
-    // Ayın günü iyelik ekiyle (web: dayWithSuffix): 1'i, 6'sı, 15'i, 20'si, 30'u
+    // Ayın günü iyelik ekiyle (web: dayWithSuffix): 1'i, 6'sı, 15'i, 20'si, 30'u; diğer dillerde sayı (ek cümlede:
+    // "Am {0}. des Monats", "毎月{0}日")
     static func gunEki(_ n: Int) -> String {
-        if Dil.ingilizce {   // 1st, 2nd, 3rd, 4th, 11th, 21st
+        if Dil.turkceDegil && Dil.kod != "en" { return "\(n)" }
+        if Dil.turkceDegil {   // 1st, 2nd, 3rd, 4th, 11th, 21st
             let ek = (11...13).contains(n % 100) ? "th" : ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]
             return "\(n)\(ek)"
         }
@@ -112,8 +119,10 @@ enum Bicim {
 
     // Kullanıcının yazdığı tutar: "1.234,56", "1234.56", "1234"; ondalık ayırıcısı nokta olan bölgede (ABD) "1,234.56"
     static func parse(_ s: String) -> Double? {
-        let t = s.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: homeSymbol, with: "").replacingOccurrences(of: "₺", with: "")
-            .replacingOccurrences(of: "$", with: "").replacingOccurrences(of: " ", with: "")
+        // Para işaretleri, boşluklar (Fransızcanın binlik boşluğu da) ve İsviçre'nin binlik kesmesi atılır
+        let t = String(String.UnicodeScalarView(s.replacingOccurrences(of: homeSymbol, with: "").unicodeScalars.filter {
+            !$0.properties.isWhitespace && $0.properties.generalCategory != .currencySymbol && $0 != "'" && $0 != "’"
+        }))
         guard !t.isEmpty else { return nil }
         let normalized: String
         if locale.decimalSeparator == "." {

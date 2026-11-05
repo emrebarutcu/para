@@ -183,7 +183,7 @@ struct AyarlarEkrani: View {
 
     private var nakitMetni: String {
         let ad: (String) -> String = { c in
-            c == "MMF" ? L("para piyasası fonları") : c == "GAU" ? L("altın") : Dil.ingilizce ? c : model.constants?.currencies.first { $0.code == c }?.short ?? c
+            c == "MMF" ? L("para piyasası fonları") : c == "GAU" ? L("altın") : Dil.turkceDegil ? c : model.constants?.currencies.first { $0.code == c }?.short ?? c
         }
         let list = model.cashDef.map(ad)
         return list.isEmpty ? L("hiçbiri") : list.joined(separator: ", ")

@@ -139,7 +139,7 @@ final class Model: ObservableObject {
     }
 
     // Cihazın saat dilimi ya da uygulamanın dili değiştiyse hesaba yazılır (asistan "bugün"ü saat dilimine göre
-    // hesaplar, giriş e-postaları bu dilde gider)
+    // hesaplar, giriş e-postaları bu dilde gider; şablonlar şimdilik Türkçe / İngilizce: "tr" dışındaki dillere İngilizce)
     private func sendProfile() async {
         let tz = TimeZone.current.identifier, profil = "\(tz)|\(Dil.kod)"
         guard let uid = session?.userId, UserDefaults.standard.string(forKey: "para.profil.\(uid)") != profil,
@@ -383,7 +383,7 @@ final class Model: ObservableObject {
         Bicim.home = home
         Bicim.homeSymbol = c?.symbol ?? home
         // Kısa ad metinlerde ("TL bakiyemden"): İngilizcede para birimi kodu (USD), TL hariç
-        Bicim.homeShort = Dil.ingilizce ? (home == "TRY" ? "TL" : home) : (c?.short ?? home)
+        Bicim.homeShort = Dil.turkceDegil ? (home == "TRY" ? "TL" : home) : (c?.short ?? home)
         if !marketsAllowed { epostalar = [] }   // banka e-postaları yalnızca Türkiye'de
         revision += 1
     }

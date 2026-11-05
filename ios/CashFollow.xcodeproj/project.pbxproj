@@ -92,6 +92,14 @@
 			knownRegions = (
 				tr,
 				en,
+				de,
+				fr,
+				es,
+				it,
+				nl,
+				ja,
+				ko,
+				"pt-BR",
 				Base,
 			);
 			mainGroup = CF0000000000000000000004;
@@ -127,6 +135,14 @@
 			inputPaths = (
 				"$(SRCROOT)/../dil.js",
 				"$(SRCROOT)/../dil/en.json",
+				"$(SRCROOT)/../dil/de.json",
+				"$(SRCROOT)/../dil/fr.json",
+				"$(SRCROOT)/../dil/es.json",
+				"$(SRCROOT)/../dil/it.json",
+				"$(SRCROOT)/../dil/nl.json",
+				"$(SRCROOT)/../dil/ja.json",
+				"$(SRCROOT)/../dil/ko.json",
+				"$(SRCROOT)/../dil/pt.json",
 				"$(SRCROOT)/../para.js",
 				"$(SRCROOT)/../tekrar.js",
 				"$(SRCROOT)/../taksit.js",
@@ -147,6 +163,14 @@
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/dil.js",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/en.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/de.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/fr.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/es.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/it.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/nl.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/ja.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/ko.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/pt.json",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/para.js",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/tekrar.js",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/taksit.js",
@@ -257,7 +281,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 8.6.0;
+				MARKETING_VERSION = 8.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.cashfollow.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -287,7 +311,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 8.6.0;
+				MARKETING_VERSION = 8.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.cashfollow.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

@@ -187,10 +187,13 @@ extension View {
     }
 }
 
-// Eksen için kısa tutar: 12,5 B, 1,2 Mn (İngilizcede 12.5K, 1.2M)
+// Eksen için kısa tutar: 12,5 B, 1,2 Mn (İngilizcede 12.5K, 1.2M; diğer dillerde yerel kısaltma: 1,2 Mio., 12万)
 func kisa(_ v: Double) -> String {
     let a = abs(v), s = v < 0 ? "−" : ""
-    let (mn, b) = Dil.ingilizce ? ("M", "K") : (" Mn", " B")
+    if Dil.kod != "tr" && Dil.kod != "en" {
+        return s + a.formatted(.number.locale(Bicim.locale).notation(.compactName).precision(.fractionLength(0...1)))
+    }
+    let (mn, b) = Dil.turkceDegil ? ("M", "K") : (" Mn", " B")
     if a >= 1_000_000 { return s + (a / 1_000_000).formatted(.number.locale(Bicim.locale).precision(.fractionLength(0...1))) + mn }
     if a >= 1_000 { return s + (a / 1_000).formatted(.number.locale(Bicim.locale).precision(.fractionLength(0...1))) + b }
     return s + a.formatted(.number.locale(Bicim.locale).precision(.fractionLength(0)))

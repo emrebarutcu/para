@@ -179,6 +179,31 @@ test("İngilizce: kategoriler, tekrar etiketi, içgörüler ve ay adları sözl�
   }
 });
 
+// Diğer diller: Motor.swift Dil.setLang(kod, sözlük, İngilizce sözlük) çağırır; eksik anahtar İngilizceden
+test("Almanca ve Japonca: sözlükten, ay adları yerel, eksik anahtar İngilizceden", async () => {
+  const { sandbox, call } = engine();
+  const en = JSON.parse(read("dil/en.json"));
+  try {
+    sandbox.Dil.setLang("de", read("dil/de.json"), read("dil/en.json"));
+    const c = JSON.parse(sandbox.Kopru.constants());
+    assert.equal(c.categories.find(x => x.id === "market").name, "Lebensmittel");
+    await call("add_card", { name: "DKB", cutoff_day: 10, due_day: 5, limit: 1000 });
+    await call("add_purchase", { description: "Netflix", amount: 15, card: "DKB", repeat: 0 });
+    assert.equal((await call("list_purchases", {})).ok.purchases[0].repeat.label, "Monatlich");
+    assert.equal(sandbox.Taksit.monthName(10), "November");
+    // Almanca sözlükte olmayan anahtar İngilizce sözlükten
+    sandbox.Dil.setLang("de", { "Market": "Lebensmittel" }, en);
+    assert.equal(sandbox.Dil.t("Her ay"), "Monthly");
+    sandbox.Dil.setLang("ja", read("dil/ja.json"), read("dil/en.json"));
+    assert.equal(sandbox.Taksit.monthName(10), "11月");
+    assert.equal(sandbox.Dil.locale(), "ja-JP");
+    assert.equal(sandbox.Dil.choose(["sv-SE", "pt-PT", "en"]), "pt");
+    assert.equal(sandbox.Dil.choose(["sv-SE"]), "en");
+  } finally {
+    sandbox.Dil.setLang("tr");
+  }
+});
+
 test("banka e-postaları: Swift'in verdiği liste; yalnızca sunucuda işaretlenenler eklenir", async () => {
   const e = engine();
   await e.call("add_card", { name: "Bonus", limit: 50000, cutoff_day: 10, due_day: 20, last4: "1234" });
