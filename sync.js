@@ -259,9 +259,9 @@
   function watchInbox() {
     unwatchInbox();
     if (!db || !user || typeof db.channel !== 'function') return;
-    // Banka e-postaları yalnızca Türkiye'de (para.js marketsFor; ülkesi yazılmamış eski hesap Türkiye)
+    // Banka e-postaları yalnızca Türkiye'de (para.js features bankEmails; ülkesi yazılmamış eski hesap Türkiye)
     const P = window.Para;
-    if (P && !P.marketsFor(P.homeOfCountry(user.user_metadata?.country))) return;
+    if (P && !P.features(P.country(user.user_metadata?.country)?.code ?? P.DEFAULT_COUNTRY).bankEmails) return;
     inboxChannel = db.channel('inbox-' + user.id)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'inbox_messages', filter: `user_id=eq.${user.id}` },

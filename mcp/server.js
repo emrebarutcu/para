@@ -3,7 +3,7 @@
 // Kimlik doğrulama: Supabase OAuth 2.1. Token'sız istek 401 + WWW-Authenticate alır; istemci
 // /.well-known/oauth-protected-resource'tan Supabase'in yetkilendirme sunucusunu bulur, kullanıcı
 // cashfollow.app/oauth/consent'te izin verir. Bağımlılığı yoktur; sitenin Worker'ından çağrılır (worker.js).
-import { TOOLS, INSTRUCTIONS, ToolError, todayKey } from "./tools.js";
+import { TOOLS, ToolError, todayKey, toolsFor, instructionsFor } from "./tools.js";
 import { createStore, getUser, getPremium } from "./supabase.js";
 import { getRates } from "./kur.js";
 import { getPrices, searchFunds } from "./piyasa.js";
@@ -117,7 +117,7 @@ async function dispatch(msg, ctx) {
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : LATEST,
           capabilities: { tools: { listChanged: false } },
           serverInfo: SERVER_INFO,
-          instructions: INSTRUCTIONS,
+          instructions: instructionsFor(ctx),
         },
       };
     }
@@ -126,7 +126,7 @@ async function dispatch(msg, ctx) {
     case "tools/list":
       return {
         jsonrpc: "2.0", id,
-        result: { tools: TOOLS.map(({ name, title, description, inputSchema, annotations }) => ({ name, title, description, inputSchema, annotations: { title, ...annotations } })) },
+        result: { tools: toolsFor(ctx).map(({ name, title, description, inputSchema, annotations }) => ({ name, title, description, inputSchema, annotations: { title, ...annotations } })) },
       };
     case "tools/call": {
       const out = await callTool(params, ctx);
@@ -164,6 +164,7 @@ export async function handle(request, env = {}, { fetch: f = fetch, now = () => 
     today: todayKey(now(), user.tz),   // kullanıcının saat diliminde "bugün"
     user,
     home,
+    country: user.country,   // ülkeye göre özellikler (para.js features)
     premium: () => premiumFor(token, cfg, f),
     load: store.load,
     mutate: store.mutate,

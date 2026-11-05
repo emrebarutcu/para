@@ -129,6 +129,9 @@ final class Motor {
 
     // Hesabın ana para birimi (ülkesinden; para.js): veri, kurlar ve araçlar onunla
     func setHome(_ code: String) { kopru.invokeMethod("setHome", withArguments: [code]) }
+    // Hesabın ülkesi: ana para birimi ondan (döner), özellikler de (Pay in 4, kartın faizi, fon / hisse…; para.js features)
+    @discardableResult
+    func setCountry(_ code: String) -> String { kopru.invokeMethod("setCountry", withArguments: [code])?.toString() ?? "TRY" }
     // Nakit sayılanlar (Nakit grafiği); nil varsayılan (ana para birimi ve para piyasası fonları)
     func setCashDef(_ list: [String]?) {
         let json = list.flatMap { try? JSONSerialization.data(withJSONObject: $0) }.map { String(decoding: $0, as: UTF8.self) }
@@ -233,10 +236,16 @@ struct Sabitler: Decodable {
     let currencies: [Varlik]
     let countries: [Ulke]
     let home: String
+    // Ülkeye göre özellikler (para.js features; kopru.js constants)
+    let country: String?
+    let installments: String?     // "primary": taksit seçenekleri hep açık; "secondary": form peşin başlar, "Taksitli"
     let markets: Bool             // fon ve hisse (yalnızca Türkiye)
-    let apr: Bool?                // kartın yıllık faizi, döner kredi (ABD)
-    let bnpl: Bool?               // şimdi al sonra öde, Pay in 4 (ABD)
-    let bnplProviders: [Kategori]?    // sağlayıcılar (id, name)
+    let apr: Bool?                // kartın yıllık faizi, döner kredi (ABD, Kanada, Birleşik Krallık, Avustralya…)
+    let bnpl: Bool?               // şimdi al sonra öde, Pay in 4
+    let bankEmails: Bool?         // banka e-postaları (yalnızca Türkiye)
+    let excelImport: Bool?        // Excel içe aktarma, web'de (yalnızca Türkiye)
+    let bnplProviders: [Kategori]?    // ülkede sunulan sağlayıcılar (id, name; sonda Diğer)
+    let bnplAll: [Kategori]?          // bütün sağlayıcılar: kayıtlı harcamanın sağlayıcısı başka ülkeninse adı
     let cashDefault: [String]     // nakit tanımının varsayılanı
     let inboxBanks: [String]?     // banka e-postaları: desteklenen bankalar
 }

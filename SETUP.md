@@ -264,7 +264,24 @@ ya da GitHub'da "Supabase SQL" iş akışı (secret tanımlıysa yeni geçiş do
 Kayıtta (web ve iPhone) ülke seçilir; hesabın bilgisi olarak saklanır (`user_metadata.country`), web, iPhone ve asistan aynı
 para birimini kullanır. Girişsiz kullanımda ülke cihazdadır (web: `para.ulke`, iPhone: Ayarlar). Ülkeler ve para birimleri
 `para.js`'te; yeni ülke eklemek için oraya bir satır yeter (para birimi kur kaynağında olmalı: `mcp/kur.js`). Ülke Ayarlar'dan
-değişir; kayıtlı tutarlar çevrilmez. Fon ve hisse (TEFAS, Borsa İstanbul) yalnızca Türkiye'de.
+değişir; kayıtlı tutarlar çevrilmez.
+
+**Ülkeye göre özellikler.** Bir ülkede kullanılmayan özellik orada görünmez. Tablo `para.js`'te (`FEATURES`,
+`features(ülke)`), hesabın ülkesine göre (para birimi yetmez: euro birçok ülkenin); listede olmayan ülke `DEFAULT_FEATURES`'ı
+alır. Web (`app.js` `FEAT`), iPhone (`kopru.js` `setCountry` → `constants()` → `Sabitler`, `Model.installmentsPrimary`,
+`bnplAllowed`, `aprAllowed`…) ve asistan (`mcp/tools.js` `featuresOf(ctx)`; `toolsFor` / `instructionsFor` araç listesini ve
+bilgiyi ülkeye göre verir, doğrulama da ona göre) aynı tabloya bakar.
+
+| Özellik | Nerede | Başka yerde |
+|---|---|---|
+| `installments` "primary": taksit seçenekleri formda hep açık | TR, JP, KR, AE, SA, QA, KW (ve listeye eklenince IL, Latin Amerika) | "secondary": form peşin başlar, taksit "Taksitli"nin arkasında; taksit hiçbir yerde gizlenmez |
+| `bnpl` (Pay in 4) sağlayıcıları, sonda hep Diğer | US: Klarna, Afterpay, Affirm, PayPal, Zip, Sezzle · CA: Klarna, Afterpay, Affirm, PayPal · GB: Klarna, Clearpay, PayPal · AU: Afterpay, Zip, Klarna, PayPal · NZ: Afterpay, Zip, Klarna · DE AT NL BE SE NO DK FI ES: Klarna, PayPal · FR: + Alma · IT: + Scalapay · AE SA QA KW: Tabby, Tamara | yok |
+| `apr` (kartın faizi, döner kredi) | US, CA, GB, AU, NZ, JP | yok |
+| `markets` (fon / hisse, para piyasası fonları), `bankEmails`, `excelImport` | TR | yok |
+
+Kayıtlı veri bozulmaz: ülkede olmayan bir sağlayıcıyla (ya da APR'yle) kaydedilmiş harcama / kart görünür, düzenlenir, o değer
+kalır; yalnızca yeni bir yabancı değer seçilemez. Sağlayıcıların adları `taksit.js` `BNPL_NAMES`'te. Yeni bir özellik:
+`DEFAULT_FEATURES`'a varsayılanı, ülkelere kendi değeri.
 
 ### iOS uygulaması (`ios/`, Swift)
 
