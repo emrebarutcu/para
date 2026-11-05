@@ -1,7 +1,10 @@
 // Çeviri denetimi: iPhone'da (L("…")), paylaşılan modüllerde (L("…"), D.t("…")) ve web'de (app.js, sync.js, index.html)
-// görünen her Türkçe metnin dil/en.json'da İngilizcesi var mı. Eksik varsa listeler ve hata verir (CI: ios.yml → kopru).
-//   node scripts/dil.mjs           denetle
-//   node scripts/dil.mjs --eksik   eksikleri JSON olarak yaz (sözlüğe eklemek için)
+// görünen her Türkçe metnin dil/en.json'da İngilizcesi var mı; diğer dillerin sözlüklerinde (dil/de.json…, dil.js → LANGS)
+// İngilizcedeki her anahtar dolu mu ve yer tutucuları ({0}, {1}…) aynı mı. Eksik varsa listeler ve hata verir
+// (CI: ios.yml → kopru).
+//   node scripts/dil.mjs              denetle
+//   node scripts/dil.mjs --eksik      İngilizcesi eksikleri JSON olarak yaz (sözlüğe eklemek için)
+//   node scripts/dil.mjs --eksik de   Almancası eksikleri İngilizceleriyle JSON olarak yaz (çevirip dil/de.json'a eklemek için)
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -115,12 +118,37 @@ const holes = s => [...s.matchAll(/\{(\d+)\}/g)].map(m => m[1]).sort().join(",")
 const badHoles = [...keys.keys()].filter(k => typeof dict[k] === "string" && holes(k) !== holes(dict[k]));
 const unused = Object.keys(dict).filter(k => !keys.has(k));
 
+// Diğer diller: İngilizcedeki her anahtar dolu ve yer tutucuları aynı; İngilizcede olmayan anahtar fazladır (uyarı)
+const { LANGS } = require(path.join(ROOT, "dil.js"));
+const others = LANGS.filter(l => l !== "tr" && l !== "en").map(lang => {
+  const file = path.join(ROOT, `dil/${lang}.json`);
+  const d = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+  return {
+    lang, d,
+    missing: Object.keys(dict).filter(k => typeof d[k] !== "string" || (!d[k] && dict[k])),
+    badHoles: Object.keys(dict).filter(k => typeof d[k] === "string" && d[k] && holes(d[k]) !== holes(dict[k])),
+    extra: Object.keys(d).filter(k => !(k in dict)),
+  };
+});
+
 if (process.argv.includes("--eksik")) {
-  console.log(JSON.stringify(Object.fromEntries(missing.map(([k]) => [k, ""])), null, 2));
+  const o = others.find(x => x.lang === process.argv[process.argv.indexOf("--eksik") + 1]);
+  const out = o ? o.missing.map(k => [k, dict[k]]) : missing.map(([k]) => [k, ""]);
+  console.log(JSON.stringify(Object.fromEntries(out), null, 2));
   process.exit(0);
 }
 console.log(`${keys.size} metin, ${Object.keys(dict).length} çeviri`);
 if (unused.length) console.log(`Kullanılmayan çeviri (${unused.length}): ${unused.slice(0, 10).map(k => JSON.stringify(k)).join(", ")}${unused.length > 10 ? " …" : ""}`);
 if (badHoles.length) console.log(`Yer tutucusu uymayan (${badHoles.length}):\n` + badHoles.map(k => `  ${JSON.stringify(k)} → ${JSON.stringify(dict[k])}`).join("\n"));
 if (missing.length) console.log(`Çevirisi olmayan (${missing.length}):\n` + missing.map(([k, w]) => `  ${w}  ${JSON.stringify(k)}`).join("\n"));
-process.exit(missing.length || badHoles.length ? 1 : 0);
+let fail = missing.length > 0 || badHoles.length > 0;
+const list = (ks, f) => ks.slice(0, 20).map(f).join("\n") + (ks.length > 20 ? "\n    …" : "");
+for (const o of others) {
+  const ok = !o.missing.length && !o.badHoles.length;
+  console.log(`${o.lang}: ${Object.keys(dict).length - o.missing.length}/${Object.keys(dict).length}${ok ? " ✓" : ""}`);
+  if (o.extra.length) console.log(`  İngilizcede olmayan (${o.extra.length}): ${o.extra.slice(0, 10).map(k => JSON.stringify(k)).join(", ")}${o.extra.length > 10 ? " …" : ""}`);
+  if (o.badHoles.length) console.log(`  Yer tutucusu uymayan (${o.badHoles.length}):\n` + list(o.badHoles, k => `    ${JSON.stringify(dict[k])} → ${JSON.stringify(o.d[k])}`));
+  if (o.missing.length) console.log(`  Çevirisi olmayan (${o.missing.length}; node scripts/dil.mjs --eksik ${o.lang}):\n` + list(o.missing, k => `    ${JSON.stringify(k)}`));
+  if (!ok) fail = true;
+}
+process.exit(fail ? 1 : 0);

@@ -544,7 +544,7 @@
       const { data, error } = authMode === 'login'
         ? await db.auth.signInWithPassword({ email, password })
         : await db.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin,
-          // lang: giriş e-postalarının dili; sayfanın dili (dil-sayfa.js: tarayıcı Türkçe değilse İngilizce; iPhone'da uygulamanın)
+          // lang: giriş e-postalarının dili; sayfanın dili (dil-sayfa.js; şablonlar "tr" dışındaki dillere İngilizce)
           data: { country: document.getElementById('authCountry')?.value || 'TR', lang: window.Dil.lang } } });
 
       btn.disabled = false;

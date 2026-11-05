@@ -1,5 +1,6 @@
-// Web'in dili: tarayıcı Türkçe ise Türkçe, değilse İngilizce (iPhone'daki Dil.swift gibi). index.html'de dil.js'ten hemen
-// sonra, diğer betiklerden önce yüklenir: sözlüğü (dil/en.json) eşzamanlı alır ki app.js ve sync.js'teki L("…") ile
+// Web'in dili: tarayıcının tercih ettiği dillerden ilk desteklenen (tr, en, de, fr, es, it, nl, ja, ko, pt), yoksa İngilizce
+// (iPhone'daki Dil.swift gibi). index.html'de dil.js'ten hemen sonra, diğer betiklerden önce yüklenir: sözlüğü
+// (dil/<kod>.json, eksikler için dil/en.json) eşzamanlı alır ki app.js ve sync.js'teki L("…") ile
 // üst düzeydeki sabitler de çevrilsin; sonra sayfanın sabit metinlerini (index.html) çevirir.
 // Sabit metinler: metin düğümleri ve aria-label / title / placeholder. Doğrudan metni ve satır içi alt öğesi olan öğe
 // (<p>Kart <strong>ekstreleri</strong> düşer</p>) tek metin olarak çevrilir; alt öğeler {0}, {1}… yerindedir:
@@ -52,10 +53,10 @@
     for (const c of kids) if (c.nodeType === 1) texts(c, visit);
   }
 
-  // Tarayıcının ilk dili Türkçe değilse "en"
+  // Tarayıcının tercih ettiği dillerden ilk desteklenen (dil.js → LANGS), yoksa "en"
   function browserLang(nav) {
-    const l = (nav && (nav.languages && nav.languages[0] || nav.language)) || "tr";
-    return /^tr\b/i.test(l) ? "tr" : "en";
+    const Dl = typeof module === "object" && module.exports ? require("./dil.js") : root.Dil;
+    return Dl.choose((nav && (nav.languages && nav.languages.length ? nav.languages : [nav.language])) || []);
   }
 
   const api = { texts, browserLang };
@@ -64,13 +65,22 @@
   if (typeof document === "undefined") return;
 
   const D = root.Dil;
-  if (browserLang(root.navigator) !== "tr") {
+  // Sözlüğü eşzamanlı al: sonraki betikler çevrilmiş metinle başlasın
+  const load = code => {
     try {
       const x = new XMLHttpRequest();
-      x.open("GET", "/dil/en.json", false);   // eşzamanlı: sonraki betikler çevrilmiş metinle başlasın
+      x.open("GET", `/dil/${code}.json`, false);
       x.send();
-      if (x.status === 200) D.setLang("en", x.responseText);
-    } catch (e) { /* sözlük gelmezse Türkçe kalır */ }
+      return x.status === 200 ? x.responseText : null;
+    } catch (e) { return null; }
+  };
+  const code = browserLang(root.navigator);
+  if (code !== "tr") {
+    const own = load(code);
+    // Diğer dillerde eksik anahtar İngilizceden; sözlük gelmezse İngilizce, o da gelmezse Türkçe kalır
+    const en = code === "en" ? null : load("en");
+    if (own) D.setLang(code, own, en);
+    else if (en) D.setLang("en", en);
   }
   document.documentElement.lang = D.lang;
   if (D.lang !== "tr") {

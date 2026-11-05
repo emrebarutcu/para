@@ -151,14 +151,14 @@ struct UlkeSecici: View {
 
     private var ulkeler: [Sabitler.Ulke] {
         let liste = model.constants?.countries ?? []
-        return Dil.ingilizce ? liste.sorted { Bicim.ulkeAdi($0.code, $0.name) < Bicim.ulkeAdi($1.code, $1.name) } : liste
+        return Dil.turkceDegil ? liste.sorted { Bicim.ulkeAdi($0.code, $0.name) < Bicim.ulkeAdi($1.code, $1.name) } : liste
     }
 
     var body: some View {
         Picker(L("Ülke"), selection: $secim) {
             // İngilizcede ülke adları telefonun dilinde (Locale), alfabetik; para birimi kodla
             ForEach(ulkeler) { u in
-                Text("\(Bicim.ulkeAdi(u.code, u.name)) · \(Dil.ingilizce ? u.currency : model.constants?.currencies.first { $0.code == u.currency }?.short ?? u.currency)").tag(u.code)
+                Text("\(Bicim.ulkeAdi(u.code, u.name)) · \(Dil.turkceDegil ? u.currency : model.constants?.currencies.first { $0.code == u.currency }?.short ?? u.currency)").tag(u.code)
             }
         }
     }
