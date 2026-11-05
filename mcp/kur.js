@@ -1,7 +1,9 @@
 // ---------- Güncel kurlar: para birimleri (para.js) ve gram altın, TL karşılıklarıyla ----------
 // Başka ana para birimi olan hesaplar bunlardan kendi kurlarını hesaplar (para.js homeRates).
 // Uygulama /api/kur'dan, asistan araçları doğrudan buradan alır. Kaynak Truncgil (Türkiye piyasası, satış fiyatı);
-// erişilemezse dolar / euro open.er-api.com'dan, altın gold-api.com'un ons fiyatından hesaplanır.
+// erişilemezse dolar / euro open.er-api.com'dan, altın gold-api.com'un ons fiyatından hesaplanır. Truncgil'in diğer
+// para birimleri open.er-api ile karşılaştırılır: yarısından az ya da iki katından fazlaysa (Truncgil Japon yenini 100'de
+// bir verir) open.er-api'ninki kullanılır.
 // Sonuç 10 dakika saklanır (Worker örneğinin belleğinde ve Cloudflare önbelleğinde).
 const TTL = 10 * 60_000;
 const TIMEOUT = 5000;
@@ -35,6 +37,36 @@ async function fromTruncgil(f) {
   return { rates, updatedAt: at ? new Date(at).toISOString() : new Date().toISOString(), source: "truncgil" };
 }
 
+// open.er-api'nin kurları TL karşılığıyla ({ GBP: 67.1, … }); alınamazsa null
+async function fxTry(f) {
+  try {
+    const fx = await getJson(f, FX);
+    const usd = Number(fx.rates?.TRY);
+    if (!(Number.isFinite(usd) && usd > 0)) return null;
+    const out = {};
+    for (const c of CODES) {
+      const v = usd / Number(fx.rates?.[c]);
+      if (Number.isFinite(v) && v > 0) out[c] = Number(v.toPrecision(6));
+    }
+    return out;
+  } catch (err) {
+    console.warn("kur karşılaştırması:", err.message);
+    return null;
+  }
+}
+
+// Truncgil'in tuttuğu kurlar (TL, dolar, euro, altın) olduğu gibi kalır; diğerleri karşılaştırmadan geçer
+function checked(value, fx) {
+  if (!fx) return value;
+  const rates = { ...value.rates };
+  for (const c of CODES) {
+    if (c === "USD" || c === "EUR" || !(c in rates) || !(c in fx)) continue;
+    const ratio = rates[c] / fx[c];
+    if (ratio < 0.5 || ratio > 2) rates[c] = fx[c];
+  }
+  return { ...value, rates };
+}
+
 async function fromFallback(f) {
   const [fx, gold] = await Promise.all([getJson(f, FX), getJson(f, GOLD)]);
   const usd = Number(fx.rates?.TRY);
@@ -55,7 +87,8 @@ export async function getRates({ fetch: f = fetch, now = Date.now } = {}) {
   if (memo && now() - memo.at < TTL) return memo.value;
   let value;
   try {
-    value = await fromTruncgil(f);
+    const [t, fx] = await Promise.all([fromTruncgil(f), fxTry(f)]);
+    value = checked(t, fx);
   } catch (err) {
     console.warn("kur:", err.message);
     value = await fromFallback(f);
