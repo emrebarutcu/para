@@ -15,9 +15,10 @@ enum Bicim {
     static var home = "TRY"
     static var homeSymbol = "₺"
     static var homeShort = "TL"
+    static var homeDigits = 2   // kuruş hanesi: yen 0, Kuveyt dinarı 3 (para.js digits)
 
     static func tl(_ v: Double, fraction: Bool = true) -> String {
-        v.formatted(.currency(code: home).locale(locale).precision(.fractionLength(fraction ? 2 : 0)))
+        v.formatted(.currency(code: home).locale(locale).precision(.fractionLength(fraction ? homeDigits : 0)))
     }
 
     // Varlığın kendi biriminde: "100 $", "12,500 gr", fon / hissede adet
