@@ -3,6 +3,8 @@
 // LLM'lere araç olarak açılır. Hesaplar uygulamayla aynı modüllerden (taksit.js, borc.js, eposta.js…) gelir; doğrulama
 // kuralları app.js'teki formlarla aynıdır. Araçlar kullanıcının verisine yalnızca ctx üzerinden erişir (bkz. server.js):
 //   ctx.today            "YYYY-MM-DD" (Türkiye saati); ekstre, kredi taksiti ve ödemelerin varlığa etkisi buna göre
+//   ctx.home, ctx.country  hesabın ana para birimi ve ülkesi; ülkeye göre özellikler (para.js features: şimdi al sonra
+//                        öde, kartın faizi, fon / hisse, banka e-postaları). Ülke yoksa para biriminden (eski çağrılar).
 //   ctx.load()           → hydrate edilmiş veri
 //   ctx.mutate(fn)       → fn(veri) çalışır, değişen kişi / kart / harcama / hareket / borç kayıtları kaydedilir
 //   ctx.inbox            → pending(), claim(ids), release(ids), address(renew)
@@ -20,6 +22,18 @@ import P from "../para.js";
 
 // Hesabın ana para birimi (para.js; state.home, ctx.load verir): kartlar, nakit harcamalar ve toplamlar onunla
 const homeOf = state => P.homeOf(state);
+// Hesabın ülkesi (ctx.country; sunucuda user_metadata.country, iPhone'da Ayarlar) ve özellikleri. Ülkesi verilmeyen
+// eski çağrı: ana para biriminin ülkesi (TRY → Türkiye; yoksa Türkiye).
+function countryOf(ctx) {
+  return P.country(ctx?.country)?.code ?? (P.isCurrency(ctx?.home) ? P.countryOfHome(ctx.home) : P.DEFAULT_COUNTRY);
+}
+export const featuresOf = ctx => P.features(countryOf(ctx));
+// Hata metinlerinde ülkenin adı (İngilizce)
+function countryLabel(ctx) {
+  const c = countryOf(ctx);
+  if (!c) return "this country";
+  try { return new Intl.DisplayNames(["en"], { type: "region" }).of(c) ?? c; } catch { return c; }
+}
 
 export const TIME_ZONE = "Europe/Istanbul";   // saat dilimi verilmezse (eski çağrılar); sunucu kullanıcınınkini verir
 const MAX_MONTHS = 60;       // akıştaki en fazla ay (app.js ile aynı)
@@ -466,15 +480,18 @@ function preview(state, p) {
 
 // ---------- Harcama / kart / kişi kuralları (app.js formlarıyla aynı) ----------
 // base: düzenlenen harcama ya da e-postadan gelen taslak; verilmeyen alanlar ondan alınır
-function buildPurchase(state, args, today, base = null) {
+// ctx: hesabın ülkesi (featuresOf); şimdi al sonra öde sağlayıcıları ondan
+function buildPurchase(state, args, today, base = null, ctx = { home: homeOf(state) }) {
   const desc = args.description !== undefined ? text(args.description, "description") : base?.desc;
   if (!desc) fail("description is required (what was bought).");
 
-  // Şimdi al sonra öde (ABD; taksit.js bnpl): sağlayıcı; null kaldırır (aylık taksite döner)
+  // Şimdi al sonra öde (taksit.js bnpl): sağlayıcı; null kaldırır (aylık taksite döner). Yalnızca ülkenin
+  // sağlayıcıları (para.js features); kayıttaki sağlayıcı ülkede olmasa da kalır (ülke değişmiş olabilir).
   const bnpl = args.bnpl !== undefined ? args.bnpl : base?.bnpl ?? null;
-  if (bnpl != null) {
-    if (!T.BNPL.includes(bnpl)) fail(`bnpl must be one of ${T.BNPL.join(", ")}, or null.`);
-    if (args.bnpl !== undefined && !P.bnplFor(homeOf(state))) fail("Buy now, pay later (Pay in 4) is only available for accounts in the US for now.");
+  if (bnpl != null && bnpl !== base?.bnpl) {
+    const offered = featuresOf(ctx).bnpl;
+    if (!offered.length) fail(`Buy now, pay later (Pay in 4) is not available for accounts in ${countryLabel(ctx)}.`);
+    if (!offered.includes(bnpl)) fail(`bnpl must be one of ${offered.join(", ")} (the providers offered in ${countryLabel(ctx)}), or null.`);
   }
   const count = intArg(args.installments, "installments", 1, MAX_COUNT, args.bnpl != null && args.installments === undefined && !base?.bnpl ? 4 : base?.count ?? (bnpl ? 4 : 1));
   if (bnpl && (count < 2 || count > 12)) fail("A buy now, pay later purchase has 2 to 12 payments (Pay in 4: 4).");
@@ -535,7 +552,7 @@ function buildPurchase(state, args, today, base = null) {
   return { personId: person.id, p };
 }
 
-function buildCard(state, args, base = null) {
+function buildCard(state, args, base = null, ctx = { home: homeOf(state) }) {
   const v = {
     name: args.name !== undefined ? text(args.name, "name") : base?.name,
     limit: args.limit !== undefined ? Number(args.limit) : base?.limit ?? 0,
@@ -552,7 +569,7 @@ function buildCard(state, args, base = null) {
   if (v.last4 && state.cards.some(c => c.id !== base?.id && c.last4 === v.last4)) fail(`Another card already has last4 ${v.last4}.`);
   if (v.apr != null) {
     if (typeof v.apr !== "number" || !(v.apr >= 0 && v.apr <= 100)) fail("apr must be a number from 0 to 100 (annual %), or null.");
-    if (args.apr !== undefined && !P.aprFor(homeOf(state))) fail("Card APR (carrying a balance with interest) is only available for accounts in the US for now.");
+    if (args.apr !== undefined && args.apr !== base?.apr && !featuresOf(ctx).apr) fail(`Card APR (carrying a balance with interest) is not available for accounts in ${countryLabel(ctx)}.`);
   }
   const { last4, apr, ...rest } = v;
   return { ...rest, ...(last4 && { last4 }), ...(apr != null && { apr: Math.round(apr * 100) / 100 }) };
@@ -729,13 +746,13 @@ function buildEntry(state, args, today, base = null, quote = null) {
   return { ...e, ...(price != null && { price }), ...(settle && { settle: true }) };
 }
 
-// Fon ve hisse (TEFAS, Borsa İstanbul) şimdilik yalnızca Türkiye'deki hesaplarda (ana para birimi TL; para.js)
-function checkMarketsAllowed(code, home) {
-  if (V.market(code) && !P.marketsFor(P.isCurrency(home) ? home : "TRY")) fail("Funds and stocks (TEFAS, Borsa İstanbul) are only available for accounts in Turkey for now.");
+// Fon ve hisse (TEFAS, Borsa İstanbul) şimdilik yalnızca Türkiye'deki hesaplarda (para.js features markets)
+function checkMarketsAllowed(code, ctx) {
+  if (V.market(code) && !featuresOf(ctx).markets) fail("Funds and stocks (TEFAS, Borsa İstanbul) are only available for accounts in Turkey for now.");
 }
-// Banka e-postaları Türk bankalarının bildirimlerini okur: yalnızca Türkiye'deki hesaplarda (P.marketsFor)
-function checkInboxAllowed(home) {
-  if (!P.marketsFor(P.isCurrency(home) ? home : "TRY")) fail("Bank e-mails (Turkish bank notifications) are only available for accounts in Turkey for now.");
+// Banka e-postaları Türk bankalarının bildirimlerini okur: yalnızca Türkiye'deki hesaplarda (features bankEmails)
+function checkInboxAllowed(ctx) {
+  if (!featuresOf(ctx).bankEmails) fail("Bank e-mails (Turkish bank notifications) are only available for accounts in Turkey for now.");
 }
 
 // Fon / hisse kodu biliniyor mu (fiyat kaynağına göre); kaynak alınamadıysa doğrulanamaz, kabul edilir
@@ -1139,7 +1156,7 @@ const PURCHASE_FIELDS = {
     description: `Spending category: ${K.CATEGORIES.map(c => `${c.id} = ${c.name} (${c.hint})`).join("; ")}. null removes it. Omit on add to reuse the category the user gave the same merchant before.`,
   },
   asset: { type: "string", description: 'What the purchase is paid in: the account currency (default; the currency field of the answers, TRY in Turkey), another currency code (USD, EUR, GBP…) or GAU (grams of gold). Purchases in another currency are paid at once in cash from that asset (card "nakit", installments 1).' },
-  bnpl: { type: ["string", "null"], enum: [...T.BNPL, null], description: 'Buy now, pay later provider (accounts in the US): "Pay in 4" with Klarna, Afterpay, Affirm, PayPal, Zip, Sezzle or other. installments payments (default 4, 2–12), the first on date, then every 2 weeks, from the card (each payment goes on the statement of its own date) or cash. What is not paid yet is owed to the provider (list_debts bnpl). null turns it back into a regular purchase. Affirm\'s monthly plans are loans (add_debt) or regular card installments.' },
+  bnpl: { type: ["string", "null"], enum: [...T.BNPL, null], description: 'Buy now, pay later provider ("Pay in 4"), only the providers offered in the account\'s country (the enum; "other" for any other provider). installments payments (default 4, 2–12), the first on date, then every 2 weeks, from the card (each payment goes on the statement of its own date) or cash. What is not paid yet is owed to the provider (list_debts bnpl). null turns it back into a regular purchase. Affirm\'s monthly plans are loans (add_debt) or regular card installments.' },
   ...REPEAT_FIELDS,
 };
 const CARD_FIELDS = {
@@ -1148,7 +1165,7 @@ const CARD_FIELDS = {
   cutoff_day: S.int("Statement cutoff day of month (hesap kesim günü).", 1, 31),
   due_day: S.int("Payment due day of month (son ödeme günü).", 1, 31),
   last4: S.str('Last 4 digits of the card (used to match bank e-mails). "" removes it.'),
-  apr: { type: ["number", "null"], minimum: 0, maximum: 100, description: "Annual interest rate (APR, %) for accounts in the US: on a card paid by hand (auto_pay false), what is left of a statement after its due day carries to the next statement with monthly interest (APR / 12), and is overdue only if less than the minimum payment was paid. On automatic cards (paid in full) it has no effect. null removes it. Changing it recomputes interest since paying by hand started." },
+  apr: { type: ["number", "null"], minimum: 0, maximum: 100, description: "Annual interest rate (APR, %), only in countries where card balances are carried with interest (revolving credit): on a card paid by hand (auto_pay false), what is left of a statement after its due day carries to the next statement with monthly interest (APR / 12), and is overdue only if less than the minimum payment was paid. On automatic cards (paid in full) it has no effect. null removes it. Changing it recomputes interest since paying by hand started." },
   auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call: statements since then are unpaid until marked paid); on a day a card payment is dated it starts tomorrow instead (the card stays automatic today). Switching back to true counts unpaid past statements as paid; it fails while recorded card payments would stop counting (payments for statements not past their due day yet: on a statement's due day switch the next day; for payments made ahead, delete them or wait until the day after those due days) and while the card is not tracked (an untracked card keeps its mode)."),
 };
 
@@ -1351,7 +1368,7 @@ export const TOOLS = [
     annotations: WRITE,
     async run(args, ctx) {
       const make = state => {
-        const { personId, p } = buildPurchase(state, args, ctx.today);
+        const { personId, p } = buildPurchase(state, args, ctx.today, null, ctx);
         return { id: uid(), personId, ...p };
       };
       if (args.dry_run) {
@@ -1375,7 +1392,7 @@ export const TOOLS = [
     async run(args, ctx) {
       return ctx.mutate(state => {
         const cur = findPurchase(state, args.id);
-        const { personId, p } = buildPurchase(state, args, ctx.today, cur);
+        const { personId, p } = buildPurchase(state, args, ctx.today, cur, ctx);
         const next = { id: cur.id, personId, ...p };
         state.installments = state.installments.map(x => (x.id === cur.id ? next : x));
         return { saved: true, purchase: purchaseView(state, next, ctx.today), preview: preview(state, next) };
@@ -1438,7 +1455,7 @@ export const TOOLS = [
       if (args.auto_pay !== undefined && typeof args.auto_pay !== "boolean") fail("auto_pay must be true or false.");
       return ctx.mutate(state => {
         // Yeni kart bugünden takipte (app.js kart formu gibi); elle ödenecekse ekstreleri de bugünden
-        const c = { id: uid(), ...buildCard(state, args), color: T.nextColor(state.cards), trackSince: ctx.today,
+        const c = { id: uid(), ...buildCard(state, args, null, ctx), color: T.nextColor(state.cards), trackSince: ctx.today,
           ...(args.auto_pay === false && { manualSince: ctx.today }) };
         state.cards.push(c);
         return { saved: true, card: cardView(state, c, ctx.today) };
@@ -1464,7 +1481,7 @@ export const TOOLS = [
       return ctx.mutate(state => {
         const cur = findCard(state, args.card) ?? fail("Cash is not a card.");
         // buildCard kartı yeniden kurar: takip alanları verilmezse karttan taşınır
-        const v = { id: cur.id, ...buildCard(state, args, cur), color: cur.color, ...trackingArgs(state, args, cur, ctx.today) };
+        const v = { id: cur.id, ...buildCard(state, args, cur, ctx), color: cur.color, ...trackingArgs(state, args, cur, ctx.today) };
         const change = T.termChoices(cur, { cutoffDay: v.cutoffDay, dueDay: v.dueDay }, state.installments, ctx.today);
         const transition = typeof args.transition === "string" && change.cards && Object.hasOwn(change.cards, args.transition) ? args.transition : undefined;
         if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition, homeOf(state)));
@@ -1684,7 +1701,7 @@ export const TOOLS = [
     annotations: READ,
     async run(args, ctx) {
       if (!args.query && !args.codes?.length) fail("Pass query (to find funds) or codes (to price funds / stocks).");
-      checkMarketsAllowed("FON:AAA", ctx.home);
+      checkMarketsAllowed("FON:AAA", ctx);
       const out = {};
       if (args.query) {
         try {
@@ -1752,7 +1769,7 @@ export const TOOLS = [
     annotations: WRITE,
     async run(args, ctx) {
       const code = args.asset !== undefined ? entryAssetArg(args.asset) : null;
-      checkMarketsAllowed(code, ctx.home);
+      checkMarketsAllowed(code, ctx);
       const rates = await ratesOrNull(ctx, null, code ? [code] : []);
       checkMarket(code, rates);
       return ctx.mutate(state => {
@@ -1777,7 +1794,7 @@ export const TOOLS = [
       return ctx.mutate(async state => {
         const cur = findEntry(state, args.id);
         const code = args.asset !== undefined ? entryAssetArg(args.asset) : cur.asset;
-        if (code !== cur.asset) checkMarketsAllowed(code, homeOf(state));
+        if (code !== cur.asset) checkMarketsAllowed(code, ctx);
         const rates = await ratesOrNull(ctx, state, [code]);
         if (code !== cur.asset) checkMarket(code, rates);
         const next = { id: cur.id, ...buildEntry(state, args, ctx.today, cur, V.market(code) ? rates?.market?.[code] : rates?.rates?.[code]) };
@@ -2099,7 +2116,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: { ...READ, readOnlyHint: false, idempotentHint: true },
     async run(args, ctx) {
-      checkInboxAllowed(ctx.home);
+      checkInboxAllowed(ctx);
       return { address: await ctx.inbox.address(false) };
     },
   },
@@ -2110,7 +2127,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: DESTROY,
     async run(args, ctx) {
-      checkInboxAllowed(ctx.home);
+      checkInboxAllowed(ctx);
       return { address: await ctx.inbox.address(true), note: "Update the notification address at the bank." };
     },
   },
@@ -2121,7 +2138,7 @@ export const TOOLS = [
     inputSchema: obj({ include_body: S.bool("Include the e-mail text (e.g. to show a bank verification link).") }),
     annotations: READ,
     async run(args, ctx) {
-      checkInboxAllowed(ctx.home);
+      checkInboxAllowed(ctx);
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       return { emails: rows.map(row => emailView(emailItem(state, row), { body: !!args.include_body })) };
     },
@@ -2133,7 +2150,7 @@ export const TOOLS = [
     inputSchema: obj(),
     annotations: WRITE,
     async run(args, ctx) {
-      checkInboxAllowed(ctx.home);
+      checkInboxAllowed(ctx);
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       const items = rows.map(row => emailItem(state, row));
       const ready = items.filter(x => !x.reason);
@@ -2170,7 +2187,7 @@ export const TOOLS = [
     inputSchema: obj({ email_id: S.int("emailId from list_inbox."), ...PURCHASE_FIELDS }, ["email_id"]),
     annotations: WRITE,
     async run(args, ctx) {
-      checkInboxAllowed(ctx.home);
+      checkInboxAllowed(ctx);
       const { email_id: emailId, ...fields } = args;
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       const row = rows.find(r => r.id === Number(emailId)) ?? fail(`No pending e-mail with id ${emailId}.`);
@@ -2180,13 +2197,13 @@ export const TOOLS = [
       }
       const base = { ...emailPurchase(x.parsed, x.card), personId: undefined };
       if (base.count == null) base.count = 1;
-      buildPurchase(state, fields, ctx.today, base);   // kaydetmeden önce doğrula
+      buildPurchase(state, fields, ctx.today, base, ctx);   // kaydetmeden önce doğrula
 
       const claimed = await ctx.inbox.claim([row.id]);
       if (!claimed.includes(row.id)) fail("This e-mail was already processed (maybe on another device).");
       try {
         return await ctx.mutate(fresh => {
-          const { personId, p } = buildPurchase(fresh, fields, ctx.today, base);
+          const { personId, p } = buildPurchase(fresh, fields, ctx.today, base, ctx);
           const purchase = { id: uid(), personId, ...p };
           fresh.installments.push(purchase);
           return { saved: true, purchase: purchaseView(fresh, purchase, ctx.today), preview: preview(fresh, purchase) };
@@ -2204,7 +2221,7 @@ export const TOOLS = [
     inputSchema: obj({ email_id: S.int("emailId from list_inbox.") }, ["email_id"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
-      checkInboxAllowed(ctx.home);
+      checkInboxAllowed(ctx);
       const id = Number(args.email_id);
       const claimed = await ctx.inbox.claim([id]);
       return { dismissed: claimed.includes(id), emailId: id };
@@ -2217,7 +2234,7 @@ export const TOOLS = [
     inputSchema: obj({ text: S.str("The e-mail text.") }, ["text"]),
     annotations: READ,
     async run(args, ctx) {
-      checkInboxAllowed(ctx.home);
+      checkInboxAllowed(ctx);
       const state = await ctx.load();
       const x = emailItem(state, { id: null, body: text(args.text, "text"), received_at: new Date().toISOString() });
       const v = emailView(x);
@@ -2292,7 +2309,7 @@ export const TOOLS = [
       const timing = I.cardTiming(state, date, ctx.today).filter(x => !x.full && B.tracked(x.card));
       const fields = { description: "Simülasyon", ...args, date };
       if (args.card === undefined) fields.card = args.asset === undefined || assetArg(args.asset) === homeOf(state) ? timing[0]?.card.id ?? null : null;
-      const { personId, p } = buildPurchase(state, fields, ctx.today);
+      const { personId, p } = buildPurchase(state, fields, ctx.today, null, ctx);
       const purchase = { id: "simulasyon", personId, ...p };
       const after = { ...state, installments: [...state.installments, purchase] };
       const pays = T.payments(purchase, cardById(state, purchase.cardId), ctx.today);
@@ -2366,8 +2383,49 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
-- Revolving credit (accounts in the US): a card may have an APR (add_card / update_card apr). On a card paid by hand (auto_pay false) with an APR, what is left of a statement after its due day carries to the next statement, with interest (APR / 12) charged on the next cutoff day; a statement is overdue only if less than its minimum payment (the greater of 40 or 1% of the balance + interest, plus any past-due minimum) was paid. list_cards / list_debts show carried, interestCharged, minimumDue and payoff (months and interest if only the minimum is paid, monthly payment to clear in 12 months); statements show balance, minimum and interest. These are estimates: the bank's own figures (daily balance, fees) can differ a little. Automatic cards are paid in full each month, so no interest.
-- Buy now, pay later (accounts in the US): add_purchase bnpl (klarna, afterpay, affirm, paypal, zip, sezzle, other) = "Pay in 4": the first payment on the purchase date, then every 2 weeks, from a card (each on the statement of its own date) or cash; what is not charged yet is owed to the provider (list_debts bnpl, debtsByKind.bnpl). Affirm's monthly plans are not Pay in 4: record them as a loan or regular installments.
+- Revolving credit (only in countries where card balances carry interest; see "This account" below): a card may have an APR (add_card / update_card apr). On a card paid by hand (auto_pay false) with an APR, what is left of a statement after its due day carries to the next statement, with interest (APR / 12) charged on the next cutoff day; a statement is overdue only if less than its minimum payment (the greater of 40 or 1% of the balance + interest, plus any past-due minimum) was paid. list_cards / list_debts show carried, interestCharged, minimumDue and payoff (months and interest if only the minimum is paid, monthly payment to clear in 12 months); statements show balance, minimum and interest. These are estimates: the bank's own figures (daily balance, fees) can differ a little. Automatic cards are paid in full each month, so no interest.
+- Buy now, pay later (only in countries where it is offered, with that country's providers; see "This account" below): add_purchase bnpl = "Pay in 4": the first payment on the purchase date, then every 2 weeks, from a card (each on the statement of its own date) or cash; what is not charged yet is owed to the provider (list_debts bnpl, debtsByKind.bnpl). Affirm's monthly plans are not Pay in 4: record them as a loan or regular installments.
 - Bank e-mails (the *_inbox* tools and try_bank_email: Turkish bank notifications turned into purchases) are only available for accounts in Turkey for now.
 - Using CashFollow through an assistant needs CashFollow Premium (a subscription in the iPhone app). If a tool answers that Premium is needed, tell the user how to subscribe instead of retrying.
 - Reply to the user in their language (the app is in Turkish and English).`;
+
+// ---------- Ülkeye göre araçlar (para.js features) ----------
+// Banka e-postası araçları yalnızca Türkiye'de, fon / hisse araması fon ve hisse olan ülkede
+const INBOX_TOOLS = ["get_inbox_address", "renew_inbox_address", "list_inbox", "check_inbox", "add_inbox_purchase", "dismiss_inbox_email", "try_bank_email"];
+const MARKET_TOOLS = ["search_market"];
+
+// Hesabın ülkesine göre araç listesi (tools/list): ülkede olmayan araçlar ve alanlar çıkar, şimdi al sonra öde
+// sağlayıcıları ülkeninkiler. Araçlar yine de kendi doğrulamasını yapar (listede olmayanı çağıran asistana hata döner).
+export function toolsFor(ctx) {
+  const f = featuresOf(ctx);
+  const out = [];
+  for (const t of TOOLS) {
+    if (!f.bankEmails && INBOX_TOOLS.includes(t.name)) continue;
+    if (!f.markets && MARKET_TOOLS.includes(t.name)) continue;
+    const props = t.inputSchema?.properties;
+    if (!props || !(props.bnpl || props.apr)) { out.push(t); continue; }
+    const next = { ...props };
+    if (next.bnpl && !f.bnpl.length) delete next.bnpl;
+    else if (next.bnpl) {
+      const names = f.bnpl.map(id => (id === "other" ? "other" : T.BNPL_NAMES[id])).join(", ");
+      next.bnpl = { ...next.bnpl, enum: [...f.bnpl, null], description: next.bnpl.description.replace('only the providers offered in the account\'s country (the enum; "other" for any other provider)', `offered in ${countryLabel(ctx)}: ${names}`) };
+    }
+    if (next.apr && !f.apr) delete next.apr;
+    out.push({ ...t, inputSchema: { ...t.inputSchema, properties: next } });
+  }
+  return out;
+}
+
+// initialize'da verilen bilgi: genel bilgi ve hesabın ülkesinde olanlar
+export function instructionsFor(ctx) {
+  const f = featuresOf(ctx);
+  const names = f.bnpl.map(id => (id === "other" ? "other" : T.BNPL_NAMES[id])).join(", ");
+  const has = [
+    f.installments === "primary" ? "card installments are common (the app offers them first)" : "most purchases are single payments (installments stay available)",
+    f.bnpl.length ? `buy now, pay later with ${names}` : "no buy now, pay later",
+    f.apr ? "card APR / revolving credit" : "no card APR (cards are paid in full)",
+    f.markets ? "TEFAS funds and Borsa İstanbul stocks" : null,
+    f.bankEmails ? "bank e-mails" : null,
+  ].filter(Boolean);
+  return `${INSTRUCTIONS}\n- This account is in ${countryLabel(ctx)}: ${has.join("; ")}.`;
+}

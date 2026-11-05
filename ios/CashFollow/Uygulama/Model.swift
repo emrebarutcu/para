@@ -158,7 +158,7 @@ final class Model: ObservableObject {
     private var inboxBusy = false
     @discardableResult
     private func checkInbox() async -> Int? {
-        guard marketsAllowed else { epostalar = []; return nil }   // ülke Türkiye değilse onay bekleyenler de gizlenir
+        guard bankEmailsAllowed else { epostalar = []; return nil }   // ülke Türkiye değilse onay bekleyenler de gizlenir
         guard let motor, let s = senkron, s.pulled, !inboxBusy else { return nil }
         inboxBusy = true
         defer { inboxBusy = false }
@@ -375,8 +375,7 @@ final class Model: ObservableObject {
         country = code
         Analitik.ulkeAyarla(code)
         guard let motor else { return }
-        let home = motor.homeOf(country: code)
-        motor.setHome(home)
+        let home = motor.setCountry(code)   // ana para birimi ve ülkenin özellikleri (para.js features)
         motor.setCashDef(Depo.cashDef)
         constants = motor.constants()
         let c = constants?.currencies.first { $0.code == home }
@@ -384,7 +383,7 @@ final class Model: ObservableObject {
         Bicim.homeSymbol = c?.symbol ?? home
         // Kısa ad metinlerde ("TL bakiyemden"): İngilizcede para birimi kodu (USD), TL hariç
         Bicim.homeShort = Dil.ingilizce ? (home == "TRY" ? "TL" : home) : (c?.short ?? home)
-        if !marketsAllowed { epostalar = [] }   // banka e-postaları yalnızca Türkiye'de
+        if !bankEmailsAllowed { epostalar = [] }   // banka e-postaları yalnızca Türkiye'de
         revision += 1
     }
 
@@ -398,9 +397,22 @@ final class Model: ObservableObject {
         motor?.setCashDef(list)
         revision += 1
     }
-    var marketsAllowed: Bool { constants?.markets ?? true }
-    var aprAllowed: Bool { constants?.apr ?? false }      // kartın APR'si (döner kredi), ABD
-    var bnplAllowed: Bool { constants?.bnpl ?? false }    // Pay in 4, ABD
+    // Ülkeye göre özellikler (para.js features): formlar yalnızca ülkede olanı sunar
+    var marketsAllowed: Bool { constants?.markets ?? true }              // fon / hisse, para piyasası fonları, Excel
+    var bankEmailsAllowed: Bool { constants?.bankEmails ?? marketsAllowed }   // banka e-postaları
+    var excelImportAllowed: Bool { constants?.excelImport ?? marketsAllowed }  // Excel içe aktarma (web)
+    var aprAllowed: Bool { constants?.apr ?? false }      // kartın APR'si (döner kredi)
+    var bnplAllowed: Bool { constants?.bnpl ?? false }    // Pay in 4
+    // Taksit öne çıkıyor mu: değilse harcama formu peşin başlar, taksit "Taksitli" düğmesinin arkasında
+    var installmentsPrimary: Bool { constants?.installments != "secondary" }
+    // Pay in 4 sağlayıcıları: ülkedekiler; kayıttaki sağlayıcı (current) listede yoksa o da (adıyla)
+    func bnplProviders(current: String? = nil) -> [Sabitler.Kategori] {
+        var list = constants?.bnplProviders ?? []
+        if let current, !list.contains(where: { $0.id == current }) {
+            list.insert(constants?.bnplAll?.first { $0.id == current } ?? Sabitler.Kategori(id: current, name: current, hint: ""), at: 0)
+        }
+        return list
+    }
 
     // Ülke değişince tutarlar çevrilmez: kayıtlar yazıldıkları para biriminde kalır
     func setCountry(_ code: String) async throws {
