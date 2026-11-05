@@ -128,7 +128,10 @@ final class Motor {
     // ── Kurlar, fiyatlar, sabitler ─────────────────────────────────────────────
 
     // Hesabın ana para birimi (ülkesinden; para.js): veri, kurlar ve araçlar onunla
-    func setHome(_ code: String) { kopru.invokeMethod("setHome", withArguments: [code]) }
+    // country: ülkeye özel seçenekler (bonus ödemesi, Japonya)
+    func setHome(_ code: String, country: String? = nil) {
+        kopru.invokeMethod("setHome", withArguments: [code, country.map { $0 as Any } ?? NSNull()])
+    }
     // Nakit sayılanlar (Nakit grafiği); nil varsayılan (ana para birimi ve para piyasası fonları)
     func setCashDef(_ list: [String]?) {
         let json = list.flatMap { try? JSONSerialization.data(withJSONObject: $0) }.map { String(decoding: $0, as: UTF8.self) }
@@ -237,6 +240,8 @@ struct Sabitler: Decodable {
     let apr: Bool?                // kartın yıllık faizi, döner kredi (ABD)
     let bnpl: Bool?               // şimdi al sonra öde, Pay in 4 (ABD)
     let bnplProviders: [Kategori]?    // sağlayıcılar (id, name)
+    let bonus: Bool?              // bonus ödemesi, ボーナス払い (Japonya)
+    let bonusMonths: [Int]?       // varsayılan bonus ayları [yaz, kış]
     let cashDefault: [String]     // nakit tanımının varsayılanı
     let inboxBanks: [String]?     // banka e-postaları: desteklenen bankalar
 }

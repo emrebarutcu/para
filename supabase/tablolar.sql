@@ -199,6 +199,20 @@ begin
   end if;
 end $$;
 
+-- Bonus ödemesi (8.7; Japonya, ボーナス払い; taksit.js bonus). bonus_months kartın bonus ayları [yaz, kış] (boşsa
+-- Ağustos ve Ocak). purchases.bonus: tutar kartın bonus ayındaki son ödeme gününde ödenir; count 1 tek bonus, 2 art
+-- arda iki bonusa yarı yarıya. Kartlı, tarihli, tekrarlamayan harcamada.
+alter table cards add column if not exists bonus_months smallint[]
+  check (bonus_months is null or (cardinality(bonus_months) = 2 and bonus_months <@ '{1,2,3,4,5,6,7,8,9,10,11,12}'::smallint[]
+    and bonus_months[1] <> bonus_months[2]));
+alter table purchases add column if not exists bonus boolean check (bonus is null or bonus);
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'purchases_bonus_date_check') then
+    alter table purchases add constraint purchases_bonus_date_check check (bonus is null or date is not null);
+  end if;
+end $$;
+
 create index if not exists people_sync    on people    (user_id, updated_at);
 create index if not exists cards_sync     on cards     (user_id, updated_at);
 create index if not exists purchases_sync on purchases (user_id, updated_at);

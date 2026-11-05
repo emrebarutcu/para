@@ -96,6 +96,18 @@ enum OzDenetim {
             let usCards: KartListesi = try m.run("list_cards")
             try check(usCards.cards.first?.apr == 24.99 && usCards.cards.first?.tracking?.autoPay == false, "APR: \(usCards.cards)")
             let _: Borclar = try m.run("list_debts")
+            try check(m.constants()?.bonus == false, "bonus ödemesi ABD'de yok")
+
+            // Japonya: bonus ödemesi (ボーナス払い; para.js bonusFor, taksit.js bonus)
+            m.box.json = m.defaultState
+            m.setHome(m.homeOf(country: "JP"), country: "JP")
+            try check(m.constants()?.bonus == true && m.constants()?.bonusMonths == [8, 1], "Japonya formları")
+            try m.runJSON("add_card", ["name": "JCB", "cutoff_day": 15, "due_day": 10, "bonus_months": [7, 12]])
+            let jp: HarcamaSonucu = try m.run("add_purchase", ["description": "テレビ", "amount": 98000, "card": "JCB",
+                                                               "bonus": "twice", "date": "2026-10-05"])
+            try check(jp.purchase.bonus?.schedule.map(\.date) == ["2026-12-10", "2027-07-10"], "bonus: \(String(describing: jp.purchase.bonus))")
+            let jpCards: KartListesi = try m.run("list_cards")
+            try check(jpCards.cards.first?.bonusMonths == [7, 12], "bonus ayları")
             m.setHome("TRY")
 
             // CashFollow Premium: hesabın satırı (tablo.js premium, köprüden), ürünler ve ücretsiz sürümün sınırları

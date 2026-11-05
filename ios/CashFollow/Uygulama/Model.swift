@@ -376,7 +376,7 @@ final class Model: ObservableObject {
         Analitik.ulkeAyarla(code)
         guard let motor else { return }
         let home = motor.homeOf(country: code)
-        motor.setHome(home)
+        motor.setHome(home, country: code)
         motor.setCashDef(Depo.cashDef)
         constants = motor.constants()
         let c = constants?.currencies.first { $0.code == home }
@@ -401,6 +401,7 @@ final class Model: ObservableObject {
     var marketsAllowed: Bool { constants?.markets ?? true }
     var aprAllowed: Bool { constants?.apr ?? false }      // kartın APR'si (döner kredi), ABD
     var bnplAllowed: Bool { constants?.bnpl ?? false }    // Pay in 4, ABD
+    var bonusAllowed: Bool { constants?.bonus ?? false }  // bonus ödemesi (ボーナス払い), Japonya
 
     // Ülke değişince tutarlar çevrilmez: kayıtlar yazıldıkları para biriminde kalır
     func setCountry(_ code: String) async throws {

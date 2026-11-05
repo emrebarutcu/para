@@ -66,6 +66,10 @@
   // ABD'ye özel olanlar dolarda: kartın yıllık faizi (APR; döner kredi, asgari ödeme) ve "şimdi al sonra öde" (Pay in 4)
   const aprFor = home => home === "USD";
   const bnplFor = home => home === "USD";
+  // Japonya'ya özel: ボーナス払い (bonus payment; taksit.js bonus) — kartla alınanı yaz ya da kış bonusu ayında tek
+  // seferde (ya da ikisine bölerek) ödemek. Ülkeye göre (ülke özellikleri tablosuna tek satır olarak taşınabilir).
+  const BONUS_COUNTRIES = ["JP"];
+  const bonusFor = code => BONUS_COUNTRIES.includes(String(code ?? "").toUpperCase());
   // Formlarda önce sunulan yabancı para birimleri: ana para biriminin dışında dolar, euro, sterlin
   const commonForeign = home => ["USD", "EUR", "GBP", "TRY"].filter(c => c !== home).slice(0, 3);
 
@@ -83,7 +87,7 @@
     return out;
   }
 
-  const api = { CURRENCIES, COUNTRIES, DEFAULT_COUNTRY, DEFAULT_HOME, currency, isCurrency, country, homeOfCountry, homeOf, marketsFor, aprFor, bnplFor, commonForeign, homeRates, zoneOfCountry, isZone };
+  const api = { CURRENCIES, COUNTRIES, DEFAULT_COUNTRY, DEFAULT_HOME, currency, isCurrency, country, homeOfCountry, homeOf, marketsFor, aprFor, bnplFor, bonusFor, commonForeign, homeRates, zoneOfCountry, isZone };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Para = api;
 })(this);

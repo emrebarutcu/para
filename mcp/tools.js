@@ -20,6 +20,8 @@ import P from "../para.js";
 
 // Hesabın ana para birimi (para.js; state.home, ctx.load verir): kartlar, nakit harcamalar ve toplamlar onunla
 const homeOf = state => P.homeOf(state);
+// Hesabın ülkesi (para.js; sunucuda ctx.user.country, iPhone'da ctx.country): ülkeye özel seçenekler (bonus ödemesi)
+const countryOf = ctx => ctx?.user?.country ?? ctx?.country ?? null;
 
 export const TIME_ZONE = "Europe/Istanbul";   // saat dilimi verilmezse (eski çağrılar); sunucu kullanıcınınkini verir
 const MAX_MONTHS = 60;       // akıştaki en fazla ay (app.js ile aynı)
@@ -160,10 +162,11 @@ function defaultCardFor(state) {
 
 // ---------- Görünümler ----------
 // Harcamanın türü (list_purchases kind): tekrarlayan, şimdi al sonra öde, taksitli ya da tek çekim
-const PURCHASE_KINDS = ["installment", "single", "repeat", "bnpl"];
-function purchaseKind(p) {
+const PURCHASE_KINDS = ["installment", "single", "repeat", "bnpl", "bonus"];
+function purchaseKind(p, state) {
   if (T.repeats(p)) return "repeat";
   if (T.bnpl(p)) return "bnpl";
+  if (T.bonus(p) && (!state || cardById(state, p.cardId))) return "bonus";
   return T.planLength(p) > 1 ? "installment" : "single";
 }
 
@@ -253,6 +256,14 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
       nextCharge: due[0] ? { date: due[0].at, amount: round(due[0].amount) } : null,
     };
   }
+  if (T.bonus(p) && card) {
+    // Bonus ödemesi (Japonya): bonus ayındaki son ödeme gününde tek seferde ya da iki bonusa yarı yarıya
+    v.remainingAmount = round(left.reduce((t, x) => t + x.amount, 0));
+    v.bonus = {
+      payments: p.count, name: T.bonusName(p, card), months: T.bonusMonths(card),
+      schedule: pays.map(x => ({ date: x.key, amount: round(x.amount), season: x.bonus, paid: x.key < today })),
+    };
+  }
   if (!p.date) {
     // Excel'den gelen tarihsiz kayıt: total/count kalan taksitlerdir
     v.firstDueMonth = p.firstDue;
@@ -260,7 +271,7 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     v.total = round(T.originalTotal(p));
   }
   if (card && p.date) v.statementCutoff = T.statementOf(card, p.date).cut;
-  if (schedule) v.payments = pays.map(x => ({ no: x.no, date: x.key, amount: round(x.amount), paid: x.key < today, ...(T.bnpl(p) && { chargeDate: x.at }) }));
+  if (schedule) v.payments = pays.map(x => ({ no: x.no, date: x.key, amount: round(x.amount), paid: x.key < today, ...(T.bnpl(p) && { chargeDate: x.at }), ...(x.bonus && { bonus: x.bonus }) }));
   return v;
 }
 
@@ -368,6 +379,7 @@ function cardView(state, c, today) {
     cutoffDay: c.cutoffDay,
     dueDay: c.dueDay,
     ...(B.revolving(c) && { apr: c.apr }),
+    ...(T.validBonusMonths(c.bonusMonths) && { bonusMonths: T.validBonusMonths(c.bonusMonths) }),   // Japonya: bonus ayları (yoksa [8, 1])
     nextPayment: own ? (first ? { date: first.key, amount: round(first.amount - first.covered) } : null)
       : next ? { date: next, amount: round(upcoming.filter(x => x.key === next).reduce((t, x) => t + x.amount, 0)) } : null,
     purchaseCount: mine.length,
@@ -436,6 +448,7 @@ function eventView(state, ev, { items = true } = {}) {
       person: personName(state, x.purchase.personId),
       installment: `${x.no}/${T.planLength(x.purchase)}`,
       amount: round(x.amount),
+      ...(x.bonus && { bonus: x.bonus }),   // bonus ödemesi (Japonya): summer | winter
     }));
   }
   return v;
@@ -461,22 +474,35 @@ function preview(state, p) {
     out.note = `${T.bnplName(p)} Pay in ${p.count}: ${round(a[0])} on ${p.date}, then ${round(a.at(-1))} every ${T.BNPL_DAYS} days`
       + (card ? `, each on the ${card.name} statement of its date` : ", from cash");
   }
+  if (T.bonus(p) && card) {
+    const when = pays.map(x => `${round(x.amount)} on ${x.key} (${x.bonus} bonus)`).join(" and ");
+    out.note = `Bonus payment (ボーナス払い) on ${card.name}: ${when}; bonus months ${T.bonusMonths(card).join(" and ")}`;
+  }
   return out;
 }
 
 // ---------- Harcama / kart / kişi kuralları (app.js formlarıyla aynı) ----------
 // base: düzenlenen harcama ya da e-postadan gelen taslak; verilmeyen alanlar ondan alınır
-function buildPurchase(state, args, today, base = null) {
+function buildPurchase(state, args, today, base = null, country = null) {
   const desc = args.description !== undefined ? text(args.description, "description") : base?.desc;
   if (!desc) fail("description is required (what was bought).");
 
+  // Bonus ödemesi (Japonya; taksit.js bonus): "once" tek bonus, "twice" iki bonusa bölünmüş; null kaldırır
+  if (args.bonus !== undefined && args.bonus !== null && !["once", "twice"].includes(args.bonus)) fail('bonus must be "once", "twice" or null.');
+  if (args.bonus != null && !P.bonusFor(country)) fail("Bonus payment (ボーナス払い) is only available for accounts in Japan.");
+  const bonus = args.bonus !== undefined ? args.bonus != null : base?.bonus === true && args.bnpl == null;
+  if (bonus && args.bnpl != null) fail("A purchase can't be both bonus payment and buy now, pay later.");
+  if (args.bonus != null && args.installments !== undefined) fail("Leave out installments with bonus: once is one payment, twice splits it across two bonuses.");
+
   // Şimdi al sonra öde (ABD; taksit.js bnpl): sağlayıcı; null kaldırır (aylık taksite döner)
-  const bnpl = args.bnpl !== undefined ? args.bnpl : base?.bnpl ?? null;
+  const bnpl = args.bnpl !== undefined ? args.bnpl : bonus ? null : base?.bnpl ?? null;
   if (bnpl != null) {
     if (!T.BNPL.includes(bnpl)) fail(`bnpl must be one of ${T.BNPL.join(", ")}, or null.`);
     if (args.bnpl !== undefined && !P.bnplFor(homeOf(state))) fail("Buy now, pay later (Pay in 4) is only available for accounts in the US for now.");
   }
-  const count = intArg(args.installments, "installments", 1, MAX_COUNT, args.bnpl != null && args.installments === undefined && !base?.bnpl ? 4 : base?.count ?? (bnpl ? 4 : 1));
+  const count = args.bonus != null ? (args.bonus === "twice" ? 2 : 1)
+    : intArg(args.installments, "installments", 1, MAX_COUNT, args.bnpl != null && args.installments === undefined && !base?.bnpl ? 4 : base?.count ?? (bnpl ? 4 : 1));
+  if (bonus && count > 2) fail("A bonus payment is paid with one bonus (installments 1) or split across two (2). Pass bonus null for regular installments.");
   if (bnpl && (count < 2 || count > 12)) fail("A buy now, pay later purchase has 2 to 12 payments (Pay in 4: 4).");
   // Döviz / altın harcaması o varlıktan ödenir: kartsız ve peşin
   const asset = args.asset !== undefined ? assetArg(args.asset) : T.assetOf(base, homeOf(state));
@@ -513,7 +539,10 @@ function buildPurchase(state, args, today, base = null) {
   if (rep.repeat != null && !date) fail("A repeating purchase needs a date.");
   if (bnpl && rep.repeat != null) fail("A buy now, pay later purchase doesn't repeat: leave out repeat (or pass bnpl null).");
   if (bnpl && !date) fail("A buy now, pay later purchase needs a date (the first payment is on that day).");
-  const p = { desc, cardId: card ? card.id : null, count, total, ...(foreign && { asset }), ...rep, ...(bnpl && { bnpl }) };
+  if (bonus && !card) fail("A bonus payment goes on a credit card: pass card (not cash).");
+  if (bonus && rep.repeat != null) fail("A bonus payment doesn't repeat: leave out repeat (or pass bonus null).");
+  if (bonus && !date) fail("A bonus payment needs a purchase date (it decides which bonus it falls into).");
+  const p = { desc, cardId: card ? card.id : null, count, total, ...(foreign && { asset }), ...rep, ...(bnpl && { bnpl }), ...(bonus && { bonus: true }) };
   // Kategori: verilirse kullanıcının seçimi sayılır (uygulama bundan öğrenir); verilmezse düzenlenen kayıttaki kalır,
   // yeni kayıtta kullanıcının aynı işyerine daha önce verdiği kategori önerilir
   // Açıklama değişince kullanıcının seçmediği (önerilmiş) kategori yeniden önerilir (app.js'teki gibi)
@@ -535,7 +564,7 @@ function buildPurchase(state, args, today, base = null) {
   return { personId: person.id, p };
 }
 
-function buildCard(state, args, base = null) {
+function buildCard(state, args, base = null, country = null) {
   const v = {
     name: args.name !== undefined ? text(args.name, "name") : base?.name,
     limit: args.limit !== undefined ? Number(args.limit) : base?.limit ?? 0,
@@ -554,8 +583,16 @@ function buildCard(state, args, base = null) {
     if (typeof v.apr !== "number" || !(v.apr >= 0 && v.apr <= 100)) fail("apr must be a number from 0 to 100 (annual %), or null.");
     if (args.apr !== undefined && !P.aprFor(homeOf(state))) fail("Card APR (carrying a balance with interest) is only available for accounts in the US for now.");
   }
+  // Bonus ayları (Japonya): [yaz, kış]; null varsayılana (Ağustos, Ocak) döner
+  let bonusMonths = base?.bonusMonths ?? null;
+  if (args.bonus_months !== undefined) {
+    if (args.bonus_months !== null && !T.validBonusMonths(args.bonus_months)) fail("bonus_months must be two different months (1–12), [summer, winter], e.g. [8, 1]; or null.");
+    if (args.bonus_months !== null && !P.bonusFor(country)) fail("Bonus payment months are only available for accounts in Japan.");
+    bonusMonths = args.bonus_months && T.validBonusMonths(args.bonus_months);
+  }
+  if (bonusMonths && bonusMonths[0] === T.BONUS_MONTHS[0] && bonusMonths[1] === T.BONUS_MONTHS[1]) bonusMonths = null;
   const { last4, apr, ...rest } = v;
-  return { ...rest, ...(last4 && { last4 }), ...(apr != null && { apr: Math.round(apr * 100) / 100 }) };
+  return { ...rest, ...(last4 && { last4 }), ...(apr != null && { apr: Math.round(apr * 100) / 100 }), ...(bonusMonths && { bonusMonths }) };
 }
 
 // Kesim / son ödeme günü değişirken kullanıcıya sorulacak seçenekler (app.js'teki kart formuyla aynı)
@@ -1140,6 +1177,7 @@ const PURCHASE_FIELDS = {
   },
   asset: { type: "string", description: 'What the purchase is paid in: the account currency (default; the currency field of the answers, TRY in Turkey), another currency code (USD, EUR, GBP…) or GAU (grams of gold). Purchases in another currency are paid at once in cash from that asset (card "nakit", installments 1).' },
   bnpl: { type: ["string", "null"], enum: [...T.BNPL, null], description: 'Buy now, pay later provider (accounts in the US): "Pay in 4" with Klarna, Afterpay, Affirm, PayPal, Zip, Sezzle or other. installments payments (default 4, 2–12), the first on date, then every 2 weeks, from the card (each payment goes on the statement of its own date) or cash. What is not paid yet is owed to the provider (list_debts bnpl). null turns it back into a regular purchase. Affirm\'s monthly plans are loans (add_debt) or regular card installments.' },
+  bonus: { type: ["string", "null"], enum: ["once", "twice", null], description: 'Bonus payment (ボーナス払い; accounts in Japan only), on a credit card: "once" = the whole amount on the card\'s due day in its next bonus month (ボーナス一括払い; the summer bonus is paid in August, winter in January, unless the card\'s bonus_months differ), "twice" = half on each of the next two bonuses (ボーナス2回払い). The bonus is the first one whose month is at least 2 months after the purchase\'s statement cutoff (cutoff on the 15th: bought up to Jun 15 → August, Jun 16 – Nov 15 → January). Usually interest-free. Leave out installments. null turns it back into a regular payment.' },
   ...REPEAT_FIELDS,
 };
 const CARD_FIELDS = {
@@ -1149,6 +1187,7 @@ const CARD_FIELDS = {
   due_day: S.int("Payment due day of month (son ödeme günü).", 1, 31),
   last4: S.str('Last 4 digits of the card (used to match bank e-mails). "" removes it.'),
   apr: { type: ["number", "null"], minimum: 0, maximum: 100, description: "Annual interest rate (APR, %) for accounts in the US: on a card paid by hand (auto_pay false), what is left of a statement after its due day carries to the next statement with monthly interest (APR / 12), and is overdue only if less than the minimum payment was paid. On automatic cards (paid in full) it has no effect. null removes it. Changing it recomputes interest since paying by hand started." },
+  bonus_months: { type: ["array", "null"], items: { type: "integer", minimum: 1, maximum: 12 }, minItems: 2, maxItems: 2, description: "Bonus payment months of the card (accounts in Japan only): [summer, winter], default [8, 1] (August and January). Purchases with bonus are paid on the card's due day in these months. null resets to the default." },
   auto_pay: S.bool("Payment mode of the tracked card's statements. true (default) = each statement counts as paid the day after its due day; false = paid by hand: a statement stays owed until marked paid with pay_debt card=… (Ödendi) and shows as overdue after its due day. Switching to false applies from today (from track_since when tracking starts or track_since changes in the same call: statements since then are unpaid until marked paid); on a day a card payment is dated it starts tomorrow instead (the card stays automatic today). Switching back to true counts unpaid past statements as paid; it fails while recorded card payments would stop counting (payments for statements not past their due day yet: on a statement's due day switch the next day; for payments made ahead, delete them or wait until the day after those due days) and while the card is not tracked (an untracked card keeps its mode)."),
 };
 
@@ -1288,7 +1327,7 @@ export const TOOLS = [
       card: { type: ["string", "null"], description: 'Only this card (id, name or last 4); "nakit" for cash.' },
       search: S.str("Case-insensitive text to look for in the description."),
       category: { ...PURCHASE_FIELDS.category, description: 'Only this category (id); null = purchases without a category.' },
-      kind: { type: "string", enum: PURCHASE_KINDS, description: 'Only this kind: "installment" (2+ monthly installments), "single" (one payment), "repeat" (recurring) or "bnpl" (Pay in 4).' },
+      kind: { type: "string", enum: PURCHASE_KINDS, description: 'Only this kind: "installment" (2+ monthly installments), "single" (one payment), "repeat" (recurring), "bnpl" (Pay in 4) or "bonus" (bonus payment, Japan).' },
       sort: { type: "string", enum: Object.keys(PURCHASE_SORTS), description: 'Order: "next_payment" (default; soonest first), "added" (when it was entered; newest first), "date" (purchase date; newest first) or "amount" (largest first).' },
       order: { type: "string", enum: ["asc", "desc"], description: 'Reverse the default direction of sort: "asc" = oldest / smallest / soonest first, "desc" = newest / largest / latest first.' },
       limit: S.int("Maximum number of purchases (default 100).", 1, 1000),
@@ -1316,7 +1355,7 @@ export const TOOLS = [
         .filter(p => !person || p.personId === person.id)
         .filter(p => card === undefined || (card ? p.cardId === card.id : !cardById(state, p.cardId)))
         .filter(p => !q || T.normalize(p.desc).includes(q))
-        .filter(p => !kind || purchaseKind(p) === kind)
+        .filter(p => !kind || purchaseKind(p, state) === kind)
         .map(p => purchaseView(state, p, ctx.today))
         .filter(v => status === "all" || v.status === status)
         .sort((a, b) => dir * PURCHASE_SORTS[sort](a, b, added)
@@ -1340,7 +1379,7 @@ export const TOOLS = [
   {
     name: "add_purchase",
     title: "Add purchase",
-    description: "Add a single or installment purchase — also any spending paid in cash from the user's assets (lira, dollars, euros or gold). Payment dates are computed from the card's cutoff and due days: a purchase up to and including the cutoff day goes into that month's statement, installments fall into following statements one month apart; cash is paid on the purchase day and deducted from that asset's balance. With repeat it recurs (every N days / weeks / months), each time as its own purchase on that card. Use dry_run to preview the schedule first.",
+    description: "Add a single or installment purchase — also any spending paid in cash from the user's assets (lira, dollars, euros or gold). In Japan a card purchase can also be a bonus payment (bonus: ボーナス払い, paid with the summer / winter bonus). Payment dates are computed from the card's cutoff and due days: a purchase up to and including the cutoff day goes into that month's statement, installments fall into following statements one month apart; cash is paid on the purchase day and deducted from that asset's balance. With repeat it recurs (every N days / weeks / months), each time as its own purchase on that card. Use dry_run to preview the schedule first.",
     inputSchema: obj({
       ...PURCHASE_FIELDS,
       date: S.date("Purchase date, YYYY-MM-DD. Default: today."),
@@ -1351,7 +1390,7 @@ export const TOOLS = [
     annotations: WRITE,
     async run(args, ctx) {
       const make = state => {
-        const { personId, p } = buildPurchase(state, args, ctx.today);
+        const { personId, p } = buildPurchase(state, args, ctx.today, null, countryOf(ctx));
         return { id: uid(), personId, ...p };
       };
       if (args.dry_run) {
@@ -1369,13 +1408,13 @@ export const TOOLS = [
   {
     name: "update_purchase",
     title: "Update purchase",
-    description: "Change fields of a purchase; omitted fields stay as they are. Changing installments keeps the total unless amount is given too.",
+    description: "Change fields of a purchase; omitted fields stay as they are. Changing installments keeps the total unless amount is given too. In Japan, bonus switches a card purchase to bonus payment (once / twice) or back (null).",
     inputSchema: obj({ id: S.str("Purchase id."), ...PURCHASE_FIELDS }, ["id"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
       return ctx.mutate(state => {
         const cur = findPurchase(state, args.id);
-        const { personId, p } = buildPurchase(state, args, ctx.today, cur);
+        const { personId, p } = buildPurchase(state, args, ctx.today, cur, countryOf(ctx));
         const next = { id: cur.id, personId, ...p };
         state.installments = state.installments.map(x => (x.id === cur.id ? next : x));
         return { saved: true, purchase: purchaseView(state, next, ctx.today), preview: preview(state, next) };
@@ -1438,7 +1477,7 @@ export const TOOLS = [
       if (args.auto_pay !== undefined && typeof args.auto_pay !== "boolean") fail("auto_pay must be true or false.");
       return ctx.mutate(state => {
         // Yeni kart bugünden takipte (app.js kart formu gibi); elle ödenecekse ekstreleri de bugünden
-        const c = { id: uid(), ...buildCard(state, args), color: T.nextColor(state.cards), trackSince: ctx.today,
+        const c = { id: uid(), ...buildCard(state, args, null, countryOf(ctx)), color: T.nextColor(state.cards), trackSince: ctx.today,
           ...(args.auto_pay === false && { manualSince: ctx.today }) };
         state.cards.push(c);
         return { saved: true, card: cardView(state, c, ctx.today) };
@@ -1464,7 +1503,7 @@ export const TOOLS = [
       return ctx.mutate(state => {
         const cur = findCard(state, args.card) ?? fail("Cash is not a card.");
         // buildCard kartı yeniden kurar: takip alanları verilmezse karttan taşınır
-        const v = { id: cur.id, ...buildCard(state, args, cur), color: cur.color, ...trackingArgs(state, args, cur, ctx.today) };
+        const v = { id: cur.id, ...buildCard(state, args, cur, countryOf(ctx)), color: cur.color, ...trackingArgs(state, args, cur, ctx.today) };
         const change = T.termChoices(cur, { cutoffDay: v.cutoffDay, dueDay: v.dueDay }, state.installments, ctx.today);
         const transition = typeof args.transition === "string" && change.cards && Object.hasOwn(change.cards, args.transition) ? args.transition : undefined;
         if (change.choices.length && !transition) fail(transitionQuestion(change, args.transition, homeOf(state)));
@@ -2292,7 +2331,7 @@ export const TOOLS = [
       const timing = I.cardTiming(state, date, ctx.today).filter(x => !x.full && B.tracked(x.card));
       const fields = { description: "Simülasyon", ...args, date };
       if (args.card === undefined) fields.card = args.asset === undefined || assetArg(args.asset) === homeOf(state) ? timing[0]?.card.id ?? null : null;
-      const { personId, p } = buildPurchase(state, fields, ctx.today);
+      const { personId, p } = buildPurchase(state, fields, ctx.today, null, countryOf(ctx));
       const purchase = { id: "simulasyon", personId, ...p };
       const after = { ...state, installments: [...state.installments, purchase] };
       const pays = T.payments(purchase, cardById(state, purchase.cardId), ctx.today);
@@ -2368,6 +2407,7 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
 - Revolving credit (accounts in the US): a card may have an APR (add_card / update_card apr). On a card paid by hand (auto_pay false) with an APR, what is left of a statement after its due day carries to the next statement, with interest (APR / 12) charged on the next cutoff day; a statement is overdue only if less than its minimum payment (the greater of 40 or 1% of the balance + interest, plus any past-due minimum) was paid. list_cards / list_debts show carried, interestCharged, minimumDue and payoff (months and interest if only the minimum is paid, monthly payment to clear in 12 months); statements show balance, minimum and interest. These are estimates: the bank's own figures (daily balance, fees) can differ a little. Automatic cards are paid in full each month, so no interest.
 - Buy now, pay later (accounts in the US): add_purchase bnpl (klarna, afterpay, affirm, paypal, zip, sezzle, other) = "Pay in 4": the first payment on the purchase date, then every 2 weeks, from a card (each on the statement of its own date) or cash; what is not charged yet is owed to the provider (list_debts bnpl, debtsByKind.bnpl). Affirm's monthly plans are not Pay in 4: record them as a loan or regular installments.
+- Bonus payment (accounts in Japan, ボーナス払い): add_purchase / update_purchase bonus "once" puts the whole card purchase on the due day of the card's next bonus month (default August for the summer bonus, January for winter; add_card / update_card bonus_months changes them), "twice" splits it across the next two bonuses (ボーナス2回払い). The bonus is the first whose month is at least 2 months after the purchase's statement cutoff. It counts in the card's statements, limit and cash flow like any payment.
 - Bank e-mails (the *_inbox* tools and try_bank_email: Turkish bank notifications turned into purchases) are only available for accounts in Turkey for now.
 - Using CashFollow through an assistant needs CashFollow Premium (a subscription in the iPhone app). If a tool answers that Premium is needed, tell the user how to subscribe instead of retrying.
 - Reply to the user in their language (the app is in Turkish and English).`;

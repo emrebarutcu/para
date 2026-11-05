@@ -3,7 +3,7 @@
 // biteceği ay, dolmak üzere olan limitler, yaklaşan ödeme sıçraması, bugün hangi kartla alışveriş yapılırsa ilk
 // ödemenin en geç geleceği, düzenli ödemeler (abonelik), kategoride olağandışı artış, geciken ya da yaklaşan borç
 // ödemeleri (elle ödenen kartların geciken ekstreleri dahil), ödemesi gelen alacaklar (kart payları ve kişiler), diğer
-// kişilerin payı (takipte kart yoksa).
+// kişilerin payı (takipte kart yoksa), yaklaşan bonus ödemesi (Japonya).
 // Gelir varlık girişlerinden, sabit giderler tekrarlayan harcamalardan ve çıkışlardan gelir; borç ve kredi taksitleri
 // ödemelere girer, borç alınan para gelir sayılmaz (borc.js). Döviz ve altın güncel kurla TL'dir.
 // app.js (Özet) ve MCP (get_insights) kullanır.
@@ -29,6 +29,7 @@
   const SUB_SPREAD = 1.25;    // düzenli ödemenin tutarları arasında en fazla bu oran
   const UNCATEGORIZED = 3;    // son 3 ayda bu kadar kategorisiz harcama varsa öneri
   const DUE_SOON = 7;         // borç ödemesi bu kadar gün içindeyse uyarı
+  const BONUS_SOON = 92;      // bonus ödemesi (Japonya) bu kadar gün içindeyse hatırlatma
   const EPS = 0.005;
 
   // Ana para birimi (para.js): her dışa açık işlev verinin birimini burada tutar (işlevler eşzamanlı, karışmaz)
@@ -215,7 +216,7 @@
     }
     for (const p of own) {
       const d = T.parseDate(p.date);
-      if (!d || T.repeats(p) || T.assetOf(p, home) !== home || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
+      if (!d || T.repeats(p) || T.bonus(p) || T.assetOf(p, home) !== home || T.planLength(p) !== 1 || d.idx < t - 5 || d.idx > t) continue;
       const key = K.keyOf(p.desc);
       if (!key) continue;
       if (!groups.has(key)) groups.set(key, []);
@@ -364,6 +365,26 @@
         id: "sicrama", tone: "warn", title: L("{0} ayında ödemeler artıyor", T.monthName(peak.idx)),
         text: L("{0}: {1} ({2} taksit) — bu ay {3}. Önceden hazırlıklı ol.", monthLong(peak.idx), fmt(peak.total), count, fmt(current)),
         data: { month: T.monthKey(peak.idx), total: round(peak.total), current: round(current), installments: count },
+      });
+    }
+
+    // Yaklaşan bonus ödemesi (Japonya, ボーナス払い; taksit.js bonus): sıradaki bonus gününe düşen tutar
+    const bonusPays = [];
+    for (const p of paying(state, purchases)) {
+      if (!T.bonus(p) || T.assetOf(p, home) !== home) continue;
+      const card = state.cards.find(c => c.id === p.cardId);
+      if (!card) continue;
+      for (const x of T.payments(p, card)) if (x.key >= today && days(today, x.key) <= BONUS_SOON) bonusPays.push({ ...x, card, p });
+    }
+    if (bonusPays.length) {
+      const first = bonusPays.reduce((a, x) => (x.key < a.key ? x : a)).key;
+      const due = bonusPays.filter(x => x.key === first), total = due.reduce((s, x) => s + x.amount, 0);
+      const d = T.parseDate(first);
+      add({
+        id: "bonus", tone: "info",
+        title: L("{0} {1} bonus ödemesi {2}", d.day, T.monthShort(d.idx), fmt(total)),
+        text: L("Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.", due.length),
+        data: { date: first, total: round(total), purchases: due.map(x => ({ purchase: x.p.desc, card: x.card.name, amount: round(x.amount), season: x.bonus })) },
       });
     }
 

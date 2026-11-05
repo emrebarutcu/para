@@ -16,7 +16,12 @@
 
   // Hesabın ana para birimi (ülkesinden; para.js). Swift ayarlar (setHome); veri onunla okunur ve eşitlenir.
   let home = "TRY";
-  function setHome(code) { home = P.isCurrency(code) ? code : "TRY"; }
+  // Hesabın ülkesi: ülkeye özel seçenekler (bonus ödemesi, Japonya); verilmezse yok
+  let country = null;
+  function setHome(code, countryCode) {
+    home = P.isCurrency(code) ? code : "TRY";
+    country = P.country(countryCode)?.code ?? null;
+  }
   // Nakit sayılanlar (Ayarlar → Nakit; web'deki gibi cihazda): varlık kodları ve "MMF" (para piyasası fonları); null varsayılan
   let cashDef = null;
   function setCashDef(json) { cashDef = json ? V.cashDef(JSON.parse(json), home) : null; }
@@ -104,6 +109,7 @@
     return {
       today,
       home,
+      country,
       load: async () => loadState(),
       // Uygulamadaki gibi: araç veriyi değiştirir, Swift kaydeder ve değişen satırları eşitler (Tablo.changes)
       mutate: async fn => {
@@ -215,6 +221,8 @@
       apr: P.aprFor(home),
       bnpl: P.bnplFor(home),
       bnplProviders: T.BNPL.map(id => ({ id, name: T.bnplName({ bnpl: id }), hint: "" })),
+      bonus: P.bonusFor(country),               // bonus ödemesi (Japonya)
+      bonusMonths: T.BONUS_MONTHS,              // varsayılan bonus ayları [yaz, kış]
       cashDefault: V.cashDefault(home),
       inboxBanks: root.Eposta.BANKS,   // banka e-postaları: denenmiş bankalar (eposta.js)
     });

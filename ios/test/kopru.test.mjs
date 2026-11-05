@@ -108,7 +108,7 @@ test("eşitleme: değişen satırlar, uzaktan gelenler, boş veri", async () => 
   const f = JSON.parse(S.fromRows(e.sandbox.Kopru.defaultState(), JSON.stringify({ cards: [row] })));
   assert.equal(f.state.cards.length, 1);
   assert.equal(f.state.people[0].id, "ben");
-  assert.equal(S.SCHEMA, 8);
+  assert.equal(S.SCHEMA, 9);
 });
 
 test("grafikler: Nakit ve Varlığın seyri web'deki nakit.js ile", async () => {
@@ -200,4 +200,27 @@ test("banka e-postaları: Swift'in verdiği liste; yalnızca sunucuda işaretlen
   assert.deepEqual(rest.ok.emails.map(x => x.emailId), [2, 3]);
   assert.match(rest.ok.emails[1].body, /AMAZON/);
   assert.equal(e.sandbox.Kopru.inboxReleased(), "[]");
+});
+
+// Japonya: bonus ödemesi (ボーナス払い) yalnızca ülkesi JP olan hesapta; Swift ülkeyi setHome ile verir
+test("Japonya: bonus ödemesi sabitlerde ve araçlarda, başka ülkede yok", async () => {
+  const e = engine();
+  const K = e.sandbox.Kopru;
+  K.setHome("JPY", "JP");
+  const c = JSON.parse(K.constants());
+  assert.equal(c.bonus, true);
+  assert.deepEqual(c.bonusMonths, [8, 1]);
+  await e.call("add_card", { name: "JCB", cutoff_day: 15, due_day: 10, bonus_months: [7, 12] });
+  const p = await e.call("add_purchase", { description: "テレビ", amount: 98000, bonus: "once", date: "2026-10-05", card: "JCB" });
+  assert.equal(p.ok?.saved, true, JSON.stringify(p.err));
+  assert.equal(p.ok.purchase.nextPayment.date, "2026-12-10");   // 15 Eki kesim → kış bonusu Aralık
+  assert.equal(p.ok.purchase.bonus.name, "Kış bonusu");
+  const plan = JSON.parse(K.sync.changes(K.sync.state(), "{}"));
+  assert.equal(plan.purchases.upsert[0].row.bonus, true);
+  assert.deepEqual(plan.cards.upsert[0].row.bonus_months, [7, 12]);
+
+  K.setHome("USD", "US");
+  assert.equal(JSON.parse(K.constants()).bonus, false);
+  const us = await e.call("add_purchase", { description: "TV", amount: 900, bonus: "once", card: "JCB" });
+  assert.equal(us.err.user, true);
 });

@@ -1375,5 +1375,18 @@
  "İşyeri": "Merchant",
  "Kendiliğinden eklenir.": "Added automatically.",
  "Onaya düşer: {0}": "Waits for review: {0}",
- "Önce giriş yap": "Sign in first"
+ "Önce giriş yap": "Sign in first",
+ "Bonus ödemesi": "Bonus payment",
+ "bonus {0}": "bonus {0}",
+ "Yok": "None",
+ "Bonusla": "Bonus",
+ "2 bonus": "Two bonuses",
+ "{0} · {1}: {2}": "{0} · {1}: {2}",
+ "Yaz bonusu": "Summer bonus",
+ "Kış bonusu": "Winter bonus",
+ "Bonus": "Bonus",
+ "Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.": "Bonus payment purchases are paid in these months, on the card’s due day.",
+ "{0} {1} bonus ödemesi {2}": "Bonus payment on {1} {0}: {2}",
+ "Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.": "{0} bonus payment purchase(s) will be charged to your card that day. Set part of your bonus aside for it.",
+ "Taksit / peşin": "Installments / single"
 }

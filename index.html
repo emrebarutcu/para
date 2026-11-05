@@ -355,6 +355,11 @@
 
         <div class="field" id="countField">
           <span class="field-label">Taksit</span>
+          <div class="seg seg-full" id="bonusRow" role="radiogroup" aria-label="Bonus ödemesi" hidden>
+            <label><input type="radio" name="bonus" value="" checked /><span>Taksit / peşin</span></label>
+            <label><input type="radio" name="bonus" value="1" /><span>Bonusla</span></label>
+            <label><input type="radio" name="bonus" value="2" /><span>2 bonus</span></label>
+          </div>
           <div class="count-grid" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
           <div class="stepper" id="countOther" hidden>
             <button type="button" data-step="-1" aria-label="Bir taksit az"><svg class="ic"><use href="#i-minus"/></svg></button>
@@ -553,6 +558,20 @@
             <button type="button" class="link" id="cardPaysLink" hidden>Kart ödemelerin ›</button>
             <button type="button" class="link" id="cardDebtLink" hidden>Borçlar'da gör ›</button>
           </div>
+        </div>
+        <div class="field" data-jp hidden>
+          <span class="field-label">Bonus ödemesi</span>
+          <div class="field-row">
+            <label class="field">
+              <span class="field-label">Yaz bonusu</span>
+              <select name="bonusSummer" aria-label="Yaz bonusu"></select>
+            </label>
+            <label class="field">
+              <span class="field-label">Kış bonusu</span>
+              <select name="bonusWinter" aria-label="Kış bonusu"></select>
+            </label>
+          </div>
+          <small class="hint">Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.</small>
         </div>
         <div class="field" id="termField" hidden>
           <span class="field-label">Günler değişince harcamalar</span>

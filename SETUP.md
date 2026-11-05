@@ -130,6 +130,15 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
+- **8.7.0** — **Japonya: bonus ödemesi** (ボーナス払い; yalnızca ülkesi Japonya olan hesapta, `para.js bonusFor`). Kartlı
+  harcama yaz ya da kış bonusu ayında, kartın son ödeme gününde tek seferde (`purchases.bonus`, `count` 1) ya da art arda
+  iki bonusa yarı yarıya (`count` 2, ボーナス2回払い) ödenir. Bonus ayları kartta (`cards.bonus_months` [yaz, kış]; boşsa
+  Ağustos ve Ocak). Harcama, ekstresi bonus ayından en az 2 ay önce kesilen ilk bonusa girer (aşağıda Kartlar). Ekstre,
+  limit, nakit akışı ve içgörüler (`bonus`: yaklaşan bonus ödemesi) aynı ödeme planından. **Yayından önce**
+  `supabase/gecis/8.7.0.sql` çalıştırılır (boş olabilen iki sütun; yeni istemci bunları yazar). Eşitleme biçimi
+  `SCHEMA = 9` (boş `bnpl` artık null yazılır: kaldırılan sağlayıcı tabloda da silinir). MCP: `add_purchase` /
+  `update_purchase` / `simulate_purchase` `bonus` ("once" | "twice" | null), `add_card` / `update_card` `bonus_months`;
+  Japonya dışında hata verir. Mağaza metinleri `magaza/` klasöründe.
 - **8.2.0** — **CashFollow Premium** (haftalık / aylık / yıllık App Store aboneliği; yıllıkta 1 hafta ücretsiz).
   Ücretsiz sürüm 2 kart ve 1 kişi; Akış, "Alabilir miyim?", içgörüler, Varlığın seyri, geri ödeme planı ve asistan
   bağlantısı Premium. **Yayından önce** `supabase/gecis/8.2.0.sql` çalıştırılır: `subscriptions` tablosu (kullanıcı
@@ -323,6 +332,8 @@ yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; ayn�
 
 #### App Store sayfası
 
+- **Metinler:** `magaza/<dil>.md` (ad, alt başlık, anahtar kelimeler, tanıtım metni, açıklama; App Store'un karakter
+  sınırlarıyla): `magaza/en.md` İngilizce (ABD), `magaza/ja.md` Japonca. App Store Connect'te o dilin sayfasına kopyalanır.
 - **Adresler:** destek `https://cashfollow.app/support`, gizlilik `https://cashfollow.app/privacy` (ikisi de İngilizce;
   `support.html`, `privacy.html`). Destek e-postası `support@cashfollow.app` (Cloudflare yönlendirmesi).
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
@@ -442,6 +453,11 @@ Harcama eklerken tarih ve kart seçilir (ya da "Nakit / banka kartı"):
 - Ekstre, son ödeme günü kesimden sonraysa aynı ay, değilse bir sonraki ay ödenir
   (ör. kesim 12 / son ödeme 22 → 12 Eki ekstresi 22 Eki'de; kesim 25 / son ödeme 5 → 25 Eki ekstresi 5 Kas'ta).
 - Taksitler sonraki ekstrelere birer ay kayarak düşer. Ay kısaysa gün ayın son gününe çekilir.
+- **Bonus ödemesi** (yalnızca Japonya, ボーナス払い; `taksit.js bonus`): tutar kartın bonus ayındaki son ödeme gününde
+  ödenir; "2 bonus"ta yarısı bir bonusta, yarısı sonrakinde. Bonus ayları kartta (yaz 6–9, kış 11–2; varsayılan Ağustos
+  ve Ocak). Harcama, ekstresi bonus ayından en az 2 ay önce kesilen ilk bonusa girer: kesim 15 / ödeme ertesi ay 10 olan
+  kartta 15 Haziran'a kadar alınan 10 Ağustos'ta, 16 Haziran – 15 Kasım arası 10 Ocak'ta; ay sonu kesimli kartta 30
+  Haziran'a kadar Ağustos, 1 Temmuz – 30 Kasım Ocak. Kartların bonus kullanılamayan aralıkları ayrıca tutulmaz.
 - Nakit harcama kendi gününde ödenir.
 - Kartın kesim ya da son ödeme günü değiştirilirken karttaki harcamalar etkileniyorsa uygulama arada kalanların ne
   olacağını sorar: **açık ekstre eski günlerle kesilsin** (yeni günler sonraki ekstreden başlar), **yeni günler hemen

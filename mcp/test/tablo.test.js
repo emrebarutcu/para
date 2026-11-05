@@ -58,7 +58,7 @@ test("yeni, değişen ve silinen kayıtlar bulunur", () => {
   assert.deepEqual(plan.purchases.upsert.map(x => x.row), [{
     id: "p3", person_id: "ali", card_id: "k2", description: "Yeni", total: 100, count: 1, date: "2026-10-19",
     first_due: null, plan_count: null, category: null, category_by: null,
-    asset: null, repeat_count: null, repeat_every: null, repeat_unit: null,
+    asset: null, repeat_count: null, repeat_every: null, repeat_unit: null, bnpl: null, bonus: null,
   }]);
   assert.deepEqual(plan.purchases.delete, ["p1"]);
   assert.deepEqual(plan.people.delete, []);
