@@ -1,4 +1,5 @@
-// Web'in dili: tarayıcının tercih ettiği dillerden ilk desteklenen (tr, en, de, fr, es, it, nl, ja, ko, pt), yoksa İngilizce
+// Web'in dili: tarayıcının tercih ettiği dillerden ilk desteklenen (tr, en, de, fr, es, it, nl, ja, ko, pt, ar), yoksa İngilizce;
+// Arapçada <html dir="rtl">
 // (iPhone'daki Dil.swift gibi). index.html'de dil.js'ten hemen sonra, diğer betiklerden önce yüklenir: sözlüğü
 // (dil/<kod>.json, eksikler için dil/en.json) eşzamanlı alır ki app.js ve sync.js'teki L("…") ile
 // üst düzeydeki sabitler de çevrilsin; sonra sayfanın sabit metinlerini (index.html) çevirir.
@@ -83,6 +84,7 @@
     else if (en) D.setLang("en", en);
   }
   document.documentElement.lang = D.lang;
+  document.documentElement.dir = D.dir();
   if (D.lang !== "tr") {
     texts(document.body, (k, apply) => {
       const t = D.t(k);

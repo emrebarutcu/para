@@ -125,6 +125,7 @@ struct BuyukTutar: View {
             Text(p.tam).font(.system(size: boyut, weight: .bold)).tracking(-1).foregroundStyle(renk)
             Text(p.kesir).font(.system(size: boyut * 0.5, weight: .medium)).foregroundStyle(Tema.metin3)
         }
+        .environment(\.layoutDirection, .leftToRight)   // sağdan solada da "AED 4,598.91": parçalar sayının sırasıyla
         .monospacedDigit()
         .lineLimit(1)
         .minimumScaleFactor(0.5)

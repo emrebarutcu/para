@@ -286,13 +286,22 @@ kalır; yalnızca yeni bir yabancı değer seçilemez. Sağlayıcıların adlar�
 ### Diller
 
 Türkçe (kaynak), İngilizce, Almanca, Fransızca, İspanyolca, İtalyanca, Felemenkçe, Japonca, Korece, Portekizce (Brezilya
-yazımı). Metinler kodda Türkçe yazılır (`L("…")`, `D.t("…")`); sözlükler `dil/<kod>.json`, anahtar Türkçe metin. Dil
+yazımı), Arapça. Metinler kodda Türkçe yazılır (`L("…")`, `D.t("…")`); sözlükler `dil/<kod>.json`, anahtar Türkçe metin. Dil
 telefonun (iPhone: `Dil.swift`; Ayarlar → CashFollow → Dil ile değişir) ya da tarayıcının tercih ettiği dillerden ilk
 desteklenenidir, hiçbiri değilse İngilizce (`dil.js` → `LANGS`, `choose`). Sözlükte olmayan anahtar İngilizceden, o da
 yoksa Türkçe gösterilir. Tarih, sayı ve ay adları seçilen dilin yerel ayarıyla (`dil.js` → `locale`; iPhone'da dil +
 telefonun bölgesi). Web sözlüğü `dil-sayfa.js` eşzamanlı yükler ve `<html lang>`'ı yazar; service worker İngilizceyi ve
 cihazın dilini önbelleğe alır. iPhone'da sözlükleri Xcode'un "Web modülleri" adımı (`ios/scripts/js-kopyala.sh`) pakete
 kopyalar; App Store'da dillerin görünmesi için `knownRegions` ve `ios/CashFollow/Uygulama/<dil>.lproj`.
+
+**Arapça** (`ar`; Körfez: BAE, Suudi Arabistan, Katar, Kuveyt) sağdan soladır. Web: `dil-sayfa.js` `<html dir="rtl">`
+yazar; `styles.css` mantıksal özelliklerle (`margin-inline`, `inset-inline`, `text-align: start`) kendiliğinden döner,
+sonundaki `[dir="rtl"]` kuralları dönmeyenleri düzeltir (önceki / sonraki okları, açılır liste oku, tutarlar
+`unicode-bidi: isolate`, e-posta / kod alanları soldan sağa, Arapçada harf aralığı 0). Web grafikleri (SVG) soldan sağa
+kalır; iPhone'da Swift Charts yerleşimle döner. Sayılar Batı rakamıyla ve Miladi takvimle (`ar-AE-u-ca-gregory-nu-latn`,
+Swift `@numbers=latn;calendar=gregorian`): 1,234.50 د.إ.‏. Swift: `chevron.backward` / `forward`, "önce → sonra" için
+`Dil.ok`, tutarın başındaki "+" / "−" için `Bicim.isaret`; büyük tutar (`BuyukTutar`) soldan sağa dizilir. Örnek veriyle:
+`-ornek -ulke AE -AppleLanguages "(ar)" -AppleLocale ar_AE`.
 
 Yeni metin: Türkçesini koda yaz, `node scripts/dil.mjs` her sözlükte eksikleri ve yer tutucusu (`{0}`…) uymayanları
 listeler (CI'da da, eksik varsa hata). `node scripts/dil.mjs --eksik` İngilizcesi, `--eksik de` Almancası eksikleri

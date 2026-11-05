@@ -680,7 +680,7 @@ struct AlabilirMiyim: View {
                     Satir(title: L("Son ödeme"), value: Bicim.day(p.lastPaymentDate))
                 }
                 if let ilk {
-                    Satir(title: L("{0} ödemesi", Bicim.month(ilk.month)), value: "\(Bicim.tl(ilk.paymentsBefore, fraction: false)) → \(Bicim.tl(ilk.paymentsAfter, fraction: false))")
+                    Satir(title: L("{0} ödemesi", Bicim.month(ilk.month)), value: "\(Bicim.tl(ilk.paymentsBefore, fraction: false)) \(Dil.ok) \(Bicim.tl(ilk.paymentsAfter, fraction: false))")
                 }
                 if let c = sim.card, c.limit > 0, let kalan = c.availableAfter {
                     Satir(title: L("Kalan limit"), value: Bicim.tl(kalan, fraction: false), color: kalan < 0 ? Tema.tehlike : Tema.metin)

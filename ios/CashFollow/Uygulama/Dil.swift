@@ -7,7 +7,7 @@ import Foundation
 // Çeviri sırası: dilin sözlüğü → İngilizce sözlük → Türkçe. scripts/dil.mjs (CI) her L("…") için her sözlükte çeviri
 // var mı denetler.
 enum Dil {
-    static let diller = ["tr", "en", "de", "fr", "es", "it", "nl", "ja", "ko", "pt"]   // dil.js → LANGS ile aynı
+    static let diller = ["tr", "en", "de", "fr", "es", "it", "nl", "ja", "ko", "pt", "ar"]   // dil.js → LANGS ile aynı
 
     // Seçilen dilin kodu: "de-DE" → "de", "pt-PT" → "pt"
     static let kod: String = {
@@ -19,6 +19,10 @@ enum Dil {
     }()
     // Türkçe değil: Türkçeye özel yazım (ekler, "%45", kısa para adları) yerine yerel biçim
     static let turkceDegil: Bool = kod != "tr"
+    // Arapça: sağdan sola (SwiftUI yerleşimi telefonun diliyle kendiliğinden döner), Batı rakamları (Bicim.locale)
+    static let arapca: Bool = kod == "ar"
+    // "önce → sonra" okları: sağdan sola yazıda ters
+    static var ok: String { arapca ? "←" : "→" }
 
     // dil/<kod>.json ve dil/en.json (uygulama paketinde js/; Web modülleri adımı kopyalar)
     private static func oku(_ ad: String) -> String? {

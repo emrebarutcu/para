@@ -100,6 +100,7 @@
 				ja,
 				ko,
 				"pt-BR",
+				ar,
 				Base,
 			);
 			mainGroup = CF0000000000000000000004;
@@ -143,6 +144,7 @@
 				"$(SRCROOT)/../dil/ja.json",
 				"$(SRCROOT)/../dil/ko.json",
 				"$(SRCROOT)/../dil/pt.json",
+				"$(SRCROOT)/../dil/ar.json",
 				"$(SRCROOT)/../para.js",
 				"$(SRCROOT)/../tekrar.js",
 				"$(SRCROOT)/../taksit.js",
@@ -171,6 +173,7 @@
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/ja.json",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/ko.json",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/pt.json",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/ar.json",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/para.js",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/tekrar.js",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/js/taksit.js",
@@ -281,7 +284,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 8.8.0;
+				MARKETING_VERSION = 8.9.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.cashfollow.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -311,7 +314,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 8.8.0;
+				MARKETING_VERSION = 8.9.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.cashfollow.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

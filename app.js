@@ -194,12 +194,15 @@ let moneyFmt = new Intl.NumberFormat(D.locale(), { style: "currency", currency: 
 const numFmt = new Intl.NumberFormat(D.locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function fmt(n) { return moneyFmt.format(n || 0); }
 function fmtNum(n) { return numFmt.format(n || 0); }
+// "önce → sonra": sağdan sola yazıda ok ters döner
+const ARROW = D.dir() === "rtl" ? "←" : "→";
 
 function fmtShort(n) {
   const abs = Math.abs(n), s = n < 0 ? "-" : "";
   const f = v => new Intl.NumberFormat(D.locale(), { maximumFractionDigits: 1 }).format(v);
-  if (abs >= 1e6) return s + f(abs / 1e6) + "M";
-  if (abs >= 1e3) return s + f(abs / 1e3) + "K";
+  const [mn, k] = D.lang === "ar" ? [" مليون", " ألف"] : ["M", "K"];   // iPhone'daki kisa() gibi
+  if (abs >= 1e6) return s + f(abs / 1e6) + mn;
+  if (abs >= 1e3) return s + f(abs / 1e3) + k;
   return s + Math.round(abs).toLocaleString(D.locale());
 }
 
@@ -305,7 +308,7 @@ function setMoney(node, n) {
       const last = node.lastChild;
       if (last?.className === "dec") last.textContent += part.value;
       else node.append(el("span", "dec", part.value));
-    } else if (part.type !== "literal") node.append(document.createTextNode(part.value));
+    } else if (part.type !== "literal" || D.dir() === "rtl") node.append(document.createTextNode(part.value));   // sağdan solada boşluk ve yön işaretleri kalır
   }
 }
 
@@ -4618,7 +4621,7 @@ function updateEntryForm() {
     const when = e.date > today ? L(" ({0} tarihinde)", fmtDayShort(e.date)) : "";   // tarihi gelmemiş hareket tarihinde işlenir
     const held = before[e.asset] ?? 0, left = V.round(held + e.amount, e.asset);
     box.append(el("div", left < 0 ? "warn" : "", left < 0 ? L("{0} · elinde {1} {2} var", person.name, fmtAsset(held, e.asset), ticker)
-      : `${person.name} · ${ticker} ${fmtAsset(held, e.asset)} → ${fmtAsset(left, e.asset)}${when}`));
+      : `${person.name} · ${ticker} ${fmtAsset(held, e.asset)} ${ARROW} ${fmtAsset(left, e.asset)}${when}`));
     if (e.settle) {
       const tl0 = before[HOME] ?? 0, tl1 = V.round(tl0 - V.settled(e, HOME), HOME);
       box.append(el("div", tl1 < 0 ? "warn" : "", L("{0} bakiyesi {1} → {2}", homeShort(), fmtAsset(tl0, HOME), fmtAsset(tl1, HOME)) + when));
@@ -5464,7 +5467,7 @@ function updatePayForm() {
     const ahead = Math.min(amount, Math.max(info.remaining, 0)) - info.cd.unpaid;
     if (ahead > EPS) box.append(el("div", "", L("Fazlası {0} sonraki ekstreye sayılır.", m(ahead))));
   } else if (!closed) {
-    box.append(el("div", "", `${info.cd ? L("Kart borcu") : info.person ? L("Sana borcu") : L("Kalan")} ${m(Math.max(info.remaining, 0))} → ${m(Math.max(left, 0))}`));
+    box.append(el("div", "", `${info.cd ? L("Kart borcu") : info.person ? L("Sana borcu") : L("Kalan")} ${m(Math.max(info.remaining, 0))} ${ARROW} ${m(Math.max(left, 0))}`));
   }
   const owner = personById(info.owner);
   if (owner) {
@@ -5475,7 +5478,7 @@ function updatePayForm() {
     const short = a.code === HOME ? homeShort() : L(a.name);
     const unit = a.code === HOME ? homeShort() : lowerName(a.name);
     box.append(el("div", "", (owner.id === state.people[0]?.id ? L("{0} bakiyen", short) : L("{0} {1} bakiyesi", adEk(owner.name, "in"), unit))
-      + ` ${fmtAsset(bal(base), info.code)} → ${fmtAsset(bal(after), info.code)}`));
+      + ` ${fmtAsset(bal(base), info.code)} ${ARROW} ${fmtAsset(bal(after), info.code)}`));
   }
   const over = info.d || info.cd ? amount - Math.max(info.remaining, 0) : -left;
   if (over > EPS && !closed) {
