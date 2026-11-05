@@ -12,6 +12,9 @@
   let welcome = false;
   let loginFor = null;   // onAuthLogin'in çağrıldığı kullanıcı   // ilk açılıştaki giriş penceresi: kapatılamaz, "Çevrimdışı devam et" ile geçilir
 
+  // Görünen metinler (dil.js): tarayıcı Türkçe değilse İngilizcesi; sözlüğü dil-sayfa.js bu betikten önce yükler
+  const L = window.Dil.t;
+
   const OFFLINE_PREF = 'para.offline';   // girişsiz devam etmeyi seçti; ilk açılış penceresi bir daha çıkmaz
 
   function enabled() {
@@ -50,7 +53,7 @@
   function setWelcome(on) {
     welcome = on;
     const title = document.getElementById('authTitle');
-    if (title) title.textContent = on ? 'CashFollow\'a hoş geldin' : 'Bulut senkronizasyonu';
+    if (title) title.textContent = on ? L('CashFollow\'a hoş geldin') : L('Bulut senkronizasyonu');
     document.getElementById('authClose')?.toggleAttribute('hidden', on);
     document.getElementById('authWelcomeDesc')?.toggleAttribute('hidden', !on);
     document.getElementById('authOffline')?.toggleAttribute('hidden', !on);
@@ -104,14 +107,14 @@
       const msg = document.getElementById('authMsg');
       if (msg) {
         msg.textContent = '⚠ ' + (type === 'recovery'
-          ? 'Bağlantının süresi dolmuş ya da daha önce kullanılmış. "Şifremi unuttum" ile yenisini iste.'
-          : 'Bağlantının süresi dolmuş ya da daha önce kullanılmış. Hesabın zaten doğrulanmış olabilir; giriş yapmayı dene.');
+          ? L('Bağlantının süresi dolmuş ya da daha önce kullanılmış. "Şifremi unuttum" ile yenisini iste.')
+          : L('Bağlantının süresi dolmuş ya da daha önce kullanılmış. Hesabın zaten doğrulanmış olabilir; giriş yapmayı dene.'));
         msg.style.color = 'var(--expense)';
       }
     } else if (type === 'recovery') {
       showResetForm();
     } else if (typeof window.toast === 'function') {
-      window.toast(type === 'email_change' ? 'E-posta adresin güncellendi' : 'E-posta adresin doğrulandı');
+      window.toast(type === 'email_change' ? L('E-posta adresin güncellendi') : L('E-posta adresin doğrulandı'));
     }
   }
 
@@ -468,8 +471,8 @@
     if (!btn) return;
     if (!enabled()) { btn.style.display = 'none'; return; }
     btn.style.display = '';
-    btn.textContent = u ? ('☁ ' + u.email.split('@')[0]) : '☁ Giriş';
-    btn.title = u ? u.email : 'Cloud sync için giriş yap';
+    btn.textContent = u ? ('☁ ' + u.email.split('@')[0]) : L('☁ Giriş');
+    btn.title = u ? u.email : L('Cloud sync için giriş yap');
     btn.classList.toggle('auth-active', !!u);
     document.getElementById('offlineNote')?.toggleAttribute('hidden', !!u || hasStoredSession());
   }
@@ -496,7 +499,7 @@
         authModeNow = authMode;
         showCountry();
         document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t === tab));
-        document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
+        document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? L('Giriş Yap') : L('Kayıt Ol');
         document.getElementById('authPassword').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
         const m = document.getElementById('authMsg'); if (m) m.textContent = '';
         showResend(null);
@@ -522,10 +525,10 @@
       const { error } = await db.auth.resend({ type: 'signup', email: resendEmail, options: { emailRedirectTo: window.location.origin } });
       if (error) {
         btn.disabled = false;
-        authMessage(error.status === 429 ? 'Biraz bekleyip yeniden dene.' : error.message, false);
+        authMessage(error.status === 429 ? L('Biraz bekleyip yeniden dene.') : error.message, false);
         return;
       }
-      authMessage('Doğrulama e-postası yeniden gönderildi. Gelmezse gereksiz / spam klasörüne de bak.', true);
+      authMessage(L('Doğrulama e-postası yeniden gönderildi. Gelmezse gereksiz / spam klasörüne de bak.'), true);
       setTimeout(() => { btn.disabled = false; }, 60000);
     });
 
@@ -541,26 +544,25 @@
       const { data, error } = authMode === 'login'
         ? await db.auth.signInWithPassword({ email, password })
         : await db.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin,
-          // lang: giriş e-postalarının dili; web henüz yalnızca Türkçe olduğu için tarayıcının dili (iPhone'da uygulamanın)
-          data: { country: document.getElementById('authCountry')?.value || 'TR',
-                  lang: /^tr/i.test(navigator.language || 'tr') ? 'tr' : 'en' } } });
+          // lang: giriş e-postalarının dili; sayfanın dili (dil-sayfa.js: tarayıcı Türkçe değilse İngilizce; iPhone'da uygulamanın)
+          data: { country: document.getElementById('authCountry')?.value || 'TR', lang: window.Dil.lang } } });
 
       btn.disabled = false;
-      btn.textContent = authMode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
+      btn.textContent = authMode === 'login' ? L('Giriş Yap') : L('Kayıt Ol');
       showResend(null);
       if (authMode !== 'login' && !error) window.Analitik?.event('account_created', { country: document.getElementById('authCountry')?.value || 'TR' });
 
       if (error?.code === 'email_not_confirmed' || error?.message === 'Email not confirmed') {
-        authMessage('E-posta adresin henüz doğrulanmadı. E-postana gelen bağlantıya tıkla.', false);
+        authMessage(L('E-posta adresin henüz doğrulanmadı. E-postana gelen bağlantıya tıkla.'), false);
         showResend(email);
       } else if (error) {
-        authMessage(error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message, false);
+        authMessage(error.message === 'Invalid login credentials' ? L('E-posta veya şifre hatalı.') : error.message, false);
       } else if (authMode === 'register' && data.user && !data.user.identities?.length) {
         // Adres zaten kayıtlı: Supabase bunu belli etmemek için başarılı döner ama e-posta göndermez
-        authMessage('Bu e-postayla zaten bir hesap var. Giriş Yap sekmesinden gir; şifreni hatırlamıyorsan "Şifremi unuttum".', false);
+        authMessage(L('Bu e-postayla zaten bir hesap var. Giriş Yap sekmesinden gir; şifreni hatırlamıyorsan "Şifremi unuttum".'), false);
       } else if (authMode === 'register') {
-        if (data.session) { authMessage('Kayıt olundu!', true); return; }
-        authMessage('Kayıt olundu! E-postana gelen bağlantıyla hesabını doğrula. Gelmezse gereksiz / spam klasörüne de bak.', true);
+        if (data.session) { authMessage(L('Kayıt olundu!'), true); return; }
+        authMessage(L('Kayıt olundu! E-postana gelen bağlantıyla hesabını doğrula. Gelmezse gereksiz / spam klasörüne de bak.'), true);
         showResend(email);
       } else {
         closeModal();
@@ -585,9 +587,9 @@
       const { error } = await db.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin,
       });
-      btn.disabled = false; btn.textContent = 'Link gönder';
+      btn.disabled = false; btn.textContent = L('Link gönder');
       const msgEl = document.getElementById('forgotMsg');
-      msgEl.textContent = error ? '⚠ ' + error.message : '✓ Link gönderildi — e-postanı kontrol et.';
+      msgEl.textContent = error ? '⚠ ' + error.message : L('✓ Link gönderildi — e-postanı kontrol et.');
       msgEl.style.color = error ? 'var(--expense)' : 'var(--income)';
     });
 
@@ -599,13 +601,13 @@
       const btn = e.submitter;
       btn.disabled = true; btn.textContent = '…';
       const { error } = await db.auth.updateUser({ password });
-      btn.disabled = false; btn.textContent = 'Şifreyi güncelle';
+      btn.disabled = false; btn.textContent = L('Şifreyi güncelle');
       const msgEl = document.getElementById('resetMsg');
       if (error) {
         msgEl.textContent = '⚠ ' + error.message;
         msgEl.style.color = 'var(--expense)';
       } else {
-        msgEl.textContent = '✓ Şifre güncellendi!';
+        msgEl.textContent = L('✓ Şifre güncellendi!');
         msgEl.style.color = 'var(--income)';
         setTimeout(closeModal, 1200);
       }
@@ -621,12 +623,12 @@
     // tarayıcıdan silinir
     document.getElementById('authDeleteBtn')?.addEventListener('click', async () => {
       if (!db || !user) return;
-      if (!confirm('Hesabın ve bütün verilerin (kartlar, harcamalar, varlıklar, borçlar) kalıcı olarak silinsin mi? Geri alınamaz.')) return;
+      if (!confirm(L('Hesabın ve bütün verilerin (kartlar, harcamalar, varlıklar, borçlar) kalıcı olarak silinsin mi? Geri alınamaz.'))) return;
       const msg = document.getElementById('authDeleteMsg');
       const uid = user.id;
       const { error } = await db.rpc('delete_my_account');
       if (error) {
-        if (msg) { msg.hidden = false; msg.style.color = 'var(--expense)'; msg.textContent = 'Hesap silinemedi: ' + error.message; }
+        if (msg) { msg.hidden = false; msg.style.color = 'var(--expense)'; msg.textContent = L('Hesap silinemedi: {0}', error.message); }
         return;
       }
       try {

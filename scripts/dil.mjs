@@ -1,5 +1,5 @@
-// Çeviri denetimi: iPhone'da (L("…")) ve paylaşılan modüllerde (L("…"), D.t("…")) görünen her Türkçe metnin
-// dil/en.json'da İngilizcesi var mı. Eksik varsa listeler ve hata verir (CI: ios.yml → kopru).
+// Çeviri denetimi: iPhone'da (L("…")), paylaşılan modüllerde (L("…"), D.t("…")) ve web'de (app.js, sync.js, index.html)
+// görünen her Türkçe metnin dil/en.json'da İngilizcesi var mı. Eksik varsa listeler ve hata verir (CI: ios.yml → kopru).
 //   node scripts/dil.mjs           denetle
 //   node scripts/dil.mjs --eksik   eksikleri JSON olarak yaz (sözlüğe eklemek için)
 import fs from "node:fs";
@@ -44,6 +44,55 @@ for (const f of ["icgoru.js", "nakit.js", "borc.js", "tekrar.js", "taksit.js", "
   scan(path.join(ROOT, f), /(?<![A-Za-z0-9_.$])(?:L|D\.t)\("((?:[^"\\]|\\.)*)"/g);
 }
 
+// Web: app.js ve sync.js'te L("…") / L('…'), index.html'in sabit metinleri (dil-sayfa.js'in gezdiği gibi)
+for (const f of ["app.js", "sync.js"]) {
+  scan(path.join(ROOT, f), /(?<![A-Za-z0-9_.$])(?:L|D\.t)\("((?:[^"\\]|\\.)*)"/g);
+  scan(path.join(ROOT, f), /(?<![A-Za-z0-9_.$])(?:L|D\.t)\('((?:[^'\\]|\\.)*)'/g);
+}
+{
+  const file = path.join(ROOT, "index.html");
+  const S = require(path.join(ROOT, "dil-sayfa.js"));
+  S.texts(parseHTML(fs.readFileSync(file, "utf8")), k => add(k, "index.html"));
+}
+
+// index.html için küçük ayrıştırıcı: dil-sayfa.js'in kullandığı kadar DOM (nodeType, nodeName, nodeValue, childNodes,
+// getAttribute). Yalnızca <body>; yorumlar atlanır, script / style içeriği metin sayılmaz.
+function parseHTML(src) {
+  const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+  const RAW = new Set(["script", "style"]);
+  const ent = s => s.replace(/&(lt|gt|amp|quot|nbsp|#\d+);/g, (m, e) => ({ lt: "<", gt: ">", amp: "&", quot: '"', nbsp: " " })[e] ?? String.fromCharCode(Number(e.slice(1))));
+  const elem = (name, attrs) => ({ nodeType: 1, nodeName: name, attrs, childNodes: [], getAttribute: a => (a in attrs ? attrs[a] : null) });
+  const body = src.slice(src.search(/<body[\s>]/i));
+  const top = elem("ROOT", {});
+  const stack = [top];
+  const re = /<!--[\s\S]*?-->|<\/([a-zA-Z0-9-]+)\s*>|<([a-zA-Z0-9-]+)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>|[^<]+|</g;
+  for (let m; (m = re.exec(body));) {
+    const cur = stack[stack.length - 1];
+    if (m[0].startsWith("<!--")) continue;
+    if (m[1]) {   // kapanış
+      const name = m[1].toLowerCase();
+      const at = stack.map(n => n.nodeName.toLowerCase()).lastIndexOf(name);
+      if (at > 0) stack.length = at;
+    } else if (m[2]) {
+      const name = m[2].toLowerCase();
+      const attrs = {};
+      for (const a of m[3].matchAll(/([^\s=>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) attrs[a[1].toLowerCase()] = ent(a[2] ?? a[3] ?? a[4] ?? "");
+      const node = elem(name, attrs);
+      cur.childNodes.push(node);
+      if (RAW.has(name)) {   // içeriği kapanışa kadar atla
+        const end = new RegExp(`</${name}`, "ig");
+        end.lastIndex = re.lastIndex;
+        re.lastIndex = end.exec(body)?.index ?? body.length;
+        continue;
+      }
+      if (!m[4] && !VOID.has(name)) stack.push(node);
+    } else {
+      cur.childNodes.push({ nodeType: 3, nodeName: "#text", nodeValue: ent(m[0]) });
+    }
+  }
+  return top.childNodes.find(n => n.nodeName === "body") ?? top;
+}
+
 // Kodda kurulan anahtarlar: kategoriler, tekrar etiketleri, varlık adları
 const K = require(path.join(ROOT, "kategori.js"));
 for (const c of K.CATEGORIES) { add(c.name, "kategori.js"); add(c.hint, "kategori.js"); }
@@ -56,7 +105,9 @@ for (const u of Object.keys(R.UNIT_IN)) {
   add(`/{0} ${R.UNIT_NAMES[u]}`, "tekrar.js");
 }
 const V = require(path.join(ROOT, "varlik.js"));
-for (const a of V.assetsFor("TRY")) add(a.name, "varlik.js");
+// Her ana para biriminin varlıkları (web, ana para birimi TL değilken diğer para birimlerini de adıyla gösterir)
+const Pa = require(path.join(ROOT, "para.js"));
+for (const c of ["TRY", ...Pa.CURRENCIES.map(c => c.code)]) for (const a of V.assetsFor(c)) add(a.name, "varlik.js");
 
 const missing = [...keys].filter(([k]) => typeof dict[k] !== "string" || !dict[k]);
 // Yer tutucular aynı mı ({0}, {1}…)

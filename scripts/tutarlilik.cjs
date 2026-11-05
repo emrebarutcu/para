@@ -252,7 +252,7 @@ async function formFlow(p) {
 
 (async () => {
   const b = await chromium.launch();
-  const p = await b.newPage({ viewport: { width: 390, height: 900 } });
+  const p = await b.newPage({ viewport: { width: 390, height: 900 }, locale: "tr-TR" });   // tutarlar Türkçe yazımla okunur (tarayıcı Türkçe değilse sayfa İngilizce)
   const errors = [];
   p.on("pageerror", e => errors.push(String(e)));
   await p.route("**/cdn.jsdelivr.net/**", r => r.abort());
