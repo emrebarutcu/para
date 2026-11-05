@@ -73,7 +73,8 @@
   //   markets       fon ve hisse (TEFAS, Borsa İstanbul), para piyasası fonları
   //   bankEmails    banka e-postaları (Türk bankalarının bildirimleri; eposta.js)
   //   excelImport   Excel içe aktarma (Türkçe sayfa biçimi)
-  const DEFAULT_FEATURES = { installments: "secondary", bnpl: [], apr: false, markets: false, bankEmails: false, excelImport: false };
+  //   bonus         bonus ödemesi (ボーナス払い): kartlı harcama yaz / kış bonusu ayında ödenir (taksit.js bonus)
+  const DEFAULT_FEATURES = { installments: "secondary", bnpl: [], apr: false, markets: false, bankEmails: false, excelImport: false, bonus: false };
   const EU_BNPL = ["klarna", "paypal"];
   const GULF = { installments: "primary", bnpl: ["tabby", "tamara"] };
   const PRIMARY = { installments: "primary" };
@@ -84,7 +85,7 @@
     GB: { apr: true, bnpl: ["klarna", "clearpay", "paypal"] },
     AU: { apr: true, bnpl: ["afterpay", "zip", "klarna", "paypal"] },
     NZ: { apr: true, bnpl: ["afterpay", "zip", "klarna"] },
-    JP: { installments: "primary", apr: true },
+    JP: { installments: "primary", apr: true, bonus: true },
     KR: PRIMARY,
     DE: { bnpl: EU_BNPL }, AT: { bnpl: EU_BNPL }, NL: { bnpl: EU_BNPL }, BE: { bnpl: EU_BNPL },
     SE: { bnpl: EU_BNPL }, NO: { bnpl: EU_BNPL }, DK: { bnpl: EU_BNPL }, FI: { bnpl: EU_BNPL },
@@ -110,6 +111,8 @@
   const marketsFor = home => home === "TRY";
   const aprFor = home => features(countryOfHome(home)).apr;
   const bnplFor = home => features(countryOfHome(home)).bnpl.length > 0;
+  // Bonus ödemesi (Japonya, ボーナス払い; taksit.js bonus): features(ülke).bonus
+  const bonusFor = code => features(code).bonus;
   // Formlarda önce sunulan yabancı para birimleri: ana para biriminin dışında dolar, euro, sterlin
   const commonForeign = home => ["USD", "EUR", "GBP", "TRY"].filter(c => c !== home).slice(0, 3);
 
@@ -127,7 +130,7 @@
     return out;
   }
 
-  const api = { CURRENCIES, COUNTRIES, DEFAULT_COUNTRY, DEFAULT_HOME, currency, isCurrency, country, homeOfCountry, homeOf, FEATURES, DEFAULT_FEATURES, features, countryOfHome, marketsFor, aprFor, bnplFor, commonForeign, homeRates, zoneOfCountry, isZone };
+  const api = { CURRENCIES, COUNTRIES, DEFAULT_COUNTRY, DEFAULT_HOME, currency, isCurrency, country, homeOfCountry, homeOf, FEATURES, DEFAULT_FEATURES, features, countryOfHome, marketsFor, aprFor, bnplFor, bonusFor, commonForeign, homeRates, zoneOfCountry, isZone };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Para = api;
 })(this);

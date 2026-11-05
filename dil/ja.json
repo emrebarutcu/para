@@ -1375,5 +1375,18 @@
  "İşyeri": "店舗",
  "Kendiliğinden eklenir.": "自動で追加されます。",
  "Onaya düşer: {0}": "確認待ちになります：{0}",
- "Önce giriş yap": "先にログインしてください"
+ "Önce giriş yap": "先にログインしてください",
+ "Bonus ödemesi": "ボーナス払い",
+ "bonus {0}": "ボーナス {0}",
+ "Yok": "なし",
+ "Bonusla": "ボーナス一括",
+ "2 bonus": "ボーナス2回払い",
+ "{0} · {1}: {2}": "{0}・{1}：{2}",
+ "Yaz bonusu": "夏のボーナス",
+ "Kış bonusu": "冬のボーナス",
+ "Bonus": "ボーナス",
+ "Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.": "ボーナス払いの利用分は、この月のカードの支払日に引き落とされます。",
+ "{0} {1} bonus ödemesi {2}": "{1}{0}日 ボーナス払い {2}",
+ "Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.": "ボーナス払いの{0}件がこの日にカードから引き落とされます。ボーナスの一部を取っておきましょう。",
+ "Taksit / peşin": "分割・一括"
 }

@@ -216,7 +216,7 @@ struct DonemHarcamalari: View {
                     Spacer(minLength: 8)
                     Text(Bicim.amount(k.amount, asset: k.asset)).font(.body.weight(.semibold)).monospacedDigit().foregroundStyle(Tema.metin)
                 }
-                let plan = k.bnpl.map { "\($0.name) · Pay in \($0.payments)" } ?? k.repeat?.label ?? (k.installments > 1 ? L("{0} taksit", k.installments) : L("Peşin"))
+                let plan = k.bnpl.map { "\($0.name) · Pay in \($0.payments)" } ?? k.bonus?.name ?? k.repeat?.label ?? (k.installments > 1 ? L("{0} taksit", k.installments) : L("Peşin"))
                 Text([Bicim.day(k.date), plan, k.categoryName].compactMap { $0 }.joined(separator: " · "))
                     .font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
             }
@@ -296,6 +296,7 @@ struct KartGorseli: View {
 // Kart ekleme (add_card) ve düzenleme (update_card: ad, limit, son 4 hane, ödeme modu, APR). Kesim / son ödeme günü
 // değişince eski ekstrelerin ne olacağı sorulur (transition). Ödeme modu: otomatikte ekstre son ödeme gününün ertesi günü
 // tamamen ödenmiş sayılır; elle modda "Ödendi" ile işlenir. APR (ABD): elle ödenen kartta kalan faiziyle devreder.
+// Bonus ayları (Japonya): bonus ödemeli harcamaların ödendiği yaz ve kış ayı (varsayılan Ağustos, Ocak).
 struct KartFormu: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
@@ -307,6 +308,8 @@ struct KartFormu: View {
     @State private var last4 = ""
     @State private var otomatik = true
     @State private var apr = ""
+    @State private var yazBonusu = 8
+    @State private var kisBonusu = 1
     @State private var error: String?
     @State private var gecis: [Gecis] = []      // günler değişince sorulan seçenekler (update_card transition)
     @State private var soru = false
@@ -342,6 +345,16 @@ struct KartFormu: View {
                             ? L("Ödediğinde \"Ödendi\" ile işlersin. En az asgari ödemeyi ödersen kalan faiziyle sonraki ekstreye devreder; daha azı gecikmedir.")
                             : L("Ödediğinde \"Ödendi\" ile işlersin; son ödeme günü geçen ödenmemiş ekstre gecikmiş sayılır."))
                 }
+                if model.bonusAllowed {
+                    Section {
+                        Picker(L("Yaz bonusu"), selection: $yazBonusu) { ForEach([6, 7, 8, 9], id: \.self) { Text(ayAdi($0)).tag($0) } }
+                        Picker(L("Kış bonusu"), selection: $kisBonusu) { ForEach([11, 12, 1, 2], id: \.self) { Text(ayAdi($0)).tag($0) } }
+                    } header: {
+                        Text(L("Bonus ödemesi"))
+                    } footer: {
+                        Text(L("Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir."))
+                    }
+                }
                 HataMetni(text: error)
                 Section {
                     AltKaydet(eksik: name.trimmingCharacters(in: .whitespaces).isEmpty ? L("Kartın adını yaz") : nil, eylem: save)
@@ -373,11 +386,25 @@ struct KartFormu: View {
                 last4 = c.last4 ?? ""
                 otomatik = c.tracking?.autoPay ?? true
                 apr = c.apr.map { $0.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2))) } ?? ""
+                let bm = bonusAylari(c)
+                yazBonusu = bm[0]
+                kisBonusu = bm[1]
             }
         }
     }
 
     private func save() { save(transition: nil) }
+
+    // Kartın bonus ayları [yaz, kış]; yoksa varsayılan (taksit.js BONUS_MONTHS)
+    private func bonusAylari(_ c: KartGorunumu?) -> [Int] {
+        c?.bonusMonths ?? model.constants?.bonusMonths ?? [8, 1]
+    }
+
+    private func ayAdi(_ m: Int) -> String {
+        let f = DateFormatter()
+        f.locale = Bicim.locale
+        return f.standaloneMonthSymbols[(m - 1) % 12].capitalized(with: Bicim.locale)
+    }
 
     private func save(transition: String?) {
         var a: [String: Any] = ["name": name.trimmingCharacters(in: .whitespaces), "limit": Bicim.parse(limit) ?? 0, "last4": last4]
@@ -387,6 +414,7 @@ struct KartFormu: View {
                 a["card"] = c.id
                 if otomatik != (c.tracking?.autoPay ?? true) { a["auto_pay"] = otomatik }
                 if model.aprAllowed, oran != c.apr { a["apr"] = oran.map { $0 as Any } ?? NSNull() }
+                if model.bonusAllowed, [yazBonusu, kisBonusu] != bonusAylari(c) { a["bonus_months"] = [yazBonusu, kisBonusu] }
                 if cutoff != c.cutoffDay || due != c.dueDay {
                     a["cutoff_day"] = cutoff
                     a["due_day"] = due
@@ -405,6 +433,7 @@ struct KartFormu: View {
                 a["due_day"] = due
                 a["auto_pay"] = otomatik
                 if let oran { a["apr"] = oran }
+                if model.bonusAllowed, [yazBonusu, kisBonusu] != bonusAylari(nil) { a["bonus_months"] = [yazBonusu, kisBonusu] }
                 try model.write("add_card", a)
             }
             Analitik.olay(card == nil ? "card_added" : "card_edited")

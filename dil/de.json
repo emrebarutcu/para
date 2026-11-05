@@ -1375,5 +1375,18 @@
  "İşyeri": "Händler",
  "Kendiliğinden eklenir.": "Wird automatisch hinzugefügt.",
  "Onaya düşer: {0}": "Wartet auf Prüfung: {0}",
- "Önce giriş yap": "Melde dich zuerst an"
+ "Önce giriş yap": "Melde dich zuerst an",
+ "Bonus ödemesi": "Bonuszahlung",
+ "bonus {0}": "Bonus {0}",
+ "Yok": "Keine",
+ "Bonusla": "Mit Bonus",
+ "2 bonus": "2 Boni",
+ "{0} · {1}: {2}": "{0} · {1}: {2}",
+ "Yaz bonusu": "Sommerbonus",
+ "Kış bonusu": "Winterbonus",
+ "Bonus": "Bonus",
+ "Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.": "Käufe mit Bonuszahlung werden in diesen Monaten am Fälligkeitstag der Karte abgebucht.",
+ "{0} {1} bonus ödemesi {2}": "Bonuszahlung am {0}. {1}: {2}",
+ "Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.": "{0} Käufe mit Bonuszahlung werden an diesem Tag von deiner Karte abgebucht. Leg einen Teil deines Bonus dafür zurück.",
+ "Taksit / peşin": "Raten / einmalig"
 }

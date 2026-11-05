@@ -236,7 +236,7 @@ struct HarcamaSatiri: View {
                     if let sag = sagAlt { Text(sag).monospacedDigit() }
                 }
                 .font(.footnote).foregroundStyle(Tema.metin3)
-                let plan = p.bnpl.map { "\($0.name) · Pay in \($0.payments)" } ?? p.repeat?.label ?? (p.installments > 1 ? L("{0} taksit", p.installments) : L("Peşin"))
+                let plan = p.bnpl.map { "\($0.name) · Pay in \($0.payments)" } ?? p.bonus?.name ?? p.repeat?.label ?? (p.installments > 1 ? L("{0} taksit", p.installments) : L("Peşin"))
                 Text([plan, p.categoryName].compactMap { $0 }.joined(separator: " · ")).font(.footnote).foregroundStyle(Tema.metin3)
                 if p.installments > 1, p.repeat == nil {
                     let odenen = p.bnpl?.paid ?? p.paidInstallments   // Pay in 4: çekilen ödemeler
@@ -252,7 +252,7 @@ struct HarcamaSatiri: View {
     }
 
     private var tutar: String {
-        if p.bnpl != nil { return Bicim.amount(p.total, asset: p.asset) }   // Pay in 4: fiyat (ödemeler aylık değil)
+        if p.bnpl != nil || p.bonus != nil { return Bicim.amount(p.total, asset: p.asset) }   // Pay in 4, bonus: fiyat (ödemeler aylık değil)
         if p.repeat != nil || p.installments > 1 { return Bicim.amount(p.perInstallment, asset: p.asset) + L("/ay") }
         return Bicim.amount(p.total, asset: p.asset)
     }
@@ -261,6 +261,7 @@ struct HarcamaSatiri: View {
         if p.status == "done" { return "bitti" }
         if p.repeat != nil, let n = p.repeat?.nextDate { return L("sonraki {0}", Bicim.day(n)) }
         if let b = p.bnpl { return b.owedToProvider > 0.004 ? L("kalan {0}", Bicim.amount(b.owedToProvider, asset: p.asset)) : nil }
+        if p.bonus != nil, let n = p.nextPayment { return L("bonus {0}", Bicim.day(n.date)) }   // sıradaki bonus günü
         if p.installments > 1 { return L("kalan {0}", Bicim.amount(p.remainingAmount, asset: p.asset)) }
         if let n = p.nextPayment { return Bicim.relative(n.date) }
         return nil
@@ -294,6 +295,12 @@ struct HarcamaDetayi: View {
                             Istatistik(etiket: L("Ödenen"), deger: "\(b.paid)/\(b.payments)"),
                             Istatistik(etiket: L("{0} kalan", b.name), deger: Bicim.amount(b.owedToProvider, asset: p.asset)),
                         ])
+                    } else if let b = p.bonus {
+                        IstatistikSatiri(ogeler: [
+                            Istatistik(etiket: b.name, deger: Bicim.amount(b.payments > 1 ? p.perInstallment : p.total, asset: p.asset)),
+                            Istatistik(etiket: L("Ödenen"), deger: "\(p.paidInstallments)/\(p.installments)"),
+                            Istatistik(etiket: L("Kalan"), deger: Bicim.amount(p.remainingAmount, asset: p.asset)),
+                        ])
                     } else {
                         IstatistikSatiri(ogeler: [
                             Istatistik(etiket: p.repeat != nil ? L("Her ay") : L("Taksit"), deger: p.installments > 1 || p.repeat != nil ? Bicim.amount(p.perInstallment, asset: p.asset) : L("Peşin")),
@@ -312,6 +319,7 @@ struct HarcamaDetayi: View {
                             Satir(title: L("Şimdi al sonra öde"), value: "\(b.name) · Pay in \(b.payments)")
                             if let n = b.nextCharge { Satir(title: L("Sıradaki çekim"), value: "\(Bicim.day(n.date)) · \(Bicim.amount(n.amount, asset: p.asset))") }
                         }
+                        if let b = p.bonus { Satir(title: L("Bonus ödemesi"), value: b.name) }
                     }
                     .font(.subheadline)
                 }
@@ -322,7 +330,7 @@ struct HarcamaDetayi: View {
                             HStack(spacing: 12) {
                                 TarihRozeti(tarih: x.date)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(p.bnpl != nil ? L("{0}. ödeme", x.no) : L("{0}. taksit", x.no)).font(.body.weight(.semibold))
+                                    Text(x.bonus.map { L($0 == "summer" ? "Yaz bonusu" : "Kış bonusu") } ?? (p.bnpl != nil ? L("{0}. ödeme", x.no) : L("{0}. taksit", x.no))).font(.body.weight(.semibold))
                                     Text(x.paid ? L("ödendi") : Bicim.relative(x.date)).font(.footnote).foregroundStyle(Tema.metin3)
                                 }
                                 Spacer()
@@ -374,6 +382,7 @@ struct HarcamaFormu: View {
     @AppStorage("harcama.sonBnpl") private var sonBnpl = "klarna"
     @State private var bnpl = false            // Pay in 4: 4 ödeme, 2 haftada bir (ülkede varsa; para.js features)
     @State private var taksitli = false        // taksidin ikinci planda olduğu ülkede taksit seçimi açık mı
+    @State private var bonus = 0               // bonus ödemesi (Japonya): 0 yok, 1 tek bonus, 2 iki bonusa bölünmüş
     @State private var saglayici = "klarna"
     @State private var yuklendi = false
     @State private var desc = ""
@@ -438,8 +447,23 @@ struct HarcamaFormu: View {
                                 }
                             }
                         }
+                        if bonusSecilebilir {
+                            etiket(L("Bonus ödemesi"))
+                            Picker(L("Bonus ödemesi"), selection: $bonus.animation()) {
+                                Text(L("Yok")).tag(0)
+                                Text(L("Bonusla")).tag(1)
+                                Text(L("2 bonus")).tag(2)
+                            }
+                            .pickerStyle(.segmented)
+                            if bonus > 0, let b = (sim?.purchase ?? preview?.purchase)?.bonus {
+                                ForEach(b.schedule, id: \.date) { x in
+                                    Text(L("{0} · {1}: {2}", L(x.season == "summer" ? "Yaz bonusu" : "Kış bonusu"), Bicim.day(x.date), Bicim.tl(x.amount)))
+                                        .font(.footnote).foregroundStyle(Tema.metin3)
+                                }
+                            }
+                        }
                         // Taksidin öne çıkmadığı ülkede form peşin başlar; taksit "Taksitli" düğmesinin arkasında
-                        if !tekrar, !bnpl, !model.installmentsPrimary {
+                        if !tekrar, !bnpl, bonusEtkin == 0, !model.installmentsPrimary {
                             Toggle(L("Taksitli"), isOn: Binding(get: { taksitli }, set: { acik in
                                 withAnimation {
                                     taksitli = acik
@@ -448,7 +472,7 @@ struct HarcamaFormu: View {
                             }))
                             .font(.subheadline).tint(Tema.metin)
                         }
-                        if !tekrar, !bnpl, model.installmentsPrimary || taksitli {
+                        if !tekrar, !bnpl, bonusEtkin == 0, model.installmentsPrimary || taksitli {
                             if model.installmentsPrimary { etiket(L("Taksit")) }
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
@@ -470,7 +494,7 @@ struct HarcamaFormu: View {
                                 }
                             }
                         }
-                        if duzenle == nil, !bnpl {
+                        if duzenle == nil, !bnpl, bonusEtkin == 0 {
                             Toggle(L("Her ay tekrarlar (abonelik, kira)"), isOn: $tekrar.animation())
                                 .font(.subheadline).tint(Tema.metin)
                         }
@@ -523,7 +547,7 @@ struct HarcamaFormu: View {
                 ToolbarItem(placement: .confirmationAction) { Button(L("Kaydet"), action: save).fontWeight(.semibold).disabled(!valid) }
             }
             .task { load() }
-            .task(id: "\(desc)|\(amount)|\(count)|\(taksitli)|\(tekrar)|\(bnpl)|\(saglayici)|\(Bicim.key(date))|\(card)|\(person)") { dryRun() }
+            .task(id: "\(desc)|\(amount)|\(count)|\(taksitli)|\(tekrar)|\(bnpl)|\(bonus)|\(saglayici)|\(Bicim.key(date))|\(card)|\(person)") { dryRun() }
         }
     }
 
@@ -539,6 +563,10 @@ struct HarcamaFormu: View {
         return (kurus - taban * 3) / 100
     }
 
+    // Bonus ödemesi yalnızca Japonya'da, kartla, tekrarlamayan harcamada (taksit.js bonus)
+    private var bonusSecilebilir: Bool { model.bonusAllowed && card != "nakit" && !tekrar && !bnpl }
+    private var bonusEtkin: Int { bonusSecilebilir ? bonus : 0 }
+
     private func etiket(_ s: String) -> some View {
         Text(s).font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
     }
@@ -549,7 +577,7 @@ struct HarcamaFormu: View {
             VStack(spacing: 8) {
                 if let cut = p.preview?.statementCutoff { Satir(title: L("Ekstre kesimi"), value: Bicim.day(cut)) }
                 Satir(title: L("İlk ödeme"), value: Bicim.day(p.preview?.firstPayment ?? p.purchase.nextPayment?.date))
-                if taksitSayisi > 1 {
+                if taksitSayisi > 1 || bonusEtkin > 1 {
                     Satir(title: L("Son ödeme"), value: Bicim.day(p.preview?.lastPayment ?? p.purchase.lastPaymentDate))
                     Satir(title: L("Taksit tutarı"), value: Bicim.tl(p.purchase.perInstallment))
                 }
@@ -580,6 +608,7 @@ struct HarcamaFormu: View {
             category = p.category ?? ""
             if let b = p.bnpl { bnpl = true; saglayici = b.provider }
             taksitli = count > 1
+            if let b = p.bonus { bonus = b.payments }
         } else if !yuklendi, card == "nakit" {
             saglayici = sonBnpl
             // Son kullanılan kart; yoksa ilk kart
@@ -614,6 +643,8 @@ struct HarcamaFormu: View {
             "description": desc.trimmingCharacters(in: .whitespaces), "amount": Bicim.parse(amount) ?? 0,
             "installments": taksitSayisi, "date": Bicim.key(date), "card": card, "person": person,
         ]
+        if bonusEtkin > 0 { a["bonus"] = bonusEtkin == 2 ? "twice" : "once"; a["installments"] = nil }
+        else if duzenle?.bonus != nil { a["bonus"] = NSNull() }
         if tekrar { a["repeat"] = 0 }
         if bnpl { a["bnpl"] = saglayici } else if duzenle?.bnpl != nil { a["bnpl"] = NSNull() }
         if !category.isEmpty { a["category"] = category } else if duzenle?.category != nil { a["category"] = NSNull() }
@@ -645,7 +676,7 @@ struct HarcamaFormu: View {
             if let e = eposta { Task { await model.epostaBitti(e.emailId) } }
             if bnpl { sonBnpl = saglayici }
             Analitik.olay(duzenle == nil ? "purchase_added" : "purchase_edited",
-                          ["installments": taksitSayisi, "repeat": tekrar, "bnpl": bnpl, "cash": card == "nakit", "afford_shown": sim != nil && abonelik.premium])
+                          ["installments": bonusEtkin > 0 ? bonusEtkin : taksitSayisi, "repeat": tekrar, "bnpl": bnpl, "bonus": bonusEtkin, "cash": card == "nakit", "afford_shown": sim != nil && abonelik.premium])
             dismiss()
         } catch {
             self.error = error.localizedDescription

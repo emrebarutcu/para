@@ -1375,5 +1375,18 @@
  "İşyeri": "التاجر",
  "Kendiliğinden eklenir.": "أُضيف تلقائياً.",
  "Onaya düşer: {0}": "بانتظار المراجعة: {0}",
- "Önce giriş yap": "سجّل الدخول أولاً"
+ "Önce giriş yap": "سجّل الدخول أولاً",
+ "Bonus ödemesi": "الدفع بالمكافأة",
+ "bonus {0}": "المكافأة {0}",
+ "Yok": "لا شيء",
+ "Bonusla": "بالمكافأة",
+ "2 bonus": "مكافأتان",
+ "{0} · {1}: {2}": "{0} · {1}: {2}",
+ "Yaz bonusu": "مكافأة الصيف",
+ "Kış bonusu": "مكافأة الشتاء",
+ "Bonus": "مكافأة",
+ "Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.": "تُخصم مشتريات الدفع بالمكافأة في هذه الأشهر، في تاريخ استحقاق البطاقة.",
+ "{0} {1} bonus ödemesi {2}": "الدفع بالمكافأة في {0} {1}: {2}",
+ "Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.": "ستُخصم {0} من مشتريات الدفع بالمكافأة من بطاقتك في ذلك اليوم. خصّص جزءًا من مكافأتك لها.",
+ "Taksit / peşin": "أقساط / دفعة واحدة"
 }

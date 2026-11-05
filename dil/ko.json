@@ -1375,5 +1375,18 @@
  "İşyeri": "가맹점",
  "Kendiliğinden eklenir.": "자동으로 추가돼요.",
  "Onaya düşer: {0}": "확인 대기: {0}",
- "Önce giriş yap": "먼저 로그인하세요"
+ "Önce giriş yap": "먼저 로그인하세요",
+ "Bonus ödemesi": "보너스 결제",
+ "bonus {0}": "보너스 {0}",
+ "Yok": "없음",
+ "Bonusla": "보너스로",
+ "2 bonus": "보너스 2회",
+ "{0} · {1}: {2}": "{0} · {1}: {2}",
+ "Yaz bonusu": "여름 보너스",
+ "Kış bonusu": "겨울 보너스",
+ "Bonus": "보너스",
+ "Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.": "보너스 결제 이용분은 이 달의 카드 결제일에 출금됩니다.",
+ "{0} {1} bonus ödemesi {2}": "{1} {0}일 보너스 결제 {2}",
+ "Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.": "보너스 결제 {0}건이 그날 카드에서 출금됩니다. 보너스 일부를 남겨 두세요.",
+ "Taksit / peşin": "할부 / 일시불"
 }

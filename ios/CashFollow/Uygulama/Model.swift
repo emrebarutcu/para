@@ -403,6 +403,7 @@ final class Model: ObservableObject {
     var excelImportAllowed: Bool { constants?.excelImport ?? marketsAllowed }  // Excel içe aktarma (web)
     var aprAllowed: Bool { constants?.apr ?? false }      // kartın APR'si (döner kredi)
     var bnplAllowed: Bool { constants?.bnpl ?? false }    // Pay in 4
+    var bonusAllowed: Bool { constants?.bonus ?? false }  // bonus ödemesi (ボーナス払い), Japonya
     // Taksit öne çıkıyor mu: değilse harcama formu peşin başlar, taksit "Taksitli" düğmesinin arkasında
     var installmentsPrimary: Bool { constants?.installments != "secondary" }
     // Pay in 4 sağlayıcıları: ülkedekiler; kayıttaki sağlayıcı (current) listede yoksa o da (adıyla)

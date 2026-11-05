@@ -73,7 +73,14 @@
     const n = v == null || v === "" ? NaN : Number(v);
     return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.round(n * 100) / 100 : null;
   }
-  const BNPL = /^[a-z]{1,20}$/;
+  // Sağlayıcı yalnızca metinse (boş alan null yazılır: kaldırılan sağlayıcı tabloda da silinir)
+  const bnplOf = v => (typeof v === "string" && /^[a-z]{1,20}$/.test(v) ? v : null);
+  // Bonus ayları (Japonya; taksit.js bonusMonths): [yaz, kış], iki farklı ay 1–12; varsayılan [8, 1] boş yazılır
+  function bonusMonths(list) {
+    if (!Array.isArray(list) || list.length !== 2) return null;
+    const [a, b] = list.map(v => int(v, 1, 12));
+    return a != null && b != null && a !== b && !(a === 8 && b === 1) ? [a, b] : null;
+  }
 
   // Kayıt → satır (user_id'siz); tablonun kısıtlarını ihlal edecek kayıt için null (yalnızca yerelde kalır)
   const ROW = {
@@ -88,6 +95,7 @@
         history: history(c.history, "cutoffDay", "dueDay")?.map(h => ({ until: h.until, cutoff_day: h.c, due_day: h.d })) ?? null,
         track_since: dateKey(c.trackSince), track_off: c.trackOff === true, manual_since: dateKey(c.manualSince),
         apr: apr(c.apr),
+        bonus_months: bonusMonths(c.bonusMonths),
       };
     },
     purchases: (p, home) => {
@@ -103,7 +111,9 @@
         asset: money(p.asset) && p.asset !== home ? p.asset : null,
         ...(date ? repeatCols(p) : repeatCols({})),
         // Şimdi al sonra öde: tarihli, tekrarlamayan harcamada sağlayıcı (taksit.js bnpl)
-        bnpl: date && BNPL.test(p.bnpl) && repeatCols(p).repeat_count == null ? p.bnpl : null,
+        bnpl: date && repeatCols(p).repeat_count == null ? bnplOf(p.bnpl) : null,
+        // Bonus ödemesi (Japonya): kartlı, tarihli, tekrarlamayan, 1 ya da 2 ödemeli harcamada (taksit.js bonus)
+        bonus: date && p.bonus === true && validId(p.cardId) && (count === 1 || count === 2) && repeatCols(p).repeat_count == null ? true : null,
       };
     },
     // Fon / hisse tekrarlamaz. price birim fiyat ya da kur (TL; fon, hisse, döviz ve altında, tek seferlik), settle
@@ -161,6 +171,8 @@
       const manual = dateKey(r.manual_since);
       if (manual) c.manualSince = manual;
       if (apr(r.apr) != null) c.apr = apr(r.apr);
+      const bm = bonusMonths(r.bonus_months);
+      if (bm) c.bonusMonths = bm;
       return c;
     },
     purchases: (r, home) => {
@@ -174,7 +186,8 @@
       }
       if (money(r.asset) && r.asset !== home) p.asset = r.asset;
       repeatFields(r, p);
-      if (r.date && BNPL.test(r.bnpl) && p.repeat == null) p.bnpl = r.bnpl;
+      if (r.date && bnplOf(r.bnpl) && p.repeat == null) p.bnpl = r.bnpl;
+      if (r.date && r.bonus === true && r.card_id && (r.count === 1 || r.count === 2) && p.repeat == null) p.bonus = true;
       return p;
     },
     entries: r => {
@@ -211,10 +224,11 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 8;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
+  const SCHEMA = 9;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
                       // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit;
                       // 5: cards.track_since / track_off (debts yeni tablo); 6: cards.manual_since, debts.card_id;
-                      // 7: entries.price / settle (fon, hisse, döviz ve altın); 8: cards.apr, purchases.bnpl
+                      // 7: entries.price / settle (fon, hisse, döviz ve altın); 8: cards.apr, purchases.bnpl;
+                      // 9: cards.bonus_months, purchases.bonus (Japonya'da bonus ödemesi); boş bnpl artık null yazılır
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base, home = "TRY") {

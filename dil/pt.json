@@ -1375,5 +1375,18 @@
  "İşyeri": "Estabelecimento",
  "Kendiliğinden eklenir.": "Adicionado automaticamente.",
  "Onaya düşer: {0}": "Aguarda revisão: {0}",
- "Önce giriş yap": "Entre primeiro"
+ "Önce giriş yap": "Entre primeiro",
+ "Bonus ödemesi": "Pagamento com bônus",
+ "bonus {0}": "bônus {0}",
+ "Yok": "Nenhum",
+ "Bonusla": "Com bônus",
+ "2 bonus": "2 bônus",
+ "{0} · {1}: {2}": "{0} · {1}: {2}",
+ "Yaz bonusu": "Bônus de verão",
+ "Kış bonusu": "Bônus de inverno",
+ "Bonus": "Bônus",
+ "Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.": "As compras com pagamento com bônus são cobradas nestes meses, no dia de vencimento do cartão.",
+ "{0} {1} bonus ödemesi {2}": "Pagamento com bônus em {0} de {1}: {2}",
+ "Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.": "{0} compra(s) com pagamento com bônus serão cobradas no seu cartão nesse dia. Reserve parte do seu bônus para isso.",
+ "Taksit / peşin": "Parcelado / à vista"
 }

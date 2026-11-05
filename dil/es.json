@@ -1375,5 +1375,18 @@
  "İşyeri": "Comercio",
  "Kendiliğinden eklenir.": "Se añade automáticamente.",
  "Onaya düşer: {0}": "Pendiente de revisión: {0}",
- "Önce giriş yap": "Primero inicia sesión"
+ "Önce giriş yap": "Primero inicia sesión",
+ "Bonus ödemesi": "Pago con bonificación",
+ "bonus {0}": "bonificación {0}",
+ "Yok": "Ninguno",
+ "Bonusla": "Con bonificación",
+ "2 bonus": "2 bonificaciones",
+ "{0} · {1}: {2}": "{0} · {1}: {2}",
+ "Yaz bonusu": "Bonificación de verano",
+ "Kış bonusu": "Bonificación de invierno",
+ "Bonus": "Bonificación",
+ "Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.": "Las compras con pago con bonificación se cobran en estos meses, el día de vencimiento de la tarjeta.",
+ "{0} {1} bonus ödemesi {2}": "Pago con bonificación el {0} {1}: {2}",
+ "Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.": "{0} compra(s) con pago con bonificación se cargarán a tu tarjeta ese día. Reserva parte de tu bonificación para ello.",
+ "Taksit / peşin": "Cuotas / un pago"
 }

@@ -264,6 +264,10 @@ function cardName(id) { return cardById(id)?.name ?? L("Nakit"); }
 function seriesVar(entity) { return `var(--s${(entity.color % SERIES_COUNT) + 1})`; }
 function cardColor(id) { const c = cardById(id); return c ? seriesVar(c) : CASH_COLOR; }
 function paymentsOf(p, until) { return T.payments(p, cardById(p.cardId), until); }
+// Bonus ödemesi (Japonya, ボーナス払い; para.js bonusFor, taksit.js bonus): hesabın ülkesi Japonya'ysa sunulur
+function bonusAllowed() { return FEAT.bonus; }
+// Bonus ödemeli harcamanın ödeme adı: "Yaz bonusu · 10 Ağu" ya da "Kış bonusu"
+function bonusPayName(x) { return x.bonus === "summer" ? L("Yaz bonusu") : L("Kış bonusu"); }
 // Tekrarlayan harcamada sıradaki tekrarın ödemeleri de (henüz gelmemiş olsa da) sayılır: liste ve durum için
 function upcomingPayments(p, today) { return paymentsOf(p, T.repeats(p) ? R.nextDate(p, today) ?? today : undefined); }
 // Tutar harcamanın / hareketin varlığında: TL ise "₺1.250,00", değilse "$100,00", "12,5 gr"
@@ -396,7 +400,7 @@ const els = {
   purchaseDelete: $("purchaseDelete"), purchasePreview: $("purchasePreview"),
   countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"), personField: $("personField"),
   purchaseSum: $("purchaseSum"), purchaseStatus: $("purchaseStatus"), purchaseCopy: $("purchaseCopy"),
-  dateChips: $("dateChips"), descList: $("descList"), countOther: $("countOther"), perRow: $("perRow"), cardTip: $("cardTip"),
+  dateChips: $("dateChips"), descList: $("descList"), countOther: $("countOther"), perRow: $("perRow"), bonusRow: $("bonusRow"), cardTip: $("cardTip"),
   dateRow: $("dateRow"), dateVal: $("dateVal"), categoryRow: $("categoryRow"), categoryVal: $("categoryVal"), personVal: $("personVal"),
   repeatRow: $("repeatRow"), repeatVal: $("repeatVal"), purchaseRepeat: $("purchaseRepeat"), assetRow: $("assetRow"), assetVal: $("assetVal"),
   purchaseAssetChips: $("purchaseAssetChips"), countField: $("countField"), cardField: $("cardField"),
@@ -1154,14 +1158,14 @@ function eventItemRows(ev) {
   const order = new Map(state.people.map((p, i) => [p.id, i]));
   const items = [...ev.items].sort((a, b) =>
     order.get(a.purchase.personId) - order.get(b.purchase.personId) || b.amount - a.amount);
-  return items.map(({ purchase, no, amount }) => {
+  return items.map(({ purchase, no, amount, bonus }) => {
     const p = personById(purchase.personId);
     const plan = T.planLength(purchase);
     const li = el("li");
     li.style.setProperty("--c", seriesVar(p));
     const main = el("div", "ev-item-main");
     main.append(el("span", "desc", purchase.desc),
-      el("span", "meta", `${p.name} · ${plan > 1 ? L("{0}/{1}. taksit", no, plan) : L("peşin")}`));
+      el("span", "meta", `${p.name} · ${bonus ? bonusPayName({ bonus }) : plan > 1 ? L("{0}/{1}. taksit", no, plan) : L("peşin")}`));
     li.append(main, el("span", "amount", fmt(amount)), icon("right"));
     editsPurchase(li, purchase, () => els.eventSheet.close());
     return li;
@@ -1779,14 +1783,14 @@ function eventItems(ev) {
   const items = [...ev.items].sort((a, b) =>
     order.get(a.purchase.personId) - order.get(b.purchase.personId)
     || a.purchase.desc.localeCompare(b.purchase.desc, "tr"));
-  for (const { purchase, no, amount } of items) {
+  for (const { purchase, no, amount, bonus } of items) {
     const p = personById(purchase.personId);
     const li = el("li");
     const who = el("span", "who");
     who.append(dot(seriesVar(p)), document.createTextNode(p.name));
     const plan = T.planLength(purchase);
     li.append(who, el("span", "", purchase.desc),
-      el("span", "no", plan > 1 ? `${no}/${plan}` : L("peşin")), el("span", "amount", fmt(amount)));
+      el("span", "no", bonus ? bonusPayName({ bonus }) : plan > 1 ? `${no}/${plan}` : L("peşin")), el("span", "amount", fmt(amount)));
     editsPurchase(li, purchase);
     ul.append(li);
   }
@@ -1963,6 +1967,7 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   if (p.date) meta.append(el("span", "", fmtDayShort(p.date) + " " + T.yearOf(T.parseDate(p.date).idx)));
   if (code !== HOME) meta.append(el("span", "", L(V.asset(code).name)));
   if (T.bnpl(p)) meta.append(el("span", "", `${T.bnplName(p)} · Pay in ${plan}`));   // şimdi al sonra öde: 2 haftada bir
+  else if (T.bonus(p) && cardById(p.cardId)) meta.append(el("span", "", T.bonusName(p, cardById(p.cardId))));   // bonus ödemesi (Japonya)
   else if (plan > 1 || !rule) meta.append(el("span", "", plan > 1 ? L("{0} taksit", plan) : L("Peşin")));
   if (rule) meta.append(el("span", "", R.label(p) + (rule.n ? " · " + L("{0} kez", rule.n) : "")));
   if (K.valid(p.category)) meta.append(el("span", "cat-tag" + (p.categoryBy === "user" ? "" : " ai"), K.category(p.category).name));
@@ -1994,6 +1999,8 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   } else if (T.bnpl(p)) {
     const rest = T.payments(p, cardById(p.cardId)).filter(x => x.key >= today).reduce((t, x) => t + x.amount, 0);
     side.append(el("span", "amount", fmt(p.total)), el("span", "sub", rest > EPS ? L("kalan {0}", fmt(rest)) : L("bitti")));
+  } else if (T.bonus(p) && cardById(p.cardId)) {
+    side.append(el("span", "amount", fmt(p.total)), el("span", "sub", next ? L("bonus {0}", fmtDayShort(next)) : L("ödendi")));
   } else if (plan > 1) {
     const amount = el("span", "amount", fmt(per));
     amount.append(el("small", "", L("/ay")));
@@ -3473,6 +3480,7 @@ function openPurchaseSheet(p, draft) {
   const chosen = provider ?? (providers.includes(lastBnpl) ? lastBnpl : providers[0]);
   els.bnplChips.replaceChildren(...providers.map(id => radioChip("bnplProvider", id, T.bnplName({ bnpl: id }), id === chosen)));
   f.elements.bnpl.checked = !!provider;
+  f.elements.bonus.value = T.bonus(src) ? String(src.count) : "";
 
   const cardId = p ? (p.cardId && cardById(p.cardId) ? p.cardId : "")
     : draft?.cardId && cardById(draft.cardId) ? draft.cardId
@@ -3576,9 +3584,10 @@ function renderPurchaseStatus(p) {
   }
   const pays = paymentsOf(p), plan = T.planLength(p);
   const left = pays.filter(x => x.key >= today);
-  const parts = plan > 1
+  const bonusName = T.bonus(p) && cardById(p.cardId) ? [T.bonusName(p, cardById(p.cardId))] : [];
+  const parts = bonusName.concat(plan > 1
     ? [L("{0}/{1} taksit ödendi", plan - left.length, plan), left.length ? L("kalan {0}", money(left.reduce((s, x) => s + x.amount, 0), T.assetOf(p, HOME))) : L("bitti")]
-    : [left.length ? L("Ödenmedi") : L("Ödendi")];
+    : [left.length ? L("Ödenmedi") : L("Ödendi")]);
   if (left[0]) parts.push(L("sonraki {0}", fmtDay(left[0].key)));
   els.purchaseStatus.textContent = parts.join(" · ");
 }
@@ -3718,9 +3727,12 @@ function collectPurchase() {
   const bnpl = !foreign && els.bnplChips.children.length && f.bnpl.checked ? f.bnplProvider.value || null : null;
   // Taksidin öne çıkmadığı ülkede "Peşin" seçiliyse tek ödeme
   const single = FEAT.installments === "secondary" && f.plan.value !== "1";
-  const count = foreign ? 1 : bnpl ? 4 : single ? 1 : Math.round(Number(f.count.value || 1));
   const date = T.parseDate(f.date.value) ? f.date.value : "";
   const { rep, error } = bnpl ? { rep: {}, error: null } : readRepeat(f);
+  // Bonus ödemesi (Japonya, FEAT.bonus): kartlı, tarihli, tekrarlamayan harcamada; 1 tek bonus, 2 iki bonusa bölünmüş
+  const bonusOk = bonusAllowed() && !foreign && !bnpl && !!cardById(f.card.value) && rep.repeat == null;
+  const bonus = bonusOk && date ? Number(f.bonus.value) || 0 : 0;
+  const count = foreign ? 1 : bnpl ? 4 : bonus || (single ? 1 : Math.round(Number(f.count.value || 1)));
   const errors = [];
   if (!(amount > 0)) errors.push("amount");
   if (!desc) errors.push("desc");
@@ -3729,10 +3741,11 @@ function collectPurchase() {
   if (error) errors.push(error);
   if (!personById(f.person.value)) errors.push("person");
 
-  const total = f.per.value === "1" && count > 1 && !bnpl ? Math.round(amount * count * 100) / 100 : amount;
+  const total = f.per.value === "1" && count > 1 && !bnpl && !bonus ? Math.round(amount * count * 100) / 100 : amount;
   const p = { desc, cardId: foreign ? null : f.card.value || null, count, total };
   if (foreign) p.asset = asset;
   Object.assign(p, rep);
+  if (bonus) p.bonus = true;
   if (bnpl) {
     p.bnpl = bnpl;
     if (!date && !errors.includes("date")) errors.push("date");   // ilk ödeme harcama günü
@@ -3745,7 +3758,7 @@ function collectPurchase() {
     p.firstDue = editing.firstDue;
     if (editing.planCount) p.planCount = editing.planCount;
   }
-  return { p, personId: f.person.value, errors };
+  return { p, personId: f.person.value, errors, bonusOk };
 }
 
 // Tekrarlayan harcamanın ilk tekrarı (tek alışveriş olarak)
@@ -3755,8 +3768,9 @@ function firstOccurrence(p) {
 }
 
 function updatePurchasePreview() {
-  const { p, personId, errors } = collectPurchase();
+  const { p, personId, errors, bonusOk } = collectPurchase();
   const code = T.assetOf(p, HOME), a = V.asset(code), rule = R.rule(p);
+  const bonus = T.bonus(p);
   const box = els.purchasePreview;
   box.replaceChildren();
   els.purchaseSum.replaceChildren();
@@ -3781,7 +3795,10 @@ function updatePurchasePreview() {
   els.bnplHint.textContent = parts ? L("Bugün {0}, sonra 2 haftada bir 3 × {1}", fmt(parts[0]), fmt(parts.at(-1))) : "";
   els.purchaseForm.querySelector(".amount-input .cur").textContent = a.symbol;
   els.purchaseForm.elements.amount.dataset.amount = a.digits;
-  els.perRow.hidden = !(p.count > 1) || !!p.bnpl;
+  els.perRow.hidden = !(p.count > 1) || !!p.bnpl || bonus;
+  // Bonus ödemesi (Japonya): seçilince taksit kutuları gizlenir
+  els.bonusRow.hidden = !bonusOk;
+  if (bonus) els.planSeg.hidden = els.countChips.hidden = els.countOther.hidden = true;
   renderCountTiles();
   renderRowValues();
   renderCardTip(p.cardId, p.date);
@@ -3790,8 +3807,14 @@ function updatePurchasePreview() {
   const card = cardById(p.cardId);
   const first = T.payments(firstOccurrence(p), card)[0].key;
   const pays = T.payments(p, card);
-  els.purchaseSum.append(el("strong", "", (p.count > 1 ? `${p.count} × ${fmt(T.perInstallment(p))}` : money(p.total, code)) + (rule ? ` ${R.per(p)}` : "")),
-    el("span", "", p.count > 1 ? L("toplam {0} · ilk ödeme {1}", fmt(p.total), fmtDayShort(first)) : L("ödeme {0}", fmtDayShort(first))));
+  if (bonus && card) {
+    // Bonus ödemesi: tutar ve bonus günleri ("Yaz bonusu 10 Ağu")
+    els.purchaseSum.append(el("strong", "", money(p.total, code)),
+      el("span", "", pays.map(x => `${bonusPayName(x)} ${fmtDayShort(x.key)}${pays.length > 1 ? ` · ${fmt(x.amount)}` : ""}`).join(" + ")));
+  } else {
+    els.purchaseSum.append(el("strong", "", (p.count > 1 ? `${p.count} × ${fmt(T.perInstallment(p))}` : money(p.total, code)) + (rule ? ` ${R.per(p)}` : "")),
+      el("span", "", p.count > 1 ? L("toplam {0} · ilk ödeme {1}", fmt(p.total), fmtDayShort(first)) : L("ödeme {0}", fmtDayShort(first))));
+  }
   if (rule && p.date && !errors.some(e => e in REPEAT_ERRORS)) {
     box.append(el("div", "", `${R.label(p)} · ` + (rule.n ? L("{0} kez, son {1}", rule.n, fmtDay(R.lastDate(p))) : L("bitiş tarihi yok"))));
   }
@@ -3858,7 +3881,7 @@ function updatePurchasePreview() {
     const ol = el("ol", "plan-list");
     for (const [i, x] of pays.entries()) {
       const li = el("li", x.key < today ? "paid" : "");
-      li.append(el("span", "", `${rule ? i + 1 : x.no}. ${fmtDay(x.key)}`), el("span", "amount", money(x.amount, code)));
+      li.append(el("span", "", x.bonus ? `${bonusPayName(x)} · ${fmtDay(x.key)}` : `${rule ? i + 1 : x.no}. ${fmtDay(x.key)}`), el("span", "amount", money(x.amount, code)));
       ol.append(li);
     }
     details.append(ol);
@@ -4061,6 +4084,16 @@ function openCardSheet(c) {
   // Ekstre ödemesi: yeni kartta otomatik (son ödeme günü geçince ödendi sayılır)
   f.elements.payMode.value = !c ? "auto" : !B.tracked(c) ? "off" : B.manual(c) ? "manual" : "auto";
   f.elements.apr.value = B.revolving(c) ? String(c.apr) : "";
+  // Bonus ayları (Japonya): yaz ve kış ayı seçenekleri ay adlarıyla
+  const [summer, winter] = T.bonusMonths(c);
+  const monthOptions = (select, months, selected) => select.replaceChildren(...months.map(m => {
+    const o = el("option", "", T.monthName(m - 1));
+    o.value = String(m);
+    o.selected = m === selected;
+    return o;
+  }));
+  monthOptions(f.elements.bonusSummer, [...new Set([6, 7, 8, 9, summer])].sort((a, b) => a - b), summer);
+  monthOptions(f.elements.bonusWinter, [...new Set([11, 12, 1, 2, winter])], winter);
   syncChecked(els.cardPayMode);
   renderColorSwatches(c ? c.color % SERIES_COUNT : nextColor(state.cards));
   termChange = null;
@@ -4333,10 +4366,18 @@ els.cardForm.addEventListener("submit", e => {
   if (!v.last4) delete v.last4;
   // Yıllık faiz (döner kredi olan ülkelerde, FEAT.apr; borc.js): boşsa yok; ülkede yoksa kayıtlı olan kalır
   const apr = FEAT.apr && f.apr.value !== "" ? Math.round(Number(f.apr.value) * 100) / 100 : null;
-  const withApr = c => {
+  const withApr0 = c => {
     const { apr: _, ...rest } = c;
     return apr != null ? { ...rest, apr } : FEAT.apr ? rest : c;
   };
+  // Bonus ayları (Japonya; taksit.js bonusMonths): varsayılan [8, 1] yazılmaz; başka ülkede kayıttaki kalır
+  const months = T.validBonusMonths([f.bonusSummer.value, f.bonusWinter.value]);
+  const withBonus = c => {
+    if (!bonusAllowed()) return c;
+    const { bonusMonths: _, ...rest } = c;
+    return months && (months[0] !== T.BONUS_MONTHS[0] || months[1] !== T.BONUS_MONTHS[1]) ? { ...rest, bonusMonths: months } : rest;
+  };
+  const withApr = c => withBonus(withApr0(c));
 
   // Ekstre ödemesi (trackSince / trackOff / manualSince) formdan; diğer alanlar ve günlerin geçmişi korunur
   if (editingCardId) {
@@ -6511,6 +6552,8 @@ function applyHome() {
   for (const n of document.querySelectorAll("[data-not-tr]")) n.hidden = tr;
   // Kartın yıllık faizi (FEAT.apr; döner kredi olan ülkeler)
   for (const n of document.querySelectorAll("[data-apr]")) n.hidden = !FEAT.apr;
+  // Japonya'ya özel olanlar (FEAT.bonus): kartın bonus ayları
+  for (const n of document.querySelectorAll("[data-jp]")) n.hidden = !bonusAllowed();
   els.importInput.accept = FEAT.excelImport ? IMPORT_ACCEPT : ".json,application/json";
 }
 

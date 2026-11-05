@@ -66,7 +66,8 @@
   }
 
   // ---------- Kart ----------
-  // { id, name, limit, cutoffDay, dueDay, color, last4?, history?, trackSince?, trackOff? }
+  // { id, name, limit, cutoffDay, dueDay, color, last4?, history?, trackSince?, trackOff?, bonusMonths? }
+  // bonusMonths: Japonya'da bonus ödemesinin ayları ([yaz, kış]; yoksa [8, 1]; aşağıda bonus).
   // trackSince / trackOff: ekstre takibi (borc.js) — trackSince'tan sonra ödenen ekstreler ilk kişinin TL varlığından düşer.
   // history: kesim / son ödeme günü değişmeden önceki günler, [{ until: "YYYY-MM-DD", cutoffDay, dueDay }] until'e göre
   // sıralı. Kesimi until'e kadar olan ekstreler o günlerle kesilmiştir; sonrakiler bir sonraki günlerle (en son kartın).
@@ -177,7 +178,7 @@
 
   // ---------- Harcama ----------
   // { id, personId, cardId, desc, total, count, date?: "YYYY-MM-DD", firstDue?: "YYYY-MM", planCount?, asset?,
-  //   repeat?, every?, unit? }
+  //   repeat?, every?, unit?, bnpl?, bonus? }
   // date: harcama tarihi. Tarihi bilinmeyen (Excel'den gelen) kayıtlarda firstDue kalan ilk taksitin
   // ödendiği ay, count/total kalan taksitler, planCount alışverişin asıl taksit sayısıdır.
   // asset: harcamanın varlığı (USD, EUR, GAU); yoksa TL. Döviz ve altın harcaması kartsız, peşindir; TL nakit akışına
@@ -210,14 +211,67 @@
     return Array.from({ length: p.count }, (_, k) => (k ? base : cents - base * (p.count - 1)) / 100);
   }
 
-  function perInstallment(p) { return bnpl(p) ? bnplAmounts(p).at(-1) : p.total / p.count; }
+  // ---------- Bonus ödemesi (Japonya, ボーナス払い) ----------
+  // bonus: true, kartlı, tarihli, tekrarlamayan harcama: tutar kartın bonus ayındaki son ödeme gününde tek seferde
+  // ödenir (count 1, ボーナス一括払い) ya da art arda iki bonus ayına yarı yarıya bölünür (count 2, ボーナス2回払い).
+  // Çoğu Japon kartında faizsizdir. Bonus ayları kartta (bonusMonths: [yaz, kış], ay numarası); yoksa Ağustos ve Ocak
+  // (yaz bonusu Temmuz / Ağustos, kış bonusu Aralık / Ocak ekstresiyle ödenir). Harcama, ekstresi bonus ayından en az
+  // BONUS_LEAD ay önce kesilen ilk bonusa girer: kesim 15 / ödeme ertesi ay 10 olan kartta 15 Haziran'a kadar
+  // alınan Ağustos'ta, 16 Haziran – 15 Kasım arası Ocak'ta ödenir (kartların "16 Haz – 15 Tem gibi bonus
+  // kullanılamayan" aralıkları ayrıca tutulmaz: o aralıkta alınan bir sonraki bonusa girer). Kart yoksa bonus yok
+  // sayılır (normal ödeme planı).
+  const BONUS_MONTHS = [8, 1];
+  const BONUS_LEAD = 2;
+  // Kartın bonus ayları: iki farklı ay (1–12), [yaz, kış]; geçersizse null
+  function validBonusMonths(list) {
+    if (!Array.isArray(list) || list.length !== 2) return null;
+    const [a, b] = list.map(Number);
+    return Number.isInteger(a) && Number.isInteger(b) && a >= 1 && a <= 12 && b >= 1 && b <= 12 && a !== b ? [a, b] : null;
+  }
+  function bonusMonths(card) { return validBonusMonths(card?.bonusMonths) ?? BONUS_MONTHS; }
+  function bonus(p) {
+    return p?.bonus === true && !!parseDate(p.date) && (p.count === 1 || p.count === 2) && R.rule(p) == null;
+  }
+  // Tutarlar: tek bonus tamamı; iki bonusta yarısı (tam sayı tutar tam sayı bölünür — yen —, değilse kuruşla), artığı ilk
+  function bonusAmounts(p) {
+    if (p.count !== 2) return [p.total];
+    const unit = Number.isInteger(p.total) ? 1 : 100;
+    const all = Math.round(p.total * unit), half = Math.floor(all / 2);
+    return [(all - half) / unit, half / unit];
+  }
+  // from ayı ve sonrasındaki ilk bonus ayı
+  function nextBonusIdx(months, from) {
+    for (let i = from; i < from + 12; i++) if (months.includes(i % 12 + 1)) return i;
+    return from;
+  }
+  // Bonus ödemeleri: [{ idx (ödeme ayı), key (o ayın son ödeme günü), season: "summer" | "winter" }]. Ödeme günü bonus ayında
+  // ödenen ekstrenin günüdür (kart günleri değiştiyse o dönemin günleri)
+  function bonusSchedule(card, date, count = 1) {
+    const ps = periods(card), months = bonusMonths(card);
+    let s = statementOf(card, date, ps), b = nextBonusIdx(months, s.idx + BONUS_LEAD);
+    const out = [];
+    for (let k = 0; k < count; k++) {
+      while (s.dueIdx < b) s = nextStatement(ps, s);
+      out.push({ idx: b, key: s.dueIdx === b ? s.due : dateKey(b, card.dueDay), season: b % 12 + 1 === months[0] ? "summer" : "winter" });
+      b = nextBonusIdx(months, b + 1);
+    }
+    return out;
+  }
+  // Görünen ad: "Yaz bonusu" / "Kış bonusu" (tek bonus, hangisi olduğu tarihten ve karttan) ya da "2 bonus"
+  function bonusName(p, card) {
+    if (p?.count === 2) return D.t("2 bonus");
+    const s = card && parseDate(p?.date) ? bonusSchedule(card, p.date, 1)[0].season : null;
+    return s === "summer" ? D.t("Yaz bonusu") : s === "winter" ? D.t("Kış bonusu") : D.t("Bonus");
+  }
+
+  function perInstallment(p) { return bnpl(p) ? bnplAmounts(p).at(-1) : bonus(p) ? bonusAmounts(p).at(-1) : p.total / p.count; }
   function planLength(p)     { return Math.max(p.planCount || 0, p.count); }
-  function originalTotal(p)  { return bnpl(p) ? p.total : perInstallment(p) * planLength(p); }
+  function originalTotal(p)  { return bnpl(p) || bonus(p) ? p.total : perInstallment(p) * planLength(p); }
 
   // Tekrarlayan harcama (tarihi olan)
   function repeats(p) { return R.rule(p) != null && !!parseDate(p.date); }
 
-  // Ödemeler: [{ idx (ödeme ayı), key ("YYYY-MM-DD"), no (1 tabanlı), amount }], tarihe göre sıralı.
+  // Ödemeler: [{ idx (ödeme ayı), key ("YYYY-MM-DD"), no (1 tabanlı), amount, bonus? ("summer" | "winter") }], tarihe göre sıralı.
   // Tekrarlayan harcamada her tekrarın ödemeleri; at: tekrarın tarihi, occ: kaçıncı tekrar (0 tabanlı). N kez
   // tekrarlayanın bütün tekrarları, süresizin until gününe (varsayılan bugün) kadar gelenleri.
   function payments(p, card, until) {
@@ -237,6 +291,10 @@
         const s = card ? statementOf(card, at) : null;
         return { idx: s ? s.dueIdx : parseDate(at).idx, key: s ? s.due : at, no: k + 1, amount, at };
       }).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.no - b.no));
+    }
+    if (bonus(p) && card) {
+      const when = bonusSchedule(card, p.date, p.count);
+      return bonusAmounts(p).map((amount, k) => ({ idx: when[k].idx, key: when[k].key, no: k + 1, amount, bonus: when[k].season }));
     }
     const amount = perInstallment(p);
     const d = parseDate(p.date);
@@ -317,7 +375,7 @@
         }
         ev.total += pay.amount;
         ev.byPerson[p.personId] = (ev.byPerson[p.personId] || 0) + pay.amount;
-        ev.items.push({ purchase: p, no: pay.no, amount: pay.amount, at: pay.at });
+        ev.items.push({ purchase: p, no: pay.no, amount: pay.amount, at: pay.at, ...(pay.bonus && { bonus: pay.bonus }) });
         m.total += pay.amount;
         m.byPerson[p.personId] = (m.byPerson[p.personId] || 0) + pay.amount;
         m.byCard[cardKey] = (m.byCard[cardKey] || 0) + pay.amount;
@@ -507,6 +565,7 @@
     addDays, statementIndex, dueIndex, periods, statementOf, nextStatement, retermCard, termChoices,
     FOREIGN, assetOf, perInstallment, planLength, originalTotal, repeats, payments, endless, remainingFrom, outstanding, cashSpent,
     BNPL, BNPL_NAMES, BNPL_DAYS, bnpl, bnplName, bnplAmounts,
+    BONUS_MONTHS, BONUS_LEAD, validBonusMonths, bonusMonths, bonus, bonusAmounts, bonusSchedule, bonusName,
     buildCashflow,
     defaultState, validDay, validHistory, defaultCard, nextColor, hydrate,
     normalize, titleCase, parseStatement, fromStatement, parseSheetRows, parseWorkbook,

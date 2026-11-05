@@ -32,6 +32,7 @@ struct HarcamaFiltresi: View {
         case "installment": return L("Taksitli")
         case "single": return L("Tek çekim")
         case "repeat": return L("Tekrarlayan")
+        case "bonus": return L("Bonus ödemesi")
         default: return "Pay in 4"
         }
     }
@@ -62,7 +63,7 @@ struct HarcamaFiltresi: View {
                     bolum(L("Tür")) {
                         Akan(aralik: 8, satirAraligi: 8) {
                             Cip(ad: L("Tümü"), secili: tur == nil) { tur = nil }
-                            ForEach(["installment", "single", "repeat"] + (model.constants?.bnpl == true ? ["bnpl"] : []), id: \.self) { t in
+                            ForEach(["installment", "single", "repeat"] + (model.constants?.bnpl == true ? ["bnpl"] : []) + (model.bonusAllowed ? ["bonus"] : []), id: \.self) { t in
                                 Cip(ad: Self.turAdi(t), secili: tur == t) { tur = t }
                             }
                         }

@@ -233,6 +233,8 @@
       bnpl: f.bnpl.length > 0,
       bankEmails: f.bankEmails,
       excelImport: f.excelImport,
+      bonus: f.bonus,                             // bonus ödemesi (ボーナス払い; Japonya)
+      bonusMonths: T.BONUS_MONTHS,                // varsayılan bonus ayları [yaz, kış]
       bnplProviders: f.bnpl.map(provider),        // ülkede sunulan sağlayıcılar (sonda Diğer)
       bnplAll: T.BNPL.map(provider),              // bütün sağlayıcılar: kayıtlı harcamanın sağlayıcısı başka ülkeninse adı
       cashDefault: V.cashDefault(home),

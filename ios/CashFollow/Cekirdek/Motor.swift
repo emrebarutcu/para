@@ -248,6 +248,8 @@ struct Sabitler: Decodable {
     let excelImport: Bool?        // Excel içe aktarma, web'de (yalnızca Türkiye)
     let bnplProviders: [Kategori]?    // ülkede sunulan sağlayıcılar (id, name; sonda Diğer)
     let bnplAll: [Kategori]?          // bütün sağlayıcılar: kayıtlı harcamanın sağlayıcısı başka ülkeninse adı
+    let bonus: Bool?              // bonus ödemesi, ボーナス払い (Japonya)
+    let bonusMonths: [Int]?       // varsayılan bonus ayları [yaz, kış]
     let cashDefault: [String]     // nakit tanımının varsayılanı
     let inboxBanks: [String]?     // banka e-postaları: desteklenen bankalar
 }

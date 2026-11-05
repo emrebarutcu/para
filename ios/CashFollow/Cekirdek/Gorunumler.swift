@@ -83,13 +83,14 @@ struct KartGorunumu: Decodable, Identifiable, Hashable {
     let purchaseToday: Bugun
     let tracking: Takip?
     let apr: Double?
+    let bonusMonths: [Int]?     // bonus ödemesinin ayları [yaz, kış] (Japonya); yoksa varsayılan [8, 1]
     let statement: KartEkstresi?
 }
 
 struct HarcamaListesi: Decodable { let count: Int; let purchases: [Harcama] }
 
 struct Harcama: Decodable, Identifiable, Hashable {
-    struct Taksit: Decodable, Hashable { let no: Int; let date: String; let amount: Double; let paid: Bool }
+    struct Taksit: Decodable, Hashable { let no: Int; let date: String; let amount: Double; let paid: Bool; let bonus: String? }   // bonus: summer | winter
     struct Tekrar: Decodable, Hashable { let label: String?; let nextDate: String? }
     let id: String
     let description: String
@@ -114,6 +115,7 @@ struct Harcama: Decodable, Identifiable, Hashable {
     let `repeat`: Tekrar?
     let payments: [Taksit]?
     let bnpl: SimdiAl?
+    let bonus: BonusOdemesi?
 }
 
 // Kartın dönem dönem harcamaları (card_statements): yeniden eskiye; ilki bugünün dönemi
@@ -130,6 +132,7 @@ struct KartDonemleri: Decodable {
         let categoryName: String?
         let `repeat`: Harcama.Tekrar?
         let bnpl: SimdiAl?
+        let bonus: BonusOdemesi?
     }
     struct Donem: Decodable, Identifiable, Hashable {
         let from: String
@@ -155,6 +158,15 @@ struct SimdiAl: Decodable, Hashable {
     let perPayment: Double
     let owedToProvider: Double
     let nextCharge: Odeme?
+}
+
+// Bonus ödemesi (Japonya, ボーナス払い; taksit.js bonus): 1 ya da 2 bonus, adı ("Yaz bonusu"…), ödemeler
+struct BonusOdemesi: Decodable, Hashable {
+    struct Odemesi: Decodable, Hashable { let date: String; let amount: Double; let season: String?; let paid: Bool }
+    let payments: Int
+    let name: String
+    let months: [Int]
+    let schedule: [Odemesi]
 }
 
 struct HarcamaSonucu: Decodable {

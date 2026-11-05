@@ -1375,5 +1375,18 @@
  "İşyeri": "Commerçant",
  "Kendiliğinden eklenir.": "Ajouté automatiquement.",
  "Onaya düşer: {0}": "En attente de vérification : {0}",
- "Önce giriş yap": "Connectez-vous d'abord"
+ "Önce giriş yap": "Connectez-vous d'abord",
+ "Bonus ödemesi": "Paiement bonus",
+ "bonus {0}": "bonus {0}",
+ "Yok": "Aucun",
+ "Bonusla": "Avec bonus",
+ "2 bonus": "2 bonus",
+ "{0} · {1}: {2}": "{0} · {1} : {2}",
+ "Yaz bonusu": "Bonus d’été",
+ "Kış bonusu": "Bonus d’hiver",
+ "Bonus": "Bonus",
+ "Bonus ödemeli harcamalar bu aylarda, kartın son ödeme gününde ödenir.": "Les achats en paiement bonus sont prélevés ces mois-là, à la date d’échéance de la carte.",
+ "{0} {1} bonus ödemesi {2}": "Paiement bonus le {0} {1} : {2}",
+ "Bonus ödemeli {0} harcama o gün kartından çekilecek. Bonusunun bir kısmını buna ayır.": "{0} achat(s) en paiement bonus seront prélevés sur ta carte ce jour-là. Mets de côté une partie de ton bonus.",
+ "Taksit / peşin": "Plusieurs fois / comptant"
 }
