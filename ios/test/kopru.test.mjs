@@ -204,6 +204,28 @@ test("Almanca ve Japonca: sözlükten, ay adları yerel, eksik anahtar İngilizc
   }
 });
 
+// Arapça (telefon Arapçayken Motor.swift Dil.setLang("ar", sözlük, İngilizce) çağırır): sağdan sola, Batı rakamları
+test("Arapça: kategoriler, tekrar etiketi, ay adları ve sayı biçimi", async () => {
+  const { sandbox, call } = engine();
+  sandbox.Dil.setLang("ar", read("dil/ar.json"), read("dil/en.json"));
+  try {
+    assert.equal(sandbox.Dil.lang, "ar");
+    assert.equal(sandbox.Dil.dir(), "rtl");
+    assert.equal(sandbox.Dil.choose(["ar-AE", "en"]), "ar");
+    assert.equal(sandbox.Dil.pct(45), "45%");
+    assert.equal(new Intl.NumberFormat(sandbox.Dil.locale()).format(1234.5), "1,234.5");   // ١٬٢٣٤٫٥ değil
+    const c = JSON.parse(sandbox.Kopru.constants());
+    assert.equal(c.categories.find(x => x.id === "market").name, "البقالة");
+    await call("add_card", { name: "Rajhi", cutoff_day: 10, due_day: 5, limit: 1000 });
+    await call("add_purchase", { description: "Netflix", amount: 15, card: "Rajhi", repeat: 0 });
+    const list = (await call("list_purchases", {})).ok.purchases;
+    assert.equal(list[0].repeat.label, "شهرياً");
+    assert.equal(sandbox.Taksit.monthName(10), "نوفمبر");   // Miladi ay adı (Hicri değil)
+  } finally {
+    sandbox.Dil.setLang("tr");
+  }
+});
+
 test("banka e-postaları: Swift'in verdiği liste; yalnızca sunucuda işaretlenenler eklenir", async () => {
   const e = engine();
   await e.call("add_card", { name: "Bonus", limit: 50000, cutoff_day: 10, due_day: 20, last4: "1234" });

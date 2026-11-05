@@ -4,9 +4,11 @@
 // (Motor.swift, dil-sayfa.js → choose). Çeviri sırası: seçilen dilin sözlüğü → İngilizce sözlük (yedek) → Türkçe.
 // scripts/dil.mjs her t("…") ve L("…") için her sözlükte çeviri var mı denetler.
 (function (root) {
-  const LANGS = ["tr", "en", "de", "fr", "es", "it", "nl", "ja", "ko", "pt"];
-  // Sayı ve tarih biçimi için yerel ayar (Portekizce Brezilya yazımıyla)
-  const LOCALES = { tr: "tr-TR", en: "en-US", de: "de-DE", fr: "fr-FR", es: "es-ES", it: "it-IT", nl: "nl-NL", ja: "ja-JP", ko: "ko-KR", pt: "pt-BR" };
+  const LANGS = ["tr", "en", "de", "fr", "es", "it", "nl", "ja", "ko", "pt", "ar"];
+  // Sayı ve tarih biçimi için yerel ayar (Portekizce Brezilya yazımıyla; Arapça Körfez bankaları gibi Batı rakamları ve
+  // Miladi takvimle: 1,234.50 د.إ.‏, 5 نوفمبر)
+  const LOCALES = { tr: "tr-TR", en: "en-US", de: "de-DE", fr: "fr-FR", es: "es-ES", it: "it-IT", nl: "nl-NL", ja: "ja-JP", ko: "ko-KR", pt: "pt-BR",
+    ar: "ar-AE-u-ca-gregory-nu-latn" };
   let lang = "tr";
   let dict = {};
   let fallback = {};
@@ -41,7 +43,10 @@
   // Yüzde: Türkçede "%45", diğer dillerde "45%"
   const pct = n => (lang === "tr" ? `%${n}` : `${n}%`);
 
-  const api = { LANGS, setLang, choose, t, locale, pct, get lang() { return lang; } };
+  // Yazı yönü: Arapça sağdan sola (dil-sayfa.js → <html dir>)
+  const dir = () => (lang === "ar" ? "rtl" : "ltr");
+
+  const api = { LANGS, setLang, choose, t, locale, pct, dir, get lang() { return lang; } };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Dil = api;
 })(this);

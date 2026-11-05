@@ -23,7 +23,8 @@ enum Ornek {
         return a[i + 1].split(separator: ",").map(String.init)
     }
 
-    // "-ulke US": örnek veri ABD'de (dolar; tutarlar dolar ölçeğinde)
+    // "-ulke US": örnek veri ABD'de (dolar; tutarlar dolar ölçeğinde). Türkiye dışındaki her ülke (AE, SA…) aynı veriyi
+    // kendi para biriminde kullanır.
     static var ulke: String {
         let a = CommandLine.arguments
         guard let i = a.firstIndex(of: "-ulke"), i + 1 < a.count else { return "TR" }
@@ -37,8 +38,8 @@ enum Ornek {
         Depo.offlineCountry = ulke
         Depo.cashDef = nil
         // "-bos": hiç verisi olmayan yeni kullanıcı (Başlarken kartı)
-        let bos: [String: Any] = ["people": [["id": "ben", "name": ulke == "US" ? "Me" : "Ben", "color": 0]], "cards": [], "installments": [], "entries": [], "debts": []]
-        if let data = try? JSONSerialization.data(withJSONObject: CommandLine.arguments.contains("-bos") ? bos : ulke == "US" ? veriUS() : veri()) {
+        let bos: [String: Any] = ["people": [["id": "ben", "name": ulke != "TR" ? "Me" : "Ben", "color": 0]], "cards": [], "installments": [], "entries": [], "debts": []]
+        if let data = try? JSONSerialization.data(withJSONObject: CommandLine.arguments.contains("-bos") ? bos : ulke != "TR" ? veriUS() : veri()) {
             Depo.write(Depo.stateFile(nil), String(decoding: data, as: UTF8.self))
         }
     }
@@ -171,7 +172,7 @@ struct GrafikGalerisi: View {
 
     var body: some View {
         if sayfa == 3 {
-            HarcamaFormu(ornek: ulke == "US" ? ("1800", "Refrigerator", 6) : ("36000", "Buzdolabı", 6))
+            HarcamaFormu(ornek: ulke != "TR" ? ("1800", "Refrigerator", 6) : ("36000", "Buzdolabı", 6))
         } else if sayfa == 4 {
             BorcFormu(baslangic: "loan")
         } else if sayfa == 5 {

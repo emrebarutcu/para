@@ -9,7 +9,7 @@ for f in dil para tekrar taksit varlik borc kategori eposta icgoru nakit tablo; 
   cp "$ROOT/$f.js" "$DEST/$f.js"
 done
 cp "$ROOT/mcp/tools.js" "$DEST/tools.js"
-for l in en de fr es it nl ja ko pt; do   # sözlükler (dil.js, Dil.swift); dil.js → LANGS ile aynı
+for l in en de fr es it nl ja ko pt ar; do   # sözlükler (dil.js, Dil.swift); dil.js → LANGS ile aynı
   cp "$ROOT/dil/$l.json" "$DEST/$l.json"
 done
 cp "$SRCROOT/js/kopru.js" "$DEST/kopru.js"

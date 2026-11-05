@@ -206,7 +206,7 @@ struct BaslarkenKarti: View {
                     Text(alt).font(.footnote).foregroundStyle(Tema.metin3)
                 }
                 Spacer()
-                if !tamam { Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3) }
+                if !tamam { Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3) }
             }
             .padding(.vertical, 10)
             .contentShape(Rectangle())

@@ -1,11 +1,13 @@
 import SwiftUI
 
 // Tutar ve tarih biçimleri: Türkçede web'deki gibi (tr_TR), diğer dillerde uygulamanın dili ve telefonun bölgesiyle
-// (en_US: $1,234.56, Nov 20; de_DE: 1.234,56 $, 20. Nov.; ja_JP: 11月20日)
+// (en_US: $1,234.56, Nov 20; de_DE: 1.234,56 $, 20. Nov.; ja_JP: 11月20日). Arapçada Körfez bankaları gibi Batı rakamları
+// ve Miladi takvim (ar_SA'nın varsayılanı Hicri takvim ve ٠١٢ rakamlarıdır): 1,234.50 د.إ.‏, 20 نوفمبر
 enum Bicim {
     static let locale: Locale = {
         guard Dil.turkceDegil else { return Locale(identifier: "tr_TR") }
         let bolge = Locale.current.region?.identifier
+        if Dil.arapca { return Locale(identifier: "ar_\(bolge ?? "AE")@numbers=latn;calendar=gregorian") }
         return Locale(identifier: bolge.map { "\(Dil.kod)_\($0)" } ?? Dil.kod)
     }()
 
@@ -21,7 +23,7 @@ enum Bicim {
     // Varlığın kendi biriminde: "100 $", "12,500 gr", fon / hissede adet
     static func amount(_ v: Double, asset: String) -> String {
         if asset == home { return tl(v) }
-        if asset == "GAU" { return v.formatted(.number.locale(locale).precision(.fractionLength(0...3))) + (Dil.turkceDegil ? " g" : " gr") }
+        if asset == "GAU" { return v.formatted(.number.locale(locale).precision(.fractionLength(0...3))) + (Dil.arapca ? " غ" : Dil.turkceDegil ? " g" : " gr") }
         if asset.count == 3, asset.allSatisfy(\.isUppercase) { return v.formatted(.currency(code: asset).locale(locale)) }
         return L("{0} adet", v.formatted(.number.locale(locale).precision(.fractionLength(0...4))))
     }
@@ -47,7 +49,14 @@ enum Bicim {
     }
 
     static func percent(_ v: Double) -> String {
-        (v >= 0 ? "+" : "") + (v / 100).formatted(.percent.locale(locale).precision(.fractionLength(0...2)))
+        isaret(v >= 0 ? "+" : "", (v / 100).formatted(.percent.locale(locale).precision(.fractionLength(0...2))))
+    }
+
+    // Tutarın başına "+" / "−": sağdan solada ICU'nun eksi işaretindeki gibi yön işaretleriyle (RLM LRM işaret), yoksa
+    // işaret sayının sağına düşer ("55,268+")
+    static func isaret(_ sign: String, _ s: String) -> String {
+        guard Dil.arapca, !sign.isEmpty else { return sign + s }
+        return "\u{200F}\u{200E}" + sign + (s.hasPrefix("\u{200F}") ? String(s.dropFirst()) : s)
     }
 
     // Gün anahtarlarıyla aynı saat dilimindeki takvim; grafikler eksen ve ay gruplarını bununla kurar
@@ -120,8 +129,10 @@ enum Bicim {
     // Kullanıcının yazdığı tutar: "1.234,56", "1234.56", "1234"; ondalık ayırıcısı nokta olan bölgede (ABD) "1,234.56"
     static func parse(_ s: String) -> Double? {
         // Para işaretleri, boşluklar (Fransızcanın binlik boşluğu da) ve İsviçre'nin binlik kesmesi atılır
-        let t = String(String.UnicodeScalarView(s.replacingOccurrences(of: homeSymbol, with: "").unicodeScalars.filter {
-            !$0.properties.isWhitespace && $0.properties.generalCategory != .currencySymbol && $0 != "'" && $0 != "’"
+        // (Arapçada yön işaretleri de: RLM / LRM); Doğu Arap rakamları Batı rakamına çevrilir
+        let t = String(String.UnicodeScalarView(batiRakami(s.replacingOccurrences(of: homeSymbol, with: "")).unicodeScalars.filter {
+            !$0.properties.isWhitespace && $0.properties.generalCategory != .currencySymbol && $0.properties.generalCategory != .format
+                && $0 != "'" && $0 != "’"
         }))
         guard !t.isEmpty else { return nil }
         let normalized: String
@@ -131,6 +142,19 @@ enum Bicim {
             normalized = t.contains(",") ? t.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".") : t
         }
         return Double(normalized)
+    }
+
+    // Arapça klavyeden gelen Doğu Arap rakamları (٠١٢… / ۰۱۲…) ve ayırıcılar (٫ ondalık, ٬ binlik) → 0-9, ".", ","
+    static func batiRakami(_ s: String) -> String {
+        String(s.unicodeScalars.map { u -> Character in
+            switch u.value {
+            case 0x0660...0x0669: return Character(String(u.value - 0x0660))
+            case 0x06F0...0x06F9: return Character(String(u.value - 0x06F0))
+            case 0x066B: return "."
+            case 0x066C: return ","
+            default: return Character(u)
+            }
+        })
     }
 }
 

@@ -25,13 +25,13 @@ struct NakitKarti: View {
             HStack(spacing: 6) {
                 Text(L("Nakit")).font(.system(size: 17, weight: .semibold))
                 Spacer()
-                Button { shift -= 1 } label: { Image(systemName: "chevron.left").frame(width: 28, height: 28) }
+                Button { shift -= 1 } label: { Image(systemName: "chevron.backward").frame(width: 28, height: 28) }
                     .accessibilityLabel(L("Önceki dönem"))
                 Button { shift = 0 } label: {
                     Text(seri.map { "\(Bicim.day($0.from)) – \(Bicim.day($0.to))" } ?? "…")
                         .font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
                 }
-                Button { shift += 1 } label: { Image(systemName: "chevron.right").frame(width: 28, height: 28) }
+                Button { shift += 1 } label: { Image(systemName: "chevron.forward").frame(width: 28, height: 28) }
                     .accessibilityLabel(L("Sonraki dönem"))
             }
             .buttonStyle(.plain)
@@ -162,7 +162,7 @@ struct NakitKarti: View {
                 HStack {
                     Text(m.desc).font(.caption).lineLimit(1)
                     Spacer()
-                    Text((m.value >= 0 ? "+" : "") + Bicim.tl(m.value)).font(.caption).monospacedDigit()
+                    Text(Bicim.isaret(m.value >= 0 ? "+" : "", Bicim.tl(m.value))).font(.caption).monospacedDigit()
                         .foregroundStyle(m.value >= 0 ? Tema.iyi : Tema.tehlike)
                 }
             }
@@ -299,10 +299,10 @@ struct KategoriKarti: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(sec == nil ? L("Harcamalar · kategoriye göre") : L("Kategoriler")).font(.system(size: 17, weight: .semibold))
                     HStack(spacing: 4) {
-                        Button { if i > 0 { secim = months[i - 1].month } } label: { Image(systemName: "chevron.left") }
+                        Button { if i > 0 { secim = months[i - 1].month } } label: { Image(systemName: "chevron.backward") }
                             .disabled(i <= 0).accessibilityLabel(L("Önceki ay"))
                         Text(Bicim.month(ay?.month)).font(.subheadline).foregroundStyle(Tema.metin3)
-                        Button { if i < months.count - 1 { secim = months[i + 1].month } } label: { Image(systemName: "chevron.right") }
+                        Button { if i < months.count - 1 { secim = months[i + 1].month } } label: { Image(systemName: "chevron.forward") }
                             .disabled(i >= months.count - 1).accessibilityLabel(L("Sonraki ay"))
                     }
                     .buttonStyle(.plain)
@@ -382,7 +382,7 @@ struct VarlikSeyriKarti: View {
                 HStack(alignment: .top, spacing: 8) {
                     Kutucuk(etiket: Bicim.day(ilk.date), deger: Bicim.tl(ilk.value))
                     Kutucuk(etiket: n == nil ? L("Bugün") : Bicim.day(simdi.date), deger: Bicim.tl(simdi.value))
-                    Kutucuk(etiket: L("Değişim"), deger: (fark >= 0 ? "+" : "") + Bicim.tl(fark, fraction: false),
+                    Kutucuk(etiket: L("Değişim"), deger: Bicim.isaret(fark >= 0 ? "+" : "", Bicim.tl(fark, fraction: false)),
                             renk: fark >= 0 ? Tema.iyi : Tema.tehlike)
                 }
                 let alan = yAlani(s.points.map(\.value))
