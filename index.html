@@ -360,6 +360,11 @@
             <label><input type="radio" name="bonus" value="1" /><span>Bonusla</span></label>
             <label><input type="radio" name="bonus" value="2" /><span>2 bonus</span></label>
           </div>
+          <!-- Taksidin öne çıkmadığı ülkede (para.js features installments "secondary") form peşin başlar -->
+          <div class="seg seg-full" id="planSeg" role="radiogroup" aria-label="Taksit" hidden>
+            <label><input type="radio" name="plan" value="" checked /><span>Peşin</span></label>
+            <label><input type="radio" name="plan" value="1" /><span>Taksitli</span></label>
+          </div>
           <div class="count-grid" id="countChips" role="radiogroup" aria-label="Taksit sayısı"></div>
           <div class="stepper" id="countOther" hidden>
             <button type="button" data-step="-1" aria-label="Bir taksit az"><svg class="ic"><use href="#i-minus"/></svg></button>
@@ -376,6 +381,13 @@
           <span class="field-label">Kart</span>
           <div class="chips" id="cardChips" role="radiogroup" aria-label="Kart"></div>
           <button type="button" class="card-tip" id="cardTip" hidden></button>
+        </div>
+
+        <!-- Şimdi al sonra öde: ülkede varsa (para.js features bnpl), sağlayıcıları ülkeninkiler -->
+        <div class="field" id="bnplField" hidden>
+          <label class="check"><input type="checkbox" name="bnpl" /><span>Pay in 4 (şimdi al sonra öde)</span></label>
+          <div class="chips" id="bnplChips" role="radiogroup" aria-label="Sağlayıcı" hidden></div>
+          <small class="hint" id="bnplHint"></small>
         </div>
 
         <div class="rows">
@@ -549,7 +561,7 @@
             <label><input type="radio" name="payMode" value="off" /><span>Hesaba katılmasın</span></label>
           </div>
           <div class="preview" id="trackPreview" aria-live="polite"></div>
-          <label class="field" data-us hidden>
+          <label class="field" data-apr hidden>
             <span class="field-label">Yıllık faiz (APR %)</span>
             <input name="apr" type="number" inputmode="decimal" min="0" max="100" step="0.01" placeholder="24,99" />
             <small class="hint">“Ben işaretlerim” kartında ekstrenin ödenmeyen kalanı faiziyle sonraki ekstreye devreder; asgari ödendiyse gecikme sayılmaz.</small>

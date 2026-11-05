@@ -85,9 +85,20 @@ enum OzDenetim {
             try check(m.constants()?.markets == false && m.constants()?.assets.first?.code == "EUR", "euro formları")
             try check(m.homeOf(country: "GB") == "GBP", "ülke → para birimi")
 
-            // ABD: kartın APR'si (döner kredi) ve Pay in 4 (para.js aprFor / bnplFor)
+            // Ülkeye göre özellikler (para.js features): Birleşik Krallık'ta Clearpay ve taksit ikinci planda, Japonya'da
+            // taksit öne çıkar ve Pay in 4 yok
             m.box.json = m.defaultState
-            m.setHome(m.homeOf(country: "US"))
+            try check(m.setCountry("GB") == "GBP", "ülke → para birimi (setCountry)")
+            let gb = m.constants()
+            try check(gb?.installments == "secondary" && gb?.bnplProviders?.map(\.id) == ["klarna", "clearpay", "paypal", "other"]
+                      && gb?.apr == true && gb?.bankEmails == false, "Birleşik Krallık formları")
+            m.setCountry("JP")
+            let jp = m.constants()
+            try check(jp?.installments == "primary" && jp?.bnpl == false && jp?.apr == true, "Japonya formları")
+
+            // ABD: kartın APR'si (döner kredi) ve Pay in 4 (para.js features)
+            m.box.json = m.defaultState
+            m.setCountry("US")
             try check(m.constants()?.apr == true && m.constants()?.bnpl == true && m.constants()?.markets == false, "ABD formları")
             try m.runJSON("add_card", ["name": "Chase", "cutoff_day": 3, "due_day": 28, "apr": 24.99, "auto_pay": false])
             let us: HarcamaSonucu = try m.run("add_purchase", ["description": "Sneakers", "amount": 99.99, "card": "nakit",
@@ -98,17 +109,17 @@ enum OzDenetim {
             let _: Borclar = try m.run("list_debts")
             try check(m.constants()?.bonus == false, "bonus ödemesi ABD'de yok")
 
-            // Japonya: bonus ödemesi (ボーナス払い; para.js bonusFor, taksit.js bonus)
+            // Japonya: bonus ödemesi (ボーナス払い; para.js features bonus, taksit.js bonus)
             m.box.json = m.defaultState
-            m.setHome(m.homeOf(country: "JP"), country: "JP")
-            try check(m.constants()?.bonus == true && m.constants()?.bonusMonths == [8, 1], "Japonya formları")
+            m.setCountry("JP")
+            try check(m.constants()?.bonus == true && m.constants()?.bonusMonths == [8, 1], "Japonya: bonus ödemesi")
             try m.runJSON("add_card", ["name": "JCB", "cutoff_day": 15, "due_day": 10, "bonus_months": [7, 12]])
-            let jp: HarcamaSonucu = try m.run("add_purchase", ["description": "テレビ", "amount": 98000, "card": "JCB",
+            let bonusluHarcama: HarcamaSonucu = try m.run("add_purchase", ["description": "テレビ", "amount": 98000, "card": "JCB",
                                                                "bonus": "twice", "date": "2026-10-05"])
-            try check(jp.purchase.bonus?.schedule.map(\.date) == ["2026-12-10", "2027-07-10"], "bonus: \(String(describing: jp.purchase.bonus))")
+            try check(bonusluHarcama.purchase.bonus?.schedule.map(\.date) == ["2026-12-10", "2027-07-10"], "bonus: \(String(describing: bonusluHarcama.purchase.bonus))")
             let jpCards: KartListesi = try m.run("list_cards")
             try check(jpCards.cards.first?.bonusMonths == [7, 12], "bonus ayları")
-            m.setHome("TRY")
+            m.setCountry("TR")
 
             // CashFollow Premium: hesabın satırı (tablo.js premium, köprüden), ürünler ve ücretsiz sürümün sınırları
             let gun: TimeInterval = 86_400

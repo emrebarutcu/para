@@ -14,13 +14,19 @@
 (function (root) {
   const T = root.Taksit, V = root.Varlik, K = root.Kategori, Tablo = root.Tablo, N = root.Nakit, P = root.Para;
 
-  // Hesabın ana para birimi (ülkesinden; para.js). Swift ayarlar (setHome); veri onunla okunur ve eşitlenir.
+  // Hesabın ülkesi ve ana para birimi (ülkesinden; para.js). Swift ayarlar (setCountry; Model.applyCountry); veri ana
+  // para birimiyle okunur ve eşitlenir, özellikler (Pay in 4, kartın faizi, fon / hisse…) ülkeden: P.features.
+  let country = P.DEFAULT_COUNTRY;
   let home = "TRY";
-  // Hesabın ülkesi: ülkeye özel seçenekler (bonus ödemesi, Japonya); verilmezse yok
-  let country = null;
-  function setHome(code, countryCode) {
+  // Yalnızca para birimi verilirse (eski çağrı) ülke ondan: tek ülkenin para birimiyse o ülke, değilse bilinmez (null)
+  function setHome(code) {
     home = P.isCurrency(code) ? code : "TRY";
-    country = P.country(countryCode)?.code ?? null;
+    if (P.homeOfCountry(country) !== home) country = P.countryOfHome(home);
+  }
+  function setCountry(code) {
+    country = P.country(code)?.code ?? P.DEFAULT_COUNTRY;
+    setHome(P.homeOfCountry(country));
+    return home;
   }
   // Nakit sayılanlar (Ayarlar → Nakit; web'deki gibi cihazda): varlık kodları ve "MMF" (para piyasası fonları); null varsayılan
   let cashDef = null;
@@ -210,6 +216,8 @@
 
   // Formlar için sabitler
   function constants() {
+    const f = P.features(country);
+    const provider = id => ({ id, name: T.bnplName({ bnpl: id }), hint: "" });
     return JSON.stringify({
       categories: K.CATEGORIES.map(c => ({ id: c.id, name: c.name, hint: c.hint })),
       // Formlarda sunulan varlıklar (ana para birimi, sık kullanılan yabancılar, altın) ve bütün para birimleri
@@ -217,12 +225,18 @@
       currencies: P.CURRENCIES.map(a => ({ code: a.code, name: a.name, short: a.short, symbol: a.symbol, digits: a.digits })),
       countries: P.COUNTRIES,
       home,
-      markets: P.marketsFor(home),
-      apr: P.aprFor(home),
-      bnpl: P.bnplFor(home),
-      bnplProviders: T.BNPL.map(id => ({ id, name: T.bnplName({ bnpl: id }), hint: "" })),
-      bonus: P.bonusFor(country),               // bonus ödemesi (Japonya)
-      bonusMonths: T.BONUS_MONTHS,              // varsayılan bonus ayları [yaz, kış]
+      country,
+      // Ülkenin özellikleri (para.js features): formlar yalnızca ülkede olanı sunar
+      installments: f.installments,   // "primary": taksit seçenekleri hep açık; "secondary": peşin başlar, "Taksitli"
+      markets: f.markets,
+      apr: f.apr,
+      bnpl: f.bnpl.length > 0,
+      bankEmails: f.bankEmails,
+      excelImport: f.excelImport,
+      bonus: f.bonus,                             // bonus ödemesi (ボーナス払い; Japonya)
+      bonusMonths: T.BONUS_MONTHS,                // varsayılan bonus ayları [yaz, kış]
+      bnplProviders: f.bnpl.map(provider),        // ülkede sunulan sağlayıcılar (sonda Diğer)
+      bnplAll: T.BNPL.map(provider),              // bütün sağlayıcılar: kayıtlı harcamanın sağlayıcısı başka ülkeninse adı
       cashDefault: V.cashDefault(home),
       inboxBanks: root.Eposta.BANKS,   // banka e-postaları: denenmiş bankalar (eposta.js)
     });
@@ -262,7 +276,7 @@
   };
 
   root.Kopru = {
-    loadTools, toScript, setRates, setPrices, setHome, setCashDef, setInbox, inboxReleased, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
+    loadTools, toScript, setRates, setPrices, setHome, setCountry, setCashDef, setInbox, inboxReleased, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
     defaultState: () => JSON.stringify(T.defaultState()),
   };
 })(this);

@@ -27,7 +27,7 @@ struct KartSatiri: View {
                     Spacer(minLength: 6)
                     VStack(alignment: .trailing, spacing: 2) {
                         if c.limit > 0 {
-                            Text(asim ? "−" + Bicim.tl(c.used - c.limit, fraction: false) : Bicim.tl(c.available ?? 0, fraction: false))
+                            Text(asim ? Bicim.isaret("−", Bicim.tl(c.used - c.limit, fraction: false)) : Bicim.tl(c.available ?? 0, fraction: false))
                                 .font(.body.weight(.semibold)).monospacedDigit()
                                 .foregroundStyle(asim ? Tema.tehlike : Tema.metin)
                             Text(asim ? L("limit aşıldı") : L("kullanılabilir")).font(.caption).foregroundStyle(Tema.metin3)

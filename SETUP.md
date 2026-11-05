@@ -130,12 +130,12 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
-- **8.7.0** — **Japonya: bonus ödemesi** (ボーナス払い; yalnızca ülkesi Japonya olan hesapta, `para.js bonusFor`). Kartlı
+- **8.10.0** — **Japonya: bonus ödemesi** (ボーナス払い; yalnızca ülkesi Japonya olan hesapta, `para.js features` `bonus`). Kartlı
   harcama yaz ya da kış bonusu ayında, kartın son ödeme gününde tek seferde (`purchases.bonus`, `count` 1) ya da art arda
   iki bonusa yarı yarıya (`count` 2, ボーナス2回払い) ödenir. Bonus ayları kartta (`cards.bonus_months` [yaz, kış]; boşsa
   Ağustos ve Ocak). Harcama, ekstresi bonus ayından en az 2 ay önce kesilen ilk bonusa girer (aşağıda Kartlar). Ekstre,
   limit, nakit akışı ve içgörüler (`bonus`: yaklaşan bonus ödemesi) aynı ödeme planından. **Yayından önce**
-  `supabase/gecis/8.7.0.sql` çalıştırılır (boş olabilen iki sütun; yeni istemci bunları yazar). Eşitleme biçimi
+  `supabase/gecis/8.10.0.sql` çalıştırılır (boş olabilen iki sütun; yeni istemci bunları yazar). Eşitleme biçimi
   `SCHEMA = 9` (boş `bnpl` artık null yazılır: kaldırılan sağlayıcı tabloda da silinir). MCP: `add_purchase` /
   `update_purchase` / `simulate_purchase` `bonus` ("once" | "twice" | null), `add_card` / `update_card` `bonus_months`;
   Japonya dışında hata verir. Mağaza metinleri `magaza/` klasöründe.
@@ -273,7 +273,51 @@ ya da GitHub'da "Supabase SQL" iş akışı (secret tanımlıysa yeni geçiş do
 Kayıtta (web ve iPhone) ülke seçilir; hesabın bilgisi olarak saklanır (`user_metadata.country`), web, iPhone ve asistan aynı
 para birimini kullanır. Girişsiz kullanımda ülke cihazdadır (web: `para.ulke`, iPhone: Ayarlar). Ülkeler ve para birimleri
 `para.js`'te; yeni ülke eklemek için oraya bir satır yeter (para birimi kur kaynağında olmalı: `mcp/kur.js`). Ülke Ayarlar'dan
-değişir; kayıtlı tutarlar çevrilmez. Fon ve hisse (TEFAS, Borsa İstanbul) yalnızca Türkiye'de.
+değişir; kayıtlı tutarlar çevrilmez.
+
+**Ülkeye göre özellikler.** Bir ülkede kullanılmayan özellik orada görünmez. Tablo `para.js`'te (`FEATURES`,
+`features(ülke)`), hesabın ülkesine göre (para birimi yetmez: euro birçok ülkenin); listede olmayan ülke `DEFAULT_FEATURES`'ı
+alır. Web (`app.js` `FEAT`), iPhone (`kopru.js` `setCountry` → `constants()` → `Sabitler`, `Model.installmentsPrimary`,
+`bnplAllowed`, `aprAllowed`…) ve asistan (`mcp/tools.js` `featuresOf(ctx)`; `toolsFor` / `instructionsFor` araç listesini ve
+bilgiyi ülkeye göre verir, doğrulama da ona göre) aynı tabloya bakar.
+
+| Özellik | Nerede | Başka yerde |
+|---|---|---|
+| `installments` "primary": taksit seçenekleri formda hep açık | TR, JP, KR, AE, SA, QA, KW (ve listeye eklenince IL, Latin Amerika) | "secondary": form peşin başlar, taksit "Taksitli"nin arkasında; taksit hiçbir yerde gizlenmez |
+| `bnpl` (Pay in 4) sağlayıcıları, sonda hep Diğer | US: Klarna, Afterpay, Affirm, PayPal, Zip, Sezzle · CA: Klarna, Afterpay, Affirm, PayPal · GB: Klarna, Clearpay, PayPal · AU: Afterpay, Zip, Klarna, PayPal · NZ: Afterpay, Zip, Klarna · DE AT NL BE SE NO DK FI ES: Klarna, PayPal · FR: + Alma · IT: + Scalapay · AE SA QA KW: Tabby, Tamara | yok |
+| `apr` (kartın faizi, döner kredi) | US, CA, GB, AU, NZ, JP | yok |
+| `markets` (fon / hisse, para piyasası fonları), `bankEmails`, `excelImport` | TR | yok |
+| `bonus` (bonus ödemesi, ボーナス払い; kartta bonus ayları) | JP | yok |
+
+Kayıtlı veri bozulmaz: ülkede olmayan bir sağlayıcıyla (ya da APR'yle) kaydedilmiş harcama / kart görünür, düzenlenir, o değer
+kalır; yalnızca yeni bir yabancı değer seçilemez. Sağlayıcıların adları `taksit.js` `BNPL_NAMES`'te. Yeni bir özellik:
+`DEFAULT_FEATURES`'a varsayılanı, ülkelere kendi değeri.
+
+### Diller
+
+Türkçe (kaynak), İngilizce, Almanca, Fransızca, İspanyolca, İtalyanca, Felemenkçe, Japonca, Korece, Portekizce (Brezilya
+yazımı), Arapça. Metinler kodda Türkçe yazılır (`L("…")`, `D.t("…")`); sözlükler `dil/<kod>.json`, anahtar Türkçe metin. Dil
+telefonun (iPhone: `Dil.swift`; Ayarlar → CashFollow → Dil ile değişir) ya da tarayıcının tercih ettiği dillerden ilk
+desteklenenidir, hiçbiri değilse İngilizce (`dil.js` → `LANGS`, `choose`). Sözlükte olmayan anahtar İngilizceden, o da
+yoksa Türkçe gösterilir. Tarih, sayı ve ay adları seçilen dilin yerel ayarıyla (`dil.js` → `locale`; iPhone'da dil +
+telefonun bölgesi). Web sözlüğü `dil-sayfa.js` eşzamanlı yükler ve `<html lang>`'ı yazar; service worker İngilizceyi ve
+cihazın dilini önbelleğe alır. iPhone'da sözlükleri Xcode'un "Web modülleri" adımı (`ios/scripts/js-kopyala.sh`) pakete
+kopyalar; App Store'da dillerin görünmesi için `knownRegions` ve `ios/CashFollow/Uygulama/<dil>.lproj`.
+
+**Arapça** (`ar`; Körfez: BAE, Suudi Arabistan, Katar, Kuveyt) sağdan soladır. Web: `dil-sayfa.js` `<html dir="rtl">`
+yazar; `styles.css` mantıksal özelliklerle (`margin-inline`, `inset-inline`, `text-align: start`) kendiliğinden döner,
+sonundaki `[dir="rtl"]` kuralları dönmeyenleri düzeltir (önceki / sonraki okları, açılır liste oku, tutarlar
+`unicode-bidi: isolate`, e-posta / kod alanları soldan sağa, Arapçada harf aralığı 0). Web grafikleri (SVG) soldan sağa
+kalır; iPhone'da Swift Charts yerleşimle döner. Sayılar Batı rakamıyla ve Miladi takvimle (`ar-AE-u-ca-gregory-nu-latn`,
+Swift `@numbers=latn;calendar=gregorian`): 1,234.50 د.إ.‏. Swift: `chevron.backward` / `forward`, "önce → sonra" için
+`Dil.ok`, tutarın başındaki "+" / "−" için `Bicim.isaret`; büyük tutar (`BuyukTutar`) soldan sağa dizilir. Örnek veriyle:
+`-ornek -ulke AE -AppleLanguages "(ar)" -AppleLocale ar_AE`.
+
+Yeni metin: Türkçesini koda yaz, `node scripts/dil.mjs` her sözlükte eksikleri ve yer tutucusu (`{0}`…) uymayanları
+listeler (CI'da da, eksik varsa hata). `node scripts/dil.mjs --eksik` İngilizcesi, `--eksik de` Almancası eksikleri
+JSON olarak verir. Yeni dil: `dil.js` `LANGS` / `LOCALES`, `Dil.swift` `diller`, `js-kopyala.sh` ve Xcode adımının
+girdi / çıktı listesi, `knownRegions`, `.lproj`. Şimdilik yalnızca Türkçe / İngilizce olanlar: giriş e-postaları
+(`tr` dışı İngilizce), asistan (MCP, Türkçe), gizlilik / koşullar / destek sayfaları (İngilizce).
 
 ### iOS uygulaması (`ios/`, Swift)
 

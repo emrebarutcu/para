@@ -102,9 +102,9 @@ test("getUser: saat dilimi hesaptan, yoksa ya da geçersizse ülkenin saat dilim
 });
 
 // ── Döner kredi (APR) asistanda ─────────────────────────────────────────────────────────────────────────────────────
-test("APR: yalnızca ABD'de; elle ödenen kartta kalan devreder, asgari ve geri ödeme görünür", async () => {
+test("APR: ülkesi olanda (ABD); elle ödenen kartta kalan devreder, asgari ve geri ödeme görünür", async () => {
   const tr = ctxFor("TRY");
-  assert.match((await run(tr, "add_card", { name: "Bonus", cutoff_day: 3, due_day: 28, apr: 40 })).error, /only available for accounts in the US/);
+  assert.match((await run(tr, "add_card", { name: "Bonus", cutoff_day: 3, due_day: 28, apr: 40 })).error, /not available for accounts in Türkiye/);
   const ctx = ctxFor("USD", "2026-09-01");
   await run(ctx, "add_entry", { asset: "USD", direction: "in", amount: 5000, description: "Opening", date: "2026-09-01" });
   const added = await run(ctx, "add_card", { name: "Chase", cutoff_day: 3, due_day: 28, limit: 5000, apr: 24, auto_pay: false });
@@ -134,9 +134,9 @@ test("APR: yalnızca ABD'de; elle ödenen kartta kalan devreder, asgari ve geri 
 });
 
 // ── Pay in 4 asistanda ──────────────────────────────────────────────────────────────────────────────────────────────
-test("Pay in 4: yalnızca ABD'de; 4 ödeme 2 haftada bir, sağlayıcıya kalan Borçlar'da", async () => {
+test("Pay in 4: ülkesi olanda (ABD); 4 ödeme 2 haftada bir, sağlayıcıya kalan Borçlar'da", async () => {
   const tr = ctxFor("TRY");
-  assert.match((await run(tr, "add_purchase", { description: "x", amount: 100, card: "nakit", bnpl: "klarna" })).error, /only available for accounts in the US/);
+  assert.match((await run(tr, "add_purchase", { description: "x", amount: 100, card: "nakit", bnpl: "klarna" })).error, /not available for accounts in Türkiye/);
   const ctx = ctxFor("USD", "2026-11-01");
   await run(ctx, "add_entry", { asset: "USD", direction: "in", amount: 1000, description: "Opening", date: "2026-10-01" });
   const p = await run(ctx, "add_purchase", { description: "Sneakers", amount: 99.99, card: "nakit", bnpl: "klarna", date: "2026-11-01" });

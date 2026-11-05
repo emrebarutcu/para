@@ -259,9 +259,9 @@
   function watchInbox() {
     unwatchInbox();
     if (!db || !user || typeof db.channel !== 'function') return;
-    // Banka e-postaları yalnızca Türkiye'de (para.js marketsFor; ülkesi yazılmamış eski hesap Türkiye)
+    // Banka e-postaları yalnızca Türkiye'de (para.js features bankEmails; ülkesi yazılmamış eski hesap Türkiye)
     const P = window.Para;
-    if (P && !P.marketsFor(P.homeOfCountry(user.user_metadata?.country))) return;
+    if (P && !P.features(P.country(user.user_metadata?.country)?.code ?? P.DEFAULT_COUNTRY).bankEmails) return;
     inboxChannel = db.channel('inbox-' + user.id)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'inbox_messages', filter: `user_id=eq.${user.id}` },
@@ -544,7 +544,7 @@
       const { data, error } = authMode === 'login'
         ? await db.auth.signInWithPassword({ email, password })
         : await db.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin,
-          // lang: giriş e-postalarının dili; sayfanın dili (dil-sayfa.js: tarayıcı Türkçe değilse İngilizce; iPhone'da uygulamanın)
+          // lang: giriş e-postalarının dili; sayfanın dili (dil-sayfa.js; şablonlar "tr" dışındaki dillere İngilizce)
           data: { country: document.getElementById('authCountry')?.value || 'TR', lang: window.Dil.lang } } });
 
       btn.disabled = false;

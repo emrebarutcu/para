@@ -158,6 +158,44 @@ test("ülke: euro hesabında tutarlar, kurlar ve formlar euroya göre", async ()
   assert.equal(plan.purchases.upsert[0].row.asset, null);
 });
 
+test("ülkeye göre özellikler: setCountry, sabitler ve araçlar (para.js features)", async () => {
+  const e = engine();
+  const K = e.sandbox.Kopru;
+  const c0 = JSON.parse(K.constants());
+  assert.deepEqual([c0.country, c0.home, c0.installments, c0.markets, c0.bnpl, c0.apr, c0.bankEmails], ["TR", "TRY", "primary", true, false, false, true]);
+  assert.deepEqual(c0.bnplProviders, []);
+  // Birleşik Krallık: sterlin, taksit ikinci planda, Klarna / Clearpay / PayPal, APR
+  assert.equal(K.setCountry("GB"), "GBP");
+  const gb = JSON.parse(K.constants());
+  assert.deepEqual([gb.country, gb.home, gb.installments, gb.markets, gb.bnpl, gb.apr, gb.bankEmails], ["GB", "GBP", "secondary", false, true, true, false]);
+  assert.deepEqual(gb.bnplProviders.map(p => p.id), ["klarna", "clearpay", "paypal", "other"]);
+  assert.equal(gb.bnplProviders[1].name, "Clearpay");
+  assert.ok(gb.bnplAll.some(p => p.id === "tabby" && p.name === "Tabby"));
+  const ok = await e.call("add_purchase", { description: "Coat", amount: 80, card: "nakit", bnpl: "clearpay", date: "2026-10-31" });
+  assert.equal(ok.ok.purchase.bnpl.name, "Clearpay");
+  const no = await e.call("add_purchase", { description: "x", amount: 80, card: "nakit", bnpl: "afterpay", date: "2026-10-31" });
+  assert.equal(no.err.user, true);
+  assert.match(no.err.message, /klarna, clearpay, paypal, other/);
+  // Japonya: taksit öne çıkar, Pay in 4 yok, APR var
+  K.setCountry("JP");
+  const jp = JSON.parse(K.constants());
+  assert.deepEqual([jp.home, jp.installments, jp.bnpl, jp.apr], ["JPY", "primary", false, true]);
+  assert.equal((await e.call("add_card", { name: "Rakuten", cutoff_day: 15, due_day: 10, apr: 15 })).ok.card.name, "Rakuten");
+  // Almanya: euro, Klarna ve PayPal; Clearpay'li kayıt yine görünür
+  K.setCountry("DE");
+  const de = JSON.parse(K.constants());
+  assert.deepEqual([de.home, de.installments, de.apr], ["EUR", "secondary", false]);
+  assert.deepEqual(de.bnplProviders.map(p => p.id), ["klarna", "paypal", "other"]);
+  const list = await e.call("list_purchases");
+  assert.equal(list.ok.purchases.find(p => p.description === "Coat").bnpl.name, "Clearpay");
+  // Bilinmeyen ülke Türkiye; yalnızca para birimi verilirse ülke ondan
+  K.setCountry("XX");
+  assert.equal(JSON.parse(K.constants()).country, "TR");
+  K.setHome("USD");
+  const us = JSON.parse(K.constants());
+  assert.deepEqual([us.country, us.bnpl, us.apr], ["US", true, true]);
+});
+
 // İngilizce (telefon Türkçe değilken Motor.swift Dil.setLang("en", sözlük) çağırır)
 test("İngilizce: kategoriler, tekrar etiketi, içgörüler ve ay adları sözlükten", async () => {
   const { sandbox, call } = engine();
@@ -174,6 +212,53 @@ test("İngilizce: kategoriler, tekrar etiketi, içgörüler ve ay adları sözl�
     const limit = ins.find(i => i.id.startsWith("limit-"));
     assert.ok(limit && /Chase is maxed out|Chase is \d+% used/.test(limit.title), JSON.stringify(ins.map(i => i.title)));
     assert.equal(sandbox.Taksit.monthName(10), "November");
+  } finally {
+    sandbox.Dil.setLang("tr");
+  }
+});
+
+// Diğer diller: Motor.swift Dil.setLang(kod, sözlük, İngilizce sözlük) çağırır; eksik anahtar İngilizceden
+test("Almanca ve Japonca: sözlükten, ay adları yerel, eksik anahtar İngilizceden", async () => {
+  const { sandbox, call } = engine();
+  const en = JSON.parse(read("dil/en.json"));
+  try {
+    sandbox.Dil.setLang("de", read("dil/de.json"), read("dil/en.json"));
+    const c = JSON.parse(sandbox.Kopru.constants());
+    assert.equal(c.categories.find(x => x.id === "market").name, "Lebensmittel");
+    await call("add_card", { name: "DKB", cutoff_day: 10, due_day: 5, limit: 1000 });
+    await call("add_purchase", { description: "Netflix", amount: 15, card: "DKB", repeat: 0 });
+    assert.equal((await call("list_purchases", {})).ok.purchases[0].repeat.label, "Monatlich");
+    assert.equal(sandbox.Taksit.monthName(10), "November");
+    // Almanca sözlükte olmayan anahtar İngilizce sözlükten
+    sandbox.Dil.setLang("de", { "Market": "Lebensmittel" }, en);
+    assert.equal(sandbox.Dil.t("Her ay"), "Monthly");
+    sandbox.Dil.setLang("ja", read("dil/ja.json"), read("dil/en.json"));
+    assert.equal(sandbox.Taksit.monthName(10), "11月");
+    assert.equal(sandbox.Dil.locale(), "ja-JP");
+    assert.equal(sandbox.Dil.choose(["sv-SE", "pt-PT", "en"]), "pt");
+    assert.equal(sandbox.Dil.choose(["sv-SE"]), "en");
+  } finally {
+    sandbox.Dil.setLang("tr");
+  }
+});
+
+// Arapça (telefon Arapçayken Motor.swift Dil.setLang("ar", sözlük, İngilizce) çağırır): sağdan sola, Batı rakamları
+test("Arapça: kategoriler, tekrar etiketi, ay adları ve sayı biçimi", async () => {
+  const { sandbox, call } = engine();
+  sandbox.Dil.setLang("ar", read("dil/ar.json"), read("dil/en.json"));
+  try {
+    assert.equal(sandbox.Dil.lang, "ar");
+    assert.equal(sandbox.Dil.dir(), "rtl");
+    assert.equal(sandbox.Dil.choose(["ar-AE", "en"]), "ar");
+    assert.equal(sandbox.Dil.pct(45), "45%");
+    assert.equal(new Intl.NumberFormat(sandbox.Dil.locale()).format(1234.5), "1,234.5");   // ١٬٢٣٤٫٥ değil
+    const c = JSON.parse(sandbox.Kopru.constants());
+    assert.equal(c.categories.find(x => x.id === "market").name, "البقالة");
+    await call("add_card", { name: "Rajhi", cutoff_day: 10, due_day: 5, limit: 1000 });
+    await call("add_purchase", { description: "Netflix", amount: 15, card: "Rajhi", repeat: 0 });
+    const list = (await call("list_purchases", {})).ok.purchases;
+    assert.equal(list[0].repeat.label, "شهرياً");
+    assert.equal(sandbox.Taksit.monthName(10), "نوفمبر");   // Miladi ay adı (Hicri değil)
   } finally {
     sandbox.Dil.setLang("tr");
   }
@@ -206,7 +291,7 @@ test("banka e-postaları: Swift'in verdiği liste; yalnızca sunucuda işaretlen
 test("Japonya: bonus ödemesi sabitlerde ve araçlarda, başka ülkede yok", async () => {
   const e = engine();
   const K = e.sandbox.Kopru;
-  K.setHome("JPY", "JP");
+  K.setCountry("JP");
   const c = JSON.parse(K.constants());
   assert.equal(c.bonus, true);
   assert.deepEqual(c.bonusMonths, [8, 1]);
@@ -219,7 +304,7 @@ test("Japonya: bonus ödemesi sabitlerde ve araçlarda, başka ülkede yok", asy
   assert.equal(plan.purchases.upsert[0].row.bonus, true);
   assert.deepEqual(plan.cards.upsert[0].row.bonus_months, [7, 12]);
 
-  K.setHome("USD", "US");
+  K.setCountry("US");
   assert.equal(JSON.parse(K.constants()).bonus, false);
   const us = await e.call("add_purchase", { description: "TV", amount: 900, bonus: "once", card: "JCB" });
   assert.equal(us.err.user, true);

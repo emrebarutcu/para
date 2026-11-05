@@ -145,7 +145,7 @@ struct HareketListesiBolumu: View {
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 3) {
-                            Text((e.direction == "in" ? "+" : "−") + Bicim.amount(e.amount, asset: e.asset) + (e.repeat != nil ? L("/ay") : ""))
+                            Text(Bicim.isaret(e.direction == "in" ? "+" : "−", Bicim.amount(e.amount, asset: e.asset)) + (e.repeat != nil ? L("/ay") : ""))
                                 .font(.body.weight(.semibold)).monospacedDigit()
                                 .foregroundStyle(e.direction == "in" ? Tema.iyi : Tema.tehlike)
                             if let n = e.repeat?.nextDate {

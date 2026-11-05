@@ -7,7 +7,7 @@ import B from "../../borc.js";
 import I from "../../icgoru.js";
 import P from "../../para.js";
 import Tablo from "../../tablo.js";
-import { TOOLS } from "../tools.js";
+import { TOOLS, toolsFor, instructionsFor } from "../tools.js";
 
 // JCB / SMBC gibi: 15'inde kesim, ertesi ay 10'unda ödeme. Rakuten gibi: ay sonu kesim, ertesi ay 27'si.
 const JCB = { id: "jcb", name: "JCB", limit: 500000, cutoffDay: 15, dueDay: 10, color: 0 };
@@ -114,7 +114,7 @@ test("tablo: purchases.bonus ve cards.bonus_months; varsayılan aylar boş yazı
 function ctxFor(country, today = "2026-06-20") {
   let state = T.hydrate({ home: P.homeOfCountry(country) });
   return {
-    today, home: P.homeOfCountry(country), user: { country },
+    today, home: P.homeOfCountry(country), country,
     load: async () => T.hydrate(JSON.parse(JSON.stringify(state))),
     mutate: async fn => { const s = T.hydrate(JSON.parse(JSON.stringify(state))); const out = await fn(s); state = s; return out; },
     rates: async () => ({ rates: { TRY: 1, JPY: 0.3, USD: 40 }, updatedAt: "2026-06-20T10:00:00Z", source: "test" }),
@@ -154,7 +154,7 @@ test("asistan: bonus yalnızca Japonya'da ve kartla; twice iki bonusa böler; nu
 
   const us = ctxFor("US");
   await run(us, "add_card", { name: "Visa", cutoff_day: 15, due_day: 10 });
-  assert.match((await run(us, "add_purchase", { description: "TV", amount: 900, bonus: "once" })).error, /only available for accounts in Japan/);
+  assert.match((await run(us, "add_purchase", { description: "TV", amount: 900, bonus: "once" })).error, /only offered in Japan/);
 });
 
 test("asistan: kartın bonus ayları (Japonya), simülasyon", async () => {
@@ -168,5 +168,15 @@ test("asistan: kartın bonus ayları (Japonya), simülasyon", async () => {
   assert.match((await run(jp, "update_card", { card: "SMBC", bonus_months: [8, 8] })).error, /two different months/);
 
   const tr = ctxFor("TR");
-  assert.match((await run(tr, "add_card", { name: "Bonus", cutoff_day: 15, due_day: 25, bonus_months: [8, 1] })).error, /only available for accounts in Japan/);
+  assert.match((await run(tr, "add_card", { name: "Bonus", cutoff_day: 15, due_day: 25, bonus_months: [8, 1] })).error, /only offered in Japan/);
+});
+
+test("araç listesi ve yönergeler: bonus alanları yalnızca Japonya hesabında", () => {
+  const field = (country, tool, name) => toolsFor({ country }).find(t => t.name === tool).inputSchema.properties[name];
+  assert.ok(field("JP", "add_purchase", "bonus"));
+  assert.ok(field("JP", "update_card", "bonus_months"));
+  assert.equal(field("US", "add_purchase", "bonus"), undefined);
+  assert.equal(field("TR", "add_card", "bonus_months"), undefined);
+  assert.match(instructionsFor({ country: "JP" }), /This account is in Japan:.*bonus payment/);
+  assert.doesNotMatch(instructionsFor({ country: "DE" }).split("This account")[1], /bonus/);
 });

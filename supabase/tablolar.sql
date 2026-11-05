@@ -199,7 +199,7 @@ begin
   end if;
 end $$;
 
--- Bonus ödemesi (8.7; Japonya, ボーナス払い; taksit.js bonus). bonus_months kartın bonus ayları [yaz, kış] (boşsa
+-- Bonus ödemesi (8.10; Japonya, ボーナス払い; taksit.js bonus). bonus_months kartın bonus ayları [yaz, kış] (boşsa
 -- Ağustos ve Ocak). purchases.bonus: tutar kartın bonus ayındaki son ödeme gününde ödenir; count 1 tek bonus, 2 art
 -- arda iki bonusa yarı yarıya. Kartlı, tarihli, tekrarlamayan harcamada.
 alter table cards add column if not exists bonus_months smallint[]

@@ -19,8 +19,20 @@
     return `${Math.floor(idx / 12)}-${String(idx % 12 + 1).padStart(2, "0")}`;
   }
   const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  function monthName(idx) { return (D.lang === "en" ? MONTHS_EN : MONTHS)[idx % 12]; }
-  function monthShort(idx) { return D.lang === "en" ? MONTHS_EN[idx % 12].slice(0, 3) : MONTHS_SHORT[idx % 12]; }
+  // Diğer dillerde ay adları yerel ayardan (Intl): de "November" / "Nov.", ja "11月"
+  const intlMonths = new Map();
+  function months(width) {
+    const k = `${D.lang}|${width}`;
+    if (!intlMonths.has(k)) {
+      const f = new Intl.DateTimeFormat(D.locale(), { month: width, timeZone: "UTC" });
+      intlMonths.set(k, Array.from({ length: 12 }, (_, m) => f.format(new Date(Date.UTC(2026, m, 15)))));
+    }
+    return intlMonths.get(k);
+  }
+  function monthName(idx) { return (D.lang === "tr" ? MONTHS : D.lang === "en" ? MONTHS_EN : months("long"))[idx % 12]; }
+  function monthShort(idx) {
+    return D.lang === "tr" ? MONTHS_SHORT[idx % 12] : D.lang === "en" ? MONTHS_EN[idx % 12].slice(0, 3) : months("short")[idx % 12];
+  }
   function yearOf(idx) { return Math.floor(idx / 12); }
   function daysInMonth(idx) { return new Date(yearOf(idx), idx % 12 + 1, 0).getDate(); }
 
@@ -181,9 +193,13 @@
   // bnpl sağlayıcıyla (klarna, afterpay, …) tarihli, tekrarlamayan harcama: count ödeme, ilki date günü, sonrakiler
   // BNPL_DAYS günde bir. Kartla ödenen her ödeme kendi gününün ekstresine girer (at: çekim günü; at bugünden sonraysa
   // henüz karta yansımadı, sağlayıcıya borçtur: borc.js bnplDebt). Kuruşlar tam bölünür, artığı ilk ödeme alır
-  // (99,99 → 25,02 + 3 × 24,99).
-  const BNPL = ["klarna", "afterpay", "affirm", "paypal", "zip", "sezzle", "other"];
-  const BNPL_NAMES = { klarna: "Klarna", afterpay: "Afterpay", affirm: "Affirm", paypal: "PayPal", zip: "Zip", sezzle: "Sezzle", other: "Diğer" };
+  // (99,99 → 25,02 + 3 × 24,99). Bütün sağlayıcılar; bir ülkede sunulanlar para.js features(ülke).bnpl. Başka ülkenin
+  // sağlayıcısıyla kayıtlı harcama da geçerlidir (ülke değişse de kayıt bozulmaz).
+  const BNPL = ["klarna", "afterpay", "affirm", "paypal", "zip", "sezzle", "clearpay", "alma", "scalapay", "tabby", "tamara", "other"];
+  const BNPL_NAMES = {
+    klarna: "Klarna", afterpay: "Afterpay", affirm: "Affirm", paypal: "PayPal", zip: "Zip", sezzle: "Sezzle",
+    clearpay: "Clearpay", alma: "Alma", scalapay: "Scalapay", tabby: "Tabby", tamara: "Tamara", other: "Diğer",
+  };
   const BNPL_DAYS = 14;
   function bnpl(p) {
     return BNPL.includes(p?.bnpl) && !!parseDate(p.date) && p.count >= 2 && R.rule(p) == null;

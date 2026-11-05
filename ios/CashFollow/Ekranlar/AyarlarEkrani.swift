@@ -108,7 +108,7 @@ struct AyarlarEkrani: View {
                 }
 
                 // Banka e-postaları yalnızca Türkiye'de
-                if model.marketsAllowed {
+                if model.bankEmailsAllowed {
                     Section {
                         NavigationLink { EpostaAyarlari() } label: { Text(L("Banka e-postaları")) }
                     } footer: {
@@ -124,7 +124,7 @@ struct AyarlarEkrani: View {
 
                 Section {
                     // İçe aktarma (Excel) yalnızca Türkiye'de
-                    Link(model.marketsAllowed ? L("Web'de aç (içe aktarma)") : L("Web'de aç"), destination: Yapilandirma.site)
+                    Link(model.excelImportAllowed ? L("Web'de aç (içe aktarma)") : L("Web'de aç"), destination: Yapilandirma.site)
                     Link(L("Gizlilik politikası"), destination: Yapilandirma.gizlilik)
                     Link(L("Kullanım koşulları"), destination: Yapilandirma.kosullar)
                     Link(L("Destek"), destination: Yapilandirma.destek)
@@ -183,7 +183,7 @@ struct AyarlarEkrani: View {
 
     private var nakitMetni: String {
         let ad: (String) -> String = { c in
-            c == "MMF" ? L("para piyasası fonları") : c == "GAU" ? L("altın") : Dil.ingilizce ? c : model.constants?.currencies.first { $0.code == c }?.short ?? c
+            c == "MMF" ? L("para piyasası fonları") : c == "GAU" ? L("altın") : Dil.turkceDegil ? c : model.constants?.currencies.first { $0.code == c }?.short ?? c
         }
         let list = model.cashDef.map(ad)
         return list.isEmpty ? L("hiçbiri") : list.joined(separator: ", ")
