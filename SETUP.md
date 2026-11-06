@@ -393,9 +393,11 @@ bir sonraki gönderimde depodakiyle ezilir; değişiklik `magaza/`'da yapılır.
   ürünlerinin dil metinleri (`abonelik`; ad ≤30, açıklama ≤55) ve abonelik ülkeleri. Abonelik fiyatı ve ücretsiz deneme
   App Store Connect'te kalır.
 - **Sürüm:** düzenlenebilir mağaza sürümünün numarası `version.js`'teki sürüme çekilir (yoksa açılır), o sürümün en yeni
-  geçerli build'i seçilir: önce TestFlight.
+  geçerli build'i seçilir. O sürümün build'i yoksa numara değişmez (uyarı yazılır): önce TestFlight, sonra yeniden
+  `gonder`. Sürüm incelemedeyken `gonder` çalıştırılmaz (yeni sürüm açmaya çalışır).
 - **Elle kalanlar** (API'de yok ya da kişisel bilgi; depo herkese açık, günlükte yalnızca "dolu / boş" yazılır): App
-  Privacy, inceleme iletişim bilgileri (ad, telefon, e-posta) ve notları, içerik hakları beyanı, anlaşmalar / vergi / banka.
+  Privacy, inceleme iletişim bilgileri (ad, telefon, e-posta) ve notları, anlaşmalar / vergi / banka. İçerik hakları
+  beyanı `ayarlar.json → icerikHaklari`'nda (kur, altın, fon ve hisse fiyatları dışarıdan: `USES_THIRD_PARTY_CONTENT`).
 - **Adresler:** destek `https://cashfollow.app/support`, gizlilik `https://cashfollow.app/privacy` (ikisi de İngilizce;
   `support.html`, `privacy.html`). Destek e-postası `support@cashfollow.app` (Cloudflare yönlendirmesi).
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
