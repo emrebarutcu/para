@@ -71,15 +71,16 @@ struct Doluluk: View {
     }
 }
 
-// Girişsizken Özet'in üstündeki not (web: offlineNote)
+// Girişsizken Özet'in üstündeki not (web: offlineNote). Yeni kullanıcıya ilk 72 saat gösterilmez (hesap açmadan
+// başlamayı seçti; önce uygulamayı tanısın), sonra uyarı değil sakin bir öneri olarak
 struct CevrimdisiNotu: View {
     @EnvironmentObject private var model: Model
     @State private var login = false
 
     var body: some View {
-        if model.session == nil {
+        if model.session == nil, !Karsilama.yeni {
             HStack(alignment: .center, spacing: 12) {
-                Image(systemName: "icloud.slash").font(.system(size: 18)).foregroundStyle(Tema.uyari)
+                Image(systemName: "icloud.and.arrow.up").font(.system(size: 18)).foregroundStyle(Tema.metin2)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L("Verilerin yalnızca bu telefonda")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
                     Text(L("Yedeklemek ve web'de de görmek için giriş yap.")).font(.footnote).foregroundStyle(Tema.metin2)
@@ -88,8 +89,8 @@ struct CevrimdisiNotu: View {
                 KucukDugme(ad: L("Giriş yap")) { login = true }
             }
             .padding(14)
-            .background(Tema.uyari.opacity(0.1), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Tema.uyari.opacity(0.35), lineWidth: 1))
+            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Tema.cizgi, lineWidth: 1))
             .sheet(isPresented: $login) { GirisEkrani(welcome: false) }
         }
     }

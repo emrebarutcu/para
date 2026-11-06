@@ -56,6 +56,16 @@ enum OzDenetim {
             try check(z?.0 == saat("1910") && z?.1 == 1
                       && Hatirlatma.zamani("2026-11-20", gunOnce: 1, dakika: 600, simdi: saat("1911"))?.1 == 0
                       && Hatirlatma.zamani("2026-11-20", gunOnce: 1, dakika: 600, simdi: saat("2011")) == nil, "hatırlatma zamanı")
+            // İlk açılış akışı: son ödeme günü tahmini, "n ay önce", varsayılan ülke (desteklenmeyen bölge boş kalır)
+            try check(Karsilama.sonOdemeGunu(kesim: 10, ulke: "TR") == 20 && Karsilama.sonOdemeGunu(kesim: 25, ulke: "TR") == 5
+                      && Karsilama.sonOdemeGunu(kesim: 3, ulke: "US") == 24, "son ödeme günü tahmini")
+            let mart31 = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 3, day: 31, hour: 12)) ?? Date()
+            try check(Bicim.key(Karsilama.tarih(ayOnce: 1, bugun: mart31)) == "2026-02-28", "ay önce: \(Bicim.key(Karsilama.tarih(ayOnce: 1, bugun: mart31)))")
+            let ulkeler = m.constants()?.countries ?? []
+            try check(Karsilama.varsayilanUlke(kayitli: nil, bolge: "DE", paraBirimi: "EUR", ulkeler: ulkeler) == "DE"
+                      && Karsilama.varsayilanUlke(kayitli: nil, bolge: "BR", paraBirimi: "BRL", ulkeler: ulkeler) == ""
+                      && Karsilama.varsayilanUlke(kayitli: "US", bolge: "DE", paraBirimi: "EUR", ulkeler: ulkeler) == "US"
+                      && !Karsilama.varsayilanUlke(kayitli: nil, bolge: nil, paraBirimi: "EUR", ulkeler: ulkeler).isEmpty, "varsayılan ülke")
             let loan = borclar.debts.first { $0.type == "loan" }
             try m.runJSON("pay_debt", ["debt": loan?.id ?? "", "amount": 2500, "date": "2026-10-31"])
             let nakit = try m.cash(start: "1", shift: 0)

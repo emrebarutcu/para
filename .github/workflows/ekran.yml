@@ -70,6 +70,9 @@ jobs:
           tur bos- light sekme0 -bos $TR                 # verisi olmayan yeni kullanıcı (Başlarken)
           tur en- light sekme0,sekme1,sekme2,sekme3,sekme4,galeri3 -ulke US $EN
           tur en-bos- light sekme0 -bos -ulke US $EN
+          # İlk açılış akışı (KarsilamaEkrani): beş ekran, cevaplar dolu
+          tur "" light tanitim0,tanitim1,tanitim2,tanitim3,tanitim4 -bos $TR
+          tur en- light tanitim0,tanitim1,tanitim2,tanitim3,tanitim4 -bos -ulke US $EN
           # CashFollow Premium ödeme ekranı ve kilitler (ücretsiz sürüm); en-ucretsiz-galeri7 App Store incelemesinin
           # her abonelik için istediği görüntü
           tur en-ucretsiz- light galeri7,galeri8,sekme0,sekme1 -ucretsiz -ulke US $EN

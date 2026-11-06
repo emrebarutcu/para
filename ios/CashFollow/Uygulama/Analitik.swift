@@ -8,12 +8,15 @@ import UIKit
 // Ayarlar → "Kullanım verisi gönder" kapatılabilir. Abonelik yenileme, iptal ve iadeleri sunucu gönderir (mcp/abonelik.js).
 //
 // A/B: bayrak("deneme_adi") PostHog'daki özellik bayrağının değerini (ör. "control", "test") verir; ilk okumada
-// $feature_flag_called olayı gider, deneme sonuçları bununla ölçülür.
+// $feature_flag_called olayı gider, deneme sonuçları bununla ölçülür. Bayraklar yüklenmeden okunursa olay gitmez.
+// İlk açılışta bayrak henüz gelmemiş olabilir: bayrakBekle en fazla birkaç saniye bekler. Kullanıcının girdiği deneme
+// kolu (kolAyarla) sonraki her olaya "$feature/<bayrak>" olarak eklenir (PostHog denemesi bununla çözümlenir).
 enum Analitik {
     private static let kuyrukSiniri = 20
     private static var kuyruk: [[String: Any]] = []
     private static var bayraklar: [String: Any] = [:]
     private static var bildirilen: Set<String> = []
+    private static var yuklendi = false
     private static var ulke = "TR"
 
     static var acik: Bool {
@@ -35,13 +38,29 @@ enum Analitik {
     }
     private static var kim: String { hesap ?? kimlik }
 
+    private static var surum: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
+
+    // Girilen deneme kolları: bayrak → kol (ilk açılış akışı gibi bir kez seçilenler)
+    private static var kollar: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: "analitik.kollar") as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "analitik.kollar") }
+    }
+
+    static func kolAyarla(_ bayrak: String, _ kol: String) {
+        var k = kollar
+        k[bayrak] = kol
+        kollar = k
+    }
+
     // Her olayla giden bilgiler
     private static var ortak: [String: Any] {
-        [
-            "$app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+        var p: [String: Any] = [
+            "$app_version": surum,
             "$os": "iOS", "$os_version": UIDevice.current.systemVersion, "$device_type": "Mobile",
             "platform": "ios", "lang": Dil.kod, "country": ulke, "$lib": "cashfollow-ios", "$geoip_disable": true,
         ]
+        for (b, k) in kollar { p["$feature/\(b)"] = k }
+        return p
     }
 
     static func ulkeAyarla(_ kod: String) { ulke = kod }
@@ -95,7 +114,7 @@ enum Analitik {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: [
             "api_key": Yapilandirma.posthogKey, "distinct_id": kim,
-            "person_properties": ["platform": "ios", "lang": Dil.kod, "country": ulke],
+            "person_properties": ["platform": "ios", "lang": Dil.kod, "country": ulke, "app_version": surum],
         ])
         guard let (data, _) = try? await URLSession.shared.data(for: req),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
@@ -105,16 +124,30 @@ enum Analitik {
                 guard let f = v as? [String: Any], f["enabled"] as? Bool == true else { continue }
                 out[k] = (f["variant"] as? String) ?? true
             }
-            await MainActor.run { bayraklar = out }
+            await MainActor.run { bayraklar = out; yuklendi = true }
         } else if let flags = json["featureFlags"] as? [String: Any] {
-            await MainActor.run { bayraklar = flags.filter { ($0.value as? Bool) != false } }
+            await MainActor.run { bayraklar = flags.filter { ($0.value as? Bool) != false }; yuklendi = true }
         }
+    }
+
+    static var bayraklarYuklendi: Bool { yuklendi }
+
+    // Bayrak henüz yüklenmediyse en fazla `sure` saniye beklenir (ilk açılış); gelmezse ya da analitik kapalıysa nil
+    @MainActor
+    static func bayrakBekle(_ ad: String, sure: Double = 1.5) async -> String? {
+        guard etkin else { return nil }
+        if !yuklendi {
+            Task { await bayraklariYukle() }
+            let son = Date().addingTimeInterval(sure)
+            while !yuklendi, Date() < son { try? await Task.sleep(nanoseconds: 100_000_000) }
+        }
+        return yuklendi ? bayrak(ad) : nil
     }
 
     // Bayrağın değeri: deneme kolu ("control", "test"…), açık bayrakta "true", kapalı ya da bilinmiyorsa nil
     static func bayrak(_ ad: String) -> String? {
         let deger = bayraklar[ad].map { ($0 as? String) ?? "true" }
-        if etkin, !bildirilen.contains(ad) {
+        if etkin, yuklendi, !bildirilen.contains(ad) {
             bildirilen.insert(ad)
             olay("$feature_flag_called", ["$feature_flag": ad, "$feature_flag_response": deger ?? false])
         }

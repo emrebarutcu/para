@@ -370,7 +370,7 @@ struct HatirlatmaBolumu: View {
             Toggle(L("Ödeme hatırlatmaları"), isOn: Binding(get: { acik }, set: { yeni in
                 acik = yeni
                 Task {
-                    if yeni { acik = await Hatirlatma.ac(model); reddedildi = !acik }
+                    if yeni { acik = await Hatirlatma.ac(model, kaynak: "settings"); reddedildi = !acik }
                     else { await Hatirlatma.kapat(); reddedildi = false }
                 }
             }))

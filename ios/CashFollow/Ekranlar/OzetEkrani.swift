@@ -20,7 +20,7 @@ struct OzetEkrani: View {
                     let bos = o.remainingTotal < 0.004 && o.upcomingPayments.isEmpty && o.dueThisMonth < 0.004
                     VStack(alignment: .leading, spacing: 14) {
                         if !bos {
-                            ustKart(o)
+                            BuAyKarti(o: o)
                             siradakiler(o)
                             if teklif, !o.upcomingPayments.isEmpty { HatirlatmaTeklifi(goster: $teklif) }
                         }
@@ -43,35 +43,12 @@ struct OzetEkrani: View {
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
             .task(id: model.revision) {
                 baslarken = BaslarkenDurumu.oku(model)
-                if !Hatirlatma.acik, !Hatirlatma.teklifBitti, Ornek.tur == nil {
+                Karsilama.etkinlesmeyiDenetle(model)
+                if !Hatirlatma.acik, !Hatirlatma.teklifBitti, !Hatirlatma.ertelendi, Ornek.tur == nil {
                     teklif = await Hatirlatma.izinDurumu() != .denied
                 }
             }
         }
-    }
-
-    // Bu ay ödenecek: büyük tutar, borç ödemeleri, gelecek ay ve kalan toplam
-    private func ustKart(_ o: Ozet) -> some View {
-        Kart {
-            HStack {
-                Text(L("Bu ay ödenecek")).font(.subheadline).foregroundStyle(Tema.metin2)
-                Spacer()
-                Text(Bicim.month(o.month)).font(.subheadline.weight(.semibold))
-            }
-            BuyukTutar(deger: o.dueThisMonth)
-            if let d = o.debts?.dueThisMonth, d > 0.004 {
-                Text(L("+ {0} borç ödemesi", Bicim.tl(d))).font(.subheadline).foregroundStyle(Tema.metin2).monospacedDigit()
-            }
-            Ayirici()
-            IstatistikSatiri(ogeler: [
-                Istatistik(etiket: L("Gelecek ay ({0})", ayAdi(o.nextMonth.month)), deger: Bicim.tl(o.nextMonth.total)),
-                Istatistik(etiket: L("Kalan bütün taksitler"), deger: Bicim.tl(o.remainingTotal)),
-            ])
-        }
-    }
-
-    private func ayAdi(_ ym: String) -> String {
-        String(Bicim.month(ym).split(separator: " ").first ?? "")
     }
 
     // Sıradaki ödemeler: tarih rozeti, kart / nakit, ne zaman, tutar; gecikmiş ekstrede "Ödendi"
@@ -114,6 +91,34 @@ struct OzetEkrani: View {
         odeme = .kart(id: c.id, ad: c.name, tutar: c.tracking?.unpaid ?? p.total, asgari: c.tracking?.revolving?.minimumDue)
     }
 
+}
+
+// Bu ay ödenecek: büyük tutar, borç ödemeleri, gelecek ay ve kalan toplam (Özet'in üstü; ilk açılışta "Planın hazır")
+struct BuAyKarti: View {
+    let o: Ozet
+
+    var body: some View {
+        Kart {
+            HStack {
+                Text(L("Bu ay ödenecek")).font(.subheadline).foregroundStyle(Tema.metin2)
+                Spacer()
+                Text(Bicim.month(o.month)).font(.subheadline.weight(.semibold))
+            }
+            BuyukTutar(deger: o.dueThisMonth)
+            if let d = o.debts?.dueThisMonth, d > 0.004 {
+                Text(L("+ {0} borç ödemesi", Bicim.tl(d))).font(.subheadline).foregroundStyle(Tema.metin2).monospacedDigit()
+            }
+            Ayirici()
+            IstatistikSatiri(ogeler: [
+                Istatistik(etiket: L("Gelecek ay ({0})", ayAdi(o.nextMonth.month)), deger: Bicim.tl(o.nextMonth.total)),
+                Istatistik(etiket: L("Kalan bütün taksitler"), deger: Bicim.tl(o.remainingTotal)),
+            ])
+        }
+    }
+
+    private func ayAdi(_ ym: String) -> String {
+        String(Bicim.month(ym).split(separator: " ").first ?? "")
+    }
 }
 
 // İçgörüler: en önemlileri, "Tümü" ile hepsi (get_insights)
@@ -166,7 +171,8 @@ struct BaslarkenDurumu: Equatable {
         BaslarkenDurumu(
             kart: (try? model.read("list_cards") as KartListesi)?.cards.isEmpty == false,
             harcama: ((try? model.read("list_purchases", ["status": "all", "limit": 1]) as HarcamaListesi)?.count ?? 0) > 0,
-            gelir: ((try? model.read("list_entries", ["limit": 1]) as HareketListesi)?.count ?? 0) > 0)
+            // Gelir: ana para biriminde giriş (döviz / altın alışı gelir sayılmaz)
+            gelir: (try? model.read("list_entries", ["asset": Bicim.home, "limit": 20]) as HareketListesi)?.entries.contains { $0.direction == "in" } == true)
     }
 }
 
@@ -179,7 +185,7 @@ struct BaslarkenKarti: View {
         let d = durum
         Kart {
             KartBasligi(baslik: L("Başlarken")) {
-                Button(L("Gizle")) { gizli = true; Analitik.olay("onboarding_hidden") }.font(.subheadline).foregroundStyle(Tema.metin3)
+                Button(L("Gizle")) { gizli = true; Analitik.olay("onboarding_hidden", ["surface": "checklist"]) }.font(.subheadline).foregroundStyle(Tema.metin3)
             }
             Text(L("Üç adımda bu ay ne ödeyeceğini ve paranın yetip yetmeyeceğini görürsün."))
                 .font(.subheadline).foregroundStyle(Tema.metin2)
@@ -191,9 +197,12 @@ struct BaslarkenKarti: View {
                 adim(3, L("Maaşını ekle"), L("Her ay tekrarlanır; nakdin hesaplanır"), d.gelir) { form = .hareket(.gelir) }
             }
         }
-        .sheet(item: $form) { EkleFormu(secim: $0) }
+        // Maaş adımı: "Maaş" yazılı ve "Her ay tekrarla" açık gelir (kartta söz verildiği gibi)
+        .sheet(item: $form) { s in
+            if s == .hareket(.gelir) { HareketFormu(tur: .gelir, maas: true) } else { EkleFormu(secim: s) }
+        }
         .onChange(of: form) { _, s in
-            if let s { Analitik.olay("onboarding_step_opened", ["item": s.id]) }
+            if let s { Analitik.olay("onboarding_step_opened", ["item": s.id, "surface": "checklist"]) }
         }
     }
     private func adim(_ no: Int, _ baslik: String, _ alt: String, _ tamam: Bool, _ eylem: @escaping () -> Void) -> some View {
@@ -247,7 +256,7 @@ struct HatirlatmaTeklifi: View {
                 }
                 Button {
                     Hatirlatma.teklifBitti = true
-                    Analitik.olay("reminders_offer_dismissed")
+                    Analitik.olay("reminders_offer_dismissed", ["source": "overview_offer"])
                     withAnimation { goster = false }
                 } label: {
                     Text(L("Şimdi değil")).font(.subheadline).foregroundStyle(Tema.metin2)
