@@ -6,7 +6,7 @@ değiştirme.
 
 ## Name (≤30)
 
-CashFollow: Taksit Takibi
+CashFollow: Para Takibi
 
 ## Subtitle (≤30)
 
