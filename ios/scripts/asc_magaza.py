@@ -477,6 +477,9 @@ def gonder_ekranlar(v, ay, klasor):
             print(f"  {loc}: {len(yollar)} görüntü aynı")
             continue
         print(("  [kuru] " if KURU else "  → ") + f"{loc}: {len(simdi)} görüntü yerine {len(yollar)} ({', '.join(dosyalar)})")
+        print("    şimdiki: " + " ".join((c or "-")[:6] for c in simdi) + " | istenen: " + " ".join(c[:6] for c in istenen)
+              + " | durum: " + " ".join(((goruntu[x["id"]]["attributes"].get("assetDeliveryState") or {}).get("state") or "?")
+                                       for x in (s or {}).get("relationships", {}).get("appScreenshots", {}).get("data", []) if x["id"] in goruntu))
         if KURU:
             continue
         if s is None:
