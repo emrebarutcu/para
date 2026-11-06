@@ -16,6 +16,7 @@ struct KarsilamaKapisi: View {
     @State private var kol: String?
 
     var body: some View {
+        let kol = self.kol ?? Karsilama.hazirKol
         Group {
             if kol == "eylem" {
                 KarsilamaEkrani()
@@ -26,7 +27,7 @@ struct KarsilamaKapisi: View {
             }
         }
         .interactiveDismissDisabled()
-        .task { if kol == nil { kol = await Karsilama.kolSec() } }
+        .task { if self.kol == nil { self.kol = await Karsilama.kolSec() } }
         // Pencere kapandı: giriş ekranından (control) ya da akıştan giriş yapılarak; akışın kendi sonu önce yazılır
         .onDisappear { Karsilama.bitir(yol: model.session != nil ? "account" : "offline") }
     }
@@ -60,6 +61,7 @@ struct KarsilamaEkrani: View {
     @State private var izin: UNAuthorizationStatus?
     @State private var eklenen = 0
     @State private var atlanan = 0
+    @State private var ahaYazildi = false
     @State private var hata: String?
     @State private var girisAcik = false
     @State private var bekliyor = false
@@ -96,7 +98,10 @@ struct KarsilamaEkrani: View {
         .onAppear(perform: hazirla)
         .onChange(of: adim) { _, a in adimGosterildi(a) }
         .onChange(of: scenePhase) { _, faz in
-            if faz == .background, !ornek { Karsilama.olay("onboarding_backgrounded", ["step": adim.ad]) }
+            if faz == .background, !ornek {
+                Karsilama.olay("onboarding_backgrounded", ["step": adim.ad])
+                Analitik.gonder()   // uygulama arka planda kapatılırsa kaybolmasın
+            }
         }
         .sheet(isPresented: $girisAcik) { GirisEkrani(welcome: false, kaynak: "onboarding") }
     }
@@ -189,6 +194,7 @@ struct KarsilamaEkrani: View {
             HataMetni(text: hata)
         }
         .task(id: "\(tutar)|\(taksit)|\(ayOnce)|\(kartId ?? "")") { onizle() }
+        .onChange(of: taksit) { _, n in if ayOnce >= n { ayOnce = max(n - 1, 0) } }
         .task {
             guard !ornek, tutar.isEmpty else { return }
             try? await Task.sleep(nanoseconds: 350_000_000)   // geçiş bitsin
@@ -204,6 +210,8 @@ struct KarsilamaEkrani: View {
                     BuAyKarti(o: o)
                 } else if let ilk = o.upcomingPayments.first {
                     ilkOdemeKarti(ilk, o)
+                } else {
+                    Kart { Text(L("Ödenecek taksit yok")).font(.subheadline).foregroundStyle(Tema.metin2) }
                 }
                 if let aciklama {
                     Label(aciklama, systemImage: "info.circle")
@@ -270,22 +278,26 @@ struct KarsilamaEkrani: View {
         }
     }
 
-    // Taksitli harcama ne zaman alındı: geçmiş aylarda alınanın ödenen taksitleri düşer
+    // Taksitli harcama ne zaman alındı: geçmiş aylarda alınanın ödenen taksitleri düşer. Seçenekler taksit sayısından
+    // az ay önce (n taksitli harcama n ay önce alındıysa bütün taksitleri ödenmiştir; "Planın hazır" boş kalırdı)
     @ViewBuilder private var neZaman: some View {
+        let enFazla = min(taksit - 1, 12)
         etiket(L("Ne zaman aldın?"))
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 Cip(ad: L("Bu ay"), secili: ayOnce == 0) { ayOnce = 0 }
                 Cip(ad: L("Geçen ay"), secili: ayOnce == 1) { ayOnce = 1 }
-                ForEach([2, 3], id: \.self) { n in
+                ForEach([2, 3].filter { $0 <= enFazla }, id: \.self) { n in
                     Cip(ad: L("{0} ay önce", n), secili: ayOnce == n) { ayOnce = n }
                 }
-                Menu {
-                    Picker(L("Ne zaman aldın?"), selection: $ayOnce) {
-                        ForEach(4...12, id: \.self) { Text(L("{0} ay önce", $0)).tag($0) }
+                if enFazla >= 4 {
+                    Menu {
+                        Picker(L("Ne zaman aldın?"), selection: $ayOnce) {
+                            ForEach(4...enFazla, id: \.self) { Text(L("{0} ay önce", $0)).tag($0) }
+                        }
+                    } label: {
+                        menuEtiketi(ayOnce > 3 ? L("{0} ay önce", ayOnce) : L("Diğer"), secili: ayOnce > 3)
                     }
-                } label: {
-                    menuEtiketi(ayOnce > 3 ? L("{0} ay önce", ayOnce) : L("Diğer"), secili: ayOnce > 3)
                 }
             }
         }
@@ -551,6 +563,9 @@ struct KarsilamaEkrani: View {
             let o = try? model.read("get_overview") as Ozet
             withAnimation(.snappy) { ozet = o }
             guard !ornek, let o else { return }
+            Karsilama.etkinlesmeyiDenetle(model, akista: true)
+            guard !ahaYazildi else { return }
+            ahaYazildi = true
             Karsilama.olay("onboarding_aha_viewed", ["has_due_this_month": o.dueThisMonth > 0.004,
                                                      "upcoming_count": min(o.upcomingPayments.count, 10),
                                                      "installments": taksitSayisi, "seconds_since_start": saniye(akisBasi, 1800)])

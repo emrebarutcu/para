@@ -37,11 +37,18 @@ enum Karsilama {
     static var varyant: String? { d.string(forKey: "karsilama.varyant") }
     private static var bitti: Bool { d.object(forKey: "karsilama.bitis") != nil }
 
-    // Hangi karşılama: "eylem" yeni akış, "control" giriş ekranı, "returning" daha önce kullanılmış (deneme dışı)
-    static func kolSec() async -> String {
+    // Hangi karşılama: "eylem" yeni akış, "control" giriş ekranı, "returning" daha önce kullanılmış ya da akışı bitirmiş
+    // (deneme dışı; örneğin akıştan giriş yapıp sonra çıkış yapan giriş ekranını görür). Bayrak beklemeden belli
+    // olanlar hemen (kapı boş kare göstermez); belli değilse nil
+    static var hazirKol: String? {
         if CommandLine.arguments.contains("-karsilama") { return "eylem" }   // simülatörde denemek için
+        if bitti || !yeniKurulum { return "returning" }
         if let v = varyant { return v == "control" ? "control" : "eylem" }
-        guard yeniKurulum else { return "returning" }
+        return nil
+    }
+
+    static func kolSec() async -> String {
+        if let k = hazirKol { return k }
         let bayrak = await Analitik.bayrakBekle(bayrakAdi)
         let v = bayrak ?? (Analitik.bayraklarYuklendi ? "default" : "fallback")
         d.set(v, forKey: "karsilama.varyant")
@@ -70,16 +77,18 @@ enum Karsilama {
     }
 
     // Etkinleşme: ödeme planı ilk kez görünür oldu (kalan taksit ya da sıradaki ödeme var). Yeni kurulumda bir kez;
-    // verinin akıştan, formdan, web'den ya da asistandan gelmesi fark etmez
-    static func etkinlesmeyiDenetle(_ model: Model) {
+    // verinin akıştan, formdan, web'den ya da asistandan gelmesi fark etmez. Akış açıkken Özet denetlemez: akış
+    // "Planın hazır" ekranında kendisi denetler (akista: true)
+    static func etkinlesmeyiDenetle(_ model: Model, akista: Bool = false) {
         guard yeniKurulum, varyant != nil, !d.bool(forKey: "analitik.etkinlesti"), Ornek.tur == nil,
+              akista || !model.showWelcome,
               let o = try? model.read("get_overview") as Ozet,
               o.remainingTotal > 0.004 || !o.upcomingPayments.isEmpty else { return }
         d.set(true, forKey: "analitik.etkinlesti")
         let dakika = Int((Date().timeIntervalSince1970 - ilkAcilis) / 60)
         let kart = (try? model.read("list_cards") as KartListesi)?.cards.isEmpty == false
         olay("activation_reached", ["definition": "plan_visible", "minutes_since_first_open": min(max(dakika, 0), 10080),
-                                    "via_flow": bitti && varyant != "control", "has_card": kart])
+                                    "via_flow": akista, "has_card": kart])
     }
 
     // Varsayılan ülke: kayıtlı, yoksa telefonun bölgesi (listedeyse), yoksa aynı para birimli ilk ülke; hiçbiri değilse

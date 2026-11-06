@@ -171,8 +171,15 @@ struct BaslarkenDurumu: Equatable {
         BaslarkenDurumu(
             kart: (try? model.read("list_cards") as KartListesi)?.cards.isEmpty == false,
             harcama: ((try? model.read("list_purchases", ["status": "all", "limit": 1]) as HarcamaListesi)?.count ?? 0) > 0,
-            // Gelir: ana para biriminde giriş (döviz / altın alışı gelir sayılmaz)
-            gelir: (try? model.read("list_entries", ["asset": Bicim.home, "limit": 20]) as HareketListesi)?.entries.contains { $0.direction == "in" } == true)
+            gelir: gelirVar(model))
+    }
+
+    // Gelir: bir giriş (ana para biriminde ya da karşılığı ödenmeden gelen döviz; döviz / altın alışı gelir sayılmaz).
+    // Daha önce kurulmuş uygulamada eski kural (herhangi bir hareket): bitmiş Başlarken geri gelmesin
+    @MainActor private static func gelirVar(_ model: Model) -> Bool {
+        guard let l = try? model.read("list_entries", ["limit": 1000]) as HareketListesi else { return false }
+        if !Karsilama.yeniKurulum { return l.count > 0 }
+        return l.entries.contains { $0.direction == "in" && ($0.asset == Bicim.home || $0.settledInTry != true) }
     }
 }
 

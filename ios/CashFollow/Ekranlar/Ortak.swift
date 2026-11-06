@@ -91,7 +91,7 @@ struct CevrimdisiNotu: View {
             .padding(14)
             .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Tema.cizgi, lineWidth: 1))
-            .sheet(isPresented: $login) { GirisEkrani(welcome: false) }
+            .sheet(isPresented: $login) { GirisEkrani(welcome: false, kaynak: "offline_note") }
         }
     }
 }
