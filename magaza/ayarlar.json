@@ -1,0 +1,18 @@
+{
+  "paket": "app.cashfollow.ios",
+  "diller": { "en": "en-US", "ja": "ja" },
+  "adresler": {
+    "destek": "https://cashfollow.app/support",
+    "gizlilik": "https://cashfollow.app/privacy",
+    "pazarlama": "https://cashfollow.app"
+  },
+  "kategori": { "birincil": "FINANCE" },
+  "fiyat": 0,
+  "ekranlar": {
+    "tur": "APP_IPHONE_67",
+    "diller": {
+      "en-US": ["en-sekme0-light.png", "en-sekme1-light.png", "en-sekme2-light.png", "en-sekme3-light.png", "en-sekme4-light.png", "en-galeri3-light.png"],
+      "ja": ["en-sekme0-light.png", "en-sekme1-light.png", "en-sekme2-light.png", "en-sekme3-light.png", "en-sekme4-light.png", "en-galeri3-light.png"]
+    }
+  }
+}
