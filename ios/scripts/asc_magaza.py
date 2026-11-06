@@ -470,16 +470,18 @@ def gonder_ekranlar(v, ay, klasor):
         sets, inc = hepsi(f"/appStoreVersionLocalizations/{l['id']}/appScreenshotSets?include=appScreenshots&limit=50")
         s = next((x for x in sets if x["attributes"]["screenshotDisplayType"] == tur), None)
         goruntu = {i["id"]: i for i in inc if i["type"] == "appScreenshots"}
-        simdi = [goruntu[x["id"]]["attributes"].get("sourceFileChecksum") for x in
+        simdi = [goruntu[x["id"]]["attributes"] for x in
                  (s or {}).get("relationships", {}).get("appScreenshots", {}).get("data", []) if x["id"] in goruntu]
-        istenen = [md5(y) for y in yollar]
-        if simdi == istenen:
-            print(f"  {loc}: {len(yollar)} görüntü aynı")
+        hal = lambda a: (a.get("assetDeliveryState") or {}).get("state") or "?"
+        # Apple işlerken (UPLOAD_COMPLETE) özet boş gelir: o zaman dosya adı ve boyutu
+        ayni = lambda a, y: hal(a) != "FAILED" and (a.get("sourceFileChecksum") == md5(y) if a.get("sourceFileChecksum")
+                                                    else (a.get("fileName"), a.get("fileSize")) == (os.path.basename(y), os.path.getsize(y)))
+        if len(simdi) == len(yollar) and all(ayni(a, y) for a, y in zip(simdi, yollar)):
+            isleniyor = sum(hal(a) != "COMPLETE" for a in simdi)
+            print(f"  {loc}: {len(yollar)} görüntü aynı" + (f" ({isleniyor} tanesini Apple hâlâ işliyor)" if isleniyor else ""))
             continue
-        print(("  [kuru] " if KURU else "  → ") + f"{loc}: {len(simdi)} görüntü yerine {len(yollar)} ({', '.join(dosyalar)})")
-        print("    şimdiki: " + " ".join((c or "-")[:6] for c in simdi) + " | istenen: " + " ".join(c[:6] for c in istenen)
-              + " | durum: " + " ".join(((goruntu[x["id"]]["attributes"].get("assetDeliveryState") or {}).get("state") or "?")
-                                       for x in (s or {}).get("relationships", {}).get("appScreenshots", {}).get("data", []) if x["id"] in goruntu))
+        print(("  [kuru] " if KURU else "  → ") + f"{loc}: {len(simdi)} görüntü yerine {len(yollar)} ({', '.join(dosyalar)})"
+              + " | şimdiki durum: " + " ".join(hal(a) for a in simdi))
         if KURU:
             continue
         if s is None:
