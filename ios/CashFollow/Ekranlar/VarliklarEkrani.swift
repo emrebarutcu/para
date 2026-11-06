@@ -98,8 +98,7 @@ struct VarliklarEkrani: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: .black.opacity(0.05), radius: 10, y: 6)
+        .background { KartZemini(yaricap: 20, golge: 0.05, golgeYaricapi: 10, golgeY: 6) }
     }
 
     private func pozisyon(_ h: Varliklar.Pozisyon) -> some View {

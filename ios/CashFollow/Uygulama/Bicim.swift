@@ -84,22 +84,29 @@ enum Bicim {
     // "20 Kasım", başka yılsa "20 Kasım 2027"
     static func day(_ key: String?) -> String {
         guard let key, let d = date(key) else { return "—" }
-        let f = DateFormatter()
-        f.locale = locale
-        f.timeZone = Yapilandirma.timeZone
-        let sablon = key.prefix(4) == Bicim.key(Date()).prefix(4) ? "dMMMM" : "dMMMMyyyy"
-        f.dateFormat = Dil.turkceDegil ? DateFormatter.dateFormat(fromTemplate: sablon, options: 0, locale: locale) : (sablon == "dMMMM" ? "d MMMM" : "d MMMM yyyy")
-        return f.string(from: d)
+        let buYil = key.prefix(4) == Bicim.key(Date()).prefix(4)
+        return bicimci(buYil ? "dMMMM" : "dMMMMyyyy", tr: buYil ? "d MMMM" : "d MMMM yyyy").string(from: d)
     }
 
     // "2026-11" → "Kasım 2026"
     static func month(_ ym: String?) -> String {
         guard let ym, let d = date(ym + "-01") else { return "—" }
+        return bicimci("yMMMM", tr: "LLLL yyyy").string(from: d)
+    }
+
+    // Tarih biçimcileri bir kez kurulur: her satırda yeni DateFormatter (ve şablondan biçim) listeleri yavaşlatıyordu
+    private static var bicimciler: [String: DateFormatter] = [:]
+    private static let bicimciKilidi = NSLock()
+    private static func bicimci(_ sablon: String, tr: String) -> DateFormatter {
+        bicimciKilidi.lock()
+        defer { bicimciKilidi.unlock() }
+        if let f = bicimciler[sablon] { return f }
         let f = DateFormatter()
         f.locale = locale
         f.timeZone = Yapilandirma.timeZone
-        f.dateFormat = Dil.turkceDegil ? DateFormatter.dateFormat(fromTemplate: "yMMMM", options: 0, locale: locale) : "LLLL yyyy"
-        return f.string(from: d)
+        f.dateFormat = Dil.turkceDegil ? DateFormatter.dateFormat(fromTemplate: sablon, options: 0, locale: locale) : tr
+        bicimciler[sablon] = f
+        return f
     }
 
     // Bugünden kaç gün sonra: "bugün", "yarın", "5 gün sonra", "3 gün geçti"

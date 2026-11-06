@@ -284,11 +284,12 @@ struct KartGorseli: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
+            // Gölge yalnızca şekle (içeriğe verilince kaydırırken her karede yeniden çiziliyordu)
             let sekil = RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous)
             sekil.fill(renk)
+                .shadow(color: renk.opacity(0.3), radius: 12, y: 8)
                 .overlay(sekil.fill(LinearGradient(colors: [.white.opacity(0.14), .black.opacity(0.24)], startPoint: .topLeading, endPoint: .bottomTrailing)))
         }
-        .shadow(color: renk.opacity(0.3), radius: 12, y: 8)
         .contentShape(RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous))
     }
 }
