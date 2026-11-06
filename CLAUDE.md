@@ -46,4 +46,4 @@ sh supabase/sql.sh supabase/gecis/<sürüm>.sql
 ```
 
 GitHub Actions: `ios.yml` (derleme + öz-denetim), `ekran.yml` (ekran görüntüleri → `ekran-goruntuleri` dalı; elle
-çalıştırınca koyu tema seçilebilir), `testflight.yml` (elle, `main`'den: TestFlight'a yükler), `sql.yml`, `surum.yml`.
+çalıştırınca koyu tema seçilebilir), `testflight.yml` (elle, `main`'den: TestFlight'a yükler), `magaza.yml` (App Store sayfası: `magaza/` → App Store Connect; oku / kuru / gonder), `sql.yml`, `surum.yml`.

@@ -1,0 +1,117 @@
+{
+  "paket": "app.cashfollow.ios",
+  "diller": {
+    "tr": "tr",
+    "en": "en-US",
+    "ja": "ja"
+  },
+  "adresler": {
+    "destek": "https://cashfollow.app/support",
+    "gizlilik": "https://cashfollow.app/privacy",
+    "pazarlama": "https://cashfollow.app"
+  },
+  "kategori": {
+    "birincil": "FINANCE"
+  },
+  "fiyat": 0,
+  "ekranlar": {
+    "tur": "APP_IPHONE_67",
+    "diller": {
+      "tr": [
+        "sekme0-light.png",
+        "sekme1-light.png",
+        "sekme2-light.png",
+        "sekme3-light.png",
+        "sekme4-light.png",
+        "galeri3-light.png"
+      ],
+      "en-US": [
+        "en-sekme0-light.png",
+        "en-sekme1-light.png",
+        "en-sekme2-light.png",
+        "en-sekme3-light.png",
+        "en-sekme4-light.png",
+        "en-galeri3-light.png"
+      ],
+      "ja": [
+        "en-sekme0-light.png",
+        "en-sekme1-light.png",
+        "en-sekme2-light.png",
+        "en-sekme3-light.png",
+        "en-sekme4-light.png",
+        "en-galeri3-light.png"
+      ]
+    }
+  },
+  "telif": "2026 Emre Barutçu",
+  "yas": {
+    "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+    "contests": "NONE",
+    "gamblingSimulated": "NONE",
+    "gunsOrOtherWeapons": "NONE",
+    "horrorOrFearThemes": "NONE",
+    "matureOrSuggestiveThemes": "NONE",
+    "medicalOrTreatmentInformation": "NONE",
+    "profanityOrCrudeHumor": "NONE",
+    "sexualContentGraphicAndNudity": "NONE",
+    "sexualContentOrNudity": "NONE",
+    "violenceCartoonOrFantasy": "NONE",
+    "violenceRealistic": "NONE",
+    "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+    "advertising": false,
+    "ageAssurance": false,
+    "gambling": false,
+    "healthOrWellnessTopics": false,
+    "lootBox": false,
+    "messagingAndChat": false,
+    "parentalControls": false,
+    "socialMedia": false,
+    "unrestrictedWebAccess": false,
+    "userGeneratedContent": false
+  },
+  "ulkeler": {
+    "yeniUlkeler": true,
+    "haric": [
+      "CHN"
+    ]
+  },
+  "abonelik": {
+    "grup": {
+      "tr": "CashFollow Premium",
+      "en-US": "CashFollow Premium",
+      "ja": "CashFollow Premium"
+    },
+    "urunler": {
+      "app.cashfollow.ios.premium.yearly": {
+        "tr": [
+          "Premium Yıllık",
+          "Tüm özellikler, sınırsız kart ve kişi"
+        ],
+        "ja": [
+          "プレミアム（年額）",
+          "すべての機能、カードと人数は無制限"
+        ]
+      },
+      "app.cashfollow.ios.premium.monthly": {
+        "tr": [
+          "Premium Aylık",
+          "Tüm özellikler, sınırsız kart ve kişi"
+        ],
+        "ja": [
+          "プレミアム（月額）",
+          "すべての機能、カードと人数は無制限"
+        ]
+      },
+      "app.cashfollow.ios.premium.weekly": {
+        "tr": [
+          "Premium Haftalık",
+          "Tüm özellikler, sınırsız kart ve kişi"
+        ],
+        "ja": [
+          "プレミアム（週額）",
+          "すべての機能、カードと人数は無制限"
+        ]
+      }
+    }
+  }
+}

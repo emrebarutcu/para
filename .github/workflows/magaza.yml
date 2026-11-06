@@ -1,0 +1,68 @@
+# App Store sayfası: magaza/<dil>.md metinleri, magaza/ayarlar.json (adresler, kategori, yaş, ülkeler, fiyat) ve
+# ekran-goruntuleri dalındaki görüntüler App Store Connect API ile yazılır (ios/scripts/asc_magaza.py). TestFlight'la
+# aynı anahtar (ASC_*). İncelemeye göndermez. Kurulum ve kullanım: SETUP.md → App Store sayfası.
+#   oku    → App Store Connect'teki durum, hiçbir şey değişmez
+#   kuru   → neyin değişeceği, değişmez (claude/magaza* dallarına magaza/ değişikliği itilince kendiliğinden)
+#   gonder → değiştirir
+# Elle: Actions → App Store sayfası → Run workflow (dosya main'de olmalı); ya da her dalda magaza-<işlem>-* etiketi:
+# git tag magaza-oku-1 && git push origin magaza-oku-1
+name: App Store sayfası
+
+on:
+  workflow_dispatch:
+    inputs:
+      islem:
+        description: "oku: durum, kuru: ne değişecek, gonder: yaz"
+        type: choice
+        options: [oku, kuru, gonder]
+        default: kuru
+  push:
+    tags: ["magaza-oku-*", "magaza-kuru-*", "magaza-gonder-*"]
+    branches: ["claude/magaza*"]
+    paths: ["magaza/**", "ios/scripts/asc_magaza.py", ".github/workflows/magaza.yml"]
+
+concurrency:
+  group: magaza
+  cancel-in-progress: false
+
+jobs:
+  magaza:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: İşlem
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then ISLEM="${{ inputs.islem }}"
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then ISLEM=$(echo "$GITHUB_REF_NAME" | cut -d- -f2)
+          else ISLEM=kuru; fi
+          echo "ISLEM=$ISLEM" >> "$GITHUB_ENV"
+          echo "İşlem: $ISLEM"
+      - name: Metinleri denetle
+        run: python3 ios/scripts/asc_magaza.py denetle
+      - name: Anahtar
+        run: |
+          for v in KEY_ID ISSUER_ID KEY_P8; do
+            [ -n "$(printenv $v)" ] || { echo "::error::$v boş: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 gizli değişkenleri (SETUP.md → TestFlight)"; exit 1; }
+          done
+          KEY="$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
+          printf '%s\n' "$KEY_P8" > "$KEY"
+          echo "KEY_PATH=$KEY" >> "$GITHUB_ENV"
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -q pyjwt cryptography
+      - name: Ekran görüntüleri
+        if: env.ISLEM != 'oku'
+        run: |
+          git fetch -q --depth 1 origin ekran-goruntuleri
+          mkdir -p "$RUNNER_TEMP/ekran"
+          git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/ekran"
+          cat "$RUNNER_TEMP/ekran/KAYNAK.txt"
+      - name: App Store Connect
+        run: '"$RUNNER_TEMP/venv/bin/python" ios/scripts/asc_magaza.py "$ISLEM" --ekran "$RUNNER_TEMP/ekran"'
+      - name: Temizlik
+        if: always()
+        run: rm -f "$KEY_PATH"

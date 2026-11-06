@@ -376,13 +376,31 @@ yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; ayn�
 
 #### App Store sayfası
 
-- **Metinler:** `magaza/<dil>.md` (ad, alt başlık, anahtar kelimeler, tanıtım metni, açıklama; App Store'un karakter
-  sınırlarıyla): `magaza/en.md` İngilizce (ABD), `magaza/ja.md` Japonca. App Store Connect'te o dilin sayfasına kopyalanır.
+Sayfa depodan yönetilir, App Store Connect'e API ile yazılır (`.github/workflows/magaza.yml`,
+`ios/scripts/asc_magaza.py`; TestFlight'la aynı `ASC_*` anahtarı, App Manager ya da Admin olmalı). Elle değiştirilen alan
+bir sonraki gönderimde depodakiyle ezilir; değişiklik `magaza/`'da yapılır.
+
+- **İşlemler:** `oku` (App Store Connect'teki durum), `kuru` (neyin değişeceği), `gonder` (yazar). Actions → **App Store
+  sayfası** → Run workflow (dosya `main`'de olmalı) ya da her dalda etiketle: `git tag magaza-gonder-2 && git push origin
+  magaza-gonder-2` (`magaza-oku-*`, `magaza-kuru-*`). `claude/magaza*` dalına `magaza/` değişikliği itilince kendiliğinden
+  `kuru` çalışır. **İncelemeye göndermez**: o adım elle, App Store Connect → Add for Review.
+- **Metinler:** `magaza/<dil>.md` (ad, alt başlık, anahtar kelimeler, tanıtım metni, açıklama; başlıklar sabit, karakter
+  sınırları denetlenir): `tr.md` Türkçe (uygulamanın ana dili), `en.md` İngilizce (ABD), `ja.md` Japonca. Yeni dil:
+  `magaza/<kod>.md` ve `ayarlar.json → diller`'e App Store Connect'in dil kodu.
+- **`magaza/ayarlar.json`:** adresler, kategori (`FINANCE`), telif, fiyat (ücretsiz; yalnızca hiç ayarlanmamışsa yazılır),
+  yaş sınırı bildirimi (`yas`: hepsi yok), satılan ülkeler (`ulkeler.haric`: Çin, ICP lisansı gerektiği için), her dilin
+  ekran görüntüleri (`ekran-goruntuleri` dalındaki dosya adları, sırayla; aynıysa yeniden yüklenmez), abonelik grubu ve
+  ürünlerinin dil metinleri (`abonelik`; ad ≤30, açıklama ≤55) ve abonelik ülkeleri. Abonelik fiyatı ve ücretsiz deneme
+  App Store Connect'te kalır.
+- **Sürüm:** düzenlenebilir mağaza sürümünün numarası `version.js`'teki sürüme çekilir (yoksa açılır), o sürümün en yeni
+  geçerli build'i seçilir: önce TestFlight.
+- **Elle kalanlar** (API'de yok ya da kişisel bilgi; depo herkese açık, günlükte yalnızca "dolu / boş" yazılır): App
+  Privacy, inceleme iletişim bilgileri (ad, telefon, e-posta) ve notları, içerik hakları beyanı, anlaşmalar / vergi / banka.
 - **Adresler:** destek `https://cashfollow.app/support`, gizlilik `https://cashfollow.app/privacy` (ikisi de İngilizce;
   `support.html`, `privacy.html`). Destek e-postası `support@cashfollow.app` (Cloudflare yönlendirmesi).
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
-  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir). `en-*` İngilizce (ABD örnek
-  verisi), ötekiler Türkçe.
+  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir; API'de `APP_IPHONE_67`). `en-*`
+  İngilizce (ABD örnek verisi), ötekiler Türkçe. Japonca sayfa şimdilik İngilizce görüntüleri kullanır.
 - **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı; hepsi kullanıcıya bağlı, takip yok):
   - Contact Info → E-posta adresi: App Functionality.
   - Financial Info → Other Financial Info: App Functionality.
