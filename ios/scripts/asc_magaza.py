@@ -247,23 +247,49 @@ def oku_satis(app):
         kapali = sorted(t["relationships"]["territory"]["data"]["id"] for t in ta if not t["attributes"].get("available"))
         print(f"Ülkeler: {len(acik)} açık, kapalı: {' '.join(kapali) or '—'}; yeni ülkelerde otomatik: "
               f"{av['data']['attributes'].get('availableInNewTerritories')}")
-    ps = yoksa_none(f"/apps/{app['id']}/appPriceSchedule?include=baseTerritory")
+    fiyat = fiyatlar(app)
+    print(f"Fiyat: {fiyat}" if fiyat is not None else "Fiyat: ayarlanmamış")
+
+
+def fiyatlar(app):
+    """Elle girilmiş fiyatlar (USD karşılığı); hiç ayarlanmamışsa None (o zaman manualPrices 404 döner)."""
+    ps = yoksa_none(f"/apps/{app['id']}/appPriceSchedule")
     if not ps or not ps.get("data"):
-        print("Fiyat: ayarlanmamış")
-    else:
+        return None
+    try:
         mp, inc = hepsi(f"/appPriceSchedules/{ps['data']['id']}/manualPrices?include=appPricePoint&limit=50")
-        fiyat = [i["attributes"].get("customerPrice") for i in inc if i["type"] == "appPricePoints"]
-        base = (ps["data"]["relationships"].get("baseTerritory", {}).get("data") or {}).get("id")
-        print(f"Fiyat: temel ülke {base}, {fiyat}")
+    except HataAPI as e:
+        if e.kod == 404:
+            return None
+        raise
+    return [i["attributes"].get("customerPrice") for i in inc if i["type"] == "appPricePoints"] if mp else None
 
 
 def oku_abonelik(app):
     gruplar, inc = hepsi(f"/apps/{app['id']}/subscriptionGroups?include=subscriptions&limit=20")
     if not gruplar:
         print("Abonelik grubu yok")
+    for g in gruplar:
+        gl = hepsi(f"/subscriptionGroups/{g['id']}/subscriptionGroupLocalizations?limit=50")[0]
+        print(f"grup «{g['attributes'].get('referenceName')}» ({g['id']}): diller "
+              + (", ".join(f"{l['attributes']['locale']} «{l['attributes'].get('name')}»" for l in gl) or "yok"))
     for s in [i for i in inc if i["type"] == "subscriptions"]:
         a = s["attributes"]
-        print(f"  {a.get('productId')}: {a.get('state')}, {a.get('subscriptionPeriod')}, «{a.get('name')}»")
+        print(f"  {a.get('productId')} ({s['id']}): {a.get('state')}, {a.get('subscriptionPeriod')}, «{a.get('name')}», "
+              f"sıra {a.get('groupLevel')}, aile paylaşımı {a.get('familySharable')}")
+        sl = hepsi(f"/subscriptions/{s['id']}/subscriptionLocalizations?limit=50")[0]
+        print("    diller: " + (", ".join(f"{l['attributes']['locale']} «{l['attributes'].get('name')}» / «{kisa(l['attributes'].get('description'), 40)}»" for l in sl) or "yok"))
+        pr, pinc = hepsi(f"/subscriptions/{s['id']}/prices?include=subscriptionPricePoint,territory&limit=200")
+        usa = [i["attributes"].get("customerPrice") for p in pr
+               if (p["relationships"].get("territory", {}).get("data") or {}).get("id") == "USA"
+               for i in pinc if i["type"] == "subscriptionPricePoints" and i["id"] == p["relationships"]["subscriptionPricePoint"]["data"]["id"]]
+        print(f"    fiyat: {len(pr)} ülke, ABD {usa}")
+        io = hepsi(f"/subscriptions/{s['id']}/introductoryOffers?limit=50")[0]
+        print("    tanıtım teklifi: " + (", ".join(f"{o['attributes'].get('offerMode')} {o['attributes'].get('duration')}" for o in io) or "yok"))
+        ek = yoksa_none(f"/subscriptions/{s['id']}/appStoreReviewScreenshot")
+        print(f"    inceleme görüntüsü: {'var' if ek and ek.get('data') else 'yok'}")
+        av = yoksa_none(f"/subscriptions/{s['id']}/subscriptionAvailability")
+        print(f"    ülkeler: {'ayarlı' if av and av.get('data') else 'ayarlanmamış'}")
 
 
 def oku_build(app):
@@ -498,9 +524,9 @@ def gonder_fiyat(app, ay):
     if ay.get("fiyat") is None:
         print("  ayarlar.json'da yok, dokunulmadı")
         return
-    ps = yoksa_none(f"/apps/{app['id']}/appPriceSchedule")
-    if ps and ps.get("data"):
-        print("  fiyat zaten ayarlı, dokunulmadı (değiştirmek App Store Connect → Pricing and Availability)")
+    simdi = fiyatlar(app)
+    if simdi is not None:
+        print(f"  fiyat zaten ayarlı ({simdi}), dokunulmadı (değiştirmek: App Store Connect → Pricing and Availability)")
         return
     hedef = float(ay["fiyat"])
     nokta, path = None, f"/apps/{app['id']}/appPricePoints?filter[territory]=USA&limit=200"
