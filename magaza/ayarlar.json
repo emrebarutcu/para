@@ -74,5 +74,44 @@
     "haric": [
       "CHN"
     ]
+  },
+  "abonelik": {
+    "grup": {
+      "tr": "CashFollow Premium",
+      "en-US": "CashFollow Premium",
+      "ja": "CashFollow Premium"
+    },
+    "urunler": {
+      "app.cashfollow.ios.premium.yearly": {
+        "tr": [
+          "Premium Yıllık",
+          "Tüm özellikler, sınırsız kart ve kişi"
+        ],
+        "ja": [
+          "プレミアム（年額）",
+          "すべての機能、カードと人数は無制限"
+        ]
+      },
+      "app.cashfollow.ios.premium.monthly": {
+        "tr": [
+          "Premium Aylık",
+          "Tüm özellikler, sınırsız kart ve kişi"
+        ],
+        "ja": [
+          "プレミアム（月額）",
+          "すべての機能、カードと人数は無制限"
+        ]
+      },
+      "app.cashfollow.ios.premium.weekly": {
+        "tr": [
+          "Premium Haftalık",
+          "Tüm özellikler, sınırsız kart ve kişi"
+        ],
+        "ja": [
+          "プレミアム（週額）",
+          "すべての機能、カードと人数は無制限"
+        ]
+      }
+    }
   }
 }

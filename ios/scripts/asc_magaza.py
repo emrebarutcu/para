@@ -285,7 +285,7 @@ def oku_abonelik(app):
                for i in pinc if i["type"] == "subscriptionPricePoints" and i["id"] == p["relationships"]["subscriptionPricePoint"]["data"]["id"]]
         print(f"    fiyat: {len(pr)} ülke, ABD {usa}")
         io = hepsi(f"/subscriptions/{s['id']}/introductoryOffers?limit=50")[0]
-        print("    tanıtım teklifi: " + (", ".join(f"{o['attributes'].get('offerMode')} {o['attributes'].get('duration')}" for o in io) or "yok"))
+        print("    tanıtım teklifi: " + (", ".join(sorted({f"{o['attributes'].get('offerMode')} {o['attributes'].get('duration')}" for o in io})) + f" ({len(io)} ülke)" if io else "yok"))
         ek = yoksa_none(f"/subscriptions/{s['id']}/appStoreReviewScreenshot")
         print(f"    inceleme görüntüsü: {'var' if ek and ek.get('data') else 'yok'}")
         av = yoksa_none(f"/subscriptions/{s['id']}/subscriptionAvailability")
@@ -388,6 +388,7 @@ def gonder_surum(app, ay):
     if d:
         yaz("PATCH", f"/appStoreVersions/{v['id']}", {"data": {"type": "appStoreVersions", "id": v["id"], "attributes": d}},
             f"sürüm {v['attributes']['versionString']}: {d}")
+        v = {**v, "attributes": {**v["attributes"], **d}}   # kuruda da sonraki adımlar yeni numarayla baksın
     else:
         print(f"  sürüm {hedef} ({durum(v)}): değişiklik yok")
     return v
@@ -546,6 +547,63 @@ def gonder_fiyat(app, ay):
         f"fiyat: {hedef} USD (temel ülke ABD)")
 
 
+def satis_ulkeleri(ay):
+    haric = set((ay.get("ulkeler") or {}).get("haric", []))
+    return [t["id"] for t in hepsi("/territories?limit=200")[0] if t["id"] not in haric]
+
+
+def gonder_abonelik(app, ay):
+    """Abonelik grubu ve ürünlerin dil metinleri (ad ≤30 / grup adı ≤75, açıklama ≤55) ve satıldığı ülkeler.
+    Fiyat ve ücretsiz deneme App Store Connect'te kalır (kodda fiyat yok)."""
+    ab = ay.get("abonelik")
+    if not ab:
+        print("  ayarlar.json'da yok, dokunulmadı")
+        return
+    gruplar, inc = hepsi(f"/apps/{app['id']}/subscriptionGroups?include=subscriptions&limit=20")
+    for g in gruplar:
+        mevcut = {l["attributes"]["locale"]: l for l in hepsi(f"/subscriptionGroups/{g['id']}/subscriptionGroupLocalizations?limit=50")[0]}
+        for loc, ad in ab.get("grup", {}).items():
+            l = mevcut.get(loc)
+            if l and l["attributes"].get("name") == ad:
+                continue
+            if l:
+                yaz("PATCH", f"/subscriptionGroupLocalizations/{l['id']}", {"data": {"type": "subscriptionGroupLocalizations",
+                    "id": l["id"], "attributes": {"name": ad}}}, f"grup {loc}: «{ad}»")
+            else:
+                yaz("POST", "/subscriptionGroupLocalizations", {"data": {"type": "subscriptionGroupLocalizations",
+                    "attributes": {"locale": loc, "name": ad},
+                    "relationships": {"subscriptionGroup": {"data": {"type": "subscriptionGroups", "id": g["id"]}}}}},
+                    f"grup {loc} ekleniyor: «{ad}»")
+    ulkeler = None
+    for s in [i for i in inc if i["type"] == "subscriptions"]:
+        pid = s["attributes"]["productId"]
+        mevcut = {l["attributes"]["locale"]: l for l in hepsi(f"/subscriptions/{s['id']}/subscriptionLocalizations?limit=50")[0]}
+        for loc, (ad, aciklama) in ab.get("urunler", {}).get(pid, {}).items():
+            if len(ad) > 30 or len(aciklama) > 55:
+                raise HataAPI(0, f"{pid} {loc}: ad ≤30, açıklama ≤55 karakter olmalı")
+            istenen = {"name": ad, "description": aciklama}
+            l = mevcut.get(loc)
+            if l:
+                d = fark(l["attributes"], istenen)
+                if d:
+                    yaz("PATCH", f"/subscriptionLocalizations/{l['id']}", {"data": {"type": "subscriptionLocalizations",
+                        "id": l["id"], "attributes": d}}, f"{pid} {loc}: {d}")
+            else:
+                yaz("POST", "/subscriptionLocalizations", {"data": {"type": "subscriptionLocalizations",
+                    "attributes": {"locale": loc, **istenen},
+                    "relationships": {"subscription": {"data": {"type": "subscriptions", "id": s["id"]}}}}},
+                    f"{pid} {loc} ekleniyor: «{ad}» / «{aciklama}»")
+        av = yoksa_none(f"/subscriptions/{s['id']}/subscriptionAvailability")
+        if not (av and av.get("data")) and ay.get("ulkeler"):
+            ulkeler = ulkeler or satis_ulkeleri(ay)
+            yaz("POST", "/subscriptionAvailabilities", {"data": {"type": "subscriptionAvailabilities",
+                "attributes": {"availableInNewTerritories": ay["ulkeler"].get("yeniUlkeler", True)},
+                "relationships": {"subscription": {"data": {"type": "subscriptions", "id": s["id"]}},
+                                  "availableTerritories": {"data": [{"type": "territories", "id": t} for t in ulkeler]}}}},
+                f"{pid}: {len(ulkeler)} ülkede satışa açılıyor")
+    print("  (fiyat ve ücretsiz deneme App Store Connect'te; incelemeye gönderme elle)")
+
+
 def gonder(ay, klasor):
     mt = metinler(ay)
     for loc, m in mt.items():
@@ -562,6 +620,7 @@ def gonder(ay, klasor):
         print("\n(sürüm henüz yok: metinler ve görüntüler sürüm açıldıktan sonra yazılır)")
     bolum("Ülkeler", gonder_ulkeler, app, ay)
     bolum("Fiyat", gonder_fiyat, app, ay)
+    bolum("Abonelikler (dil metinleri, ülkeler)", gonder_abonelik, app, ay)
 
 
 if __name__ == "__main__":
