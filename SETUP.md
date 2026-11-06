@@ -439,7 +439,9 @@ penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
 - **Ücretsiz sürüm:** 2 kart, yalnızca kullanıcının kendisi (1 kişi), Özet, harcamalar ve taksitler, borçlar
   (`Abonelik.ucretsizKart`, `ucretsizKisi`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir miyim?",
   içgörüler, Varlığın seyri, kart borcu geri ödeme planı, asistan (MCP) bağlantısı. Sınırı aşan eski kart ve kişiler kalır;
-  yalnızca yenisi eklenemez. Web şimdilik kilitsiz (Stripe sonra).
+  yalnızca yenisi eklenemez. **Web** aynı sınırları uygular (`app.js` → CashFollow Premium; web'de "Alabilir miyim?" ve
+  borç planı yok): satın alma yok, Premium iPhone'da alınır ve hesaba bağlanınca web'de de açılır. Web hesabın satırını
+  oturum açılınca ve sekme öne gelince (en sık dakikada bir) okur, son değeri saklar; girişsiz web ücretsizdir.
 - **Premium kimde:** cihazdaki geçerli App Store aboneliği (girişsiz de) ya da hesabın `subscriptions` satırı (kural
   `tablo.js premium`: etkin ya da ödeme ek süresinde ve bitiş tarihi geçmemiş; bitişi boş satır süresiz). 8.2.0'dan önce
   açılmış hesaplar ömür boyu Premium'dur (`source = grandfathered`).

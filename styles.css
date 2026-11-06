@@ -1803,3 +1803,15 @@ a.hero-eq { display: block; width: fit-content; }
 /* E-posta, kod, adres alanları soldan sağa */
 [dir="rtl"] :is(code, input[type="email"], input[type="password"], input[type="url"], .copy-row code) { direction: ltr; unicode-bidi: isolate; }
 [dir="rtl"] input[type="email"], [dir="rtl"] input[type="password"] { text-align: end; }
+
+/* CashFollow Premium: kilitli özelliğin yerine (app.js premiumLock) */
+.premium-lock { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 4px 2px; }
+.premium-lock p { font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.premium-lock .hint { font-size: 13px; color: var(--text-3); }
+.premium-lock-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.premium-lock-head strong { font-size: 15px; font-weight: 600; color: var(--text); }
+.premium-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.premium-badge .ic { width: 14px; height: 14px; }
+.flow > .premium-lock, #cardGrid > .premium-lock { grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+#peopleLock .premium-lock, #assetLock .premium-lock { padding-top: 8px; }
+.insights li:has(> .premium-lock) { list-style: none; }

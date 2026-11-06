@@ -180,6 +180,7 @@
   };
 
   window.syncGetUser = function () { return user; };
+  window.syncOpenAuth = function () { openModal(); };
 
   // Cihazın saat dilimi hesaba yazılır (user_metadata.tz): asistan "bugün"ü kullanıcının saatine göre hesaplar
   async function syncZone() {
@@ -467,6 +468,7 @@
   }
 
   function renderBtn(u) {
+    window.onAuthUser?.(u);   // app.js: Premium durumu bu kullanıcıya göre (oturum belli olunca ve her değişince)
     const btn = document.getElementById('authBtn');
     if (!btn) return;
     if (!enabled()) { btn.style.display = 'none'; return; }
