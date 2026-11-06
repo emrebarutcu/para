@@ -56,6 +56,8 @@ struct Sayfa<Content: View>: View {
 }
 
 // Beyaz, köşeleri yuvarlak, hafif gölgeli kart (web: .card)
+// Gölge yalnızca zemindeki şekle: bütün içeriğe verilen gölge kaydırırken her karede ekran dışında yeniden çizilir
+// (uzun listeli kartlarda — kart ayrıntısının dönem harcamaları — kaydırma takılıyordu)
 struct Kart<Content: View>: View {
     var dolgu: CGFloat = 18
     @ViewBuilder let content: () -> Content
@@ -65,13 +67,24 @@ struct Kart<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) { content() }
             .padding(dolgu)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous))
-            .overlay {
-                if scheme == .dark {
-                    RoundedRectangle(cornerRadius: Tema.yaricap, style: .continuous).strokeBorder(Tema.cizgi, lineWidth: 1)
-                }
-            }
-            .shadow(color: .black.opacity(scheme == .dark ? 0.3 : 0.06), radius: 15, y: 10)
+            .background { KartZemini(yaricap: Tema.yaricap, cizgi: scheme == .dark, golge: scheme == .dark ? 0.3 : 0.06) }
+    }
+}
+
+// Kartın zemini: dolgu, koyu temada çizgi, gölge; gölge tek bir şeklin, içeriğin değil
+struct KartZemini: View {
+    var yaricap: CGFloat = Tema.yaricap
+    var renk: Color = Tema.yuzey
+    var cizgi = false
+    var golge: Double = 0.06
+    var golgeYaricapi: CGFloat = 15
+    var golgeY: CGFloat = 10
+
+    var body: some View {
+        let sekil = RoundedRectangle(cornerRadius: yaricap, style: .continuous)
+        sekil.fill(renk)
+            .shadow(color: .black.opacity(golge), radius: golgeYaricapi, y: golgeY)
+            .overlay { if cizgi { sekil.strokeBorder(Tema.cizgi, lineWidth: 1) } }
     }
 }
 
@@ -159,7 +172,7 @@ struct IstatistikSatiri: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(ogeler.enumerated()), id: \.element.id) { i, o in
+            ForEach(Array(ogeler.enumerated()), id: \.offset) { i, o in
                 if i > 0 { Rectangle().fill(Tema.cizgi).frame(width: 1).padding(.horizontal, 10) }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(o.etiket).font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
