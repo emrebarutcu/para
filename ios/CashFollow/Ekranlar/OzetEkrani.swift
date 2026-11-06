@@ -7,6 +7,7 @@ struct OzetEkrani: View {
     @State private var ayarlar = false
     @State private var odeme: OdemeHedefi?
     @State private var baslarken: BaslarkenDurumu?
+    @State private var teklif = false   // "Ödeme günlerini hatırlatayım mı?"
     @AppStorage("baslarken.gizli") private var baslarkenGizli = false
 
     var body: some View {
@@ -21,6 +22,7 @@ struct OzetEkrani: View {
                         if !bos {
                             ustKart(o)
                             siradakiler(o)
+                            if teklif, !o.upcomingPayments.isEmpty { HatirlatmaTeklifi(goster: $teklif) }
                         }
                         IcgoruBolumu()
                         if !bos || baslarken?.gelir == true { NakitKarti() }
@@ -39,7 +41,12 @@ struct OzetEkrani: View {
             }
             .sheet(isPresented: $ayarlar) { AyarlarEkrani() }
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
-            .task(id: model.revision) { baslarken = BaslarkenDurumu.oku(model) }
+            .task(id: model.revision) {
+                baslarken = BaslarkenDurumu.oku(model)
+                if !Hatirlatma.acik, !Hatirlatma.teklifBitti, Ornek.tur == nil {
+                    teklif = await Hatirlatma.izinDurumu() != .denied
+                }
+            }
         }
     }
 
@@ -213,5 +220,41 @@ struct BaslarkenKarti: View {
         }
         .buttonStyle(.plain)
         .disabled(tamam)
+    }
+}
+
+// Sıradaki ödemelerin altında bir kez: "Ödeme günlerini hatırlatayım mı?" (Aç ya da kapat; sonra Ayarlar'da)
+struct HatirlatmaTeklifi: View {
+    @EnvironmentObject private var model: Model
+    @Binding var goster: Bool
+
+    var body: some View {
+        Kart {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "bell.badge").font(.title3).foregroundStyle(Tema.metin2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L("Ödeme günlerini hatırlatayım mı?")).font(.body.weight(.semibold))
+                    Text(L("Son ödeme gününden bir gün önce bildirim gelir. Ayarlar'dan değiştirebilirsin."))
+                        .font(.footnote).foregroundStyle(Tema.metin2)
+                }
+            }
+            HStack(spacing: 10) {
+                Button {
+                    Task { _ = await Hatirlatma.ac(model); withAnimation { goster = false } }
+                } label: {
+                    Text(L("Hatırlat")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.ustMetin)
+                        .padding(.horizontal, 16).padding(.vertical, 8).background(Tema.metin, in: Capsule())
+                }
+                Button {
+                    Hatirlatma.teklifBitti = true
+                    Analitik.olay("reminders_offer_dismissed")
+                    withAnimation { goster = false }
+                } label: {
+                    Text(L("Şimdi değil")).font(.subheadline).foregroundStyle(Tema.metin2)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                }
+            }
+            .buttonStyle(.plain)
+        }
     }
 }

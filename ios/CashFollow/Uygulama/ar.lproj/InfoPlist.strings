@@ -1,1 +1,2 @@
 "CFBundleDisplayName" = "CashFollow";
+"NSFaceIDUsageDescription" = "لقفل CashFollow باستخدام Face ID.";

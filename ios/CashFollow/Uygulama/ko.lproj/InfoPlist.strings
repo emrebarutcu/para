@@ -1,1 +1,2 @@
 "CFBundleDisplayName" = "CashFollow";
+"NSFaceIDUsageDescription" = "Face ID로 CashFollow를 잠그기 위해 사용합니다.";

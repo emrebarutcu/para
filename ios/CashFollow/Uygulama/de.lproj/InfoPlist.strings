@@ -1,1 +1,2 @@
 "CFBundleDisplayName" = "CashFollow";
+"NSFaceIDUsageDescription" = "Um CashFollow mit Face ID zu sperren.";

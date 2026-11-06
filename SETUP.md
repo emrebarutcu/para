@@ -389,6 +389,8 @@ yalnızca HTTPS). Build numarası iş akışının çalışma sayısıdır; ayn�
   - Purchases → Purchase History (Premium aboneliği): App Functionality, Analytics.
   - Usage Data → Product Interaction (PostHog olayları): Analytics.
   - Identifiers → User ID (hesabın kimliği): App Functionality, Analytics.
+  - Diagnostics → Crash Data (MetricKit çökme ve takılma raporları, `Cokme.swift`; "Kullanım verisi gönder" kapalıysa
+    gitmez): App Functionality.
   Konum toplanmaz: PostHog'a IP'den konum çıkarmaması söylenir (`$geoip_disable`).
 
 #### Analitik

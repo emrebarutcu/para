@@ -24,7 +24,8 @@ struct Ozet: Decodable {
         let unpaid: Double?
         let overdue: Double?
     }
-    struct Borclar: Decodable { let dueThisMonth: Double?; let nextMonth: Double? }
+    struct BorcOdemesi: Decodable, Hashable { let date: String; let description: String; let amount: Double; let asset: String; let late: Bool? }
+    struct Borclar: Decodable { let dueThisMonth: Double?; let nextMonth: Double?; let upcoming: [BorcOdemesi]? }
 
     let today: String
     let month: String

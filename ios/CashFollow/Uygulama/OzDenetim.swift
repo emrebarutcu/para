@@ -47,6 +47,15 @@ enum OzDenetim {
             let _: KategoriHarcamasi = try m.run("spending_by_category", ["month": "2026-10"])
             let borclar: Borclar = try m.run("list_debts")
             try check(borclar.debts.count == 2 && borclar.cards.count == 1, "borçlar: \(borclar.debts.count)")
+            // Ödeme hatırlatmaları: sıradaki ödemeler bugünden sonra ve sıralı; kredi taksiti de var; bildirim zamanı
+            let hatirlat = Hatirlatma.odemeler(m), bugun = Bicim.key(Date())
+            try check(hatirlat.allSatisfy { $0.tarih >= bugun } && hatirlat.map(\.tarih) == hatirlat.map(\.tarih).sorted()
+                      && (bugun > "2027-10-15" || hatirlat.contains { $0.ad.hasPrefix("Banka") }), "hatırlatmalar: \(hatirlat)")
+            let saat = { (s: String) in Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: Int(s.prefix(2)), hour: Int(s.suffix(2)))) ?? Date() }
+            let z = Hatirlatma.zamani("2026-11-20", gunOnce: 1, dakika: 600, simdi: saat("1909"))
+            try check(z?.0 == saat("1910") && z?.1 == 1
+                      && Hatirlatma.zamani("2026-11-20", gunOnce: 1, dakika: 600, simdi: saat("1911"))?.1 == 0
+                      && Hatirlatma.zamani("2026-11-20", gunOnce: 1, dakika: 600, simdi: saat("2011")) == nil, "hatırlatma zamanı")
             let loan = borclar.debts.first { $0.type == "loan" }
             try m.runJSON("pay_debt", ["debt": loan?.id ?? "", "amount": 2500, "date": "2026-10-31"])
             let nakit = try m.cash(start: "1", shift: 0)

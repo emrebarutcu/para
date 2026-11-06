@@ -51,6 +51,8 @@ ilgili satırdaki "Ödendi" / "Ödedi" düğmesindedir.
 | 19 | Param ay sonuna yetecek mi? | 3 | 4 | 5 | Özet → Nakit: bugün, ay sonunda, en düşük; dönem başı (maaş günü) Ayarlar'da |
 | 20 | Fon / hisse | 3 | 3 | 3 | Kod elle yazılıyor (sırada: kod arama) |
 | 21 | Ayarlar | 4 | 4 | 5 | Hesap, ülke, nakit (dönem başı, nakit sayılanlar), kişiler (renkleriyle) |
+| 22 | Ödeme günü hatırlatması | – | – | 5 | Özet'te sıradaki ödemelerin altında bir kez "Hatırlatayım mı?"; Ayarlar → Bildirimler: kaç gün önce, saat |
+| 23 | Uygulama kilidi | – | – | 5 | Ayarlar → "Face ID ile kilitle"; açılışta ve arka plandan dönünce sorar, uygulama değiştiricide tutar görünmez |
 
 ## Kaldırılanlar
 

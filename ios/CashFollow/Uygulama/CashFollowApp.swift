@@ -3,11 +3,13 @@ import SwiftUI
 @main
 struct CashFollowApp: App {
     @StateObject private var model = Model()
+    @StateObject private var kilit = Kilit()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
         OzDenetim.runIfRequested()
         Ornek.hazirlaIfRequested()
+        Cokme.baslat()
     }
 
     var body: some Scene {
@@ -15,15 +17,25 @@ struct CashFollowApp: App {
             AnaEkran()
                 .environmentObject(model)
                 .environmentObject(model.abonelik)
+                .environmentObject(kilit)
                 .tint(Tema.metin)
+                // Açılışta perde penceresi sahne hazır olunca kurulur; o ana kadar ekranı bu perde örter
+                .overlay { if kilit.acik && kilit.kilitli { KilitPerdesi().environmentObject(kilit) } }
+                .onAppear { kilit.faz = scenePhase; Task { await kilit.kendiliginden() } }
         }
         .onChange(of: scenePhase) { _, phase in
+            kilit.faz = phase   // kilit açıksa uygulama değiştiricide içerik görünmez
             if phase == .active {
+                Task { await kilit.kendiliginden() }
+                Puanlama.acildi()
                 Task { await model.refresh() }
                 Analitik.olay("app_opened", ["signed_in": model.session != nil])
                 Task { await Analitik.bayraklariYukle() }
             }
-            if phase == .background { Analitik.gonder() }
+            if phase == .background {
+                kilit.arkaPlan()
+                Analitik.gonder()
+            }
         }
     }
 }
@@ -43,6 +55,11 @@ struct AnaEkran: View {
             } else {
                 Sekmeler(sekme: $sekme)
             }
+        }
+        // Ödeme hatırlatmaları veri değişince yeniden kurulur (2 sn içindeki değişiklikler bir kez)
+        .task(id: model.revision) {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if !Task.isCancelled { await Hatirlatma.kur(model) }
         }
         .fullScreenCover(isPresented: $model.showWelcome) {
             GirisEkrani(welcome: true)
