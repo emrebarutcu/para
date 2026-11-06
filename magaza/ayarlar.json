@@ -1,5 +1,6 @@
 {
   "paket": "app.cashfollow.ios",
+  "icerikHaklari": "USES_THIRD_PARTY_CONTENT",
   "diller": {
     "tr": "tr",
     "en": "en-US",

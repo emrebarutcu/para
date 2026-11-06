@@ -374,10 +374,20 @@ def gonder_bilgi(app, ay, mt):
                 {"data": {"type": "ageRatingDeclarations", "id": dek["id"], "attributes": d}}, f"yaş sınırı: {d}")
 
 
+def gecerli_build(app, surum):
+    return get(f"/builds?filter[app]={app['id']}&filter[preReleaseVersion.version]={surum}&filter[processingState]=VALID"
+               "&filter[expired]=false&sort=-uploadedDate&limit=1")["data"]
+
+
 def gonder_surum(app, ay):
-    """Düzenlenebilir sürüm: yoksa açılır; sürüm numarası version.js'teki web sürümü."""
+    """Düzenlenebilir sürüm: yoksa açılır; sürüm numarası version.js'teki web sürümü. O sürümün geçerli build'i yoksa
+    (TestFlight daha çalışmadıysa) numara değişmez: seçili build'le sürüm numarası ayrışmasın."""
     hedef = web_surumu()
     v = duzenlenen_surum(app)
+    if v is not None and v["attributes"]["versionString"] != hedef and not gecerli_build(app, hedef):
+        print(f"::warning::{hedef} sürümünün geçerli build'i yok, mağaza sürümü {v['attributes']['versionString']} kalıyor "
+              f"(önce TestFlight, sonra yeniden gonder)")
+        hedef = v["attributes"]["versionString"]
     istenen = {"versionString": hedef, "copyright": ay.get("telif")}
     if v is None:
         r = yaz("POST", "/appStoreVersions", {"data": {"type": "appStoreVersions",
@@ -396,8 +406,7 @@ def gonder_surum(app, ay):
 
 def gonder_build(app, v):
     s = v["attributes"]["versionString"]
-    b = get(f"/builds?filter[app]={app['id']}&filter[preReleaseVersion.version]={s}&filter[processingState]=VALID"
-            "&filter[expired]=false&sort=-uploadedDate&limit=1")["data"]
+    b = gecerli_build(app, s)
     if not b:
         print(f"::warning::{s} sürümünün geçerli build'i yok: önce TestFlight iş akışı (build seçilmeden incelemeye gönderilemez)")
         return
