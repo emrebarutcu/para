@@ -264,7 +264,7 @@ struct BorcDetayi: View {
     private func kaydet() {
         var a: [String: Any] = ["debt": d.id, "amount": Bicim.parse(tutar) ?? 0, "date": Bicim.key(tarih)]
         if kapat { a["close"] = true }
-        do { try model.write("pay_debt", a); Analitik.olay("payment_recorded", ["kind": "debt", "close": kapat]); dismiss() } catch { hata = error.localizedDescription }
+        do { try model.write("pay_debt", a); Analitik.olay("payment_recorded", ["kind": "debt", "close": kapat]); Puanlama.olumluAn(); dismiss() } catch { hata = error.localizedDescription }
     }
 }
 
@@ -345,7 +345,7 @@ struct OdemeFormu: View {
         case .pay(let id, _, _): a["person"] = id
         case .kart(let id, _, _, _): a["card"] = id
         }
-        do { try model.write("pay_debt", a); Analitik.olay("payment_recorded", ["kind": a["card"] != nil ? "card_statement" : "card_share"]); dismiss() } catch { hata = error.localizedDescription }
+        do { try model.write("pay_debt", a); Analitik.olay("payment_recorded", ["kind": a["card"] != nil ? "card_statement" : "card_share"]); Puanlama.olumluAn(); dismiss() } catch { hata = error.localizedDescription }
     }
 }
 

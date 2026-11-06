@@ -79,6 +79,9 @@ struct AyarlarEkrani: View {
                     Text(L("Özet'teki Nakit grafiği bu günden başlayan bir ayı gösterir (ör. maaş günün) ve yalnızca nakit sayılanları toplar."))
                 }
 
+                HatirlatmaBolumu()
+                KilitBolumu()
+
                 Section {
                     Okunan(tool: "list_people") { (l: KisiListesi) in
                         ForEach(Array(l.people.enumerated()), id: \.element.id) { i, p in
@@ -350,5 +353,70 @@ struct EpostaAyarlari: View {
                 .font(.footnote).foregroundStyle(s.wouldAutoAdd ? Tema.iyi : Tema.uyari)
         }
         .font(.subheadline)
+    }
+}
+
+// Ödeme hatırlatmaları: aç / kapat, kaç gün önce, saat (Hatirlatma)
+struct HatirlatmaBolumu: View {
+    @EnvironmentObject private var model: Model
+    @Environment(\.openURL) private var openURL
+    @State private var acik = Hatirlatma.acik
+    @State private var gun = Hatirlatma.gunOnce
+    @State private var saat = Calendar.current.date(bySettingHour: Hatirlatma.dakika / 60, minute: Hatirlatma.dakika % 60, second: 0, of: Date()) ?? Date()
+    @State private var reddedildi = false
+
+    var body: some View {
+        Section {
+            Toggle(L("Ödeme hatırlatmaları"), isOn: Binding(get: { acik }, set: { yeni in
+                acik = yeni
+                Task {
+                    if yeni { acik = await Hatirlatma.ac(model); reddedildi = !acik }
+                    else { await Hatirlatma.kapat(); reddedildi = false }
+                }
+            }))
+            if acik {
+                Picker(L("Ne zaman"), selection: $gun) {
+                    Text(L("Ödeme günü")).tag(0)
+                    Text(L("1 gün kala")).tag(1)
+                    ForEach([2, 3, 7], id: \.self) { Text(L("{0} gün kala", $0)).tag($0) }
+                }
+                DatePicker(L("Saat"), selection: $saat, displayedComponents: .hourAndMinute)
+            }
+            if reddedildi {
+                Button(L("Bildirim izni kapalı: iPhone Ayarları'nda aç")) {
+                    if let u = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(u) }
+                }
+                .font(.footnote)
+            }
+        } header: { Text(L("Bildirimler")) } footer: {
+            Text(L("Kart ekstresi, kredi ve borç taksitlerinin ödeme gününü hatırlatır. Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez."))
+        }
+        .onChange(of: gun) { _, v in Hatirlatma.gunOnce = v; Task { await Hatirlatma.kur(model) } }
+        .onChange(of: saat) { _, v in
+            let c = Calendar.current.dateComponents([.hour, .minute], from: v)
+            Hatirlatma.dakika = (c.hour ?? 10) * 60 + (c.minute ?? 0)
+            Task { await Hatirlatma.kur(model) }
+        }
+        .task {
+            // İzin iPhone Ayarları'ndan kaldırıldıysa anahtar kapalı görünür
+            if acik, await Hatirlatma.izinDurumu() == .denied { reddedildi = true }
+        }
+    }
+}
+
+// Uygulama kilidi: Face ID / Touch ID / telefon şifresi (Kilit)
+struct KilitBolumu: View {
+    @EnvironmentObject private var kilit: Kilit
+
+    var body: some View {
+        if Kilit.kullanilabilir {
+            Section {
+                Toggle(L("{0} ile kilitle", Kilit.yontem), isOn: Binding(get: { kilit.acik }, set: { yeni in
+                    Task { await kilit.ayarla(yeni) }
+                }))
+            } footer: {
+                Text(L("Uygulama açılırken ve arka plandan dönerken sorar; uygulama değiştiricide tutarlar görünmez."))
+            }
+        }
     }
 }

@@ -672,7 +672,7 @@ struct HarcamaFormu: View {
     private func save() {
         do {
             _ = try model.write(duzenle == nil ? "add_purchase" : "update_purchase", args, as: HarcamaSonucu.self)
-            if duzenle == nil { sonKart = card }
+            if duzenle == nil { sonKart = card; Puanlama.olumluAn() }
             if let e = eposta { Task { await model.epostaBitti(e.emailId) } }
             if bnpl { sonBnpl = saglayici }
             Analitik.olay(duzenle == nil ? "purchase_added" : "purchase_edited",
