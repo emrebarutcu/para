@@ -1411,5 +1411,7 @@
  "Uygulama kilidini açmak için": "Um die App-Sperre einzuschalten",
  "Uygulama kilidini kapatmak için": "Um die App-Sperre auszuschalten",
  "Kilidi aç": "Entsperren",
- "1 gün kala": "1 Tag vorher"
+ "1 gün kala": "1 Tag vorher",
+ "CashFollow Premium iPhone uygulamasından alınır (Ayarlar → CashFollow Premium). Aynı hesapla giriş yaptığında burada da açılır.": "CashFollow Premium wird in der iPhone-App gekauft (Einstellungen → CashFollow Premium). Melde dich mit demselben Konto an, dann ist es auch hier freigeschaltet.",
+ "Excel'deki her sayfa bir kişi. Ücretsiz sürümde yalnızca sen varsın; başka kişiler için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Jedes Blatt der Excel-Datei ist eine Person. Die kostenlose Version umfasst nur dich; für weitere Personen brauchst du CashFollow Premium (Kauf in der iPhone-App)."
 }

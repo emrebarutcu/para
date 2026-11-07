@@ -1411,5 +1411,7 @@
  "Uygulama kilidini açmak için": "Pour activer le verrouillage de l'app",
  "Uygulama kilidini kapatmak için": "Pour désactiver le verrouillage de l'app",
  "Kilidi aç": "Déverrouiller",
- "1 gün kala": "1 jour avant"
+ "1 gün kala": "1 jour avant",
+ "CashFollow Premium iPhone uygulamasından alınır (Ayarlar → CashFollow Premium). Aynı hesapla giriş yaptığında burada da açılır.": "CashFollow Premium s'achète dans l'app iPhone (Réglages → CashFollow Premium). Connecte-toi avec le même compte et il se débloque ici aussi.",
+ "Excel'deki her sayfa bir kişi. Ücretsiz sürümde yalnızca sen varsın; başka kişiler için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Chaque feuille du fichier Excel est une personne. La version gratuite n'inclut que toi ; pour d'autres personnes, il faut CashFollow Premium (achat dans l'app iPhone)."
 }

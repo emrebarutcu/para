@@ -1411,5 +1411,7 @@
  "Uygulama kilidini açmak için": "앱 잠금을 켜기 위해",
  "Uygulama kilidini kapatmak için": "앱 잠금을 끄기 위해",
  "Kilidi aç": "잠금 해제",
- "1 gün kala": "1일 전"
+ "1 gün kala": "1일 전",
+ "CashFollow Premium iPhone uygulamasından alınır (Ayarlar → CashFollow Premium). Aynı hesapla giriş yaptığında burada da açılır.": "CashFollow Premium은 iPhone 앱에서 구입합니다(설정 → CashFollow Premium). 같은 계정으로 로그인하면 여기서도 열립니다.",
+ "Excel'deki her sayfa bir kişi. Ücretsiz sürümde yalnızca sen varsın; başka kişiler için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Excel의 각 시트는 한 사람입니다. 무료 버전에는 본인만 포함되며, 다른 사람은 CashFollow Premium이 필요합니다(iPhone 앱에서 구입)."
 }
