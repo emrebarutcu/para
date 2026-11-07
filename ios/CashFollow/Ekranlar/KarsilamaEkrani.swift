@@ -116,9 +116,9 @@ struct KarsilamaEkrani: View {
                 .font(.footnote).foregroundStyle(Tema.metin3)
             Kart(dolgu: 14) {
                 HStack {
-                    Text(L("Ülke"))
-                    Spacer()
-                    UlkeSecici(secim: $ulke, secimYok: !ulkeKesin)
+                    Text(L("Ülke")).lineLimit(1)
+                    Spacer(minLength: 8)
+                    UlkeSecici(secim: $ulke, secimYok: !ulkeKesin).fixedSize()   // "United States · USD" tek satır
                 }
             }
         }
@@ -750,7 +750,7 @@ private struct KartYigini: View {
             Text(L("Bu ay ödenecek")).font(.footnote).foregroundStyle(Tema.metin2)
             Capsule().fill(Tema.yuzey3).frame(width: 128, height: 24)
             Ayirici()
-            ForEach([14, 44], id: \.self) { n in
+            ForEach([6, 33], id: \.self) { n in   // 27 gün arayla: iki rozet aynı gün numarasını göstermez
                 HStack(spacing: 10) {
                     TarihRozeti(tarih: gun(n))
                     VStack(alignment: .leading, spacing: 6) {
