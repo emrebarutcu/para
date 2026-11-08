@@ -1,6 +1,6 @@
 # Kullanıcıyı tutmak — bulgular ve yol haritası
 
-Kasım 2026, 8.12.0. Sekiz ajanlık bir çalışmanın özeti. Beş araştırmacı baktı: iPhone'un ilk açılışı, web'in ilk
+Kasım 2026, 8.13.0. Sekiz ajanlık bir çalışmanın özeti. Beş araştırmacı baktı: iPhone'un ilk açılışı, web'in ilk
 açılışı, finans uygulamalarında tutundurma araştırması, bildirim / e-posta altyapısı ve ölçüm. Sonra iki rakip tasarım
 yazıldı: "önce değer" ve "önce eylem". Hakem "önce eylem"i seçti (20/25'e 14/25) ve ötekinin iyi fikirlerini ekledi.
 Akışın kendisi: `Ekranlar/KarsilamaEkrani.swift`, `Uygulama/Karsilama.swift`; UX.md → akış 1.
@@ -27,7 +27,7 @@ Akışın kendisi: `Ekranlar/KarsilamaEkrani.swift`, `Uygulama/Karsilama.swift`;
   - Bildirim izni bağlam içinde, hatırlatacak ilk şey oluşunca istenmeli (Apple'ın önerisi).
   - Türkiye'de kanca taksit ve kesim günü: kesimden hemen sonra alınan yaklaşık 40 günde ödenir.
 
-## Bu sürümde yapılanlar (8.12.0)
+## Bu sürümde yapılanlar (8.13.0)
 
 - **Karşılama akışı:** ülke → "Hesap açmadan başla" → kartın adı → kesim günü (son ödeme tahmin edilir)
   → bir taksitli harcama, ödeme planı yazarken görünür → "Planın hazır" (bu ay ödenecek ya da ilk ödeme, ardından
