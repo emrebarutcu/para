@@ -57,7 +57,7 @@ ilgili satırdaki "Ödendi" / "Ödedi" düğmesindedir.
 ## Kaldırılanlar
 
 - Özet: Kişiler, Kategoriler, Aylık ödemeler (Akış ve Harcamalar'da); "Son taksit: Süresiz" istatistiği.
-- Nakit kartı: "Dönem net" görünümü ve dönem başı menüsü (dönem başı Ayarlar'a taşındı).
+- Nakit kartı: dönem başı menüsü (Ayarlar'a taşındı). "Dönem net" görünümü geri geldi (Bakiye | Dönem net).
 - Akış: takvim simgesindeki ay sayısı menüsü (altta "Sonraki 12 ayı da göster").
 - Harcamalar: Süren / Biten / Hepsi seçicisi.
 - Kartlar: büyük kart görselleri (karta dokununca ayrıntıda), "Net varlık" (Varlıklar'da).

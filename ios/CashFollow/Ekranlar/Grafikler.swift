@@ -6,13 +6,13 @@ import SwiftUI
 // kategoriler spending_by_category'den. Her biri kendi kartıdır (Kart).
 
 // ── Nakit (Özet) ──────────────────────────────────────────────────────────────
-// Dönemin gün gün nakit bakiyesi, bugün çizgisi, dokununca günün hareketleri. Dönem başı (bugün ya da ayın bir günü,
-// ör. maaş günü) Ayarlar → Nakit'te.
+// Dönemin gün gün nakit bakiyesi ya da dönem başından beri net (web'deki gibi Bakiye | Dönem net), bugün çizgisi,
+// dokununca günün hareketleri. Dönem başı (bugün ya da ayın bir günü, ör. maaş günü) Ayarlar → Nakit'te.
 
 struct NakitKarti: View {
     @EnvironmentObject private var model: Model
     @AppStorage("nakit.baslangic") private var start = "today"
-    private let mode = "balance"     // "Dönem net" görünümü sadelik için kaldırıldı; dönem başı Ayarlar'da
+    @AppStorage("nakit.mod") private var mode = "balance"   // balance: bakiye (önceki dönemlerden kalan dahil), net: dönem net
     @State private var shift = 0
     @State private var seri: NakitSerisi?
     @State private var hata: String?
@@ -36,6 +36,8 @@ struct NakitKarti: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Tema.metin2)
+
+            Secici(secim: $mode, ogeler: [("balance", L("Bakiye")), ("net", L("Dönem net"))])
 
             if let s = seri {
                 HStack(alignment: .top, spacing: 8) {
@@ -70,6 +72,7 @@ struct NakitKarti: View {
             }
         }
         .task(id: "\(model.revision)|\(start)|\(shift)") { yukle() }
+        .onChange(of: mode) { secili = nil }
     }
 
     private func yukle() {
@@ -80,13 +83,15 @@ struct NakitKarti: View {
 
     private func grafik(_ s: NakitSerisi) -> some View {
         let gunler = s.days.compactMap { g in Bicim.date(g.date).map { Nokta(d: $0, v: deger(g)) } }
-        let alan = yAlani(gunler.map(\.v), sifirDahil: mode == "net")
+        // Eksen her zaman sıfırı içerir (web'deki gibi): yoksa alt sınır en düşük bakiyenin biraz altında kalır ve
+        // bakiye sıfıra inmiş gibi görünür
+        let alan = yAlani(gunler.map(\.v), sifirDahil: true)
         let bas = Bicim.date(s.from) ?? gunler.first?.d ?? Date()
         let son = Bicim.date(s.to) ?? gunler.last?.d ?? bas
         let today = Bicim.date(s.today)
         return Chart {
             ForEach(gunler, id: \.d) { g in
-                AreaMark(x: .value("Gün", g.d), yStart: .value("Taban", alan.lowerBound), yEnd: .value("Tutar", g.v))
+                AreaMark(x: .value("Gün", g.d), yStart: .value("Taban", 0.0), yEnd: .value("Tutar", g.v))
                     .foregroundStyle(Tema.metin.opacity(0.07))
                     .interpolationMethod(.stepEnd)
                 LineMark(x: .value("Gün", g.d), y: .value("Tutar", g.v))
@@ -102,7 +107,7 @@ struct NakitKarti: View {
                         Text(kisa(last.v)).font(.caption.weight(.semibold)).foregroundStyle(Tema.metin)
                     }
             }
-            if mode == "net", alan.lowerBound < 0 {
+            if alan.lowerBound < 0 {
                 RuleMark(y: .value("Sıfır", 0)).foregroundStyle(Tema.cizgi2)
             }
             // Bugün dönemin içindeyse kesikli çizgi (dönem bugünden başlıyorsa sol kenar zaten bugündür)
@@ -156,7 +161,7 @@ struct NakitKarti: View {
             HStack {
                 Text(Bicim.day(g.date)).font(.caption.weight(.semibold))
                 Spacer()
-                Text(L("Bakiye {0}", Bicim.tl(deger(g)))).font(.caption).monospacedDigit()
+                Text(mode == "net" ? L("Net") + " " + Bicim.tl(g.net) : L("Bakiye {0}", Bicim.tl(g.balance))).font(.caption).monospacedDigit()
             }
             if g.moves.isEmpty { Text(L("Hareket yok")).font(.caption).foregroundStyle(Tema.metin3) }
             ForEach(Array(g.moves.enumerated()), id: \.offset) { _, m in
