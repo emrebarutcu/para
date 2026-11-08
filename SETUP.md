@@ -434,6 +434,8 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   `onboarding_aha_viewed`, `onboarding_add_another`, `onboarding_closed`, `onboarding_backgrounded`, `onboarding_completed`
   (`path`: offline, account, closed), `activation_reached` (ödeme planı ilk kez göründü; `via_flow`). Akıştan gelen
   `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
+- Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
+  `inbox_card_assigned` (`set_last4`: son 4 hane karta yazıldı mı), `inbox_notifications` (`enabled`).
 - Karşılama denemesi: PostHog'da çok değişkenli bayrak **`onboarding_flow`**, kollar `control` (eski giriş ekranı) ve
   `eylem` (yeni akış); "Persist flag across authentication" açık. Bayrak yokken herkes yeni akışı görür (`variant: default`);
   1,5 saniyede gelmezse de yeni akış (`fallback`, çözümlemeden çıkarılır). %100 `control` yeni akışı uzaktan kapatır.
@@ -900,17 +902,32 @@ harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
 
 ### Kullanıcı tarafı
 
-1. **Kartlar** sekmesinde her kartın son 4 hanesini gir. Tek kartın varsa son 4 hane okunamayan e-postalar da ona eklenir.
-2. Ayarlar → **Banka e-postaları**'ndaki adresi kopyala, bankanın internet/mobil şubesinde bildirim e-posta adresi yap.
-3. Banka adresi doğrulamak için e-posta gönderirse Harcamalar → "E-postadan gelenler" altında görünür;
-   **Göster** ile açılıp bağlantıya dokunulur.
+1. Ayarlar → **Banka e-postaları**'ndaki adresi kopyala. Bankanın e-postalarını bu adrese getirmenin iki yolu var:
+   - **Kendi e-postandan ilet (önerilen):** bankanın e-postaları kendi kutuna da gelmeye devam eder. Gmail'de (bilgisayardan)
+     Ayarlar → Yönlendirme ve POP/IMAP → yönlendirme adresi ekle, sonra Filtreler → Kimden: bankanın adresi → Şu adrese
+     yönlendir. Outlook ve iCloud Mail'de kural: Kimden bankanın adresi → ilet. Uygulamadaki pencerede adım adım yazılı.
+   - **Bankada bildirim adresini değiştir:** internet ya da mobil şubede harcama bildirim adresini bu adres yap.
+2. Gmail'in yönlendirme onayı ve bankanın adres doğrulama e-postası harcama değildir (`eposta.js` → `verification`):
+   Harcamalar → "E-postadan gelenler"de **Onayla** düğmesiyle (bağlantıyı açar) ve Gmail'in onay koduyla görünür.
+3. Kartların son 4 hanesini önceden girmek gerekmez: son 4 hanesi tanımlı olmayan bir harcama gelince "•••• 1234 hangi
+   kartın?" diye sorulur; seçilen karta hane yazılır ve o hanedeki bekleyenler (sonrakiler de) kendiliğinden eklenir.
+   Kartın başka bir son 4 hanesi varsa sorulur: değiştir (kart yenilendi) ya da yalnızca bu harcamayı ekle. Tek kartın
+   varsa son 4 hanesi okunamayan e-postalar da ona eklenir.
+4. Pencerede **son e-posta** görünür (ne zaman, ne türde, kimden; `inbox_messages`'ın en yenisi, işlenmiş olsa da):
+   kurulum çalışıyor mu diye. **Deneme e-postası gönder** kullanıcının e-posta uygulamasını konusu `CashFollow deneme`
+   (`eposta.js` → `TEST_SUBJECT`) olan bir e-postayla açar; gelince "Deneme e-postası ulaştı" denir, harcama eklenmez.
+5. iPhone uygulama kapalıyken de bakar: arka plan yenilemesi (`Uygulama/EpostaBildirim.swift`, `BGAppRefreshTask`
+   `app.cashfollow.ios.eposta`, `ios/CashFollow-Info.plist`) iOS'un verdiği zamanda (en erken 15 dakikada bir, ne zaman
+   olacağına iOS karar verir) eşitler, e-postaları işler ve eklenen harcamayı / onay bekleyen yeni e-postayı yerel
+   bildirimle söyler; dokununca Harcamalar açılır. Ayarlar → Banka e-postaları → "Harcama eklenince bildir" (varsayılan
+   açık, bildirim izni gerekir). Uygulamada görülen bekleyenler için sonradan bildirim gitmez.
 
 Worker yalnızca 12 onaltılık haneli adresleri kabul eder; kayıtlı olmayan adrese ve 2 MB'tan büyük e-postalara
 ret döner. Aynı e-posta iki kez gelirse ikincisi yok sayılır (`Message-ID`).
 Tutarı, tarihi ya da kartı okunamayan, yabancı para birimli ve iade/iptal e-postaları kendiliğinden eklenmez;
 **Harcamalar** sekmesinde *Ekle* (form doldurulmuş açılır), *Göster* ya da *Yok say* ile beklerler.
 Ayarlar'daki "Bir e-postayı dene" alanına bir bildirim yapıştırıp neyin okunduğunu görebilirsin.
-Adres yenilenirse eskisine gelen e-postalar reddedilir.
+Adres yenilenirse eskisine gelen e-postalar reddedilir. Sıradaki iyileştirmeler: `YAPILACAKLAR.md`.
 
 ## 7. Yapay zekâ asistanları (MCP)
 
@@ -926,7 +943,7 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 | Kişiler | `list_people` (kart payı alacağı), `add_person`, `rename_person`, `delete_person` |
 | Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı; elde tutulan fon ve hisseler `holdings`: adet, fiyat, kâr; alacak, borç, Varlık, Özvarlık), `list_entries`, `add_entry` (fon ve hisse: `asset` `FON:AFT` / `BIST:THYAO`, `price`, `settle`), `update_entry`, `delete_entry`, `search_market` (TEFAS fon arama; fon ve hisse fiyatları) |
 | Borçlar / alacaklar | `list_debts` (Eldeki / Alacak / Borç / Varlık / Özvarlık toplamları, kart borçları ve kişi payları, nakit taksitler, kart payları, borçlar), `get_debt` (ödeme planı), `add_debt` (borç aldım / verdim / kredi; tek tutar ya da taksitli; `auto_pay`: kredide varsayılan true, kişiyle borçta false; `dry_run` ile önizleme), `update_debt` (kapatma dahil; kayıt tarihi ile bugün arasında taksiti olanda `auto_pay` değişmez, hata döner), `delete_debt` (ödemeleriyle), `pay_debt` (ödeme / tahsilat; kart payı için `person`; elle ödenen kartın ekstresi için `card`: `amount` verilmezse ödemesi gelen (yoksa kesilmiş ekstre), kısmi olabilir; `close` kendiliğinden ödenen borcu bugünle kapatır), `delete_debt_payment` (kart ödemesi dahil; kapanmış borcu yeniden açar: `reopened`) |
-| Banka e-postaları | `get_inbox_address`, `renew_inbox_address`, `list_inbox`, `check_inbox`, `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
+| Banka e-postaları | `get_inbox_address` (adres ve `lastEmail`: gelen son e-posta), `renew_inbox_address`, `list_inbox` (`kind`: purchase / verification / test; doğrulamada bağlantı ve Gmail onay kodu; `lastEmail`), `check_inbox` (deneme e-postasını işlendi yapar: `tests`), `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
 | İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |
 | Yedek | `export_data` (kişiler, kartlar, harcamalar, varlık hareketleri ve borçlar; Ayarlar → Dışa aktar ile aynı), `import_data` |
 

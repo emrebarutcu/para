@@ -83,10 +83,15 @@
 
   // ── Banka e-postaları: Swift çeker ve işaretler (Senkron.swift inbox*), araçlar hazır listeyle çalışır ──
   // rows: işlenmemiş e-postalar (inbox_messages); granted: Swift'in sunucuda işlendi yaptığı id'ler (başka cihaz önce
-  // davrandıysa orada yoktur, harcama iki kez eklenmez); released: araç geri bıraktı, Swift sunucuda geri açar.
-  let inbox = { rows: [], granted: new Set(), released: [] };
-  function setInbox(rowsJson, grantedJson) {
-    inbox = { rows: rowsJson ? JSON.parse(rowsJson) : [], granted: new Set(grantedJson ? JSON.parse(grantedJson) : []), released: [] };
+  // davrandıysa orada yoktur, harcama iki kez eklenmez); released: araç geri bıraktı, Swift sunucuda geri açar;
+  // latest: gelen son e-posta (işlenmiş olsa da; Ayarlar → Banka e-postaları'ndaki durum).
+  let inbox = { rows: [], granted: new Set(), released: [], latest: null };
+  function setInbox(rowsJson, grantedJson, latestJson) {
+    const latest = latestJson ? JSON.parse(latestJson) : null;
+    inbox = {
+      rows: rowsJson ? JSON.parse(rowsJson) : [], granted: new Set(grantedJson ? JSON.parse(grantedJson) : []), released: [],
+      latest: Array.isArray(latest) ? latest[0] ?? null : latest,
+    };
   }
   function inboxReleased() {
     const out = inbox.released;
@@ -101,6 +106,7 @@
       return ok;
     },
     release: async ids => { inbox.released.push(...ids.map(Number)); },
+    latest: async () => inbox.latest,
     address: async () => { throw Object.assign(new Error("Banka e-postası adresi web'de (Ayarlar → E-postadan harcama)."), { userFacing: true }); },
   };
 

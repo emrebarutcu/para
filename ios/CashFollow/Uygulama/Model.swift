@@ -14,6 +14,7 @@ final class Model: ObservableObject {
     @Published var askMove = false          // girişsiz kullanımın verisi hesaba taşınsın mı (sync.js "Hesabıma taşı")
     @Published private(set) var country = "TR"   // hesabın ülkesi; ana para birimi ondan (para.js)
     @Published private(set) var epostalar: [Eposta] = []   // banka e-postalarından onay bekleyenler (Harcamalar)
+    @Published private(set) var sonEposta: SonEposta?       // kutuya gelen son e-posta (Banka e-postaları'ndaki durum)
     let motor: Motor?
     let startupError: String?
     let abonelik: Abonelik                       // CashFollow Premium (ekranlara ayrı environmentObject olarak verilir)
@@ -47,6 +48,7 @@ final class Model: ObservableObject {
         guard let motor else { return }
         let file = Depo.stateFile(userId)
         epostalar = []
+        sonEposta = nil
         motor.box.json = Depo.read(file) ?? motor.defaultState
         motor.box.onSave = { [weak self] json in
             Depo.write(file, json)
@@ -153,34 +155,43 @@ final class Model: ObservableObject {
     // ── Banka e-postaları (yalnızca Türkiye; web'deki checkInbox) ──────────────
 
     // Okunabilen ve kartı bulunan e-postalar harcama olarak eklenir (ilk kişiye); kalanlar Harcamalar'da onaya bekler.
+    // Deneme e-postası (Banka e-postaları → Deneme e-postası gönder) yalnızca işlendi yapılır.
     // Önce sunucuda işlendi yapılır: başka cihaz aynı anda okuduysa harcama iki kez eklenmez.
-    // Eklenen harcama sayısı; denenemediyse (giriş yok, ağ, başka kontrol sürüyor) nil
+    // Eklenen harcamalar ve gelen deneme sayısı; denenemediyse (giriş yok, ağ, başka kontrol sürüyor) nil
+    struct EpostaKontrolu { let eklenen: [Harcama]; let deneme: Int }
     private var inboxBusy = false
     @discardableResult
-    private func checkInbox() async -> Int? {
-        guard bankEmailsAllowed else { epostalar = []; return nil }   // ülke Türkiye değilse onay bekleyenler de gizlenir
+    private func checkInbox() async -> EpostaKontrolu? {
+        guard bankEmailsAllowed else { epostalar = []; sonEposta = nil; return nil }   // ülke Türkiye değilse onay bekleyenler de gizlenir
         guard let motor, let s = senkron, s.pulled, !inboxBusy else { return nil }
         inboxBusy = true
         defer { inboxBusy = false }
-        var eklenen = 0
+        var eklenen: [Harcama] = [], deneme = 0
         do {
             let rows = try await s.inboxPending()
+            let latest = (try? await s.inboxLatest()) ?? ""   // durum için; alınamazsa e-postalar yine işlenir
             guard senkron === s else { return nil }
-            motor.setInbox(rows: rows)
-            let ready = (try motor.run("list_inbox") as EpostaListesi).emails.filter { $0.needsReview == nil }.map(\.emailId)
+            motor.setInbox(rows: rows, latest: latest)
+            let ready = (try motor.run("list_inbox") as EpostaListesi).emails.filter { $0.needsReview == nil || $0.kind == "test" }.map(\.emailId)
             if !ready.isEmpty {
                 let granted = try await s.inboxClaim(ready)
                 guard senkron === s else { try? await s.inboxRelease(granted); return nil }
-                motor.setInbox(rows: rows, granted: granted)
-                if let out = try? motor.run("check_inbox") as EpostaSonucu, !out.added.isEmpty {
-                    eklenen = out.added.count
-                    Analitik.olay("inbox_added", ["count": eklenen])
+                motor.setInbox(rows: rows, granted: granted, latest: latest)
+                if let out = try? motor.run("check_inbox") as EpostaSonucu {
+                    eklenen = out.added
+                    deneme = out.tests ?? 0
+                    if !eklenen.isEmpty { Analitik.olay("inbox_added", ["count": eklenen.count]) }
+                    if deneme > 0 { Analitik.olay("inbox_test_received") }
                 }
                 let released = motor.inboxReleased()
                 if !released.isEmpty { try? await s.inboxRelease(released) }
             }
-            epostalar = (try motor.run("list_inbox", ["include_body": true]) as EpostaListesi).emails
-            return eklenen
+            let liste = try motor.run("list_inbox", ["include_body": true]) as EpostaListesi
+            epostalar = liste.emails
+            sonEposta = liste.lastEmail
+            // Uygulama açıkken görülenler için arka planda bildirim gönderilmez
+            if UIApplication.shared.applicationState == .active { EpostaBildirim.goruldu(epostalar.map(\.emailId)) }
+            return EpostaKontrolu(eklenen: eklenen, deneme: deneme)
         } catch {
             // Tablo kurulmamış ya da ağ yok: sonraki yenilemede yeniden denenir
             return nil
@@ -188,9 +199,35 @@ final class Model: ObservableObject {
     }
 
     // Ayarlar → Banka e-postaları: "Şimdi kontrol et"; önce eşitlenir (kartların son 4 hanesi güncel olsun)
-    func epostaKontrol() async -> Int? {
+    func epostaKontrol() async -> EpostaKontrolu? {
         await run { try await $0.pull() }
         return await checkInbox()
+    }
+
+    // Arka plan yenilemesi (EpostaBildirim): eşitle, e-postaları işle, eklenenleri hemen buluta yaz
+    func epostaArkaPlan() async -> EpostaKontrolu? {
+        guard session != nil, bankEmailsAllowed else { return nil }
+        await run { try await $0.pull() }
+        let k = await checkInbox()
+        if let k, !k.eklenen.isEmpty { await run { try await $0.push() } }
+        return k
+    }
+
+    // "•••• 1234 hangi kartın?": son4Yaz ise son 4 hane karta yazılır ve bu hanedeki bekleyenler (sonrakiler de)
+    // kendiliğinden eklenir; değilse yalnızca bu harcama o karta eklenir (e-postada son 4 hane yoksa da). Web'deki emailToCard.
+    func epostaKarta(_ e: Eposta, kart: KartGorunumu, son4Yaz: Bool) async throws {
+        if son4Yaz, let son4 = e.parsed.cardLast4 {
+            try write("update_card", ["card": kart.id, "last4": son4])
+            await run { try await $0.push() }
+            await checkInbox()
+            return
+        }
+        guard let tutar = e.parsed.amount else { return }
+        var a: [String: Any] = ["description": e.parsed.merchant ?? "Kart harcaması", "amount": tutar, "card": kart.id,   // tools.js emailPurchase
+                                "installments": max(e.parsed.installments ?? 1, 1)]
+        if let d = e.parsed.date { a["date"] = d }
+        _ = try write("add_purchase", a, as: HarcamaSonucu.self)
+        await epostaBitti(e.emailId)
     }
 
     // "<adres>@cashfollow.app"; renew eskisini siler (bankadaki adres de değişmeli)

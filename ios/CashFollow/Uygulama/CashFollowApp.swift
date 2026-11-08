@@ -1,4 +1,6 @@
+import Combine
 import SwiftUI
+import UserNotifications
 
 @main
 struct CashFollowApp: App {
@@ -11,6 +13,7 @@ struct CashFollowApp: App {
         Karsilama.baslat()   // yeni kurulum mu (ilk açılış akışı yalnızca yenilere)
         Ornek.hazirlaIfRequested()
         Cokme.baslat()
+        UNUserNotificationCenter.current().delegate = BildirimTemsilcisi.shared   // bildirime dokununca ilgili sekme
     }
 
     var body: some Scene {
@@ -36,7 +39,12 @@ struct CashFollowApp: App {
             if phase == .background {
                 kilit.arkaPlan()
                 Analitik.gonder()
+                EpostaBildirim.planla(model)
             }
+        }
+        // Banka e-postaları: uygulama kapalıyken iOS'un verdiği arka plan zamanında (EpostaBildirim)
+        .backgroundTask(.appRefresh(EpostaBildirim.gorev)) {
+            await EpostaBildirim.calis(model)
         }
     }
 }
@@ -61,6 +69,11 @@ struct AnaEkran: View {
         .task(id: model.revision) {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             if !Task.isCancelled { await Hatirlatma.kur(model) }
+        }
+        // Bildirime dokununca açılacak sekme (EpostaBildirim → Harcamalar)
+        .onReceive(Yonlendirici.shared.$sekme.compactMap { $0 }) { yeni in
+            sekme = yeni
+            Yonlendirici.shared.sekme = nil
         }
         // İlk açılış: yeni kullanıcıya karşılama akışı (KarsilamaEkrani), daha önce kullanmış olana giriş ekranı
         .fullScreenCover(isPresented: $model.showWelcome) {

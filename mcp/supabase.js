@@ -129,6 +129,11 @@ export function createStore({ url, key, token, userId, home = "TRY", fetch: f = 
         const q = new URLSearchParams({ id: ids(list) });
         await inboxRest(`inbox_messages?${q}`, { method: "PATCH", body: JSON.stringify({ processed_at: null }) });
       },
+      // Gelen son e-posta (işlenmiş olsa da); yoksa null
+      async latest() {
+        const q = new URLSearchParams({ select: "id,sender,subject,body,received_at,processed_at", order: "received_at.desc", limit: "1" });
+        return (await inboxRest(`inbox_messages?${q}`))[0] ?? null;
+      },
       // "<adres>@INBOX_DOMAIN"; yoksa (ya da renew ile) yenisi oluşturulur
       async address(renew, domain) {
         const mine = new URLSearchParams({ user_id: `eq.${userId}` });

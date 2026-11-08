@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 // Ayarlar: hesap ve eşitleme, ülke, nakit (dönem başı, nakit sayılanlar), kişiler, sürüm
 struct AyarlarEkrani: View {
@@ -244,6 +245,7 @@ struct EpostaAyarlari: View {
     @State private var kontrolEdiliyor = false
     @State private var deneme = ""
     @State private var sonuc: Deneme?
+    @State private var iletAcik = true
 
     struct Deneme: Decodable {
         let parsed: Eposta.Okunan
@@ -255,7 +257,7 @@ struct EpostaAyarlari: View {
     var body: some View {
         List {
             Section {
-                Text(L("Sana özel e-posta adresini bankana harcama bildirim adresi olarak ver. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur."))
+                Text(L("Bankanın harcama e-postaları sana özel adrese gelince harcama olarak eklenir. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur."))
                     .font(.footnote).foregroundStyle(Tema.metin2)
                 if let b = model.constants?.inboxBanks, !b.isEmpty {
                     Text(L("Şimdilik desteklenen bankalar: {0}. Diğer bankaların e-postaları da okunmaya çalışılır; okunamayan Harcamalar'da onaya düşer.", b.joined(separator: ", ")))
@@ -275,30 +277,57 @@ struct EpostaAyarlari: View {
                             UIPasteboard.general.string = adres
                             kopyalandi = true
                         }
+                        if let u = Self.denemeAdresi(adres) { Link(L("Deneme e-postası gönder"), destination: u) }
                     } else if hata == nil {
                         ProgressView()
                     }
                     HataMetni(text: hata)
+                    durum
                 } header: { Text(L("Adresin")) } footer: {
-                    Text(L("Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir."))
+                    Text(L("Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ya da kendi e-posta kutuna ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir."))
                 }
 
                 Section {
-                    Text(L("1. Kartlar'da her kartın son 4 hanesini gir."))
-                    Text(L("2. Bankanın internet ya da mobil şubesinde harcama bildirimlerinin gideceği e-posta adresini bu adres yap."))
-                    Text(L("3. Banka adresi doğrulamak için e-posta gönderirse Harcamalar'da \"E-postadan gelenler\" altında görünür; Göster ile açıp bağlantıya dokun."))
+                    Text(L("Bankanın harcama e-postalarını bu adrese getirmenin iki yolu var:"))
+                    DisclosureGroup(L("Kendi e-postandan ilet (önerilen)"), isExpanded: $iletAcik) {
+                        Text(L("Bankanın e-postaları kendi kutuna da gelmeye devam eder. Bankanın gönderdiği adres, kutundaki harcama e-postalarında görünür."))
+                            .foregroundStyle(Tema.metin2)
+                        rehber(L("Gmail (bilgisayardan; telefondaki Gmail uygulamasında bu ayar yok)"), [
+                            L("Ayarlar → Tüm ayarları görün → Yönlendirme ve POP/IMAP → Yönlendirme adresi ekle: bu adres."),
+                            L("Gmail bu adrese bir onay gönderir; birkaç saniye içinde Harcamalar'da \"Gmail yönlendirme onayı\" olarak görünür. Onayla'ya dokun."),
+                            L("Filtreler → Yeni filtre oluştur → Kimden: bankanın adresi → Filtre oluştur → Şu adrese yönlendir: bu adres."),
+                        ])
+                        rehber(L("Outlook / Hotmail"), [
+                            L("Ayarlar → Posta → Kurallar → Yeni kural ekle."),
+                            L("Koşul: Kimden bankanın adresi. Eylem: Şuraya ilet → bu adres."),
+                        ])
+                        rehber(L("iCloud Mail (icloud.com)"), [
+                            L("Ayarlar → Kurallar → Kural ekle."),
+                            L("Kimden: bankanın adresi → Bir adrese ilet → bu adres."),
+                        ])
+                    }
+                    DisclosureGroup(L("Bankada bildirim adresini değiştir")) {
+                        Text(L("Bankanın internet ya da mobil şubesinde harcama bildirimlerinin gideceği e-posta adresini bu adres yap. Bildirimler artık kendi kutuna gelmez. Banka adresi doğrulamak için e-posta gönderirse Harcamalar'da \"Adres doğrulama\" olarak görünür; Onayla'ya dokun."))
+                            .foregroundStyle(Tema.metin2)
+                    }
+                    Text(L("Kartların son 4 hanesini önceden girmen gerekmez: tanımadığımız bir kartla ilk harcama gelince Harcamalar'da hangi kart olduğunu sorarız."))
+                        .foregroundStyle(Tema.metin2)
                 } header: { Text(L("Kurulum")) }
                 .font(.footnote)
+
+                EpostaBildirimBolumu()
 
                 Section {
                     Button(kontrolEdiliyor ? L("Kontrol ediliyor…") : L("Şimdi kontrol et")) {
                         kontrolEdiliyor = true
                         Task {
-                            let n = await model.epostaKontrol()
+                            let k = await model.epostaKontrol()
                             kontrolEdiliyor = false
-                            kontrol = n == nil ? L("E-postalar okunamadı")
-                                : n! > 0 ? L("E-postadan {0} harcama eklendi", n!)
-                                : model.epostalar.isEmpty ? L("Yeni e-posta yok") : L("{0} e-posta onay bekliyor · Harcamalar", model.epostalar.count)
+                            kontrol = k.map { k in
+                                !k.eklenen.isEmpty ? L("E-postadan {0} harcama eklendi", k.eklenen.count)
+                                    : k.deneme > 0 ? L("Deneme e-postası ulaştı: adresin çalışıyor")
+                                    : model.epostalar.isEmpty ? L("Yeni e-posta yok") : L("{0} e-posta onay bekliyor · Harcamalar", model.epostalar.count)
+                            } ?? L("E-postalar okunamadı")
                         }
                     }
                     .disabled(kontrolEdiliyor)
@@ -317,11 +346,70 @@ struct EpostaAyarlari: View {
         }
         .navigationTitle(L("Banka e-postaları"))
         .navigationBarTitleDisplayMode(.inline)
-        .task { if model.session != nil, adres == nil { await adresAl(yenile: false) } }
+        .task {
+            guard model.session != nil else { return }
+            if adres == nil { await adresAl(yenile: false) }
+            _ = await model.epostaKontrol()   // durum (son e-posta) güncel olsun
+        }
         .confirmationDialog(L("Adres yenilensin mi? Eski adrese gelen e-postalar artık alınmaz; bankadaki adresi de değiştirmen gerekir."),
                             isPresented: $yenileSor, titleVisibility: .visible) {
             Button(L("Adresi yenile"), role: .destructive) { Task { await adresAl(yenile: true) } }
         }
+    }
+
+    // Kurulum çalışıyor mu: gelen son e-posta (işlenmiş olsa da)
+    @ViewBuilder private var durum: some View {
+        if let s = model.sonEposta {
+            let tur = ["test": L("deneme e-postası"), "verification": L("doğrulama e-postası"), "purchase": L("harcama bildirimi")][s.kind] ?? L("e-posta")
+            let ne = [tur, s.sender.map(Self.gonderen)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+            Label {
+                Text(L("Son e-posta {0}: {1}", Senkron.time(s.receivedAt).map(Self.once) ?? "", ne)).font(.footnote)
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Tema.iyi)
+            }
+        } else if adres != nil {
+            Label {
+                Text(L("Henüz e-posta gelmedi. Bankandan ilk bildirim gelince burada görünür; adresi şimdi denemek için deneme e-postası gönder.")).font(.footnote)
+            } icon: {
+                Image(systemName: "clock").foregroundStyle(Tema.metin3)
+            }
+            .foregroundStyle(Tema.metin2)
+        }
+    }
+
+    // "2 saat önce"
+    private static func once(_ d: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.locale = Bicim.locale
+        f.unitsStyle = .full
+        return f.localizedString(for: min(d, Date()), relativeTo: Date())
+    }
+
+    // "Yapı Kredi <bilgilendirme@yapikredi.com.tr>" → "Yapı Kredi"
+    static func gonderen(_ s: String) -> String {
+        let ad = s.replacingOccurrences(of: #"\s*<[^>]*>\s*"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\" ").union(.whitespaces))
+        return ad.isEmpty ? s : ad
+    }
+
+    // Deneme: kullanıcının e-posta uygulaması konusu "CashFollow deneme" olan bir e-postayla açılır (eposta.js TEST_SUBJECT)
+    static func denemeAdresi(_ adres: String) -> URL? {
+        var c = URLComponents()
+        c.scheme = "mailto"
+        c.path = adres
+        c.queryItems = [URLQueryItem(name: "subject", value: "CashFollow deneme"),
+                        URLQueryItem(name: "body", value: L("Bu e-posta CashFollow adresimin çalıştığını denemek için gönderildi."))]
+        return c.url
+    }
+
+    private func rehber(_ baslik: String, _ adimlar: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(baslik).fontWeight(.semibold)
+            ForEach(Array(adimlar.enumerated()), id: \.offset) { i, a in
+                Text("\(i + 1). \(a)").foregroundStyle(Tema.metin2)
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private func adresAl(yenile: Bool) async {
@@ -353,6 +441,45 @@ struct EpostaAyarlari: View {
                 .font(.footnote).foregroundStyle(s.wouldAutoAdd ? Tema.iyi : Tema.uyari)
         }
         .font(.subheadline)
+    }
+}
+
+// Banka e-postaları → bildirim: uygulama kapalıyken eklenen harcama ve onay bekleyen e-posta (EpostaBildirim)
+struct EpostaBildirimBolumu: View {
+    @EnvironmentObject private var model: Model
+    @Environment(\.openURL) private var openURL
+    @State private var acik = EpostaBildirim.acik
+    @State private var reddedildi = false
+
+    var body: some View {
+        Section {
+            Toggle(L("Harcama eklenince bildir"), isOn: Binding(get: { acik }, set: { yeni in
+                acik = yeni
+                EpostaBildirim.acik = yeni
+                EpostaBildirim.planla(model)
+                Analitik.olay("inbox_notifications", ["enabled": yeni])
+                guard yeni else { reddedildi = false; return }
+                Task {
+                    let c = UNUserNotificationCenter.current()
+                    switch await c.notificationSettings().authorizationStatus {
+                    case .notDetermined: reddedildi = !((try? await c.requestAuthorization(options: [.alert, .sound, .badge])) ?? false)
+                    case .denied: reddedildi = true
+                    default: reddedildi = false
+                    }
+                }
+            }))
+            if reddedildi {
+                Button(L("Bildirim izni kapalı: iPhone Ayarları'nda aç")) {
+                    if let u = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(u) }
+                }
+                .font(.footnote)
+            }
+        } footer: {
+            Text(L("Uygulama kapalıyken iPhone ara sıra yeni e-postalara bakar (ne zaman olacağına iOS karar verir); eklenen harcamayı ve onay bekleyen e-postayı bildirir. Dokununca Harcamalar açılır."))
+        }
+        .task {
+            if acik, await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .denied { reddedildi = true }
+        }
     }
 }
 

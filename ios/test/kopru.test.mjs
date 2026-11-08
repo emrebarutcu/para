@@ -316,6 +316,25 @@ test("banka e-postaları: Swift'in verdiği liste; yalnızca sunucuda işaretlen
   assert.deepEqual(rest.ok.emails.map(x => x.emailId), [2, 3]);
   assert.match(rest.ok.emails[1].body, /AMAZON/);
   assert.equal(e.sandbox.Kopru.inboxReleased(), "[]");
+  assert.equal(rest.ok.lastEmail, null);   // Swift son e-postayı vermedi
+});
+
+test("banka e-postaları: deneme ve Gmail onayı ayrılır, son e-posta Swift'ten (dizi olarak da)", async () => {
+  const e = engine();
+  const rows = [
+    { id: 7, sender: "Gmail <forwarding-noreply@google.com>", subject: "(#123456789) Gmail Yönlendirme Onayı - ali@gmail.com adresinden posta al", received_at: "2026-10-17T10:00:00Z", body: "Onay kodu: 123456789\nhttps://mail-settings.google.com/mail/vf-%5BA%5D-B" },
+    { id: 8, sender: "ben", subject: "CashFollow deneme", received_at: "2026-10-17T11:00:00Z", body: "Deneme" },
+  ];
+  const latest = [{ ...rows[1], processed_at: null }];
+  e.sandbox.Kopru.setInbox(JSON.stringify(rows), "[]", JSON.stringify(latest));
+  const list = await e.call("list_inbox");
+  assert.deepEqual(list.ok.emails.map(x => x.kind), ["verification", "test"]);
+  assert.equal(list.ok.emails[0].verification.code, "123456789");
+  assert.deepEqual(list.ok.lastEmail, { receivedAt: "2026-10-17T11:00:00Z", sender: "ben", kind: "test", processed: false });
+  e.sandbox.Kopru.setInbox(JSON.stringify(rows), "[8]", JSON.stringify(latest));
+  const out = await e.call("check_inbox");
+  assert.equal(out.ok.tests, 1);
+  assert.deepEqual(out.ok.needsReview.map(x => x.emailId), [7]);
 });
 
 // Japonya: bonus ödemesi (ボーナス払い) yalnızca ülkesi JP olan hesapta; Swift ülkeyi setHome ile verir

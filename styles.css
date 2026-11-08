@@ -1211,6 +1211,19 @@ dialog.sheet::backdrop { background: var(--overlay); backdrop-filter: blur(3px);
 }
 .inbox-body a { color: var(--text); text-decoration: underline; }
 .inbox-from { font-size: 12px; color: var(--text-3); }
+.inbox-note { font-size: 13px; color: var(--text-2); line-height: 1.45; }
+.inbox-ask { font-size: 13px; font-weight: 600; color: var(--text); }
+.inbox-cards { display: flex; flex-wrap: wrap; gap: 6px; }
+.inbox-code { margin-top: 2px; }
+.inbox-code code { letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+a.btn { text-decoration: none; }
+.inbox-status { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; color: var(--text-2); line-height: 1.45; }
+.inbox-status.ok::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+.guide { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.guide summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text); }
+.guide[open] summary { margin-bottom: 6px; }
+.guide .tag { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); margin-inline-start: 6px; }
+.guide-head { margin: 8px 0 4px; font-size: 13px; font-weight: 600; color: var(--text); }
 .inbox-list { list-style: none; margin: 0; padding: 0; }
 .cc-num { font-size: 13px; font-weight: 600; letter-spacing: .12em; opacity: .9; font-variant-numeric: tabular-nums; }
 

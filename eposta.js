@@ -165,11 +165,53 @@
     return r;
   }
 
+  // ── Kurulum e-postaları (harcama değildir) ──
+
+  const LINKS = /https?:\/\/[^\s<>"')\]]+/g;
+  const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
+  const VERIFY_WORD = /(dogrula|onayla|teyit|aktiflestir|etkinlestir|verify|confirm|activate)/;
+
+  // Adres doğrulama: Gmail'in yönlendirme onayı ("(#123456789) Gmail Forwarding Confirmation - Receive Mail from
+  // ali@gmail.com", Türkçesi "Gmail Yönlendirme Onayı") ya da bankanın "adresini doğrula" e-postası. Uygulama bunları
+  // harcama gibi değil, "Onayla" düğmesiyle gösterir.
+  // { body, subject, sender } → { gmail, code, link, from } ya da null (code: Gmail'in onay kodu; from: yönlendiren adres)
+  function verification({ body, subject, sender } = {}) {
+    const text = plainText([subject, body].filter(Boolean).join("\n"));
+    const f = fold(text);
+    const links = [...text.matchAll(LINKS)].map(m => ({ url: m[0], at: m.index }));
+    const gmail = /forwarding-noreply@google\.com/.test(fold(String(sender ?? ""))) || /gmail (forwarding confirmation|yonlendirme onayi)/.test(f);
+    if (gmail) {
+      const code = (String(subject ?? "").match(/\(#\s*(\d{5,12})\)/) || f.match(/(?:confirmation code|onay kodu)\s*:?\s*(\d{5,12})/))?.[1] ?? null;
+      const link = (links.find(l => /mail-settings\.google\.com|mail\.google\.com\/mail\/(?:u\/\d+\/)?vf/.test(l.url)) ?? links[0])?.url ?? null;
+      // Yönlendiren adres: konudaki adres; yoksa metindeki ilk adres ("ali@gmail.com has requested to …")
+      const from = (String(subject ?? "").match(EMAIL) || text.match(EMAIL))?.[0] ?? null;
+      return { gmail: true, code, link, from };
+    }
+    if (!links.length || !VERIFY_WORD.test(f)) return null;
+    if (findAmount(f.replace(LINKS, m => " ".repeat(m.length)))) return null;   // tutarı olan e-posta harcama bildirimidir
+    // Doğrulama sözcüğüne yakın bağlantı (bağlantı metni "Doğrula (https://…)" biçimindedir); yoksa ilki
+    const near = links.find(l => VERIFY_WORD.test(f.slice(Math.max(0, l.at - 80), l.at)));
+    return { gmail: false, code: null, link: (near ?? links[0]).url, from: null };
+  }
+
+  // Uygulamadaki "Deneme e-postası gönder": konu TEST_SUBJECT. Adresin çalıştığını gösterir, harcama eklenmez.
+  const TEST_SUBJECT = "CashFollow deneme";
+  function isTest({ subject } = {}) {
+    return /cashfollow (deneme|test)\b/.test(fold(String(subject ?? "")));
+  }
+
+  // E-postanın türü: test (deneme), verification (adres doğrulama), purchase (tutarı okunan bildirim), other
+  function kind(mail = {}) {
+    if (isTest(mail)) return "test";
+    if (verification(mail)) return "verification";
+    return parse(mail).amount != null ? "purchase" : "other";
+  }
+
   // Gerçek harcama bildirimleriyle denenmiş, tutar, tarih, kartın son 4 hanesi ve işyeri okunan bankalar. Diğer bankaların
   // e-postaları da okunmaya çalışılır; okunamayan onaya düşer. Web'deki Banka e-postaları penceresi ve asistan buradan okur.
   const BANKS = ["Yapı Kredi"];
 
-  const api = { parse, plainText, fold, toAmount, BANKS };
+  const api = { parse, plainText, fold, toAmount, verification, isTest, kind, TEST_SUBJECT, BANKS };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Eposta = api;
 })(this);

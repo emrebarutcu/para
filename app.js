@@ -483,7 +483,7 @@ const els = {
   cashDefBtn: $("cashDefBtn"), cashDefText: $("cashDefText"), cashDefSheet: $("cashDefSheet"), cashDefList: $("cashDefList"),
   cashDefReset: $("cashDefReset"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"), inboxBanks: $("inboxBanks"),
-  inboxAddress: $("inboxAddress"),
+  inboxAddress: $("inboxAddress"), inboxStatus: $("inboxStatus"), inboxTest: $("inboxTest"),
   aiBtn: $("aiBtn"), aiSheet: $("aiSheet"), mcpUrl: $("mcpUrl"), aiLoginNote: $("aiLoginNote"), aiPremiumNote: $("aiPremiumNote"),
   aiAppsGroup: $("aiAppsGroup"), aiApps: $("aiApps"),
   aiLocalTitle: $("aiLocalTitle"), aiLocalSub: $("aiLocalSub"), aiModeSeg: $("aiModeSeg"), aiProgress: $("aiProgress"),
@@ -5825,12 +5825,18 @@ function emailPurchase(parsed, card) {
   return { desc: parsed.merchant || "Kart harcaması", cardId: card?.id ?? null, count: parsed.count, total: parsed.amount, date: parsed.date };
 }
 
+// kind: purchase (harcama bildirimi), verification (Gmail yönlendirme onayı ya da bankanın adres doğrulaması: "Onayla"
+// ile gösterilir), test (Banka e-postaları'ndaki "Deneme e-postası gönder": işlendi sayılır) — tools.js emailItem ile aynı
 function emailItem(row) {
-  const parsed = E.parse({ body: row.body, subject: row.subject, receivedAt: row.received_at });
+  const mail = { body: row.body, subject: row.subject, sender: row.sender, receivedAt: row.received_at };
+  const parsed = E.parse(mail);
+  if (E.isTest(mail)) return { row, parsed, card: null, reason: "Deneme e-postası", kind: "test" };
+  const verify = E.verification(mail);
+  if (verify) return { row, parsed, card: null, reason: verify.gmail ? "Gmail yönlendirme onayı" : "Adres doğrulama e-postası", kind: "verification", verify };
   const card = emailCard(parsed);
   const reason = parsed.reason
     || (card ? null : parsed.last4 ? `•••• ${parsed.last4} ile biten kart tanımlı değil` : "Kart okunamadı");
-  return { row, parsed, card, reason };
+  return { row, parsed, card, reason, kind: "purchase" };
 }
 
 async function checkInbox({ quiet = true } = {}) {
@@ -5843,13 +5849,15 @@ async function checkInbox({ quiet = true } = {}) {
     if (!rows) { if (!quiet) toast("E-postalar okunamadı"); return; }
     const items = rows.map(emailItem);
     const ready = items.filter(x => !x.reason);
+    const tests = items.filter(x => x.kind === "test");
     const seen = new Set(inbox.map(x => x.row.id));
-    inbox = items.filter(x => x.reason);
+    inbox = items.filter(x => x.reason && x.kind !== "test");
     const fresh = inbox.filter(x => !seen.has(x.row.id)).length;
 
-    // Önce işaretlenir: başka bir cihaz aynı anda okuduysa harcama iki kez eklenmez
-    const claimed = new Set(await window.syncInboxClaim(ready.map(x => x.row.id)));
+    // Önce işaretlenir: başka bir cihaz aynı anda okuduysa harcama iki kez eklenmez. Deneme e-postası yalnızca işlendi olur.
+    const claimed = new Set(await window.syncInboxClaim([...ready, ...tests].map(x => x.row.id)));
     const added = ready.filter(x => claimed.has(x.row.id));
+    const tested = tests.some(x => claimed.has(x.row.id));
     if (added.length) {
       const personId = state.people[0].id;
       for (const x of added) state.installments.push({ id: uid(), personId, ...emailPurchase(x.parsed, x.card) });
@@ -5862,13 +5870,47 @@ async function checkInbox({ quiet = true } = {}) {
       toast(`E-postadan eklendi: ${p.desc} · ${fmt(p.total)}`);
     } else if (added.length) {
       toast(`E-postadan ${added.length} harcama eklendi`);
+    } else if (tested) {
+      toast("Deneme e-postası ulaştı: adresin çalışıyor");
     } else if (fresh || (!quiet && inbox.length)) {
       toast(`${inbox.length} e-posta onay bekliyor · Harcamalar`);
     } else if (!quiet) {
       toast("Yeni e-posta yok");
     }
     render();
+    if (els.inboxSheet.open && (rows.length || !quiet)) renderInboxStatus();
   } finally { inboxBusy = false; }
+}
+
+// "•••• 1234 hangi kartın?": son 4 hane seçilen karta yazılır, o hanedeki bekleyenler (ve sonrakiler) kendiliğinden
+// eklenir. Kartın başka bir son 4 hanesi varsa sorulur: değiştir (kart yenilendi) ya da yalnızca bu harcamayı ekle.
+// E-postada son 4 hane yoksa ("Kart okunamadı") harcama yalnızca seçilen karta eklenir.
+async function emailToCard(x, card) {
+  const last4 = x.parsed.last4;
+  const setLast4 = last4 && (!card.last4
+    || confirm(`${card.name} kartının son 4 hanesi ${card.last4}. ${last4} olarak değiştirilsin mi?\n\nKart yenilendiyse Tamam. Yalnızca bu harcamayı ${card.name} kartına eklemek için Vazgeç.`));
+  if (setLast4) {
+    state.cards = state.cards.map(c => (c.id === card.id ? { ...c, last4 } : c));
+    saveState();
+    toast(`${card.name}: •••• ${last4}`);
+    await checkInbox();
+    return;
+  }
+  const claimed = await window.syncInboxClaim?.([x.row.id]);
+  inbox = inbox.filter(y => y.row.id !== x.row.id);
+  if (!claimed?.includes(x.row.id)) { toast("Bu e-posta başka bir cihazda işlendi"); render(); return; }
+  const p = { id: uid(), personId: state.people[0].id, ...emailPurchase(x.parsed, card) };
+  state.installments.push(p);
+  saveState();
+  backfillCategories();
+  render();
+  toast(`E-postadan eklendi: ${p.desc} · ${fmt(p.total)}`);
+}
+
+async function emailDone(row) {
+  await window.syncInboxClaim?.([row.id]);
+  inbox = inbox.filter(y => y.row.id !== row.id);
+  render();
 }
 
 function inboxPanel() {
@@ -5876,39 +5918,69 @@ function inboxPanel() {
   const head = el("header", "panel-head");
   head.append(el("h2", "", "E-postadan gelenler"), el("span", "panel-note", `${inbox.length} onay bekliyor`));
   const list = el("ul", "inbox-list");
+  const button = (text, cls, onClick) => {
+    const b = el("button", `btn ${cls} sm`, text);
+    b.type = "button";
+    b.addEventListener("click", onClick);
+    return b;
+  };
   for (const x of inbox) {
     const { parsed, row } = x;
     const li = el("li", "inbox-item");
     const main = el("div", "p-main");
-    main.append(el("div", "p-title", parsed.merchant || row.subject || "Banka e-postası"));
-    const meta = el("div", "p-meta");
-    if (parsed.amount != null) {
-      meta.append(el("span", "", parsed.currency === HOME ? fmt(parsed.amount) : `${fmtNum(parsed.amount)} ${parsed.currency}`));
-    }
-    if (parsed.date) meta.append(el("span", "", fmtDayShort(parsed.date)));
-    if (parsed.count > 1) meta.append(el("span", "", `${parsed.count} taksit`));
-    if (meta.childElementCount) main.append(meta);
-    main.append(el("div", "inbox-reason", x.reason));
-    if (row.sender) main.append(el("div", "inbox-from", row.sender));
-
     const actions = el("div", "inbox-actions");
-    const add = el("button", "btn btn-primary sm", "Ekle");
-    add.type = "button";
-    add.addEventListener("click", () => openPurchaseSheet(null, { inboxId: row.id, ...emailPurchase(parsed, x.card) }));
-    const skip = el("button", "btn btn-ghost sm", "Yok say");
-    skip.type = "button";
-    skip.addEventListener("click", async () => {
-      skip.disabled = true;
-      await window.syncInboxClaim?.([row.id]);
-      inbox = inbox.filter(y => y.row.id !== row.id);
-      render();
-    });
     const open = inboxOpenId === row.id;
-    const show = el("button", "btn btn-ghost sm", open ? "Gizle" : "Göster");
-    show.type = "button";
+    const show = button(open ? "Gizle" : "Göster", "btn-ghost", () => { inboxOpenId = open ? null : row.id; render(); });
     show.setAttribute("aria-expanded", String(open));
-    show.addEventListener("click", () => { inboxOpenId = open ? null : row.id; render(); });
-    actions.append(add, show, skip);
+
+    if (x.kind === "verification") {
+      // Gmail yönlendirme onayı ya da bankanın adres doğrulaması: harcama değil, bağlantıyla onaylanır
+      const v = x.verify;
+      main.append(el("div", "p-title", v.gmail ? "Gmail yönlendirme onayı" : "Adres doğrulama"),
+        el("div", "inbox-note", v.gmail
+          ? `${v.from || "Gmail hesabın"} bankanın e-postalarını buraya iletmek istiyor. Onayla'ya dokun; Gmail sayfası açılır.`
+          : "Bankan bu adresi doğrulamanı istiyor. Onayla'ya dokun; bankanın sayfası açılır."));
+      if (v.code) {
+        const code = el("div", "copy-row copy-row-lg inbox-code");
+        code.append(el("code", "", v.code), button("Kodu kopyala", "btn-ghost", async () => {
+          try { await navigator.clipboard.writeText(v.code); toast(L("Kopyalandı")); } catch { toast(L("Kopyalanamadı")); }
+        }));
+        main.append(code);
+      }
+      if (v.link) {
+        const a = el("a", "btn btn-primary sm", "Onayla");
+        a.href = v.link;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        actions.append(a);
+      }
+      actions.append(button("Onayladım", "btn-ghost", () => emailDone(row)), show);
+    } else {
+      main.append(el("div", "p-title", parsed.merchant || row.subject || "Banka e-postası"));
+      const meta = el("div", "p-meta");
+      if (parsed.amount != null) {
+        meta.append(el("span", "", parsed.currency === HOME ? fmt(parsed.amount) : `${fmtNum(parsed.amount)} ${parsed.currency}`));
+      }
+      if (parsed.date) meta.append(el("span", "", fmtDayShort(parsed.date)));
+      if (parsed.count > 1) meta.append(el("span", "", `${parsed.count} taksit`));
+      if (meta.childElementCount) main.append(meta);
+      // Okunan ama kartı bulunamayan harcama: kart sorulur (son 4 hane varsa karta yazılır)
+      const ask = parsed.ok && !x.card && state.cards.length;
+      if (ask) {
+        main.append(el("div", "inbox-ask", parsed.last4 ? `•••• ${parsed.last4} hangi kartın?` : "Hangi kartla?"));
+        const chips = el("div", "inbox-cards");
+        for (const c of state.cards) {
+          const b = button(c.last4 ? `${c.name} · ${c.last4}` : c.name, "btn-ghost", () => { chips.querySelectorAll("button").forEach(y => (y.disabled = true)); emailToCard(x, c); });
+          chips.append(b);
+        }
+        main.append(chips);
+      } else {
+        main.append(el("div", "inbox-reason", x.reason));
+      }
+      actions.append(button("Ekle", ask ? "btn-ghost" : "btn-primary", () => openPurchaseSheet(null, { inboxId: row.id, ...emailPurchase(parsed, x.card) })),
+        show, button("Yok say", "btn-ghost", e => { e.currentTarget.disabled = true; emailDone(row); }));
+    }
+    if (row.sender) main.append(el("div", "inbox-from", row.sender));
     li.append(main, actions);
     if (open) li.append(emailBody(row.body));
     list.append(li);
@@ -5938,7 +6010,7 @@ function emailBody(body) {
 // Desteklenen bankalar eposta.js'ten (BANKS): tutar, tarih, son 4 hane ve işyeri okunanlar
 function inboxBanksText() {
   return `Şimdilik desteklenen bankalar: ${E.BANKS.join(", ")}. Diğer bankaların e-postaları da okunmaya çalışılır; `
-    + "okunamayan Harcamalar'da onaya düşer. Aşağıdaki Bir e-postayı dene ile bankanın e-postasını deneyebilirsin.";
+    + "okunamayan Harcamalar'da onaya düşer. En alttaki Bir e-postayı dene ile bankanın e-postasını deneyebilirsin.";
 }
 
 async function openInboxSheet() {
@@ -5953,6 +6025,7 @@ async function openInboxSheet() {
 
 async function showInboxAddress(renew) {
   els.inboxAddress.textContent = "…";
+  els.inboxTest.hidden = true;
   try {
     const address = await window.syncInboxAddress(renew);
     if (!window.INBOX_DOMAIN) {
@@ -5960,12 +6033,34 @@ async function showInboxAddress(renew) {
       toast("Alan adı ayarlanmamış (config.js → INBOX_DOMAIN)");
       return;
     }
-    els.inboxAddress.textContent = `${address}@${window.INBOX_DOMAIN}`;
+    const full = `${address}@${window.INBOX_DOMAIN}`;
+    els.inboxAddress.textContent = full;
+    // Deneme: kullanıcının e-posta uygulaması konusu E.TEST_SUBJECT olan bir e-postayla açılır; gelince "ulaştı" denir
+    els.inboxTest.href = `mailto:${full}?subject=${encodeURIComponent(E.TEST_SUBJECT)}&body=${encodeURIComponent("Bu e-posta CashFollow adresimin çalıştığını denemek için gönderildi.")}`;
+    els.inboxTest.hidden = false;
+    renderInboxStatus();
     if (renew) toast("Yeni adres oluşturuldu");
   } catch {
     els.inboxAddress.textContent = "—";
     toast("Adres alınamadı — supabase/eposta.sql çalıştırıldı mı?");
   }
+}
+
+// Kurulum çalışıyor mu: gelen son e-posta (işlenmiş olsa da)
+async function renderInboxStatus() {
+  const box = els.inboxStatus;
+  const row = await window.syncInboxLatest?.();
+  if (row === undefined) { box.hidden = true; return; }
+  box.hidden = false;
+  box.classList.toggle("ok", !!row);
+  if (!row) {
+    box.textContent = "Henüz e-posta gelmedi. Bankandan ilk bildirim gelince burada görünür; adresi şimdi denemek için deneme e-postası gönder.";
+    return;
+  }
+  const what = { test: "deneme e-postası", verification: "doğrulama e-postası", purchase: "harcama bildirimi", other: "e-posta" }[
+    E.kind({ body: row.body, subject: row.subject, sender: row.sender, receivedAt: row.received_at })];
+  const from = String(row.sender || "").replace(/\s*<[^>]*>\s*/, "").replace(/^"|"$/g, "").trim() || row.sender;
+  box.textContent = `Son e-posta ${fmtTime(row.received_at)}: ${what}${from ? ` · ${from}` : ""}`;
 }
 
 function renderInboxTry() {

@@ -140,6 +140,15 @@ enum OzDenetim {
             try check(jpCards.cards.first?.bonusMonths == [7, 12], "bonus ayları")
             m.setCountry("TR")
 
+            // Banka e-postaları: Gmail yönlendirme onayı, deneme e-postası ve son e-posta Swift'te çözülür (EpostaListesi)
+            let gmail = #"{"id":91,"sender":"forwarding-noreply@google.com","subject":"(#548123907) Gmail Forwarding Confirmation - Receive Mail from ali@gmail.com","received_at":"2026-10-17T10:00:00Z","body":"Confirmation code: 548123907\nhttps://mail-settings.google.com/mail/vf-%5BX%5D-Y"}"#
+            let denemeE = #"{"id":92,"sender":"ben","subject":"CashFollow deneme","received_at":"2026-10-17T11:00:00.123456+00:00","body":"x"}"#
+            m.setInbox(rows: "[\(gmail),\(denemeE)]", latest: "[\(denemeE)]")
+            let kutu = try m.run("list_inbox") as EpostaListesi
+            try check(kutu.emails.map { $0.kind ?? "" } == ["verification", "test"] && kutu.emails.first?.verification?.code == "548123907"
+                      && kutu.lastEmail?.kind == "test" && Senkron.time(kutu.lastEmail?.receivedAt ?? "") != nil, "banka e-postaları: \(kutu)")
+            m.setInbox(rows: "[]")
+
             // CashFollow Premium: hesabın satırı (tablo.js premium, köprüden), ürünler ve ücretsiz sürümün sınırları
             let gun: TimeInterval = 86_400
             let iso = { (d: Date) in ISO8601DateFormatter().string(from: d) }
