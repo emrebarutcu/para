@@ -80,13 +80,15 @@ struct NakitKarti: View {
 
     private func grafik(_ s: NakitSerisi) -> some View {
         let gunler = s.days.compactMap { g in Bicim.date(g.date).map { Nokta(d: $0, v: deger(g)) } }
-        let alan = yAlani(gunler.map(\.v), sifirDahil: mode == "net")
+        // Eksen her zaman sıfırı içerir (web'deki gibi): yoksa alt sınır en düşük bakiyenin biraz altında kalır ve
+        // bakiye sıfıra inmiş gibi görünür
+        let alan = yAlani(gunler.map(\.v), sifirDahil: true)
         let bas = Bicim.date(s.from) ?? gunler.first?.d ?? Date()
         let son = Bicim.date(s.to) ?? gunler.last?.d ?? bas
         let today = Bicim.date(s.today)
         return Chart {
             ForEach(gunler, id: \.d) { g in
-                AreaMark(x: .value("Gün", g.d), yStart: .value("Taban", alan.lowerBound), yEnd: .value("Tutar", g.v))
+                AreaMark(x: .value("Gün", g.d), yStart: .value("Taban", 0.0), yEnd: .value("Tutar", g.v))
                     .foregroundStyle(Tema.metin.opacity(0.07))
                     .interpolationMethod(.stepEnd)
                 LineMark(x: .value("Gün", g.d), y: .value("Tutar", g.v))
@@ -102,7 +104,7 @@ struct NakitKarti: View {
                         Text(kisa(last.v)).font(.caption.weight(.semibold)).foregroundStyle(Tema.metin)
                     }
             }
-            if mode == "net", alan.lowerBound < 0 {
+            if alan.lowerBound < 0 {
                 RuleMark(y: .value("Sıfır", 0)).foregroundStyle(Tema.cizgi2)
             }
             // Bugün dönemin içindeyse kesikli çizgi (dönem bugünden başlıyorsa sol kenar zaten bugündür)
