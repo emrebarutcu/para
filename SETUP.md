@@ -428,6 +428,17 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
 - Abonelik olayları sunucudan (`mcp/abonelik.js`, App Store bildirimleri): `subscription_subscribed`, `subscription_did_renew`,
   `subscription_did_change_renewal_status` (iptal), `subscription_expired`, `subscription_refund`… Production'daki tahsilatta
   `revenue` ve `currency` (PostHog → Revenue analytics'te bu özellik seçilir); sandbox gelir sayılmaz.
+- Karşılama hunisi (iPhone ilk açılış akışı, `Uygulama/Karsilama.swift`, `Ekranlar/KarsilamaEkrani.swift`): yalnızca yeni
+  kurulum. `onboarding_started` (deneme girişi, bir kez; `variant`), `onboarding_step_viewed` / `onboarding_step_completed`
+  (`step`: intro, card, cutoff, purchase, aha; `seconds`, `method`) / `onboarding_step_skipped` (`reason`),
+  `onboarding_aha_viewed`, `onboarding_add_another`, `onboarding_closed`, `onboarding_backgrounded`, `onboarding_completed`
+  (`path`: offline, account, closed), `activation_reached` (ödeme planı ilk kez göründü; `via_flow`). Akıştan gelen
+  `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
+- Karşılama denemesi: PostHog'da çok değişkenli bayrak **`onboarding_flow`**, kollar `control` (eski giriş ekranı) ve
+  `eylem` (yeni akış); "Persist flag across authentication" açık. Bayrak yokken herkes yeni akışı görür (`variant: default`);
+  1,5 saniyede gelmezse de yeni akış (`fallback`, çözümlemeden çıkarılır). %100 `control` yeni akışı uzaktan kapatır.
+  Olaylarda `$feature/onboarding_flow`; birincil ölçü ilk hafta geri dönüş (1–7. günde `app_opened`), etkinleşme ikincil
+  (akış kartı ve harcamayı kendisi yazdığı için tek başına karar vermez). Simülatörde yeni kurulumda `-karsilama` akışı açar.
 
 #### Abonelik (CashFollow Premium)
 

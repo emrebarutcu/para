@@ -207,6 +207,7 @@ struct HareketFormu: View {
     @Environment(\.dismiss) private var dismiss
     var tur: HareketTuru = .gelir
     var duzenle: Hareket? = nil
+    var maas = false     // Başlarken'in maaş adımı: "Maaş" yazılı, her ay tekrarlar
     @State private var yuklendi = false
     @State private var kind = Bicim.home     // ana para birimi, diğer para birimleri, GAU, FON, BIST
     @State private var ticker = ""
@@ -338,7 +339,9 @@ struct HareketFormu: View {
             return
         }
         switch tur {
-        case .gelir: direction = "in"
+        case .gelir:
+            direction = "in"
+            if maas { monthly = true; if desc.isEmpty { desc = L("Maaş") } }
         case .gider: direction = "out"
         case .doviz: kind = dovizler.first?.code ?? "USD"
         case .piyasa: kind = "FON"
