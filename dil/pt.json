@@ -1417,7 +1417,6 @@
  "Kartını ve bir harcamanı gir; ödeme gününü ve tutarını hemen gör.": "Informe seu cartão e uma compra e veja na hora a data e o valor a pagar.",
  "Banka şifresi gerekmez": "Sem senha do banco",
  "Hangi kartı kullanıyorsun?": "Qual cartão você usa?",
- "En çok kullandığını seç; diğerlerini sonra eklersin.": "Escolha o que você mais usa; os outros você adiciona depois.",
  "{0} ekstresi ayın kaçında kesiliyor?": "Em que dia fecha a fatura do seu {0}?",
  "Ekstrende ya da banka uygulamanda yazar.": "Está na sua fatura ou no app do seu banco.",
  "Taksitle aldığın bir şey var mı?": "Você está pagando algo parcelado?",
@@ -1439,5 +1438,6 @@
  "Şimdilik atla": "Pular por agora",
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "Compras até {0}, inclusive, são pagas em {1}.",
  "Taksitli alışveriş": "Compra parcelada",
- "Adım {0} / {1}": "Etapa {0} de {1}"
+ "Adım {0} / {1}": "Etapa {0} de {1}",
+ "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "Digite o nome do cartão que você mais usa; os outros você adiciona depois."
 }

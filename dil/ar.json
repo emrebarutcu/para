@@ -1417,7 +1417,6 @@
  "Kartını ve bir harcamanı gir; ödeme gününü ve tutarını hemen gör.": "أدخل بطاقتك وعملية شراء واحدة لترى موعد الاستحقاق والمبلغ فورًا.",
  "Banka şifresi gerekmez": "لا حاجة لتسجيل الدخول إلى البنك",
  "Hangi kartı kullanıyorsun?": "ما البطاقة التي تستخدمها؟",
- "En çok kullandığını seç; diğerlerini sonra eklersin.": "اختر الأكثر استخدامًا؛ وأضف الباقي لاحقًا.",
  "{0} ekstresi ayın kaçında kesiliyor?": "في أي يوم من الشهر يصدر كشف حساب {0}؟",
  "Ekstrende ya da banka uygulamanda yazar.": "تجده في كشف الحساب أو في تطبيق البنك.",
  "Taksitle aldığın bir şey var mı?": "هل اشتريت شيئًا بالتقسيط؟",
@@ -1439,5 +1438,6 @@
  "Şimdilik atla": "تخطَّ الآن",
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "المشتريات حتى {0} تُدفع في {1}.",
  "Taksitli alışveriş": "شراء بالتقسيط",
- "Adım {0} / {1}": "الخطوة {0} من {1}"
+ "Adım {0} / {1}": "الخطوة {0} من {1}",
+ "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "اكتب اسم البطاقة التي تستخدمها أكثر؛ وأضف الباقي لاحقًا."
 }

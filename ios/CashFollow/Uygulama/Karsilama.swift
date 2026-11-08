@@ -18,9 +18,6 @@ enum Karsilama {
     static let bayrakAdi = "onboarding_flow"
     private static let d = UserDefaults.standard
 
-    // Türkiye'de kart adı için hızlı seçim (yalnızca ad; logo yok)
-    static let kartlarTR = ["Bonus", "World", "Axess", "Maximum", "CardFinans", "Paraf", "Bankkart"]
-
     // Uygulama açılışında bir kez: yeni kurulumda ilk açılışın zamanı, daha önce kullanılmışsa 0
     static func baslat() {
         guard d.object(forKey: "karsilama.ilkAcilis") == nil else { return }

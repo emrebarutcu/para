@@ -1417,7 +1417,6 @@
  "Kartını ve bir harcamanı gir; ödeme gününü ve tutarını hemen gör.": "카드와 구매 하나를 입력하면 결제일과 금액이 바로 보여요.",
  "Banka şifresi gerekmez": "은행 로그인 필요 없음",
  "Hangi kartı kullanıyorsun?": "어떤 카드를 쓰세요?",
- "En çok kullandığını seç; diğerlerini sonra eklersin.": "가장 많이 쓰는 카드를 고르세요. 나머지는 나중에 추가하면 돼요.",
  "{0} ekstresi ayın kaçında kesiliyor?": "{0} 명세서는 매월 며칠에 마감되나요?",
  "Ekstrende ya da banka uygulamanda yazar.": "명세서나 은행 앱에 나와 있어요.",
  "Taksitle aldığın bir şey var mı?": "할부로 산 게 있나요?",
@@ -1439,5 +1438,6 @@
  "Şimdilik atla": "지금은 건너뛰기",
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "{0}까지 구매한 금액은 {1}에 결제돼요.",
  "Taksitli alışveriş": "할부 구매",
- "Adım {0} / {1}": "{1}단계 중 {0}단계"
+ "Adım {0} / {1}": "{1}단계 중 {0}단계",
+ "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "가장 많이 쓰는 카드의 이름을 입력하세요. 나머지는 나중에 추가하면 돼요."
 }

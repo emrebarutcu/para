@@ -1417,7 +1417,6 @@
  "Kartını ve bir harcamanı gir; ödeme gününü ve tutarını hemen gör.": "Vul je kaart en één aankoop in en zie meteen de vervaldag en het bedrag.",
  "Banka şifresi gerekmez": "Geen bankinlog nodig",
  "Hangi kartı kullanıyorsun?": "Welke kaart gebruik je?",
- "En çok kullandığını seç; diğerlerini sonra eklersin.": "Kies degene die je het meest gebruikt; de rest voeg je later toe.",
  "{0} ekstresi ayın kaçında kesiliyor?": "Op welke dag wordt het afschrift van je {0} opgemaakt?",
  "Ekstrende ya da banka uygulamanda yazar.": "Dat staat op je afschrift of in de app van je bank.",
  "Taksitle aldığın bir şey var mı?": "Betaal je iets in termijnen af?",
@@ -1439,5 +1438,6 @@
  "Şimdilik atla": "Nu overslaan",
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "Aankopen tot en met {0} worden betaald op {1}.",
  "Taksitli alışveriş": "Aankoop in termijnen",
- "Adım {0} / {1}": "Stap {0} van {1}"
+ "Adım {0} / {1}": "Stap {0} van {1}",
+ "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "Vul de naam in van de kaart die je het meest gebruikt; de rest voeg je later toe."
 }

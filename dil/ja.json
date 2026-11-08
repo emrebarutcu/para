@@ -1417,7 +1417,6 @@
  "Kartını ve bir harcamanı gir; ödeme gününü ve tutarını hemen gör.": "カードと買い物を1件入力すると、支払日と金額がすぐにわかります。",
  "Banka şifresi gerekmez": "銀行のログインは不要",
  "Hangi kartı kullanıyorsun?": "どのカードを使っていますか？",
- "En çok kullandığını seç; diğerlerini sonra eklersin.": "いちばんよく使うカードを選んでください。ほかのカードはあとで追加できます。",
  "{0} ekstresi ayın kaçında kesiliyor?": "{0}の締め日は毎月何日ですか？",
  "Ekstrende ya da banka uygulamanda yazar.": "利用明細か銀行のアプリに書いてあります。",
  "Taksitle aldığın bir şey var mı?": "分割払いで買ったものはありますか？",
@@ -1439,5 +1438,6 @@
  "Şimdilik atla": "今はスキップ",
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "{0}までの購入は{1}に支払われます。",
  "Taksitli alışveriş": "分割払いの買い物",
- "Adım {0} / {1}": "ステップ {0}/{1}"
+ "Adım {0} / {1}": "ステップ {0}/{1}",
+ "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "いちばんよく使うカードの名前を入力してください。ほかのカードはあとで追加できます。"
 }

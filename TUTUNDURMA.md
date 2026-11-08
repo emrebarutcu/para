@@ -29,7 +29,7 @@ Akışın kendisi: `Ekranlar/KarsilamaEkrani.swift`, `Uygulama/Karsilama.swift`;
 
 ## Bu sürümde yapılanlar (8.12.0)
 
-- **Karşılama akışı:** ülke → "Hesap açmadan başla" → kart (TR'de hızlı seçim) → kesim günü (son ödeme tahmin edilir)
+- **Karşılama akışı:** ülke → "Hesap açmadan başla" → kartın adı → kesim günü (son ödeme tahmin edilir)
   → bir taksitli harcama, ödeme planı yazarken görünür → "Planın hazır" (bu ay ödenecek ya da ilk ödeme, ardından
   gelecek bildirimin önizlemesiyle hatırlatma izni). Altı dokunuş ve bir tutar yeterli. Kart ve harcama gerçek kayıttır.
 - **Kim görür:** yalnızca yeni kurulum. A/B bayrağı `onboarding_flow`: `control` eski giriş ekranını gösterir. Bayrak
@@ -127,8 +127,6 @@ Ya denemeden önce ya bitince yayınlanır.
   1. Önce 1–2 hafta kontrol tabanı toplanır.
   2. Sonra en az 14 gün 50/50 (iki ekstre dönemi).
   3. Bayrak açılmazsa herkes yeni akışı görür.
-- Türkiye'deki kart adı çipleri (Bonus, World, Axess, Maximum, CardFinans, Paraf, Bankkart) düz metin olarak kalsın mı?
-  Logo yok.
 - Son ödeme günü tahmini (Türkiye'de kesim + 10, başka ülkede + 21) uygun mu? Aynı ekranda değiştirilebiliyor.
 - Satın alma formunda ücretsiz kullanıcıya ödeme planı gösterilsin mi? Dürüstlük düzeltmesi, ama "Alabilir miyim?"
   ödeme ekranı görüntülenmesini azaltabilir.

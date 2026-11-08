@@ -3,7 +3,7 @@ import UserNotifications
 
 // İlk açılış akışı (Uygulama/Karsilama.swift; ios/UX.md → akış 1). Beş ekran, her biri tek soru:
 //   1 giris    ne işe yaradığı + ülke → "Hesap açmadan başla" (ya da "Hesabım var, giriş yap")
-//   2 kart     hangi kart (Türkiye'de hızlı seçim çipleri) — "Kredi kartım yok" ile geçilir
+//   2 kart     kartın adı (hazır marka listesi yok; kullanıcı yazar) — "Kredi kartım yok" ile geçilir
 //   3 kesim    ekstre ayın kaçında kesiliyor (son ödeme günü tahmin edilir, değiştirilebilir)
 //   4 harcama  bir taksitli harcama: tutar, taksit, ne zaman; ödeme planı yazarken görünür
 //   5 sonuc    "Planın hazır": bu ay ödenecek (ya da ilk ödeme) + ödeme günü hatırlatması
@@ -68,6 +68,7 @@ struct KarsilamaEkrani: View {
     @State private var akisBasi = Date()
     @State private var adimBasi = Date()
     @FocusState private var tutarOdak: Bool
+    @FocusState private var kartOdak: Bool
 
     private let taksitler = [1, 2, 3, 6, 9, 12]
 
@@ -126,23 +127,19 @@ struct KarsilamaEkrani: View {
 
     private var kart: some View {
         VStack(alignment: .leading, spacing: 16) {
-            baslik(L("Hangi kartı kullanıyorsun?"), L("En çok kullandığını seç; diğerlerini sonra eklersin."))
-            if model.country == "TR" {
-                Akan(aralik: 8, satirAraligi: 8) {
-                    ForEach(Karsilama.kartlarTR, id: \.self) { ad in
-                        Cip(ad: ad, secili: kartAdi == ad) {
-                            kartAdi = ad
-                            ilerle(.kesim, yontem: "chip")
-                        }
-                    }
-                }
-            }
+            baslik(L("Hangi kartı kullanıyorsun?"), L("En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin."))
             Kart(dolgu: 14) {
                 TextField(L("Kartın adı (ör. Bonus, Axess)"), text: $kartAdi)
                     .font(.title3)
                     .submitLabel(.next)
+                    .focused($kartOdak)
                     .onSubmit { if !kartAdiBos { ilerle(.kesim, yontem: "typed") } }
             }
+        }
+        .task {
+            guard !ornek, kartAdi.isEmpty else { return }
+            try? await Task.sleep(nanoseconds: 350_000_000)   // geçiş bitsin
+            kartOdak = true
         }
     }
 

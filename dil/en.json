@@ -1417,7 +1417,6 @@
  "Kartını ve bir harcamanı gir; ödeme gününü ve tutarını hemen gör.": "Add your card and one purchase to see the due date and amount right away.",
  "Banka şifresi gerekmez": "No bank login needed",
  "Hangi kartı kullanıyorsun?": "Which card do you use?",
- "En çok kullandığını seç; diğerlerini sonra eklersin.": "Pick the one you use most; add the others later.",
  "{0} ekstresi ayın kaçında kesiliyor?": "What day does your {0} statement close?",
  "Ekstrende ya da banka uygulamanda yazar.": "It's on your statement or in your bank's app.",
  "Taksitle aldığın bir şey var mı?": "Anything you're paying in installments?",
@@ -1439,5 +1438,6 @@
  "Şimdilik atla": "Skip for now",
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "Purchases through {0} are paid on {1}.",
  "Taksitli alışveriş": "Installment purchase",
- "Adım {0} / {1}": "Step {0} of {1}"
+ "Adım {0} / {1}": "Step {0} of {1}",
+ "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "Enter the name of the card you use most; add the others later."
 }
