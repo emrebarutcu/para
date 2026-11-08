@@ -6,13 +6,13 @@ import SwiftUI
 // kategoriler spending_by_category'den. Her biri kendi kartıdır (Kart).
 
 // ── Nakit (Özet) ──────────────────────────────────────────────────────────────
-// Dönemin gün gün nakit bakiyesi, bugün çizgisi, dokununca günün hareketleri. Dönem başı (bugün ya da ayın bir günü,
-// ör. maaş günü) Ayarlar → Nakit'te.
+// Dönemin gün gün nakit bakiyesi ya da dönem başından beri net (web'deki gibi Bakiye | Dönem net), bugün çizgisi,
+// dokununca günün hareketleri. Dönem başı (bugün ya da ayın bir günü, ör. maaş günü) Ayarlar → Nakit'te.
 
 struct NakitKarti: View {
     @EnvironmentObject private var model: Model
     @AppStorage("nakit.baslangic") private var start = "today"
-    private let mode = "balance"     // "Dönem net" görünümü sadelik için kaldırıldı; dönem başı Ayarlar'da
+    @AppStorage("nakit.mod") private var mode = "balance"   // balance: bakiye (önceki dönemlerden kalan dahil), net: dönem net
     @State private var shift = 0
     @State private var seri: NakitSerisi?
     @State private var hata: String?
@@ -36,6 +36,8 @@ struct NakitKarti: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Tema.metin2)
+
+            Secici(secim: $mode, ogeler: [("balance", L("Bakiye")), ("net", L("Dönem net"))])
 
             if let s = seri {
                 HStack(alignment: .top, spacing: 8) {
@@ -70,6 +72,7 @@ struct NakitKarti: View {
             }
         }
         .task(id: "\(model.revision)|\(start)|\(shift)") { yukle() }
+        .onChange(of: mode) { secili = nil }
     }
 
     private func yukle() {
@@ -158,7 +161,7 @@ struct NakitKarti: View {
             HStack {
                 Text(Bicim.day(g.date)).font(.caption.weight(.semibold))
                 Spacer()
-                Text(L("Bakiye {0}", Bicim.tl(deger(g)))).font(.caption).monospacedDigit()
+                Text(mode == "net" ? L("Net") + " " + Bicim.tl(g.net) : L("Bakiye {0}", Bicim.tl(g.balance))).font(.caption).monospacedDigit()
             }
             if g.moves.isEmpty { Text(L("Hareket yok")).font(.caption).foregroundStyle(Tema.metin3) }
             ForEach(Array(g.moves.enumerated()), id: \.offset) { _, m in
