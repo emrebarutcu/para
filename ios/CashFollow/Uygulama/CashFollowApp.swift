@@ -8,6 +8,7 @@ struct CashFollowApp: App {
 
     init() {
         OzDenetim.runIfRequested()
+        Karsilama.baslat()   // yeni kurulum mu (ilk açılış akışı yalnızca yenilere)
         Ornek.hazirlaIfRequested()
         Cokme.baslat()
     }
@@ -61,8 +62,9 @@ struct AnaEkran: View {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             if !Task.isCancelled { await Hatirlatma.kur(model) }
         }
+        // İlk açılış: yeni kullanıcıya karşılama akışı (KarsilamaEkrani), daha önce kullanmış olana giriş ekranı
         .fullScreenCover(isPresented: $model.showWelcome) {
-            GirisEkrani(welcome: true)
+            KarsilamaKapisi()
         }
         .confirmationDialog(L("Bu cihazda girişsiz girilen veriler var"), isPresented: $model.askMove, titleVisibility: .visible) {
             Button(L("Hesabıma taşı")) { Task { await model.moveLocal(true) } }

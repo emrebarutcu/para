@@ -5,7 +5,9 @@ import SwiftUI
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
 // 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: kredi formu, 5: döviz formu, 6: Ayarlar,
 // 7: CashFollow Premium ödeme ekranı, 8: yapay zekâ asistanı; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
-// (kilitler) görünür. Gerçek kullanımda hiçbiri yoktur.
+// (kilitler) görünür. Turda "tanitimN" (0…4) ilk açılış akışının N. ekranı (KarsilamaEkrani, cevaplar dolu; "-bos" ile);
+// "tanitimNbos" o adımın cevabı boş (kart adı yazılmamış, kesim günü seçilmemiş).
+// Gerçek kullanımda hiçbiri yoktur. Gerçek ilk açılış akışını simülatörde denemek: yeni kurulumda "-karsilama".
 enum Ornek {
     private static func deger(_ ad: String) -> Int? {
         let a = CommandLine.arguments
@@ -222,11 +224,13 @@ struct TurEkrani: View {
         Group {
             if ad.hasPrefix("galeri"), let n = Int(ad.dropFirst(6)) {
                 GrafikGalerisi(sayfa: n)
+            } else if ad.hasPrefix("tanitim"), let n = Int(ad.dropFirst(7).prefix(while: \.isNumber)) {
+                KarsilamaEkrani(baslangic: n, ornek: true, ornekBos: ad.hasSuffix("bos"))
             } else {
                 Sekmeler(sekme: $sekme)
             }
         }
-        .id(ad.hasPrefix("galeri") ? ad : "sekmeler")
+        .id(ad.hasPrefix("sekme") ? "sekmeler" : ad)
         .task(id: i) { await adim(ad) }
     }
 

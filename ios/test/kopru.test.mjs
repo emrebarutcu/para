@@ -69,6 +69,37 @@ test("kart, harcama, özet: hesaplar web ile aynı modüllerden", async () => {
   assert.match(state.cards[0].id, /^[0-9a-z]{8}$/);
 });
 
+// İlk açılış akışı (KarsilamaEkrani.swift): boş veride kart (limitsiz, otomatik) + taksitli harcama; önizleme kaydetmez,
+// kaydedince "Planın hazır" ekranındaki tutarlar Özet'in hesabından. Kesimden önce alınan bu ay, sonra alınan gelecek ay ödenir.
+test("ilk açılış: boş veride kart + taksit, önizleme ve Planın hazır", async () => {
+  const bugun = "2026-11-06";
+  for (const [kesim, son, buAy, ilk, kesilir] of [[10, 20, 6000, "2026-11-20", "2026-11-10"], [5, 15, 0, "2026-12-15", "2026-12-05"]]) {
+    const e = engine();
+    const kart = await e.call("add_card", { name: "Bonus", cutoff_day: kesim, due_day: son, auto_pay: true, limit: 0, last4: "" }, bugun);
+    assert.equal(kart.ok.saved, true);
+    assert.deepEqual(kart.ok.card.purchaseToday, { statementCutoff: kesilir, dueDate: ilk });
+    const harcama = { description: "Taksitli alışveriş", amount: 36000, installments: 6, date: bugun, card: kart.ok.card.id, person: "ben" };
+    const on = await e.call("add_purchase", { ...harcama, dry_run: true }, bugun);
+    assert.equal(on.ok.saved, false);
+    assert.equal(on.ok.preview.firstPayment, ilk);
+    assert.equal(on.ok.preview.statementCutoff, kesilir);
+    assert.equal(on.ok.preview.perInstallment, 6000);
+    assert.equal((await e.call("list_purchases", { status: "all" }, bugun)).ok.count, 0);
+    assert.equal((await e.call("add_purchase", harcama, bugun)).ok.saved, true);
+    const o = await e.call("get_overview", {}, bugun);
+    assert.equal(o.ok.dueThisMonth, buAy);
+    assert.equal(o.ok.upcomingPayments[0].date, ilk);
+    assert.equal(o.ok.upcomingPayments[0].total, 6000);
+    assert.equal(o.ok.remainingTotal, 36000);
+  }
+  // Kartsız: nakit harcama bugün ödenir (bu ay ödenecek)
+  const e = engine();
+  await e.call("add_purchase", { description: "Harcama", amount: 500, installments: 1, date: bugun, card: "nakit", person: "ben" }, bugun);
+  const o = await e.call("get_overview", {}, bugun);
+  assert.equal(o.ok.dueThisMonth, 500);
+  assert.equal(o.ok.upcomingPayments[0].card, "Nakit");
+});
+
 test("doğrulama hatası kullanıcıya gösterilecek hata olarak döner", async () => {
   const e = engine();
   const r = await e.call("add_purchase", { description: "x", amount: -5 });

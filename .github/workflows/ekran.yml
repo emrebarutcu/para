@@ -2,6 +2,9 @@
 # İngilizce (ABD), açık tema (koyu tema elle çalıştırınca seçilirse). Cihaz en yeni iPhone Pro Max: App Store 6,9 inç
 # (1320 × 2868) görüntü ister, küçükleri bundan kendisi üretir.
 # Görüntüler ekran-goruntuleri dalına yazılır (her çalışmada yeniden). claude/grafik* ve claude/abd* dallarına itilince ya da elle çalışır.
+# App Store sayfası görüntüleri ekran-goruntuleri dalından yükler (magaza.yml): bir özelliği denemek için elle
+# çalıştırırken "dal"a başka bir ad verilir (ör. ekran-karsilama), mağazanınkiler değişmez. "karsilama" yalnızca ilk
+# açılış akışını çeker (Türkçe ve İngilizce; koyu seçiliyse koyu tema da).
 name: Ekran görüntüleri
 
 on:
@@ -9,6 +12,14 @@ on:
     inputs:
       koyu:
         description: "Koyu tema görüntüleri de"
+        type: boolean
+        default: false
+      dal:
+        description: "Görüntülerin yazılacağı dal (App Store ekran-goruntuleri dalından yükler)"
+        type: string
+        default: ekran-goruntuleri
+      karsilama:
+        description: "Yalnızca ilk açılış akışı (ara adımlar ve sonrasında Kartlar, Özet)"
         type: boolean
         default: false
   push:
@@ -66,10 +77,26 @@ jobs:
           TR='-AppleLanguages (tr) -AppleLocale tr_TR'
           EN='-AppleLanguages (en) -AppleLocale en_US'
           HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,sekme0,sekme1,sekme2,sekme3,sekme4
+          TANITIM=tanitim0,tanitim1,tanitim2,tanitim3,tanitim4
+          if [ "${{ inputs.karsilama }}" = "true" ]; then
+            # Ara adımlar (boş kart adı, seçilmemiş kesim günü) ve akıştan sonra Kartlar ile Özet
+            AYRINTI=tanitim0,tanitim1bos,tanitim1,tanitim2bos,tanitim2,tanitim3,tanitim4,sekme3,sekme0
+            tur "" light "$AYRINTI" -bos $TR
+            tur en- light "$AYRINTI" -bos -ulke US $EN
+            if [ "${{ inputs.koyu }}" = "true" ]; then
+              tur "" dark "$AYRINTI" -bos $TR
+              tur en- dark "$AYRINTI" -bos -ulke US $EN
+            fi
+            ls out
+            exit 0
+          fi
           tur "" light "$HEPSI" $TR
           tur bos- light sekme0 -bos $TR                 # verisi olmayan yeni kullanıcı (Başlarken)
           tur en- light sekme0,sekme1,sekme2,sekme3,sekme4,galeri3 -ulke US $EN
           tur en-bos- light sekme0 -bos -ulke US $EN
+          # İlk açılış akışı (KarsilamaEkrani): beş ekran, cevaplar dolu
+          tur "" light "$TANITIM" -bos $TR
+          tur en- light "$TANITIM" -bos -ulke US $EN
           # CashFollow Premium ödeme ekranı ve kilitler (ücretsiz sürüm); en-ucretsiz-galeri7 App Store incelemesinin
           # her abonelik için istediği görüntü
           tur en-ucretsiz- light galeri7,galeri8,sekme0,sekme1 -ucretsiz -ulke US $EN
@@ -78,10 +105,12 @@ jobs:
           if [ "${{ inputs.koyu }}" = "true" ]; then tur "" dark "$HEPSI" $TR; fi
           ls out
       - name: Görüntüleri yaz
+        env:
+          DAL: ${{ inputs.dal || 'ekran-goruntuleri' }}
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git checkout --orphan ekran-goruntuleri
+          git checkout --orphan "$DAL"
           git rm -rq --cached .
           mkdir -p /tmp/ekran && cp out/*.png /tmp/ekran/
           git clean -fdxq -e out
@@ -89,4 +118,4 @@ jobs:
           echo "Kaynak: $GITHUB_SHA" > KAYNAK.txt
           git add *.png KAYNAK.txt
           git commit -qm "Ekran görüntüleri ($GITHUB_SHA)"
-          git push -f origin ekran-goruntuleri
+          git push -f origin "$DAL"

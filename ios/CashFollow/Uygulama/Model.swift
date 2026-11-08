@@ -431,11 +431,13 @@ final class Model: ObservableObject {
         schedulePush()
     }
 
-    func continueOffline(country: String) {
-        Analitik.olay("started_without_account", ["country": country])
+    // Hesap açmadan başla. İlk açılış akışında (kaynak "onboarding") pencere kapanmaz: kart ve harcama adımları sürer;
+    // ülke hemen uygulanır (para birimi, taksidin öne çıkması). Uygulama bu arada kapanırsa sonraki açılış Özet'le başlar.
+    func continueOffline(country: String, kaynak: String = "welcome", kapat: Bool = true) {
+        Analitik.olay("started_without_account", ["country": country, "source": kaynak])
         Depo.offlineCountry = country
         applyCountry()
         Depo.offlineChosen = true
-        showWelcome = false
+        if kapat { showWelcome = false }
     }
 }

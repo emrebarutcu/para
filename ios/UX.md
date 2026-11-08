@@ -30,8 +30,8 @@ ilgili satırdaki "Ödendi" / "Ödedi" düğmesindedir.
 
 | # | Akış | 7.1 | 1. tur | Şimdi | Nasıl |
 |---|------|:---:|:------:|:-----:|-------|
-| 1 | İlk açılış | 3 | 3 | 4 | "Hesap açmadan başla" ya da giriş; ülke seçilir |
-| 2 | Yeni kullanıcının ilk adımları | 1 | 1 | 5 | Özet'te "Başlarken": kart ekle, harcama ekle, maaşını ekle (yapılanlar işaretlenir) |
+| 1 | İlk açılış | 3 | 3 | 5 | Yeni kullanıcıya karşılama: ülke → "Hesap açmadan başla" → kart → kesim günü → bir taksit → "Planın hazır" (bu ay ödenecek + hatırlatma izni); hesap isteğe bağlı ("Hesabım var, giriş yap") |
+| 2 | Yeni kullanıcının ilk adımları | 1 | 1 | 5 | Özet'te "Başlarken": kart ekle, harcama ekle, maaşını ekle (yapılanlar işaretlenir; karşılamada girilenler işaretli gelir, maaş her ay tekrarlar) |
 | 3 | Taksitli harcama ekleme | 3 | 5 | 5 | + → tutar, ne alındı, kart, taksit → altta Kaydet (eksik ne ise yazar) |
 | 4 | Alabilir miyim, hangi kartla? | 1 | 4 | 5 | Formda tutar yazınca: ilk ödeme, o ayın ödemesi önce → sonra, gelir yetiyor mu, kalan limit, daha geç ödenen kart önerisi |
 | 5 | Abonelik / kira | 1 | 4 | 5 | Harcama formunda "Her ay tekrarlar" |
@@ -51,7 +51,7 @@ ilgili satırdaki "Ödendi" / "Ödedi" düğmesindedir.
 | 19 | Param ay sonuna yetecek mi? | 3 | 4 | 5 | Özet → Nakit: bugün, ay sonunda, en düşük; dönem başı (maaş günü) Ayarlar'da |
 | 20 | Fon / hisse | 3 | 3 | 3 | Kod elle yazılıyor (sırada: kod arama) |
 | 21 | Ayarlar | 4 | 4 | 5 | Hesap, ülke, nakit (dönem başı, nakit sayılanlar), kişiler (renkleriyle) |
-| 22 | Ödeme günü hatırlatması | – | – | 5 | Özet'te sıradaki ödemelerin altında bir kez "Hatırlatayım mı?"; Ayarlar → Bildirimler: kaç gün önce, saat |
+| 22 | Ödeme günü hatırlatması | – | – | 5 | İlk açılışta "Planın hazır" ekranında, gelecek bildirimin önizlemesiyle; sonra Özet'te sıradaki ödemelerin altında bir kez "Hatırlatayım mı?" ("Şimdi değil" → 3 gün sonra); Ayarlar → Bildirimler: kaç gün önce, saat |
 | 23 | Uygulama kilidi | – | – | 5 | Ayarlar → "Face ID ile kilitle"; açılışta ve arka plandan dönünce sorar, uygulama değiştiricide tutar görünmez |
 
 ## Kaldırılanlar

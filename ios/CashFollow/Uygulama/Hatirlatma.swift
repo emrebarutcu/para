@@ -36,12 +36,20 @@ enum Hatirlatma {
         await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
-    // Açmak için: izin istenir (ilk seferde iOS sorar; reddedildiyse false → Ayarlar'a yönlendirilir)
-    static func ac(_ model: Model) async -> Bool {
+    // İlk açılış akışında "Şimdi değil": Özet'teki teklif 3 gün gösterilmez (sonra bir kez daha sorulur)
+    static var ertelendi: Bool { Date().timeIntervalSince1970 - d.double(forKey: "hatirlatma.ertelendi") < 3 * 86_400 }
+    static func ertele(kaynak: String) {
+        d.set(Date().timeIntervalSince1970, forKey: "hatirlatma.ertelendi")
+        Analitik.olay("reminders_offer_dismissed", ["source": kaynak])
+    }
+
+    // Açmak için: izin istenir (ilk seferde iOS sorar; reddedildiyse false → Ayarlar'a yönlendirilir).
+    // kaynak: onboarding (ilk açılış), overview_offer (Özet'teki teklif), settings
+    static func ac(_ model: Model, kaynak: String = "overview_offer") async -> Bool {
         teklifBitti = true
         let izin = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
         acik = izin
-        Analitik.olay("reminders_enabled", ["granted": izin, "days_before": gunOnce])
+        Analitik.olay("reminders_enabled", ["granted": izin, "days_before": gunOnce, "source": kaynak])
         await kur(model)
         return izin
     }

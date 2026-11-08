@@ -6,6 +6,7 @@ struct GirisEkrani: View {
     @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
     let welcome: Bool
+    var kaynak = "settings"     // nereden açıldı (analitik): settings, onboarding (ilk açılış akışı)
     @State private var register = false
     @State private var email = ""
     @State private var password = ""
@@ -95,7 +96,13 @@ struct GirisEkrani: View {
         do {
             if register {
                 let sonuc = try await Auth.signUp(email: trimmed, password: password, country: ulke)
-                if case .alreadyExists = sonuc {} else { Analitik.olay("account_created", ["country": ulke]) }
+                let sonucAdi: String?
+                switch sonuc {
+                case .session: sonucAdi = "session"
+                case .confirmEmail: sonucAdi = "confirm_email"
+                case .alreadyExists: sonucAdi = nil
+                }
+                if let sonucAdi { Analitik.olay("account_created", ["country": ulke, "result": sonucAdi, "source": welcome ? "welcome" : kaynak]) }
                 switch sonuc {
                 case .session(let s):
                     model.signedIn(s)
@@ -148,6 +155,7 @@ struct GirisEkrani: View {
 struct UlkeSecici: View {
     @EnvironmentObject private var model: Model
     @Binding var secim: String
+    var secimYok = false     // listenin başında "Ülkeni seç" (seçim boşken; desteklenmeyen bölge)
 
     private var ulkeler: [Sabitler.Ulke] {
         let liste = model.constants?.countries ?? []
@@ -156,6 +164,7 @@ struct UlkeSecici: View {
 
     var body: some View {
         Picker(L("Ülke"), selection: $secim) {
+            if secimYok { Text(L("Ülkeni seç")).tag("") }
             // İngilizcede ülke adları telefonun dilinde (Locale), alfabetik; para birimi kodla
             ForEach(ulkeler) { u in
                 Text("\(Bicim.ulkeAdi(u.code, u.name)) · \(Dil.turkceDegil ? u.currency : model.constants?.currencies.first { $0.code == u.currency }?.short ?? u.currency)").tag(u.code)
