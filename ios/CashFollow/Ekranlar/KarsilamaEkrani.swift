@@ -43,6 +43,7 @@ struct KarsilamaEkrani: View {
     @Environment(\.scenePhase) private var scenePhase
     var baslangic = 0       // ekran görüntüleri: açılacak adım (Ornek.swift TurEkrani, "tanitimN")
     var ornek = false       // ekran görüntüsü: cevaplar dolu; analitik, bildirim izni ve pencerenin kapanması yok
+    var ornekBos = false    // ekran görüntüsü: açılan adımın cevabı boş (kart adı yazılmamış, kesim günü seçilmemiş)
 
     @State private var adim: Adim = .giris
     @State private var hazir = false
@@ -137,7 +138,7 @@ struct KarsilamaEkrani: View {
             }
         }
         .task {
-            guard !ornek, kartAdi.isEmpty else { return }
+            guard !ornek || ornekBos, kartAdi.isEmpty else { return }
             try? await Task.sleep(nanoseconds: 350_000_000)   // geçiş bitsin
             kartOdak = true
         }
@@ -434,8 +435,8 @@ struct KarsilamaEkrani: View {
         if ornek {
             let tr = Ornek.ulke == "TR"
             ulke = Ornek.ulke
-            kartAdi = tr ? "Bonus" : "Chase Sapphire"
-            kesim = tr ? 10 : 3
+            kartAdi = (ornekBos && baslangic == 1) ? "" : (tr ? "Bonus" : "Chase Sapphire")
+            kesim = (ornekBos && baslangic == 2) ? nil : (tr ? 10 : 3)
             sonOdeme = tr ? 20 : 24
             taksit = tr ? 6 : 1
             if baslangic >= 3 {

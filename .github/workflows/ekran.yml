@@ -19,7 +19,7 @@ on:
         type: string
         default: ekran-goruntuleri
       karsilama:
-        description: "Yalnızca ilk açılış akışı (tanitim0…4)"
+        description: "Yalnızca ilk açılış akışı (ara adımlar ve sonrasında Kartlar, Özet)"
         type: boolean
         default: false
   push:
@@ -79,11 +79,13 @@ jobs:
           HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,sekme0,sekme1,sekme2,sekme3,sekme4
           TANITIM=tanitim0,tanitim1,tanitim2,tanitim3,tanitim4
           if [ "${{ inputs.karsilama }}" = "true" ]; then
-            tur "" light "$TANITIM" -bos $TR
-            tur en- light "$TANITIM" -bos -ulke US $EN
+            # Ara adımlar (boş kart adı, seçilmemiş kesim günü) ve akıştan sonra Kartlar ile Özet
+            AYRINTI=tanitim0,tanitim1bos,tanitim1,tanitim2bos,tanitim2,tanitim3,tanitim4,sekme3,sekme0
+            tur "" light "$AYRINTI" -bos $TR
+            tur en- light "$AYRINTI" -bos -ulke US $EN
             if [ "${{ inputs.koyu }}" = "true" ]; then
-              tur "" dark "$TANITIM" -bos $TR
-              tur en- dark "$TANITIM" -bos -ulke US $EN
+              tur "" dark "$AYRINTI" -bos $TR
+              tur en- dark "$AYRINTI" -bos -ulke US $EN
             fi
             ls out
             exit 0
