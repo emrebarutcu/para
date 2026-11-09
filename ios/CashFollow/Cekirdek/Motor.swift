@@ -147,9 +147,10 @@ final class Motor {
     func setPrices(_ json: String?) { kopru.invokeMethod("setPrices", withArguments: [json.map { $0 as Any } ?? NSNull()]) }
 
     // Banka e-postaları: işlenmemişler (JSON) ve sunucuda işlendi yapılanlar; araç geri bıraktıklarını inboxReleased verir
-    func setInbox(rows: String, granted: [Int] = []) {
+    // latest: gelen son e-posta (Senkron.inboxLatest; list_inbox → lastEmail)
+    func setInbox(rows: String, granted: [Int] = [], latest: String = "") {
         let g = String(decoding: (try? JSONSerialization.data(withJSONObject: granted)) ?? Data("[]".utf8), as: UTF8.self)
-        kopru.invokeMethod("setInbox", withArguments: [rows, g])
+        kopru.invokeMethod("setInbox", withArguments: [rows, g, latest])
     }
     func inboxReleased() -> [Int] {
         guard let json = kopru.invokeMethod("inboxReleased", withArguments: [])?.toString(),

@@ -441,8 +441,22 @@ struct Simulasyon: Decodable {
 }
 
 // Banka e-postaları (list_inbox, check_inbox)
-struct EpostaListesi: Decodable { let emails: [Eposta] }
-struct EpostaSonucu: Decodable { let added: [Harcama] }
+struct EpostaListesi: Decodable {
+    let emails: [Eposta]
+    let lastEmail: SonEposta?
+}
+struct EpostaSonucu: Decodable {
+    let added: [Harcama]
+    let tests: Int?   // gelen deneme e-postası (Banka e-postaları → Deneme e-postası gönder)
+}
+
+// Kutuya gelen son e-posta (işlenmiş olsa da): kurulum çalışıyor mu. kind: purchase, verification, test, other
+struct SonEposta: Decodable, Hashable {
+    let receivedAt: String
+    let sender: String?
+    let kind: String
+    let processed: Bool
+}
 
 struct Eposta: Decodable, Identifiable, Hashable {
     struct Okunan: Decodable, Hashable {
@@ -457,6 +471,15 @@ struct Eposta: Decodable, Identifiable, Hashable {
     let sender: String?
     let subject: String?
     let parsed: Okunan
+    // Gmail yönlendirme onayı ya da bankanın adres doğrulaması (kind verification): bağlantıyla onaylanır, harcama değildir
+    struct Dogrulama: Decodable, Hashable {
+        let gmail: Bool
+        let code: String?
+        let link: String?
+        let from: String?
+    }
+    let kind: String?          // purchase, verification, test (eposta.js kind)
+    let verification: Dogrulama?
     let matchedCard: String?
     let needsReview: String?   // neden kendiliğinden eklenemedi (eposta.js / tools.js emailItem)
     let body: String?

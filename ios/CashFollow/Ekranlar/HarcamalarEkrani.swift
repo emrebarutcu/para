@@ -139,40 +139,129 @@ struct HarcamalarEkrani: View {
 }
 
 // Banka e-postalarından kendiliğinden eklenemeyenler (kart tanımlı değil, tutar okunamadı…; web'deki inboxPanel):
-// Ekle formu doldurur, Göster e-postanın metnini açar (bankanın doğrulama bağlantısı), Yok say işlendi yapar
+// Ekle formu doldurur, Göster e-postanın metnini açar, Yok say işlendi yapar. Kartı bilinmeyen harcamada "•••• 1234 hangi
+// kartın?" sorulur (seçilen karta son 4 hane yazılır, bu hanedeki bekleyenler kendiliğinden eklenir). Gmail yönlendirme
+// onayı ve bankanın adres doğrulaması harcama değildir: Onayla bağlantıyı açar, Gmail'in onay kodu kopyalanabilir.
 struct EpostaKarti: View {
     @EnvironmentObject private var model: Model
     @State private var acik: Int?
     @State private var taslak: Eposta?
+    @State private var kartlar: [KartGorunumu] = []
+    @State private var soru: KartSorusu?
+    @State private var kopyalandi: Int?
+    @State private var hata: String?
+
+    // Seçilen kartın başka bir son 4 hanesi var: değiştir mi, yalnızca bu harcama mı
+    struct KartSorusu: Identifiable {
+        let e: Eposta
+        let kart: KartGorunumu
+        var id: String { "\(e.emailId)-\(kart.id)" }
+    }
 
     var body: some View {
         Kart(dolgu: 14) {
             KartBasligi(baslik: L("E-postadan gelenler"), alt: L("{0} onay bekliyor", model.epostalar.count)) { EmptyView() }
+            HataMetni(text: hata)
             SatirListesi(veri: model.epostalar) { e in satir(e) }
         }
         .sheet(item: $taslak) { HarcamaFormu(eposta: $0) }
+        .task(id: model.revision) { kartlar = (try? model.read("list_cards") as KartListesi)?.cards ?? [] }
+        .confirmationDialog(soru.map { L("{0} kartının son 4 hanesi {1}.", $0.kart.name, $0.kart.last4 ?? "") } ?? "",
+                            isPresented: Binding(get: { soru != nil }, set: { if !$0 { soru = nil } }), titleVisibility: .visible, presenting: soru) { q in
+            Button(L("Son 4 haneyi {0} yap", q.e.parsed.cardLast4 ?? "")) { karta(q.e, q.kart, son4Yaz: true) }
+            Button(L("Yalnızca bu harcamayı ekle")) { karta(q.e, q.kart, son4Yaz: false) }
+            Button(L("Vazgeç"), role: .cancel) {}
+        } message: { _ in
+            Text(L("Kart yenilendiyse son 4 haneyi değiştir; sonraki harcamalar da bu karta eklenir."))
+        }
     }
 
     private func satir(_ e: Eposta) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(e.parsed.merchant ?? e.subject ?? L("Banka e-postası")).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(2)
-            let bilgi = [tutar(e.parsed), e.parsed.date.map { Bicim.day($0) }, (e.parsed.installments ?? 1) > 1 ? L("{0} taksit", e.parsed.installments ?? 1) : nil]
-                .compactMap { $0 }
-            if !bilgi.isEmpty { Text(bilgi.joined(separator: " · ")).font(.footnote).monospacedDigit().foregroundStyle(Tema.metin2) }
-            if let n = Self.neden(e.needsReview, e.parsed) { Text(n).font(.footnote).foregroundStyle(Tema.uyari) }
-            if let s = e.sender { Text(s).font(.caption).foregroundStyle(Tema.metin3).lineLimit(1) }
-            HStack(spacing: 16) {
-                Button(L("Ekle")) { taslak = e }.fontWeight(.semibold)
-                Button(acik == e.id ? L("Gizle") : L("Göster")) { withAnimation { acik = acik == e.id ? nil : e.id } }
-                Button(L("Yok say")) { Task { await model.epostaBitti(e.emailId) } }
-                Spacer()
-            }
-            .font(.subheadline).foregroundStyle(Tema.metin).padding(.top, 4)
+            if e.kind == "verification", let v = e.verification { dogrulama(e, v) } else { harcama(e) }
             if acik == e.id, let b = e.body {
                 Text(Self.baglantili(b)).font(.footnote).foregroundStyle(Tema.metin2).textSelection(.enabled).padding(.top, 4)
             }
         }
         .buttonStyle(.borderless)
+    }
+
+    @ViewBuilder private func harcama(_ e: Eposta) -> some View {
+        Text(e.parsed.merchant ?? e.subject ?? L("Banka e-postası")).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(2)
+        let bilgi = [tutar(e.parsed), e.parsed.date.map { Bicim.day($0) }, (e.parsed.installments ?? 1) > 1 ? L("{0} taksit", e.parsed.installments ?? 1) : nil]
+            .compactMap { $0 }
+        if !bilgi.isEmpty { Text(bilgi.joined(separator: " · ")).font(.footnote).monospacedDigit().foregroundStyle(Tema.metin2) }
+        // Okunan ama kartı bulunamayan harcama (tools.js emailItem): kart sorulur
+        let sor = (e.needsReview?.hasPrefix("No card with last4") == true || e.needsReview == "Card could not be read") && !kartlar.isEmpty
+        if sor {
+            Text(e.parsed.cardLast4.map { L("•••• {0} hangi kartın?", $0) } ?? L("Hangi kartla?"))
+                .font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin).padding(.top, 2)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(kartlar) { k in
+                        Button(k.last4.map { "\(k.name) · \($0)" } ?? k.name) { sec(e, k) }
+                            .buttonStyle(.bordered).font(.subheadline)
+                    }
+                }
+            }
+        } else if let n = Self.neden(e.needsReview, e.parsed) {
+            Text(n).font(.footnote).foregroundStyle(Tema.uyari)
+        }
+        if let s = e.sender { Text(s).font(.caption).foregroundStyle(Tema.metin3).lineLimit(1) }
+        HStack(spacing: 16) {
+            Button(L("Ekle")) { taslak = e }.fontWeight(sor ? .regular : .semibold)
+            Button(acik == e.id ? L("Gizle") : L("Göster")) { withAnimation { acik = acik == e.id ? nil : e.id } }
+            Button(L("Yok say")) { Task { await model.epostaBitti(e.emailId) } }
+            Spacer()
+        }
+        .font(.subheadline).foregroundStyle(Tema.metin).padding(.top, 4)
+    }
+
+    @ViewBuilder private func dogrulama(_ e: Eposta, _ v: Eposta.Dogrulama) -> some View {
+        Text(v.gmail ? L("Gmail yönlendirme onayı") : L("Adres doğrulama")).font(.body.weight(.semibold)).foregroundStyle(Tema.metin)
+        Text(v.gmail ? L("{0} bankanın e-postalarını buraya iletmek istiyor. Onayla'ya dokun; Gmail sayfası açılır.", v.from ?? L("Gmail hesabın"))
+                     : L("Bankan bu adresi doğrulamanı istiyor. Onayla'ya dokun; bankanın sayfası açılır."))
+            .font(.footnote).foregroundStyle(Tema.metin2)
+        if let kod = v.code {
+            HStack {
+                Text(kod).font(.title3.weight(.semibold)).monospacedDigit().textSelection(.enabled)
+                Spacer()
+                Button(kopyalandi == e.emailId ? L("Kopyalandı") : L("Kodu kopyala")) {
+                    UIPasteboard.general.string = kod
+                    kopyalandi = e.emailId
+                }
+                .font(.subheadline)
+            }
+            .padding(10)
+            .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.top, 4)
+        }
+        if let s = e.sender { Text(s).font(.caption).foregroundStyle(Tema.metin3).lineLimit(1) }
+        HStack(spacing: 16) {
+            if let l = v.link.flatMap(URL.init(string:)) { Link(L("Onayla"), destination: l).fontWeight(.semibold) }
+            Button(L("Onayladım")) { Task { await model.epostaBitti(e.emailId) } }
+            Button(acik == e.id ? L("Gizle") : L("Göster")) { withAnimation { acik = acik == e.id ? nil : e.id } }
+            Spacer()
+        }
+        .font(.subheadline).foregroundStyle(Tema.metin).padding(.top, 4)
+    }
+
+    // Kartın başka bir son 4 hanesi varsa sorulur; yoksa e-postadaki hane karta yazılır (hane yoksa yalnızca bu harcama)
+    private func sec(_ e: Eposta, _ k: KartGorunumu) {
+        if e.parsed.cardLast4 != nil, let l = k.last4, !l.isEmpty { soru = KartSorusu(e: e, kart: k); return }
+        karta(e, k, son4Yaz: e.parsed.cardLast4 != nil)
+    }
+
+    private func karta(_ e: Eposta, _ k: KartGorunumu, son4Yaz: Bool) {
+        Task {
+            do {
+                try await model.epostaKarta(e, kart: k, son4Yaz: son4Yaz)
+                hata = nil
+                Analitik.olay("inbox_card_assigned", ["set_last4": son4Yaz])
+            } catch {
+                hata = error.localizedDescription
+            }
+        }
     }
 
     private func tutar(_ o: Eposta.Okunan) -> String? {
@@ -190,6 +279,9 @@ struct EpostaKarti: View {
         case "Tutar okunamadı": return L("Tutar okunamadı")
         case "Tarih okunamadı": return L("Tarih okunamadı")
         case "İade / iptal bildirimi": return L("İade / iptal bildirimi")
+        case "Gmail forwarding confirmation": return L("Gmail yönlendirme onayı")
+        case "Address verification": return L("Adres doğrulama")
+        case "Test e-mail": return L("Deneme e-postası")
         default: return r
         }
     }

@@ -7,7 +7,7 @@
 //                        öde, kartın faizi, fon / hisse, banka e-postaları). Ülke yoksa para biriminden (eski çağrılar).
 //   ctx.load()           → hydrate edilmiş veri
 //   ctx.mutate(fn)       → fn(veri) çalışır, değişen kişi / kart / harcama / hareket / borç kayıtları kaydedilir
-//   ctx.inbox            → pending(), claim(ids), release(ids), address(renew)
+//   ctx.inbox            → pending(), claim(ids), release(ids), address(renew), latest() (gelen son e-posta)
 //   ctx.rates()          → { rates: { TRY, USD, EUR, GAU }, updatedAt, source } (kur.js)
 //   ctx.prices(codes)    → { prices: { "BIST:THYAO": { price, … } }, missing, failed } fon ve hisse fiyatları (piyasa.js)
 //   ctx.searchFunds(q)   → [{ code: "FON:AFT", name, kind, price, date }] TEFAS fon araması (piyasa.js)
@@ -647,21 +647,28 @@ function withRemembered(state, p) {
   return guess ? { ...p, category: guess, categoryBy: "ai" } : p;
 }
 
+// kind: purchase (harcama bildirimi), verification (Gmail yönlendirme onayı ya da bankanın adres doğrulaması: harcama
+// eklenmez, kullanıcı bağlantıyla onaylar), test (uygulamadan gönderilen deneme: işlendi sayılır)
 function emailItem(state, row) {
-  const parsed = E.parse({ body: row.body, subject: row.subject, receivedAt: row.received_at });
+  const mail = { body: row.body, subject: row.subject, sender: row.sender, receivedAt: row.received_at };
+  const parsed = E.parse(mail);
+  if (E.isTest(mail)) return { row, parsed, card: null, reason: "Test e-mail", kind: "test" };
+  const verify = E.verification(mail);
+  if (verify) return { row, parsed, card: null, reason: verify.gmail ? "Gmail forwarding confirmation" : "Address verification", kind: "verification", verify };
   const card = emailCard(state, parsed);
   const reason = parsed.reason
     || (card ? null : parsed.last4 ? `No card with last4 ${parsed.last4}` : "Card could not be read");
-  return { row, parsed, card, reason };
+  return { row, parsed, card, reason, kind: "purchase" };
 }
 
 function emailView(x, { body = false } = {}) {
-  const { row, parsed, card, reason } = x;
+  const { row, parsed, card, reason, kind, verify } = x;
   const v = {
     emailId: row.id,
     receivedAt: row.received_at,
     sender: row.sender ?? null,
     subject: row.subject ?? null,
+    kind,
     parsed: {
       amount: parsed.amount, currency: parsed.currency, date: parsed.date, installments: parsed.count,
       merchant: parsed.merchant, cardLast4: parsed.last4, refund: parsed.refund,
@@ -669,11 +676,23 @@ function emailView(x, { body = false } = {}) {
     matchedCard: card ? card.name : null,
     needsReview: reason,
   };
+  if (verify) v.verification = { gmail: verify.gmail, code: verify.code, link: verify.link, from: verify.from };
   if (body) {
     const plain = E.plainText(row.body);
     v.body = plain.length > BODY_LIMIT ? plain.slice(0, BODY_LIMIT) + "…" : plain;
   }
   return v;
+}
+
+// Kutuya gelen son e-posta (işlenmiş olsa da): kurulum çalışıyor mu. { receivedAt, sender, kind, processed } ya da null
+async function lastEmail(ctx) {
+  const row = await ctx.inbox.latest?.();
+  if (!row) return null;
+  return {
+    receivedAt: row.received_at, sender: row.sender ?? null,
+    kind: E.kind({ body: row.body, subject: row.subject, sender: row.sender, receivedAt: row.received_at }),
+    processed: row.processed_at != null,
+  };
 }
 
 // ---------- Varlıklar ----------
@@ -2149,12 +2168,13 @@ export const TOOLS = [
   {
     name: "get_inbox_address",
     title: "Bank e-mail address",
-    description: `The user's personal address for bank spending notifications. Spending e-mails sent to it are turned into purchases on the card with the matching last 4 digits. Supported banks for now (amount, date, last 4 digits and merchant are read): ${E.BANKS.join(", ")}. Other banks' e-mails are still tried; what cannot be read waits for review (list_inbox), and try_bank_email tests one.`,
+    description: `The user's personal address for bank spending notifications. Spending e-mails sent to it are turned into purchases on the card with the matching last 4 digits. Supported banks for now (amount, date, last 4 digits and merchant are read): ${E.BANKS.join(", ")}. Other banks' e-mails are still tried; what cannot be read waits for review (list_inbox), and try_bank_email tests one. Setup: the user can give the address to the bank, or (to keep getting the bank's mails themselves) forward the bank's mails to it from their own mailbox with a rule (Gmail: Settings → Forwarding, add the address, then a filter "from: the bank" → forward; Gmail sends a confirmation code to the address, which list_inbox shows as a verification e-mail with the code and the confirm link). lastEmail is the last e-mail that arrived (kind purchase, verification, test or other): null means nothing has arrived yet. A test e-mail is one the user sends to the address with the subject "${E.TEST_SUBJECT}".`,
     inputSchema: obj(),
     annotations: { ...READ, readOnlyHint: false, idempotentHint: true },
     async run(args, ctx) {
       checkInboxAllowed(ctx);
-      return { address: await ctx.inbox.address(false) };
+      const [address, last] = await Promise.all([ctx.inbox.address(false), lastEmail(ctx)]);
+      return { address, lastEmail: last };
     },
   },
   {
@@ -2171,19 +2191,19 @@ export const TOOLS = [
   {
     name: "list_inbox",
     title: "Pending bank e-mails",
-    description: "Bank e-mails that have not been processed yet, with what was read from them (amount, date, installments, merchant, card). needsReview explains why one cannot be added automatically.",
+    description: "Bank e-mails that have not been processed yet, with what was read from them (amount, date, installments, merchant, card). needsReview explains why one cannot be added automatically. kind verification: a Gmail forwarding confirmation or a bank's address check, not a purchase: give the user verification.link to open (and verification.code for Gmail), then dismiss it. When needsReview says no card has the last 4 digits, ask the user which card it is and set the card's last4 with update_card: check_inbox then adds it (and later ones) automatically. lastEmail: the last e-mail that arrived, processed or not (null: none yet).",
     inputSchema: obj({ include_body: S.bool("Include the e-mail text (e.g. to show a bank verification link).") }),
     annotations: READ,
     async run(args, ctx) {
       checkInboxAllowed(ctx);
-      const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
-      return { emails: rows.map(row => emailView(emailItem(state, row), { body: !!args.include_body })) };
+      const [state, rows, last] = await Promise.all([ctx.load(), ctx.inbox.pending(), lastEmail(ctx)]);
+      return { emails: rows.map(row => emailView(emailItem(state, row), { body: !!args.include_body })), lastEmail: last };
     },
   },
   {
     name: "check_inbox",
     title: "Process bank e-mails",
-    description: "Like the app's 'Şimdi kontrol et': adds every pending e-mail that could be fully read and matched to a card as a purchase (for the first person), and lists the ones that need review.",
+    description: "Like the app's 'Şimdi kontrol et': adds every pending e-mail that could be fully read and matched to a card as a purchase (for the first person), marks test e-mails processed (tests: how many arrived), and lists the ones that need review.",
     inputSchema: obj(),
     annotations: WRITE,
     async run(args, ctx) {
@@ -2191,8 +2211,10 @@ export const TOOLS = [
       const [state, rows] = await Promise.all([ctx.load(), ctx.inbox.pending()]);
       const items = rows.map(row => emailItem(state, row));
       const ready = items.filter(x => !x.reason);
-      // Önce işaretlenir: başka bir cihaz aynı anda okuduysa harcama iki kez eklenmez
-      const claimed = new Set(ready.length ? await ctx.inbox.claim(ready.map(x => x.row.id)) : []);
+      const tests = items.filter(x => x.kind === "test");
+      // Önce işaretlenir: başka bir cihaz aynı anda okuduysa harcama iki kez eklenmez. Deneme e-postası yalnızca işlendi olur.
+      const claim = [...ready, ...tests].map(x => x.row.id);
+      const claimed = new Set(claim.length ? await ctx.inbox.claim(claim) : []);
       const toAdd = ready.filter(x => claimed.has(x.row.id));
       let added = [];
       if (toAdd.length) {
@@ -2213,7 +2235,8 @@ export const TOOLS = [
       }
       return {
         added,
-        needsReview: items.filter(x => x.reason).map(x => emailView(x)),
+        tests: tests.filter(x => claimed.has(x.row.id)).length,
+        needsReview: items.filter(x => x.reason && x.kind !== "test").map(x => emailView(x)),
       };
     },
   },
@@ -2275,7 +2298,7 @@ export const TOOLS = [
       const state = await ctx.load();
       const x = emailItem(state, { id: null, body: text(args.text, "text"), received_at: new Date().toISOString() });
       const v = emailView(x);
-      return { parsed: v.parsed, matchedCard: v.matchedCard, needsReview: v.needsReview, wouldAutoAdd: !x.reason };
+      return { kind: v.kind, parsed: v.parsed, ...(v.verification && { verification: v.verification }), matchedCard: v.matchedCard, needsReview: v.needsReview, wouldAutoAdd: !x.reason };
     },
   },
 

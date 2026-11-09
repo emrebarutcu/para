@@ -1,4 +1,4 @@
-// Sürüm 8.14.0 — scripts/surum.sh yazar: dosyanın kendisi her sürümde değişir, tarayıcılar (Safari dahil) yeni service
+// Sürüm 8.15.0 — scripts/surum.sh yazar: dosyanın kendisi her sürümde değişir, tarayıcılar (Safari dahil) yeni service
 // worker'ı yalnızca içe aktarılan version.js'e bakmadan da hemen fark eder
 importScripts('/version.js', '/dil.js');
 const CACHE = 'cashfollow-' + self.APP_VERSION;

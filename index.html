@@ -938,7 +938,7 @@
         <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
       <div class="sheet-body">
-        <p class="hint">Sana özel e-posta adresini bankana harcama bildirim adresi olarak ver. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur.</p>
+        <p class="hint">Bankanın harcama e-postaları sana özel adrese gelince harcama olarak eklenir. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur.</p>
         <p class="hint" id="inboxBanks"></p>
         <p class="hint warn-text" id="inboxLoginNote" hidden>Bu özellik bulut senkronizasyonuyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.</p>
         <div id="inboxSetup" hidden>
@@ -946,13 +946,36 @@
             <code id="inboxAddress">…</code>
             <button type="button" class="btn btn-primary sm" data-copy="inboxAddress">Kopyala</button>
           </div>
-          <ol class="steps">
-            <li><strong>Kartlar</strong> sekmesinde her kartın son 4 hanesini gir.</li>
-            <li>Bankanın internet ya da mobil şubesinde harcama bildirimlerinin gideceği e-posta adresini <strong>bu adres</strong> yap.</li>
-            <li>Banka adresi doğrulamak için e-posta gönderirse <strong>Harcamalar</strong> sekmesinde "E-postadan gelenler" altında görünür; <strong>Göster</strong> ile açıp bağlantıya dokun.</li>
-          </ol>
-          <p class="hint">Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir.</p>
+          <p class="inbox-status" id="inboxStatus" aria-live="polite" hidden></p>
+          <p class="hint">Bankanın harcama e-postalarını bu adrese getirmenin iki yolu var:</p>
+          <details class="guide" open>
+            <summary>Kendi e-postandan ilet <span class="tag">Önerilen</span></summary>
+            <p class="hint">Bankanın e-postaları kendi kutuna da gelmeye devam eder. Bankanın gönderdiği adres, kutundaki harcama e-postalarında görünür.</p>
+            <p class="guide-head">Gmail (bilgisayardan; telefondaki Gmail uygulamasında bu ayar yok)</p>
+            <ol class="steps">
+              <li>Ayarlar → <strong>Tüm ayarları görün</strong> → <strong>Yönlendirme ve POP/IMAP</strong> → Yönlendirme adresi ekle: <strong>bu adres</strong>.</li>
+              <li>Gmail bu adrese bir onay gönderir; birkaç saniye içinde <strong>Harcamalar</strong> sekmesinde "Gmail yönlendirme onayı" olarak görünür. <strong>Onayla</strong>'ya dokun.</li>
+              <li><strong>Filtreler</strong> → Yeni filtre oluştur → <strong>Kimden</strong>: bankanın adresi → Filtre oluştur → <strong>Şu adrese yönlendir</strong>: bu adres.</li>
+            </ol>
+            <p class="guide-head">Outlook / Hotmail</p>
+            <ol class="steps">
+              <li>Ayarlar → Posta → <strong>Kurallar</strong> → Yeni kural ekle.</li>
+              <li>Koşul: <strong>Kimden</strong> bankanın adresi. Eylem: <strong>Şuraya ilet</strong> → bu adres.</li>
+            </ol>
+            <p class="guide-head">iCloud Mail (icloud.com)</p>
+            <ol class="steps">
+              <li>Ayarlar → <strong>Kurallar</strong> → Kural ekle.</li>
+              <li>Kimden: bankanın adresi → <strong>Bir adrese ilet</strong> → bu adres.</li>
+            </ol>
+          </details>
+          <details class="guide">
+            <summary>Bankada bildirim adresini değiştir</summary>
+            <p class="hint">Bankanın internet ya da mobil şubesinde harcama bildirimlerinin gideceği e-posta adresini <strong>bu adres</strong> yap. Bildirimler artık kendi kutuna gelmez. Banka adresi doğrulamak için e-posta gönderirse <strong>Harcamalar</strong> sekmesinde "Adres doğrulama" olarak görünür; <strong>Onayla</strong>'ya dokun.</p>
+          </details>
+          <p class="hint">Kartların son 4 hanesini önceden girmen gerekmez: tanımadığımız bir kartla ilk harcama gelince <strong>Harcamalar</strong>'da hangi kart olduğunu sorarız.</p>
+          <p class="hint">Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ya da kendi kutuna ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir.</p>
           <div class="btn-row">
+            <a class="btn btn-ghost sm" id="inboxTest" href="#">Deneme e-postası gönder</a>
             <button type="button" class="btn btn-ghost sm" id="inboxCheck">Şimdi kontrol et</button>
             <button type="button" class="btn btn-ghost sm" id="inboxRenew">Adresi yenile</button>
           </div>

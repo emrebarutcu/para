@@ -240,6 +240,16 @@
     return error ? [] : data.map(r => r.id);
   };
 
+  // Gelen son e-posta (işlenmiş olsa da): kurulum çalışıyor mu; yoksa null, okunamazsa undefined
+  window.syncInboxLatest = async function () {
+    if (!db || !user) return undefined;
+    const { data, error } = await db.from('inbox_messages')
+      .select('id, sender, subject, body, received_at, processed_at')
+      .order('received_at', { ascending: false })
+      .limit(1);
+    return error ? undefined : data[0] ?? null;
+  };
+
   // Kullanıcının e-posta adresi ("<address>@INBOX_DOMAIN"); yoksa (ya da renew ile) yenisi oluşturulur
   window.syncInboxAddress = async function (renew) {
     if (!db || !user) return null;

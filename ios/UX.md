@@ -53,6 +53,7 @@ ilgili satırdaki "Ödendi" / "Ödedi" düğmesindedir.
 | 21 | Ayarlar | 4 | 4 | 5 | Hesap, ülke, nakit (dönem başı, nakit sayılanlar), kişiler (renkleriyle) |
 | 22 | Ödeme günü hatırlatması | – | – | 5 | İlk açılışta "Planın hazır" ekranında, gelecek bildirimin önizlemesiyle; sonra Özet'te sıradaki ödemelerin altında bir kez "Hatırlatayım mı?" ("Şimdi değil" → 3 gün sonra); Ayarlar → Bildirimler: kaç gün önce, saat |
 | 23 | Uygulama kilidi | – | – | 5 | Ayarlar → "Face ID ile kilitle"; açılışta ve arka plandan dönünce sorar, uygulama değiştiricide tutar görünmez |
+| 24 | Banka e-postalarını bağlama | – | – | 4 | Ayarlar → Banka e-postaları: adres, son e-posta durumu, deneme e-postası; Gmail / Outlook / iCloud'dan yönlendirme rehberi (bankadaki adres değişmeden); Gmail onayı ve banka doğrulaması Harcamalar'da "Onayla" ile; kartın son 4 hanesi ilk e-postada sorulur ("•••• 1234 hangi kartın?"); kapalıyken arka planda bakar, eklenen harcamayı bildirir (sırada: YAPILACAKLAR.md) |
 
 ## Kaldırılanlar
 

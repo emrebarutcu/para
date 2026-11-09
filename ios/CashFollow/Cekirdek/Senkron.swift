@@ -157,6 +157,13 @@ final class Senkron {
         return rows.compactMap { ($0["id"] as? NSNumber)?.intValue }
     }
 
+    // Gelen son e-posta, işlenmiş olsa da (JSON dizisi, en çok bir satır): Ayarlar → Banka e-postaları'ndaki durum
+    func inboxLatest() async throws -> String {
+        let data = try await rest("inbox_messages", query: [("select", "id,sender,subject,body,received_at,processed_at"),
+                                                            ("order", "received_at.desc"), ("limit", "1")])
+        return String(decoding: data, as: UTF8.self)
+    }
+
     func inboxRelease(_ ids: [Int]) async throws {
         guard !ids.isEmpty else { return }
         _ = try await rest("inbox_messages", query: [("id", "in.(\(ids.map(String.init).joined(separator: ",")))")],

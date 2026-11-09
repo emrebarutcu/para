@@ -72,8 +72,11 @@ function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { i
     if (method === "GET") {
       let out = rows.filter(match);
       if (p.get("order")) {
-        const keys = p.get("order").split(",");
-        out.sort((a, b) => { for (const k of keys) { if (a[k] < b[k]) return -1; if (a[k] > b[k]) return 1; } return 0; });
+        const keys = p.get("order").split(",").map(k => k.split("."));
+        out.sort((a, b) => {
+          for (const [k, dir] of keys) { const s = dir === "desc" ? -1 : 1; if (a[k] < b[k]) return -s; if (a[k] > b[k]) return s; }
+          return 0;
+        });
       }
       const offset = Number(p.get("offset") || 0);
       out = out.slice(offset, p.get("limit") ? offset + Number(p.get("limit")) : undefined);
@@ -463,6 +466,50 @@ test("banka e-postaları: otomatik ekleme, onay bekleyen, elle ekleme, yok sayma
   assert.equal(yk.wouldAutoAdd, true);
   const yk2 = await c.call("try_bank_email", { text: "1234 ile biten KoçAilem kartınız ile AK BUFE VE KAFETERYA I firmasından 01.10.2026 tarihinde 15:43 saatinde 150,00 TL tutarında işlem gerçekleştirilmiştir." });
   assert.equal(yk2.parsed.merchant, "AK BUFE VE KAFETERYA I");
+});
+
+test("banka e-postaları: Gmail yönlendirme onayı, deneme e-postası, son e-posta, kartı sonradan tanıtma", async () => {
+  const sb = fakeSupabase();
+  const c = client(sb);
+  assert.equal((await c.call("get_inbox_address")).lastEmail, null);
+  await c.call("add_card", { name: "A", cutoff_day: 12, due_day: 22 });
+  await c.call("add_card", { name: "B", cutoff_day: 25, due_day: 5, last4: "1111" });
+  const mail = (id, at, extra) => ({ id, user_id: "u1", message_key: String(id), sender: "bank", subject: "Harcama", received_at: `2026-10-17T10:0${at}:00+00:00`, processed_at: null, ...extra });
+  sb.db.inbox_messages.push(
+    mail(1, 1, {
+      sender: "Gmail Ekibi <forwarding-noreply@google.com>",
+      subject: "(#548123907) Gmail Forwarding Confirmation - Receive Mail from ali@gmail.com",
+      body: "ali@gmail.com has requested to automatically forward mail to your email address abc@cashfollow.app.\nConfirmation code: 548123907\nTo allow ali@gmail.com to automatically forward mail to your address, please click the link below to confirm the request:\nhttps://mail-settings.google.com/mail/vf-%5BX%5D-Y",
+    }),
+    mail(2, 2, { subject: "CashFollow deneme", body: "Deneme" }),
+    mail(3, 3, { body: "2222 ile biten kartınızdan 16.10.2026 tarihinde AMAZON işyerinde 600,00 TL tutarında harcama yapılmıştır." }),
+    mail(4, 4, { body: "2222 ile biten kartınızdan 17.10.2026 tarihinde MIGROS işyerinde 100,00 TL tutarında harcama yapılmıştır." }),
+  );
+
+  const pending = await c.call("list_inbox");
+  assert.deepEqual(pending.emails.map(e => e.kind), ["verification", "test", "purchase", "purchase"]);
+  assert.deepEqual(pending.emails[0].verification, { gmail: true, code: "548123907", link: "https://mail-settings.google.com/mail/vf-%5BX%5D-Y", from: "ali@gmail.com" });
+  assert.match(pending.emails[2].needsReview, /2222/);
+  assert.deepEqual(pending.lastEmail, { receivedAt: "2026-10-17T10:04:00+00:00", sender: "bank", kind: "purchase", processed: false });
+
+  // Deneme e-postası işlendi olur, harcama eklenmez; doğrulama ve kartı bilinmeyenler bekler
+  const first = await c.call("check_inbox");
+  assert.equal(first.added.length, 0);
+  assert.equal(first.tests, 1);
+  assert.deepEqual(first.needsReview.map(e => e.emailId), [1, 3, 4]);
+  assert.ok(sb.db.inbox_messages[1].processed_at);
+
+  // Kullanıcı "2222 hangi kartın?" sorusuna A dedi: son 4 hane karta yazılır, ikisi de kendiliğinden eklenir
+  await c.call("update_card", { card: "A", last4: "2222" });
+  const second = await c.call("check_inbox");
+  assert.deepEqual(second.added.map(p => [p.description, p.card]), [["AMAZON", "A"], ["MIGROS", "A"]]);
+  assert.deepEqual(second.needsReview.map(e => e.emailId), [1]);
+  assert.equal((await c.call("get_inbox_address")).lastEmail.processed, true);
+
+  const tried = await c.call("try_bank_email", { text: "E-posta adresinizi doğrulamak için: Doğrula (https://banka.example/verify?x=1)" });
+  assert.equal(tried.kind, "verification");
+  assert.equal(tried.verification.link, "https://banka.example/verify?x=1");
+  assert.equal(tried.wouldAutoAdd, false);
 });
 
 test("e-posta adresi ve yenileme", async () => {

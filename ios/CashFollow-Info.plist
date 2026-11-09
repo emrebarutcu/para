@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Xcode'un ürettiği Info.plist'e eklenenler (GENERATE_INFOPLIST_FILE; build ayarıyla verilemeyen anahtarlar).
+     Banka e-postaları arka planda: EpostaBildirim.swift. Dosya CashFollow klasörünün dışında: kaynak olarak kopyalanmasın. -->
+<plist version="1.0">
+<dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.cashfollow.ios.eposta</string>
+	</array>
+</dict>
+</plist>
