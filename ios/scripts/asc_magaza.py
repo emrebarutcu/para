@@ -303,13 +303,18 @@ def oku_abonelik(app):
 
 
 def oku_build(app):
-    builds, inc = hepsi(f"/builds?filter[app]={app['id']}&sort=-uploadedDate&limit=5&include=preReleaseVersion"
-                        "&fields[builds]=version,processingState,uploadedDate,expired,preReleaseVersion")
+    builds, inc = hepsi(f"/builds?filter[app]={app['id']}&sort=-uploadedDate&limit=5&include=preReleaseVersion,buildBetaDetail"
+                        "&fields[builds]=version,processingState,uploadedDate,expired,usesNonExemptEncryption,preReleaseVersion,buildBetaDetail")
     surum = {i["id"]: i["attributes"]["version"] for i in inc if i["type"] == "preReleaseVersions"}
+    # TestFlight: dahili / harici test durumu (ör. MISSING_EXPORT_COMPLIANCE ise testçilere görünmez)
+    beta = {i["id"]: i["attributes"] for i in inc if i["type"] == "buildBetaDetails"}
     for b in builds[:5]:
         a = b["attributes"]
         pv = surum.get((b["relationships"]["preReleaseVersion"]["data"] or {}).get("id"))
-        print(f"  {pv} ({a['version']}): {a['processingState']}, {a['uploadedDate']}" + (", süresi doldu" if a.get("expired") else ""))
+        bd = beta.get(((b["relationships"].get("buildBetaDetail") or {}).get("data") or {}).get("id"), {})
+        print(f"  {pv} ({a['version']}): {a['processingState']}, {a['uploadedDate']}" + (", süresi doldu" if a.get("expired") else "")
+              + f", TestFlight dahili {bd.get('internalBuildState')}, harici {bd.get('externalBuildState')}"
+              + f", şifreleme {a.get('usesNonExemptEncryption')}")
 
 
 def oku(ay):
