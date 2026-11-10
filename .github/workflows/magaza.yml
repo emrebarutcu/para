@@ -1,9 +1,10 @@
 # App Store sayfası: magaza/<dil>.md metinleri, magaza/ayarlar.json (adresler, kategori, yaş, ülkeler, fiyat) ve
 # ekran-goruntuleri dalındaki görüntüler App Store Connect API ile yazılır (ios/scripts/asc_magaza.py). TestFlight'la
-# aynı anahtar (ASC_*). İncelemeye göndermez. Kurulum ve kullanım: SETUP.md → App Store sayfası.
+# aynı anahtar (ASC_*). Kurulum ve kullanım: SETUP.md → App Store sayfası.
 #   oku    → App Store Connect'teki durum, hiçbir şey değişmez
 #   kuru   → neyin değişeceği, değişmez (claude/magaza* dallarına magaza/ değişikliği itilince kendiliğinden)
 #   gonder → değiştirir
+#   incele → gonder, ardından sürümü incelemeye gönderir (yalnızca bilerek)
 # Elle: Actions → App Store sayfası → Run workflow (dosya main'de olmalı); ya da her dalda magaza-<işlem>-* etiketi:
 # git tag magaza-oku-1 && git push origin magaza-oku-1
 name: App Store sayfası
@@ -12,12 +13,12 @@ on:
   workflow_dispatch:
     inputs:
       islem:
-        description: "oku: durum, kuru: ne değişecek, gonder: yaz"
+        description: "oku: durum, kuru: ne değişecek, gonder: yaz, incele: yaz ve incelemeye gönder"
         type: choice
-        options: [oku, kuru, gonder]
+        options: [oku, kuru, gonder, incele]
         default: kuru
   push:
-    tags: ["magaza-oku-*", "magaza-kuru-*", "magaza-gonder-*"]
+    tags: ["magaza-oku-*", "magaza-kuru-*", "magaza-gonder-*", "magaza-incele-*"]
     branches: ["claude/magaza*"]
     paths: ["magaza/**", "ios/scripts/asc_magaza.py", ".github/workflows/magaza.yml"]
 

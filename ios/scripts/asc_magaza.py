@@ -5,8 +5,9 @@
   asc_magaza.py kuru  [--ekran DIR]  → neyin değişeceğini yazar, değiştirmez
   asc_magaza.py gonder [--ekran DIR] → değiştirir: metinler, adresler, kategori, telif, yaş sınırı, ülkeler, fiyat,
                                         build, ekran görüntüleri (DIR: ekran-goruntuleri dalının içeriği)
+  asc_magaza.py incele [--ekran DIR] → gonder, ardından sürümü incelemeye gönderir (yalnızca kullanıcı isteyince)
 
-İncelemeye göndermez: o adım elle (App Store Connect → Add for Review), kullanıcının onayıyla.
+oku / kuru / gonder incelemeye göndermez.
 Depo herkese açık, Actions günlükleri de: inceleme iletişim bilgileri ve demo hesap yalnızca "dolu / boş" diye yazılır.
 Ortam: KEY_ID, ISSUER_ID, KEY_PATH (.p8). Gerekli paketler: pyjwt, cryptography.
 """
@@ -615,10 +616,52 @@ def gonder_abonelik(app, ay):
                 "relationships": {"subscription": {"data": {"type": "subscriptions", "id": s["id"]}},
                                   "availableTerritories": {"data": [{"type": "territories", "id": t} for t in ulkeler]}}}},
                 f"{pid}: {len(ulkeler)} ülkede satışa açılıyor")
-    print("  (fiyat ve ücretsiz deneme App Store Connect'te; incelemeye gönderme elle)")
+    print("  (fiyat ve ücretsiz deneme App Store Connect'te; incelemeye gönderme: incele)")
 
 
-def gonder(ay, klasor):
+# reviewSubmissions durumları: açık (öğe eklenip gönderilebilir) ve zaten gönderilmiş
+INCELEME_ACIK = {"READY_FOR_REVIEW", "UNRESOLVED_ISSUES"}
+INCELEMEDE = {"WAITING_FOR_REVIEW", "IN_REVIEW", "CANCELING", "COMPLETING"}
+
+
+def gonder_inceleme(app, v):
+    """Sürümü incelemeye gönderir: açık bir gönderim (reddedilmiş olan dahil) varsa onu, yoksa yenisini kullanır."""
+    s = v["attributes"]["versionString"]
+    if durum(v) not in DUZENLENIR:
+        print(f"  sürüm {s} {durum(v)}: incelemeye gönderilecek durumda değil")
+        return
+    b = yoksa_none(f"/appStoreVersions/{v['id']}/build")
+    if not (b and b.get("data")):
+        raise HataAPI(409, f"sürüm {s}'e build seçilmemiş: önce TestFlight, sonra incele")
+    gonderimler = hepsi(f"/reviewSubmissions?filter[app]={app['id']}&filter[platform]=IOS&limit=50")[0]
+    for g in gonderimler:
+        if g["attributes"].get("state") in INCELEMEDE:
+            print(f"  zaten incelemede: gönderim {g['id']} ({g['attributes']['state']})")
+            return
+    acik = [g for g in gonderimler if g["attributes"].get("state") in INCELEME_ACIK]
+    if acik:
+        g = acik[0]
+        print(f"  açık gönderim {g['id']} ({g['attributes']['state']}) kullanılıyor")
+    else:
+        g = yaz("POST", "/reviewSubmissions", {"data": {"type": "reviewSubmissions", "attributes": {"platform": "IOS"},
+                "relationships": {"app": {"data": {"type": "apps", "id": app["id"]}}}}}, "yeni inceleme gönderimi")
+        g = g and g["data"]
+    if g:
+        ogeler = hepsi(f"/reviewSubmissions/{g['id']}/items?include=appStoreVersion&limit=50")[0]
+        var = any(((o.get("relationships") or {}).get("appStoreVersion", {}).get("data") or {}).get("id") == v["id"]
+                  for o in ogeler)
+        if not var:
+            yaz("POST", "/reviewSubmissionItems", {"data": {"type": "reviewSubmissionItems", "relationships": {
+                "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": g["id"]}},
+                "appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}}, f"sürüm {s} gönderime ekleniyor")
+        else:
+            print(f"  sürüm {s} gönderimde")
+    yaz("PATCH", f"/reviewSubmissions/{g['id'] if g else '?'}",
+        {"data": {"type": "reviewSubmissions", "id": g["id"] if g else "?", "attributes": {"submitted": True}}},
+        f"sürüm {s} incelemeye gönderiliyor")
+
+
+def gonder(ay, klasor, incele=False):
     mt = metinler(ay)
     for loc, m in mt.items():
         print(f"{loc}: " + ", ".join(f"{k} {len(v)}/{SINIR[k]}" for k, v in m.items()))
@@ -635,6 +678,13 @@ def gonder(ay, klasor):
     bolum("Ülkeler", gonder_ulkeler, app, ay)
     bolum("Fiyat", gonder_fiyat, app, ay)
     bolum("Abonelikler (dil metinleri, ülkeler)", gonder_abonelik, app, ay)
+    if incele:
+        if HATALAR:
+            print("\n::error::Önceki bölümlerde hata var: incelemeye gönderilmedi")
+            return
+        v = duzenlenen_surum(app) or v
+        if v:
+            bolum("İncelemeye gönderme", gonder_inceleme, app, v)
 
 
 if __name__ == "__main__":
@@ -645,9 +695,9 @@ if __name__ == "__main__":
             print(f"{loc}: " + ", ".join(f"{k} {len(v)}/{SINIR[k]}" for k, v in m.items()))
     elif islem == "oku":
         oku(ayarlar())
-    elif islem in ("kuru", "gonder"):
+    elif islem in ("kuru", "gonder", "incele"):
         KURU = islem == "kuru"
-        gonder(ayarlar(), klasor)
+        gonder(ayarlar(), klasor, incele=islem == "incele")
     else:
         sys.exit(__doc__)
     if HATALAR:

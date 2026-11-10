@@ -393,7 +393,8 @@ bir sonraki gönderimde depodakiyle ezilir; değişiklik `magaza/`'da yapılır.
 - **İşlemler:** `oku` (App Store Connect'teki durum), `kuru` (neyin değişeceği), `gonder` (yazar). Actions → **App Store
   sayfası** → Run workflow (dosya `main`'de olmalı) ya da her dalda etiketle: `git tag magaza-gonder-2 && git push origin
   magaza-gonder-2` (`magaza-oku-*`, `magaza-kuru-*`). `claude/magaza*` dalına `magaza/` değişikliği itilince kendiliğinden
-  `kuru` çalışır. **İncelemeye göndermez**: o adım elle, App Store Connect → Add for Review.
+  `kuru` çalışır. `oku` / `kuru` / `gonder` **incelemeye göndermez**; `incele` önce `gonder`'i yapar, hata yoksa sürümü
+  incelemeye gönderir (seçili build gerekir; reddedilmiş açık gönderim varsa o yeniden gönderilir). Yalnızca bilerek çalıştırılır.
 - **Metinler:** `magaza/<dil>.md` (ad, alt başlık, anahtar kelimeler, tanıtım metni, açıklama; başlıklar sabit, karakter
   sınırları denetlenir): `tr.md` Türkçe (uygulamanın ana dili), `en.md` İngilizce (ABD), `ja.md` Japonca. Yeni dil:
   `magaza/<kod>.md` ve `ayarlar.json → diller`'e App Store Connect'in dil kodu.
