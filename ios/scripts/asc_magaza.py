@@ -27,6 +27,8 @@ BILGI = {"ad": "name", "alt": "subtitle"}                                       
 SURUM = {"aciklama": "description", "anahtar": "keywords", "tanitim": "promotionalText",   # appStoreVersionLocalizations
          "yenilikler": "whatsNew"}
 DUZENLENIR = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "INVALID_BINARY"}
+INCELEMEDE_SURUM = {"WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE",
+                    "PROCESSING_FOR_DISTRIBUTION", "PROCESSING_FOR_APP_STORE", "WAITING_FOR_EXPORT_COMPLIANCE"}
 YAYINDA = {"READY_FOR_DISTRIBUTION", "READY_FOR_SALE", "REPLACED_WITH_NEW_INFO", "ACCEPTED"}
 
 KURU = True
@@ -398,6 +400,11 @@ def gonder_surum(app, ay):
         hedef = v["attributes"]["versionString"]
     istenen = {"versionString": hedef, "copyright": ay.get("telif")}
     if v is None:
+        # İncelemedeki / yayın bekleyen sürüm varken yeni sürüm açılamaz (Apple 409 verir): dokunma
+        bekleyen = [x for x in surumler(app) if durum(x) in INCELEMEDE_SURUM]
+        if bekleyen:
+            print(f"  sürüm {bekleyen[0]['attributes']['versionString']} {durum(bekleyen[0])}: incelemede, yeni sürüm açılmaz")
+            return None
         r = yaz("POST", "/appStoreVersions", {"data": {"type": "appStoreVersions",
                 "attributes": {"platform": "IOS", **{k: x for k, x in istenen.items() if x}},
                 "relationships": {"app": {"data": {"type": "apps", "id": app["id"]}}}}}, f"yeni sürüm {hedef} açılıyor")
