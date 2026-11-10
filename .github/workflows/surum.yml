@@ -25,13 +25,10 @@ jobs:
             echo "::error file=sw.js::sw.js'teki sürüm satırı version.js ile aynı değil ($head). scripts/surum.sh ikisini birlikte yazar."
             exit 1
           fi
-          # iPhone'un mağaza sürümü web'den ayrı (scripts/surum.sh ios): Debug ve Release aynı, biçim 1.0 / 1.0.1
-          ios=$(sed -n "s/.*MARKETING_VERSION = \(.*\);.*/\1/p" ios/CashFollow.xcodeproj/project.pbxproj | sort -u)
-          if ! echo "$ios" | grep -qxE '[0-9]+\.[0-9]+(\.[0-9]+)?'; then
-            echo "::error file=ios/CashFollow.xcodeproj/project.pbxproj::iOS MARKETING_VERSION tek ve 1.0 / 1.0.1 biçiminde olmalı: $ios"
+          if grep "MARKETING_VERSION = " ios/CashFollow.xcodeproj/project.pbxproj | grep -qv "MARKETING_VERSION = $head;"; then
+            echo "::error file=ios/CashFollow.xcodeproj/project.pbxproj::iOS MARKETING_VERSION version.js ile aynı değil ($head). scripts/surum.sh ikisini birlikte yazar."
             exit 1
           fi
-          echo "iPhone mağaza sürümü: $ios"
           if [ -n "$base" ] && { [ "$head" = "$base" ] || [ "$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)" != "$head" ]; }; then
             echo "::error file=version.js::Sürüm artırılmalı (main: $base, bu PR: $head). scripts/surum.sh [patch|minor|major] çalıştır."
             exit 1

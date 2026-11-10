@@ -104,10 +104,8 @@ MCP araçları ve kullanıcının mevcut verisinin anlamı.
 | **PATCH** | Yeni yetenek yok: hata düzeltmesi, metin, stil, performans, belgeler, yalnızca altyapı (Worker paketleme, önbellek başlıkları) | Çıkışta verinin temizlenmesi |
 
 Bir PR'da birden fazla değişiklik varsa en yükseği belirler; kararsız kalınırsa yükseği seçilir. MAJOR'da bu dosyaya
-yükseltme notu (çalıştırılacak SQL, MCP kullananların dikkat edeceği) yazılır. iPhone'un mağaza sürümü (App Store
-`CFBundleShortVersionString`, Xcode `MARKETING_VERSION`) web sürümünden ayrıdır: 1.0'dan başlar, yayınlanan sürümden sonraki
-ilk yüklemeden önce `scripts/surum.sh ios [patch|minor|major]` ile artırılır (App Store yayınlanmış sürüm numarasına yeni
-build almaz). Google Play `versionCode`'u web sürümünden üretilir:
+yükseltme notu (çalıştırılacak SQL, MCP kullananların dikkat edeceği) yazılır. Mağaza sürümü (App Store
+`CFBundleShortVersionString`) gönderim anındaki web sürümüdür; Google Play `versionCode`'u ondan üretilir:
 `MAJOR × 1000000 + MINOR × 1000 + PATCH` (ör. `1.4.2` → `1004002`).
 
 `.github/workflows/surum.yml` ("Sürüm" denetimi) sürüm main'dekinden büyük değilse PR'ı kırmızıya çeker.
@@ -344,8 +342,8 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
   seyri web'le aynı modülden hesaplanır (`nakit.js`, geçmiş fiyatlar `/api/gecmis`). Kart günlerinin değişmesi
   (`transition`), içe aktarma ve banka e-postaları web'de. Araçların doğrulama hataları asistanlar için İngilizcedir; formlar
   çoğunu önceden engeller.
-- **Sürüm:** mağaza sürümü `MARKETING_VERSION`'dır (1.0'dan başlar, web sürümünden ayrı; `scripts/surum.sh ios`), App Store
-  sayfasının sürüm numarası da oradan alınır. `CURRENT_PROJECT_VERSION` (build numarası) her TestFlight yüklemesinde elle artırılır.
+- **Sürüm:** mağaza sürümü web sürümüdür; `scripts/surum.sh` `MARKETING_VERSION`'ı da yazar, Sürüm denetimi ikisinin aynı
+  olduğuna bakar. `CURRENT_PROJECT_VERSION` (build numarası) her TestFlight yüklemesinde elle artırılır.
 - **Denetim** (`.github/workflows/ios.yml`, iOS): `node --test ios/test/*.test.mjs` köprüyü JavaScriptCore'a benzer ortamda
   dener; macOS'ta uygulama simülatör için derlenir ve `-oz-denetim` ile açılır (`Uygulama/OzDenetim.swift`: modüller
   yüklenir, araçlar çağrılır, cevaplar Swift görünümlerine çözülür). Web modülleri ya da `mcp/tools.js` değişince de çalışır;

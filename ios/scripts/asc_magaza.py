@@ -181,10 +181,9 @@ def duzenlenen_surum(app):
     return vs[0] if vs else None
 
 
-def magaza_surumu():
-    # iPhone'un mağaza sürümü web sürümünden ayrı: Xcode MARKETING_VERSION (scripts/surum.sh ios)
-    s = open(os.path.join(KOK, "ios", "CashFollow.xcodeproj", "project.pbxproj")).read()
-    return re.search(r"MARKETING_VERSION = ([0-9.]+);", s).group(1)
+def web_surumu():
+    s = open(os.path.join(KOK, "version.js")).read()
+    return re.search(r"APP_VERSION = '([^']+)'", s).group(1)
 
 
 # ---------- oku ----------
@@ -381,9 +380,9 @@ def gecerli_build(app, surum):
 
 
 def gonder_surum(app, ay):
-    """Düzenlenebilir sürüm: yoksa açılır; sürüm numarası Xcode'daki MARKETING_VERSION. O sürümün geçerli build'i yoksa
+    """Düzenlenebilir sürüm: yoksa açılır; sürüm numarası version.js'teki web sürümü. O sürümün geçerli build'i yoksa
     (TestFlight daha çalışmadıysa) numara değişmez: seçili build'le sürüm numarası ayrışmasın."""
-    hedef = magaza_surumu()
+    hedef = web_surumu()
     v = duzenlenen_surum(app)
     if v is not None and v["attributes"]["versionString"] != hedef and not gecerli_build(app, hedef):
         print(f"::warning::{hedef} sürümünün geçerli build'i yok, mağaza sürümü {v['attributes']['versionString']} kalıyor "

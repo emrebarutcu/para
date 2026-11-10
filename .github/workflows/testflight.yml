@@ -3,7 +3,7 @@
 # yüklemeden sonra silinmez (iptal edilirse incelemeye gönderilen build ITMS-90035 ile reddedilir); eskileri sonraki
 # çalışmanın başında ayıklanır (ios/scripts/asc_imza.py; Xcode'un imzası neden kullanılmıyor da orada). Kurulum: SETUP.md → TestFlight.
 # Elle (Actions → TestFlight → Run workflow; dosya main'de olmalı) ya da testflight-* etiketiyle (her dalda) çalışır.
-# macOS 26 makinesinde en yeni Xcode ile. Build numarası iş akışının çalışma sayısıdır, sürüm Xcode'un MARKETING_VERSION'ıdır (web'den ayrı).
+# macOS 26 makinesinde en yeni Xcode ile. Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
 name: TestFlight
 
 on:
@@ -117,7 +117,7 @@ jobs:
           cp "$KEY_PATH" ~/.appstoreconnect/private_keys/
           xcrun altool --upload-app -f "$RUNNER_TEMP/CashFollow.ipa" -t ios \
             --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" --output-format normal
-          echo "Yüklendi: sürüm $(sed -n "s/.*MARKETING_VERSION = \(.*\);/\1/p" ios/CashFollow.xcodeproj/project.pbxproj | head -1), build $BUILD. App Store Connect birkaç dakika işler, sonra TestFlight'ta görünür."
+          echo "Yüklendi: sürüm $(sed -n "s/^self.APP_VERSION = '\(.*\)';/\1/p" version.js), build $BUILD. App Store Connect birkaç dakika işler, sonra TestFlight'ta görünür."
 
       - name: Apple'ın işlemesi
         # Yükleme başarılı olsa da Apple build'i işlerken reddedebilir (ör. eksik gizlilik bildirimi); sonucu bekler
