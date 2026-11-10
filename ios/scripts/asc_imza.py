@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Geçici App Store imzası (TestFlight iş akışı): App Store Connect API ile bir dağıtım sertifikası ve App Store profili
-oluşturur, iş bitince ikisini de siler. Özel anahtar bu makinede üretilir: uygulama codesign ile elle imzalanır.
+"""App Store imzası (TestFlight iş akışı): App Store Connect API ile bir dağıtım sertifikası ve App Store profili oluşturur.
+Özel anahtar bu makinede üretilir ve hiçbir yere yazılmaz: uygulama codesign ile elle imzalanır.
+
+Sertifika yüklemeden sonra silinmez: build App Store incelemesine gönderildiğinde imzası yeniden denetlenir; imzalayan
+sertifika iptal edilmişse build TestFlight'ta geçerli görünse de inceleme ITMS-90035 (Invalid Signature) ile reddeder
+(8.15.0, build 29). Önceki çalışmaların sertifikaları ("CashFollow CI" adlı profillerinden bulunur) bir sonraki çalışmanın
+başında iptal edilir: en yenisi (son yüklenen build'i imzalamıştır) ve incelemede / yayın bekleyen sürüm varken hiçbiri değil.
 
 Neden elle: dağıtım sertifikasının adı hesap sahibinin adıdır ("Apple Distribution: Emre Barutçu"). Xcode'un imzası
 gereksinimine (designated requirement) bu adı ayrışmış Unicode ile ("c" + birleşen çengel) yazar, sertifikadaki ad ise
 birleşik "ç"dir: imza kendi gereksinimini karşılamaz, App Store Connect ITMS-90035 ile reddeder. Elle imzada gereksinim
 addan değil takım kimliğinden (subject.OU) kurulur.
-Uygulamalar App Store / TestFlight'ta Apple'ın imzasıyla dağıtıldığı için sertifikanın silinmesi yüklenen build'i etkilemez.
+Yayındaki sürümü sertifikanın iptali etkilemez (App Store uygulamayı Apple'ın imzasıyla dağıtır).
 
-  asc_imza.py olustur <çıktı klasörü>   → anahtar.pem, sertifika.cer, profil.mobileprovision; GITHUB_ENV'e CERT_SHA1, id'ler
-  asc_imza.py sil <sertifika id> <profil id>
+  asc_imza.py olustur <çıktı klasörü>   → eski CI sertifikalarını ayıklar; anahtar.pem, sertifika.cer,
+                                          profil.mobileprovision; GITHUB_ENV'e CERT_SHA1, id'ler
+  asc_imza.py sil <sertifika id> <profil id>   → yalnızca elle
   asc_imza.py durum <build numarası> [bekleme sn]  → App Store Connect'in build'i işlemesini bekler, son build'leri ve
                                                     TestFlight gruplarını yazar; build geçersizse (INVALID) hata
 
@@ -33,7 +39,7 @@ def token():
                       key, algorithm="ES256", headers={"kid": os.environ["KEY_ID"], "typ": "JWT"})
 
 
-def call(method, path, body=None):
+def call(method, path, body=None, yoksa=False):
     req = urllib.request.Request(API + path, method=method, data=json.dumps(body).encode() if body else None,
                                  headers={"Authorization": f"Bearer {token()}", "Content-Type": "application/json"})
     try:
@@ -41,12 +47,52 @@ def call(method, path, body=None):
             text = res.read().decode()
             return json.loads(text) if text else None
     except urllib.error.HTTPError as e:
-        sys.exit(f"App Store Connect {method} {path}: {e.code} {e.read().decode()[:800]}")
+        if yoksa and e.code == 404:
+            return None
+        text = e.read().decode()[:800]
+        if method == "POST" and path == "/certificates" and e.code == 409:
+            sys.exit("::error::Dağıtım sertifikası sınırı dolu: developer.apple.com → Certificates'ta incelemede ya da yayın"
+                     f" bekleyen build'i imzalamamış eski bir Apple Distribution sertifikasını iptal et. ({text})")
+        sys.exit(f"App Store Connect {method} {path}: {e.code} {text}")
 
 
 def env(name, value):
     with open(os.environ["GITHUB_ENV"], "a") as f:
         f.write(f"{name}={value}\n")
+
+
+# Bu durumlardaki sürümün build'i henüz Apple'ın imzasıyla dağıtılmıyor: imzalayan sertifikası iptal edilmemeli
+BEKLEYEN = {"WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE", "ACCEPTED",
+            "PROCESSING_FOR_APP_STORE", "PROCESSING_FOR_DISTRIBUTION", "WAITING_FOR_EXPORT_COMPLIANCE"}
+
+
+def ayikla(bundle):
+    """Önceki çalışmaların CI sertifikalarını (en yenisi hariç) iptal eder; incelemede / yayın bekleyen sürüm varken hiçbirini."""
+    apps = call("GET", f"/apps?filter[bundleId]={bundle}")["data"]
+    if apps:
+        surumler = call("GET", f"/apps/{apps[0]['id']}/appStoreVersions?limit=20")["data"]
+        bekleyen = [f"{v['attributes'].get('versionString')} ({v['attributes'].get('appVersionState') or v['attributes'].get('appStoreState')})"
+                    for v in surumler
+                    if {v["attributes"].get("appVersionState"), v["attributes"].get("appStoreState")} & BEKLEYEN]
+        if bekleyen:
+            print(f"İncelemede / yayın bekleyen sürüm var ({', '.join(bekleyen)}): eski sertifikalar iptal edilmez")
+            return
+    ci = {}   # sertifika id → (en yeni profil tarihi, profil id'leri)
+    for p in call("GET", "/profiles?filter[profileType]=IOS_APP_STORE&limit=200")["data"]:
+        if not p["attributes"]["name"].startswith("CashFollow CI"):
+            continue
+        rel = call("GET", f"/profiles/{p['id']}/relationships/certificates?limit=50", yoksa=True) or {"data": []}
+        for c in rel["data"]:
+            tarih, profiller = ci.get(c["id"], ("", []))
+            ci[c["id"]] = (max(tarih, p["attributes"].get("createdDate") or ""), profiller + [p["id"]])
+    sirali = sorted(ci.items(), key=lambda x: x[1][0], reverse=True)
+    for cert_id, (_, profiller) in sirali[1:]:
+        for pid in profiller:
+            call("DELETE", f"/profiles/{pid}", yoksa=True)
+        call("DELETE", f"/certificates/{cert_id}", yoksa=True)
+        print(f"Eski CI sertifikası iptal edildi: {cert_id}")
+    if sirali:
+        print(f"Son yüklenen build'in sertifikası korunur: {sirali[0][0]}")
 
 
 def olustur(out):
@@ -56,6 +102,7 @@ def olustur(out):
            if x["attributes"]["identifier"] == bundle]
     if not ids:
         sys.exit(f"{bundle} App ID'si yok: developer.apple.com → Identifiers'ta kaydet (SETUP.md → TestFlight)")
+    ayikla(bundle)
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     csr = (x509.CertificateSigningRequestBuilder()

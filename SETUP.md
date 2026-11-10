@@ -108,7 +108,9 @@ yükseltme notu (çalıştırılacak SQL, MCP kullananların dikkat edeceği) ya
 `CFBundleShortVersionString`) gönderim anındaki web sürümüdür; Google Play `versionCode`'u ondan üretilir:
 `MAJOR × 1000000 + MINOR × 1000 + PATCH` (ör. `1.4.2` → `1004002`).
 
-`.github/workflows/surum.yml` ("Sürüm" denetimi) sürüm main'dekinden büyük değilse PR'ı kırmızıya çeker.
+`.github/workflows/surum.yml` ("Sürüm" denetimi) sürüm main'dekinden büyük değilse PR'ı kırmızıya çeker. Bilinçli
+sıfırlamada (8.15.1 → 1.0.0, Kasım 2026: App Store'da ilk yayın) PR'a **`surum-sifirla`** etiketi konur; denetim etiketle
+yeniden çalışır ve geçer. Sıfırlama App Store'da yalnızca daha yüksek numaralı bir sürüm hiç onaylanmamışsa olur.
 GitHub → Settings → Branches → `main` kuralında şu ikisi açılmalı: **Require status checks to pass** (altında **Sürüm**)
 ve **Require branches to be up to date before merging**. İkincisi olmazsa paralel iki PR aynı sürümü yazıp ikisi de
 birleşebilir (aynı satırdaki aynı değişiklik git'te çakışma sayılmaz); PR main'i alınca denetim yeniden çalışır,
@@ -352,10 +354,18 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
 #### TestFlight (Mac gerekmez)
 
 `.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS 26 makinesinde, kurulu en yeni (beta olmayan) Xcode ile arşivler ve
-App Store Connect'e yükler. İmza için her çalışmada API ile geçici bir dağıtım sertifikası ve App Store profili oluşturulur,
-arşiv imzasız alınıp `codesign` ile elle imzalanır, iş bitince sertifika ve profil silinir (`ios/scripts/asc_imza.py`).
-Dağıtım sertifikasının adı hesap sahibinin adıdır; Xcode'un imzasında addaki "ç" imzayı geçersiz kılıyordu (ITMS-90035),
-elle imzada imza gereksinimi takım kimliğinden kurulur. Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
+App Store Connect'e yükler. İmza için her çalışmada API ile bir dağıtım sertifikası ve App Store profili oluşturulur, arşiv
+imzasız alınıp `codesign` ile elle imzalanır (`ios/scripts/asc_imza.py`). Dağıtım sertifikasının adı hesap sahibinin adıdır;
+Xcode'un imzasında addaki "ç" imzayı geçersiz kılıyordu (ITMS-90035), elle imzada imza gereksinimi takım kimliğinden kurulur.
+- **Sertifika yüklemeden sonra silinmez:** build incelemeye gönderilince imzası yeniden denetlenir; imzalayan sertifika
+  iptal edilmişse TestFlight'ta geçerli görünen build inceleme ITMS-90035 (Invalid Signature) ile reddedilir (8.15.0, build
+  29: sertifika yüklemenin hemen ardından siliniyordu). Önceki çalışmaların sertifikaları ("CashFollow CI" profillerinden
+  bulunur) sonraki çalışmanın başında iptal edilir; en yenisi ve incelemede / yayın bekleyen sürüm varken hiçbiri değil.
+  İncelemeye gönderilecek build en son yüklenen olmalı. Özel anahtar hiçbir yere yazılmaz.
+- **Sertifika sınırı** dolarsa iş akışı durur: developer.apple.com → Certificates'ta incelemede ya da yayın bekleyen
+  build'i imzalamamış eski bir Apple Distribution sertifikası iptal edilir. Yayındaki sürümü etkilemez.
+
+Bir kez yapılacaklar (Apple Developer Program üyeliği gerekir):
 
 1. **Team ID:** [developer.apple.com/account](https://developer.apple.com/account) → Membership details → Team ID (10 karakter).
 2. **Uygulama kaydı:** [App Store Connect](https://appstoreconnect.apple.com) → Uygulamalar → **+** → Yeni Uygulama: platform iOS,

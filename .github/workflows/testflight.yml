@@ -1,6 +1,7 @@
 # iOS uygulamasını App Store Connect'e (TestFlight) yükler. Mac gerekmez: App Store Connect API anahtarıyla her çalışmada
-# geçici bir dağıtım sertifikası ve App Store profili oluşturulur, arşiv imzasız alınıp codesign ile elle imzalanır, iş
-# bitince sertifika ve profil silinir (ios/scripts/asc_imza.py; Xcode'un imzası neden kullanılmıyor orada yazılı). Kurulum: SETUP.md → TestFlight.
+# bir dağıtım sertifikası ve App Store profili oluşturulur, arşiv imzasız alınıp codesign ile elle imzalanır. Sertifika
+# yüklemeden sonra silinmez (iptal edilirse incelemeye gönderilen build ITMS-90035 ile reddedilir); eskileri sonraki
+# çalışmanın başında ayıklanır (ios/scripts/asc_imza.py; Xcode'un imzası neden kullanılmıyor da orada). Kurulum: SETUP.md → TestFlight.
 # Elle (Actions → TestFlight → Run workflow; dosya main'de olmalı) ya da testflight-* etiketiyle (her dalda) çalışır.
 # macOS 26 makinesinde en yeni Xcode ile. Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
 name: TestFlight
@@ -9,6 +10,10 @@ on:
   workflow_dispatch:
   push:
     tags: ["testflight-*"]
+
+concurrency:
+  group: testflight   # eski sertifikaları ayıklayan iki çalışma çakışmasın
+  cancel-in-progress: false
 
 jobs:
   yukle:
@@ -47,7 +52,7 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install -q pyjwt cryptography
 
-      - name: Geçici sertifika ve profil
+      - name: Dağıtım sertifikası ve profil
         run: |
           "$RUNNER_TEMP/venv/bin/python" ios/scripts/asc_imza.py olustur "$RUNNER_TEMP/imza"
           KC="$RUNNER_TEMP/imza.keychain-db"
@@ -119,8 +124,8 @@ jobs:
         run: '"$RUNNER_TEMP/venv/bin/python" ios/scripts/asc_imza.py durum "$BUILD" 1200'
 
       - name: Temizlik
+        # Sertifika ve profil silinmez (incelemede imza yeniden denetlenir); yalnızca bu makinedeki anahtar zinciri ve anahtarlar
         if: always()
         run: |
-          if [ -n "$CERT_ID$PROFILE_ID" ]; then "$RUNNER_TEMP/venv/bin/python" ios/scripts/asc_imza.py sil "$CERT_ID" "$PROFILE_ID" || true; fi
           [ -n "$KEYCHAIN" ] && security delete-keychain "$KEYCHAIN" || true
           rm -rf "$KEY_PATH" ~/.appstoreconnect/private_keys "$RUNNER_TEMP/imza"
