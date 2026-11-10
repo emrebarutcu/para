@@ -62,10 +62,17 @@ def call(method, path, body=None):
                 continue
             try:
                 errs = json.loads(metin).get("errors", [])
-                metin = "; ".join(f"{x.get('title', '')}: {x.get('detail', '')}" for x in errs) or metin
+                parca = []
+                for x in errs:
+                    parca.append(f"{x.get('title', '')}: {x.get('detail', '')}")
+                    # Apple nedenini meta.associatedErrors'ta verir (ör. incelemeye gönderilemeyen sürümün eksikleri)
+                    for yer, alt in ((x.get("meta") or {}).get("associatedErrors") or {}).items():
+                        for y in alt:
+                            parca.append(f"  [{yer}] {y.get('code', '')}: {y.get('title', '')} {y.get('detail', '')}".rstrip())
+                metin = "\n".join(parca) or metin
             except ValueError:
                 pass
-            raise HataAPI(e.code, f"{method} {url.replace(API, '')}: {metin[:1200]}")
+            raise HataAPI(e.code, f"{method} {url.replace(API, '')}: {metin[:4000]}")
 
 
 def get(path):
@@ -650,6 +657,8 @@ def gonder_inceleme(app, v):
         ogeler = hepsi(f"/reviewSubmissions/{g['id']}/items?include=appStoreVersion&limit=50")[0]
         var = any(((o.get("relationships") or {}).get("appStoreVersion", {}).get("data") or {}).get("id") == v["id"]
                   for o in ogeler)
+        for o in ogeler:
+            print(f"  gönderim öğesi {o.get('id')}: {(o.get('attributes') or {}).get('state')}")
         if not var:
             yaz("POST", "/reviewSubmissionItems", {"data": {"type": "reviewSubmissionItems", "relationships": {
                 "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": g["id"]}},
