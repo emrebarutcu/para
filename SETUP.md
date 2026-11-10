@@ -108,7 +108,9 @@ yükseltme notu (çalıştırılacak SQL, MCP kullananların dikkat edeceği) ya
 `CFBundleShortVersionString`) gönderim anındaki web sürümüdür; Google Play `versionCode`'u ondan üretilir:
 `MAJOR × 1000000 + MINOR × 1000 + PATCH` (ör. `1.4.2` → `1004002`).
 
-`.github/workflows/surum.yml` ("Sürüm" denetimi) sürüm main'dekinden büyük değilse PR'ı kırmızıya çeker.
+`.github/workflows/surum.yml` ("Sürüm" denetimi) sürüm main'dekinden büyük değilse PR'ı kırmızıya çeker. Bilinçli
+sıfırlamada (8.15.1 → 1.0.0, Kasım 2026: App Store'da ilk yayın) PR'a **`surum-sifirla`** etiketi konur; denetim etiketle
+yeniden çalışır ve geçer. Sıfırlama App Store'da yalnızca daha yüksek numaralı bir sürüm hiç onaylanmamışsa olur.
 GitHub → Settings → Branches → `main` kuralında şu ikisi açılmalı: **Require status checks to pass** (altında **Sürüm**)
 ve **Require branches to be up to date before merging**. İkincisi olmazsa paralel iki PR aynı sürümü yazıp ikisi de
 birleşebilir (aynı satırdaki aynı değişiklik git'te çakışma sayılmaz); PR main'i alınca denetim yeniden çalışır,
