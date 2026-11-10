@@ -16,7 +16,8 @@ Kredi kartı taksitleri, nakit akışı, borçlar ve varlıklar. Üç yüz, tek 
   çalışır; yeni metnin tüm dillere çevirisi eklenir). iPhone ve web cihazın / tarayıcının tercih ettiği ilk desteklenen
   dili seçer, yoksa İngilizce (`dil.js` → `choose`, `Dil.swift`, `dil-sayfa.js`; `index.html`'in sabit metinleri de
   sözlükten çevrilir, `data-tr` olanlar Türkçe kalır). Ayrıntı: `SETUP.md` → Diller. Asistan şimdilik yalnızca Türkçe.
-- Sürüm: `version.js`, `sw.js` ve Xcode `MARKETING_VERSION` birlikte, `sh scripts/surum.sh [patch|minor|major]` ile. Hangisi
+- Sürüm: `version.js` ve `sw.js` birlikte, `sh scripts/surum.sh [patch|minor|major]` ile; iPhone'un mağaza sürümü (Xcode
+  `MARKETING_VERSION`, 1.0'dan) ayrı: `sh scripts/surum.sh ios [patch|minor|major]`. Hangisi
   olacağı ve MAJOR'da yükseltme notu: `SETUP.md` → Sürüm.
 - `main`'e kullanıcı onayı olmadan birleştirme yapılmaz; iş `claude/…` dallarında, PR ile.
 - Gizli anahtarlar (`SUPABASE_ACCESS_TOKEN`, `CLOUDFLARE_*`) ortamda durur; değerleri yazdırılmaz, dosyaya ya da commit'e girmez.
