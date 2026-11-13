@@ -433,6 +433,7 @@ a { color: inherit; }
 }
 .empty-state .ic { width: 36px; height: 36px; color: var(--text-3); stroke-width: 1.5; }
 .empty-state strong { color: var(--text); font-size: 16px; }
+.empty-state .btn .ic { width: 18px; height: 18px; color: inherit; stroke-width: 1.8; }   /* düğmenin simgesi büyümesin */
 .footnote { font-size: 13px; color: var(--text-3); line-height: 1.55; padding: 0 4px; }
 
 /* ── Month switch ── */
@@ -530,7 +531,7 @@ a { color: inherit; }
 .pay-amt .ic { width: 16px; height: 16px; color: var(--text-3); transition: transform .2s; }
 .pay.open .pay-amt .ic { transform: rotate(180deg); }
 
-/* ── Zaman çizelgesi (Özet): ayın girdi ve çıktıları ── */
+/* ── Zaman çizelgesi (Akış → Girdi ve çıktılar): ayın girdi ve çıktıları ── */
 .panel-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .timeline-panel .panel-head { flex-wrap: wrap; }
 .in-text { color: var(--income); }
@@ -1295,6 +1296,7 @@ a.btn { text-decoration: none; }
 /* İki satırlı sonuç (harcama eklendi): "Kaydedildi · ilk ödeme 20 Kas" ve altında ayın ödemesi önce → sonra */
 .toast.two { display: flex; flex-direction: column; gap: 1px; width: max-content; max-width: calc(100vw - 24px); border-radius: 18px; white-space: normal; }
 .toast small { font-size: 13px; font-weight: 500; opacity: .78; font-variant-numeric: tabular-nums; }
+@media (max-width: 899px) { .toast.two { bottom: calc(var(--nav-h) + 84px + env(safe-area-inset-bottom)); } }   /* + düğmesinin üstünde */
 @keyframes toast { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 /* ── Auth modal (sync.js) ── */
@@ -1717,7 +1719,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .share-amt small.in-text { color: var(--income); }
 .pay .pay-title .p-desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Hero altındaki bağlantılar: Özet'te ayın borç ödemesi, Varlıklar'da eşitlik (Borçlar'a götürür) */
+/* Hero altındaki bağlantılar: Özet'te ayın borç ödemesi, Varlıklar'da eşitlik (Kartlar'daki borçlara götürür) */
 .hero-link { color: var(--text-2); text-decoration: none; }
 .hero-link:hover { color: var(--text); }
 a.hero-eq { display: block; width: fit-content; }
@@ -1750,7 +1752,7 @@ a.hero-eq { display: block; width: fit-content; }
 .p-status.late { color: var(--expense); }
 .p-status.paid { color: var(--income); }
 
-/* Özet Kişiler: kart payı olan satır kart payı penceresini açar */
+/* Kişiler (Kartlar): kart payı olan satır kart payı penceresini açar */
 .people-sum li.clickable { cursor: pointer; border-radius: 12px; }
 
 /* Kart formu: borç ve ekstre takibi */
@@ -1884,11 +1886,18 @@ a.hero-eq { display: block; width: fit-content; }
 .hero-progress-text .paid { font-weight: 600; color: var(--text); }
 .hero-progress-text .done { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--ok); }
 .hero-progress-text .done .ic { width: 16px; height: 16px; }
-.hero-stats dd.hero-diff { display: flex; align-items: center; gap: 3px; margin-top: 2px; font-size: 12px; line-height: 16px; letter-spacing: 0; color: var(--text-3); }
-.hero-stats dd.hero-diff.down { color: var(--ok); }
+/* Sonraki ayın tutarının altında (kutuların altında, soldan): "↓ ₺3.805 hafifliyor" yeşil, "↑ ₺2.000 artıyor" sakin */
+.hero-diff { display: flex; align-items: center; gap: 3px; margin-top: 3px; font-size: 12px; font-weight: 600; line-height: 16px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.hero-diff.down { color: var(--ok); }
 .hero-diff .ic { width: 13px; height: 13px; stroke-width: 2.3; }
-/* Fark satırı yalnızca ilk kutuda: diğer kutuların tutarı onunla aynı hizada kalsın */
-.hero-stats.has-diff > div:not(:first-child) { padding-bottom: 18px; }
+/* Son taksit: ay adı ve yıl; dar ekranda ay kısa */
+.hero-stats .d-short { display: none; }
+@media (max-width: 480px) {
+  .hero-stats .d-long { display: none; }
+  .hero-stats .d-short { display: inline; }
+}
+/* Başlarken'deki "Gizle" */
+.start-panel .link { border: none; background: none; padding: 4px 0; }
 
 /* ── Nakit: altta nakit sayılanlar ve "Değiştir"; grafiğin açıklaması "?" ile açılır ── */
 .help-btn {

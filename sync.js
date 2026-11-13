@@ -81,7 +81,6 @@
     setWelcome(true);
     showView('authWelcome');
     modal.removeAttribute('hidden');
-    document.getElementById('authOfflineBtn')?.focus();
   }
 
   // Ağ yokken süresi dolmuş oturum yenilenemez ve getSession boş döner; kayıtlı oturum varsa kullanıcı girişsiz sayılmaz

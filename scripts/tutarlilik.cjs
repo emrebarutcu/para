@@ -5,7 +5,9 @@
 //   Girdi ve çıktılar'ın Girdi'si = içgörünün geliri; alış / satış (aktarım) Varlık'ı, geliri ve Girdi ve çıktılar
 //   toplamlarını değiştirmez, nakitten nakde aktarım nakdi değiştirmez; ileri tarihli hareket bugünkü bakiyede yok;
 //   kişilerin Varlık'ları toplamı = hepsi; birikimden yatırım açık değildir; geçmiş kapanışla alış seyirde sıçramaz;
-//   formdan dolar alışı ve bozdurma aktarım olarak saklanır.
+//   bu ayın ödemesi her görünümde aynı: Özet'in tepesi = ayın ilerlemesi (ödenen + kalan) = Akış'ta ayın toplamı =
+//   Kartlar'daki Kişiler'in toplamı; formdan dolar alışı ve bozdurma aktarım olarak saklanır; eski #borclar adresi
+//   Kartlar'ı açar.
 // node scripts/yerel.mjs &  ve  node scripts/tutarlilik.cjs [-v]   (Playwright ve internet gerekir: gerçek kur ve fiyatlar;
 // SEED=… rastgele verilerin başlangıç değeri)
 const { chromium } = require("playwright");
@@ -165,6 +167,28 @@ async function inPage(start) {
   S.buyukAlis = base(); S.buyukAlis.entries.push({ id: "ba", personId: "ben", asset: "BIST:THYAO", amount: 1000, desc: "", date: day(12), price: price("BIST:THYAO"), settle: true });
   const ba = views(S.buyukAlis);
   check("buyukAlis · yatırım açık sayılmaz", !ba.insIds.includes("acik") && /azalıyor/.test(ba.insText), `${ba.insIds} · ${ba.insText}`);
+  // 14. Bu ayın kart ve nakit ödemesi her görünümde aynı: Özet'in tepesi = ayın ilerlemesi (icgoru.js progress: ödenen +
+  // kalan) = Akış'ta ayın toplamı (ödeme planı ve grafiğin ilk sütunu) = Kartlar'daki Kişiler'in payları toplamı
+  const before = { view, premium, currentMonth, flowMode };
+  premium = true;   // ödeme planı Premium'da çizilir
+  currentMonth = T.monthKey(idx);
+  flowMode = "list";
+  const show = v => { view = v; render(); };
+  for (const name of ["kartli", "ortakKart", "nakitHarcama", "tekrarli", "kredili"]) {
+    state = T.hydrate(JSON.parse(JSON.stringify(S[name])));
+    show("ozet");
+    const hero = parse(document.getElementById("heroAmount").textContent);
+    const pr = I.progress(state, today);
+    show("akis");
+    const flow = parse(document.querySelector(`#m-${idx} .month-head .total`)?.textContent);
+    const column = chartMonths[0]?.total ?? 0;
+    show("kartlar");
+    const people = [...document.querySelectorAll("#peopleSummary li > .amount")].reduce((sum, n) => sum + parse(n.textContent), 0);
+    check(`${name} · Özet tepe = ilerleme (ödenen + kalan)`, near(hero, pr.total) && near(pr.paid + pr.left, pr.total), `${hero} ≠ ${pr.total} (${pr.paid} + ${pr.left})`);
+    check(`${name} · Özet tepe = Akış ay toplamı`, near(hero, flow) && near(hero, column), `${hero} ≠ ${flow} / ${column}`);
+    check(`${name} · Özet tepe = Kartlar kişilerin toplamı`, near(hero, people), `${hero} ≠ ${people}`);
+  }
+  ({ view, premium, currentMonth, flowMode } = before);
   // 13. Rastgele veriler: kurallar 1, 2, 3, Girdi = gelir, kişiler toplamı
   let seed = start;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -264,6 +288,11 @@ async function formFlow(p) {
   await p.waitForFunction(() => prices?.prices?.["FON:ALE"] && prices?.prices?.["BIST:THYAO"] && rates?.rates?.USD, null, { timeout: 30000 });
   const out = await p.evaluate(inPage, Number(process.env.SEED) || 1234567);
   out.fails.push(...await formFlow(p));
+  // Eski Borçlar sekmesinin adresi (#borclar) Kartlar'ı açar (borçlar oradadır)
+  await p.evaluate(() => { location.hash = "#borclar"; });
+  await p.waitForTimeout(300);
+  const nav = await p.evaluate(() => ({ view, hash: location.hash }));
+  if (nav.view !== "kartlar" || nav.hash !== "#kartlar") out.fails.push(`#borclar Kartlar'ı açmadı: ${JSON.stringify(nav)}`);
   if (process.argv.includes("-v")) for (const [k, v] of Object.entries(out.all)) console.log(k.padEnd(13), JSON.stringify(v));
   console.log(out.fails.length ? `TUTARSIZ (${out.fails.length}):\n- ` + out.fails.join("\n- ") : "Tutarsızlık yok");
   if (errors.length) console.log("SAYFA HATALARI:\n" + errors.join("\n"));

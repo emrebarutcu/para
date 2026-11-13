@@ -123,10 +123,12 @@
         <!-- Ayın ilerlemesi (yalnızca bu ay; icgoru.js progress): ödenen / toplam çubuğu, altında ödenen ve kalan -->
         <div class="hero-progress" id="heroProgress" hidden></div>
         <dl class="hero-stats" id="heroStats">
-          <div><dt id="nextLabel">Sonraki ay</dt><dd id="nextTotal"></dd><dd class="hero-diff" id="nextDiff" hidden></dd></div>
+          <div><dt id="nextLabel">Sonraki ay</dt><dd id="nextTotal"></dd></div>
           <div><dt>Kalan ödeme</dt><dd id="remainingTotal"></dd></div>
           <div id="endStat"><dt>Son taksit</dt><dd id="endLabel"></dd></div>
         </dl>
+        <!-- Sonraki ayın altında: gösterilen aya göre hafifliyor mu, artıyor mu -->
+        <p class="hero-diff" id="nextDiff" hidden></p>
       </div>
 
       <section class="panel" id="upcomingPanel">
@@ -303,7 +305,7 @@
           <svg class="ic"><use href="#i-plus"/></svg><span>Kart ekle</span>
         </button>
       </div>
-      <div class="hero">
+      <div class="hero" id="debtHero">
         <div class="hero-top">
           <span class="hero-label">Toplam borç</span>
           <span class="hero-note" id="debtNote"></span>
@@ -1098,7 +1100,7 @@
   <!-- Auth modal (sync.js) -->
   <div id="authModal" class="modal-wrap" hidden>
     <div id="authOverlay" class="modal-overlay"></div>
-    <div class="modal-box">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="authTitle">
       <div class="modal-head" id="authHead">
         <h2 id="authTitle">Bulut senkronizasyonu</h2>
         <button id="authClose" class="icon-btn" aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>

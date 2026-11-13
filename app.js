@@ -26,7 +26,7 @@ function getStorageKey() {
 }
 
 const MAX_MONTHS = 60;           // akışta gösterilecek en fazla ay
-const CHART_MONTHS = 12;         // özetteki grafikte gösterilecek ay
+const CHART_MONTHS = 12;         // Akış'taki grafikte (Aylık ödemeler) gösterilecek ay
 const CASH_COLOR = "var(--cash)";
 const VIEWS = ["ozet", "akis", "harcamalar", "kartlar", "varliklar"];
 // Eski Borçlar sekmesi Kartlar'ın borçlar bölümüdür (#debtSection): #borclar o görünümü açar ve bölüme kaydırır
@@ -86,7 +86,7 @@ let inboxBusy = false;
 let inboxDraftId = null;      // formda açılan e-posta kaydı
 let inboxOpenId = null;       // içeriği gösterilen e-posta
 let entryFilter = "all";      // varlıklarda seçili kişi
-let timelineKind = "all";     // özetteki zaman çizelgesi: all | in | out
+let timelineKind = "all";     // Akış'taki zaman çizelgesi (Girdi ve çıktılar): all | in | out
 let timelineMode = readPref(PREF.timelineMode) === "calendar" ? "calendar" : "list";
 let timelineDay = null;       // takvimde seçili gün
 let timelineStart = /^([1-9]|[12]\d|3[01])$/.test(readPref(PREF.timelineStart) ?? "") ? readPref(PREF.timelineStart) : "1";   // takvim dönemi: ayın günü
@@ -141,6 +141,7 @@ function saveState() {
 
 function resetView() {
   personFilter = "all";
+  purchaseMode = "list";
   entryFilter = "all";
   openEventKey = null;
   focusIdx = null;
@@ -472,7 +473,7 @@ const els = {
   entryTickerLabel: $("entryTickerLabel"), entryTicker: $("entryTicker"), entryTickerList: $("entryTickerList"),
   entryTickerInfo: $("entryTickerInfo"), entryAmountLabel: $("entryAmountLabel"), entryPriceField: $("entryPriceField"),
   entrySettleText: $("entrySettleText"), entrySellOpt: $("entrySellOpt"), entryPriceLabel: $("entryPriceLabel"),
-  debtTotal: $("debtTotal"), debtNote: $("debtNote"), debtEq: $("debtEq"), debtStats: $("debtStats"),
+  debtHero: $("debtHero"), debtTotal: $("debtTotal"), debtNote: $("debtNote"), debtEq: $("debtEq"), debtStats: $("debtStats"),
   trackNote: $("trackNote"), trackNoteText: $("trackNoteText"), trackNoteOk: $("trackNoteOk"),
   balanceHint: $("balanceHint"), balanceHintText: $("balanceHintText"), balanceHintBtn: $("balanceHintBtn"),
   debtSideSeg: $("debtSide"), debtWrap: $("debtWrap"), debtFoot: $("debtFoot"),
@@ -587,10 +588,11 @@ function renderOverview(months, start, last) {
   const cash = !empty || steps.gelir;
   els.cashPanel.hidden = !cash;
   if (cash) renderCash();
-  // Gösterecek hiçbir şey kalmadıysa (veri yok, Başlarken gizlendi) boş sayfa yerine ilk harcamaya çağrı
+  // Gösterecek hiçbir şey kalmadıysa (Başlarken gizlendi; veri yok ya da her şey ödenmiş) sayfa boş kalmaz: ilk harcamaya
+  // çağrı, harcama varsa "Yaklaşan ödeme yok"
   const nothing = empty && !cash && els.startPanel.hidden && els.insightPanel.hidden;
   els.overviewEmpty.hidden = !nothing;
-  els.overviewEmpty.replaceChildren(...(nothing ? [firstPurchaseState()] : []));
+  els.overviewEmpty.replaceChildren(...(!nothing ? [] : knownPurchases().length ? [el("p", "empty", L("Yaklaşan ödeme yok"))] : [firstPurchaseState()]));
 }
 
 // Bu ay ödenecek: tutar, ayın borç ödemeleri, (yalnızca bugünün ayında) ayın ilerlemesi; altında sonraki ay ve bu aya
@@ -640,7 +642,6 @@ function renderHero(months, start) {
   const diff = at(start + 1) - at(start);
   const moving = Math.abs(diff) >= 1;
   els.nextDiff.hidden = !moving;
-  els.heroStats.classList.toggle("has-diff", moving);
   if (moving) {
     els.nextDiff.className = "hero-diff " + (diff < 0 ? "down" : "up");
     els.nextDiff.replaceChildren(icon(diff < 0 ? "arrow-down" : "arrow-up"),
@@ -651,7 +652,12 @@ function renderHero(months, start) {
   const end = I.lastInstallment(state, today);
   els.endStat.hidden = !end;
   els.heroStats.classList.toggle("two", !end);
-  if (end) els.endLabel.textContent = monthLong(T.monthIndex(end));
+  if (end) {
+    // Ay adı ve yıl; dar ekranda ay kısa ("Ağu 2027"; styles.css d-long / d-short)
+    const idx = T.monthIndex(end);
+    els.endLabel.replaceChildren(el("span", "d-long", monthLong(idx)), el("span", "d-short", `${T.monthShort(idx)} ${T.yearOf(idx)}`));
+    els.endLabel.title = monthLong(idx);
+  }
 }
 
 // ---------- Başlarken ----------
@@ -2165,7 +2171,7 @@ function renderPurchases() {
   }
   const cats = purchaseMode === "categories";
   els.catPanel.hidden = !cats;
-  els.personFilter.hidden = cats;
+  els.personFilter.hidden = els.purchaseWrap.hidden = cats;
   if (cats) {
     els.inboxWrap.hidden = els.purchaseTools.hidden = true;
     els.purchaseWrap.replaceChildren();
@@ -3246,6 +3252,8 @@ function renderDebts() {
   const t = B.totals(state, today, r);
   const payer = state.people[0];
 
+  // Kartı, borcu ve alacağı olmayan (yeni) hesapta sıfırlarla dolu toplam gösterilmez
+  els.debtHero.hidden = !state.cards.length && !t.list.length && !(t.debt.total > EPS) && !(t.receivable.total > EPS);
   setMoney(els.debtTotal, t.debt.total);
   // Varlık ve Borç yuvarlanır, Özvarlık farkıdır: tam lirada da toplam tutsun
   const A = Math.round(t.assets), Dt = Math.round(t.debt.total);
@@ -4278,6 +4286,7 @@ els.purchaseForm.addEventListener("submit", e => {
   }
   const id = editingId ?? uid();
   const adding = !editingId;
+  const converted = !!convertingEntryId;          // eski varlık çıkışı harcamaya dönüşüyor: yeni harcama sayılmaz (ölçümde)
   const totals = adding ? monthTotals() : null;   // ekleme: ayların ödemesi önce → sonra (kaydın sonucu)
   if (editingId) {
     state.installments = state.installments.map(x => (x.id === editingId ? { id: x.id, personId, ...p } : x));
@@ -4308,8 +4317,10 @@ els.purchaseForm.addEventListener("submit", e => {
     toast(title, { sub });
     if (nudge) toast(nudgeText.replace(/^./, c => c.toLocaleUpperCase(D.locale())), { wait: true });
     // iPhone'daki purchase_added ile aynı özellikler (HarcamalarEkrani.swift); "Alabilir miyim?" önizlemesi web'de yok
-    window.Analitik?.event("purchase_added", { installments: p.count, repeat: T.repeats(p), bnpl: !!p.bnpl, bonus: p.bonus ? p.count : 0,
-      cash: !p.cardId, afford_shown: false, source: "web" });
+    if (!converted) {
+      window.Analitik?.event("purchase_added", { installments: p.count, repeat: T.repeats(p), bnpl: !!p.bnpl, bonus: p.bonus ? p.count : 0,
+        cash: !p.cardId, afford_shown: false, source: "web" });
+    }
   } else {
     toast(L("Harcama güncellendi") + (p.category ? ` · ${K.category(p.category).name}` : nudge ? " · " + nudgeText : ""));
   }
