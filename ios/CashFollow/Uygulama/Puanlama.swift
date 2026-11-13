@@ -20,8 +20,10 @@ enum Puanlama {
         d.set(d.integer(forKey: "puan.gun") + 1, forKey: "puan.gun")
     }
 
-    // Olumlu an: harcama eklendi, ödeme kaydedildi
-    static func olumluAn() {
+    // Olumlu an: harcama eklendi, ödeme kaydedildi. Bir başarı titreşimi de verir (titresim: ilk açılış akışında ekran
+    // kendi titreşimini verir)
+    static func olumluAn(titresim: Bool = true) {
+        if titresim { Titresim.basari() }
         d.set(d.integer(forKey: "puan.an") + 1, forKey: "puan.an")
         guard uygun() else { return }
         d.set(surum, forKey: "puan.surum")

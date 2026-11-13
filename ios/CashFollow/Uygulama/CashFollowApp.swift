@@ -65,6 +65,8 @@ struct AnaEkran: View {
                 Sekmeler(sekme: $sekme)
             }
         }
+        // Bir işin sonucu (harcama kaydedildi…) üstte kısa bir bantla
+        .overlay(alignment: .top) { BantGorunumu() }
         // Ödeme hatırlatmaları veri değişince yeniden kurulur (2 sn içindeki değişiklikler bir kez)
         .task(id: model.revision) {
             try? await Task.sleep(nanoseconds: 2_000_000_000)

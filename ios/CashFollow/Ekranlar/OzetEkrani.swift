@@ -1,7 +1,9 @@
+import Combine
 import SwiftUI
 
-// Özet: yalnızca "bu ay ve yakında" — bu ay ödenecek, sıradaki ödemeler, en önemli içgörüler, nakit (ios/UX.md).
-// Kişilerin payı Akış'ta, kategoriler Harcamalar'da, aylık grafik Akış'ta.
+// Özet: yalnızca "bu ay ve yakında" — bu ay ödenecek (ilerlemesiyle), sıradaki ödemeler, en önemli içgörüler, nakit
+// (ios/UX.md). Kişilerin payı Akış'ta, kategoriler Harcamalar'da, aylık grafik Akış'ta. Yeri gelince iki kısa kart:
+// biten taksidin kutlaması (en üstte) ve ayın ilk günlerinde geçen ayın özeti.
 struct OzetEkrani: View {
     @EnvironmentObject private var model: Model
     @State private var ayarlar = false
@@ -9,6 +11,11 @@ struct OzetEkrani: View {
     @State private var baslarken: BaslarkenDurumu?
     @State private var teklif = false   // "Ödeme günlerini hatırlatayım mı?"
     @AppStorage("baslarken.gizli") private var baslarkenGizli = false
+    @State private var bitenler: [BitenTaksit] = []   // son iki haftada biten, kapatılmamış taksitler (kutlama kartı)
+    @State private var kutla = 0                        // yeni bir kutlama ilk kez göründü: titreşim
+    @State private var aySonu: AyOzeti?                 // ayın ilk on gününde geçen ayın özeti (kart)
+    @State private var acikOzet: AyOzeti?               // açık ay özeti sayfası
+    @AppStorage("aykapanisi.kapatilan") private var ozetKapatilan = ""   // kapatılan özetin ayı ("2026-10")
 
     var body: some View {
         NavigationStack {
@@ -20,9 +27,16 @@ struct OzetEkrani: View {
                     let bos = o.remainingTotal < 0.004 && o.upcomingPayments.isEmpty && o.dueThisMonth < 0.004
                     VStack(alignment: .leading, spacing: 14) {
                         if !bos {
+                            if !bitenler.isEmpty { BitenTaksitKarti(bitenler: bitenler, kapat: kutlamayiKapat) }
                             BuAyKarti(o: o)
                             siradakiler(o)
                             if teklif, !o.upcomingPayments.isEmpty { HatirlatmaTeklifi(goster: $teklif) }
+                            if let a = aySonu, ozetKapatilan != a.month {
+                                AyKapanisiKarti(ozet: a, ac: {
+                                    acikOzet = a
+                                    Analitik.olay("month_summary_opened", ["source": "overview"])
+                                }, kapat: { withAnimation { ozetKapatilan = a.month } })
+                            }
                         }
                         IcgoruBolumu()
                         if !bos || baslarken?.gelir == true { NakitKarti() }
@@ -41,8 +55,19 @@ struct OzetEkrani: View {
             }
             .sheet(isPresented: $ayarlar) { AyarlarEkrani() }
             .sheet(item: $odeme) { OdemeFormu(hedef: $0) }
+            .sheet(item: $acikOzet) { o in AyOzetiEkrani(ozet: o) { withAnimation { ozetKapatilan = o.month } } }
+            .sensoryFeedback(.success, trigger: kutla)
+            // Ay özeti bildirimine dokunuldu: özet doğrudan açılır
+            .onReceive(Yonlendirici.shared.$ayOzeti) { iste in
+                guard iste else { return }
+                Yonlendirici.shared.ayOzeti = false
+                guard let o = model.motor?.monthSummary(), o.paid > 0.004 else { return }
+                acikOzet = o
+                Analitik.olay("month_summary_opened", ["source": "notification"])
+            }
             .task(id: model.revision) {
                 baslarken = BaslarkenDurumu.oku(model)
+                kutlamalariOku()
                 Karsilama.etkinlesmeyiDenetle(model)
                 if !Hatirlatma.acik, !Hatirlatma.teklifBitti, !Hatirlatma.ertelendi, Ornek.tur == nil {
                     teklif = await Hatirlatma.izinDurumu() != .denied
@@ -86,6 +111,38 @@ struct OzetEkrani: View {
         }
     }
 
+    // Kutlama kartı ve ay kapanışı: biten taksitler son iki haftadan (dün dahil; bugünkü ödeme henüz ödenmedi sayılır),
+    // geçen ayın özeti ayın ilk on gününde. Ekran görüntüsü turlarında yok.
+    private static let kapatilan = "kutlama.kapatilan", gosterilen = "kutlama.gosterilen"
+    private func kutlamalariOku() {
+        guard Ornek.tur == nil, Ornek.galeri == nil, let motor = model.motor else { return }
+        let d = UserDefaults.standard, cal = Calendar.current, bugun = Date()
+        if let ilk = cal.date(byAdding: .day, value: -14, to: bugun), let dun = cal.date(byAdding: .day, value: -1, to: bugun) {
+            let kapali = Set(d.stringArray(forKey: Self.kapatilan) ?? [])
+            let yeni = motor.finishing(from: Bicim.key(ilk), to: Bicim.key(dun)).filter { !kapali.contains($0.id) }
+            if yeni != bitenler { withAnimation { bitenler = yeni } }
+            // İlk kez görünen kutlama: bir titreşim ve ölçüm (aynı taksit için bir kez)
+            var gorulen = d.stringArray(forKey: Self.gosterilen) ?? []
+            let ilkKez = yeni.filter { !gorulen.contains($0.id) }
+            if !ilkKez.isEmpty {
+                gorulen.append(contentsOf: ilkKez.map(\.id))
+                d.set(Array(gorulen.suffix(200)), forKey: Self.gosterilen)
+                kutla += 1
+                Analitik.olay("installment_finished_shown", ["count": ilkKez.count])
+            }
+        }
+        let o = Bicim.takvim.component(.day, from: bugun) <= 10 ? motor.monthSummary() : nil
+        aySonu = (o?.paid ?? 0) > 0.004 ? o : nil
+    }
+
+    private func kutlamayiKapat() {
+        let d = UserDefaults.standard
+        var kapali = d.stringArray(forKey: Self.kapatilan) ?? []
+        kapali.append(contentsOf: bitenler.map(\.id))
+        d.set(Array(kapali.suffix(200)), forKey: Self.kapatilan)
+        withAnimation { bitenler = [] }
+    }
+
     private func odendi(_ p: Ozet.Yaklasan) {
         guard let c = (try? model.read("list_cards") as KartListesi)?.cards.first(where: { $0.name == p.card }) else { return }
         odeme = .kart(id: c.id, ad: c.name, tutar: c.tracking?.unpaid ?? p.total, asgari: c.tracking?.revolving?.minimumDue)
@@ -93,7 +150,10 @@ struct OzetEkrani: View {
 
 }
 
-// Bu ay ödenecek: büyük tutar, borç ödemeleri, gelecek ay ve kalan toplam (Özet'in üstü; ilk açılışta "Planın hazır")
+// Bu ay ödenecek: büyük tutar ve ayın ilerlemesi (ödenen / kalan, sıradaki gün), borç ödemeleri; altında gelecek ay
+// (bu aya göre hafifliyor mu) ve taksitlerin bittiği ay (Özet'in üstü; ilk açılışta "Planın hazır"). Döküm değil yön:
+// kalan borcun toplamı yerine ayın neresinde olunduğu ve işlerin nereye gittiği (get_overview progress,
+// lastInstallmentMonth; icgoru.js).
 struct BuAyKarti: View {
     let o: Ozet
 
@@ -105,19 +165,128 @@ struct BuAyKarti: View {
                 Text(Bicim.month(o.month)).font(.subheadline.weight(.semibold))
             }
             BuyukTutar(deger: o.dueThisMonth)
+                .contentTransition(.numericText(value: o.dueThisMonth))   // değişen tutar eski değerden yenisine sayar
+                .animation(.snappy(duration: 0.5), value: o.dueThisMonth)
             if let d = o.debts?.dueThisMonth, d > 0.004 {
                 Text(L("+ {0} borç ödemesi", Bicim.tl(d))).font(.subheadline).foregroundStyle(Tema.metin2).monospacedDigit()
             }
+            if let p = o.progress, o.dueThisMonth > 0.004 { ilerleme(p) }
             Ayirici()
-            IstatistikSatiri(ogeler: [
-                Istatistik(etiket: L("Gelecek ay ({0})", ayAdi(o.nextMonth.month)), deger: Bicim.tl(o.nextMonth.total)),
-                Istatistik(etiket: L("Kalan bütün taksitler"), deger: Bicim.tl(o.remainingTotal)),
-            ])
+            HStack(alignment: .top, spacing: 0) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L("Gelecek ay ({0})", ayAdi(o.nextMonth.month))).font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
+                    Text(Bicim.tl(o.nextMonth.total)).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin).monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                    fark
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Rectangle().fill(Tema.cizgi).frame(width: 1).padding(.horizontal, 10)
+                VStack(alignment: .leading, spacing: 3) {
+                    // Taksitlerin bittiği ay belliyse o; değilse (taksit yok, yalnızca süresiz tekrarlar) kalan toplam
+                    Text(o.lastInstallmentMonth != nil ? L("Son taksit") : L("Kalan bütün taksitler")).font(.footnote).foregroundStyle(Tema.metin3).lineLimit(1)
+                    Text(o.lastInstallmentMonth.map { Bicim.month($0) } ?? Bicim.tl(o.remainingTotal))
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func ayAdi(_ ym: String) -> String {
-        String(Bicim.month(ym).split(separator: " ").first ?? "")
+    // Ödenen kısım yeşil çubukta; altında "₺33.175 ödendi" ve "kalan ₺16.780 · 20 Kasım"
+    private func ilerleme(_ p: Ozet.Ilerleme) -> some View {
+        let oran = Int((min(max(p.paid / o.dueThisMonth, 0), 1) * 100).rounded())
+        return VStack(alignment: .leading, spacing: 6) {
+            Doluluk(used: p.paid, limit: o.dueThisMonth, renk: Tema.iyi, erisim: L("Bu ayın yüzde {0} kadarı ödendi", oran))
+            HStack(spacing: 8) {
+                if p.left < 0.004 {
+                    Label(L("Hepsi ödendi"), systemImage: "checkmark.circle.fill").fontWeight(.semibold).foregroundStyle(Tema.iyi)
+                } else {
+                    if p.paid > 0.004 {
+                        Text(L("{0} ödendi", Bicim.tl(p.paid, fraction: false))).fontWeight(.semibold).foregroundStyle(Tema.metin)
+                        Spacer(minLength: 8)
+                    }
+                    Text(p.next.map { L("kalan {0} · {1}", Bicim.tl(p.left, fraction: false), Bicim.day($0)) } ?? L("kalan {0}", Bicim.tl(p.left, fraction: false)))
+                        .foregroundStyle(Tema.metin2)
+                }
+            }
+            .font(.footnote).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .padding(.top, 2)
+    }
+
+    // Gelecek ay bu aydan hafifse yeşil "↓ ₺7.880 hafifliyor", ağırsa sakin "↑ ₺2.000 artıyor"
+    @ViewBuilder private var fark: some View {
+        let d = o.nextMonth.total - o.dueThisMonth
+        if o.progress != nil, abs(d) >= 1 {
+            Label(d < 0 ? L("{0} hafifliyor", Bicim.tl(-d, fraction: false)) : L("{0} artıyor", Bicim.tl(d, fraction: false)),
+                  systemImage: d < 0 ? "arrow.down" : "arrow.up")
+                .labelStyle(.titleAndIcon)
+                .font(.caption.weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+                .foregroundStyle(d < 0 ? Tema.iyi : Tema.metin3)
+        }
+    }
+
+    private func ayAdi(_ ym: String) -> String { AyOzetiEkrani.ayAdi(ym) }
+}
+
+// Son iki haftada son taksidi ödenen harcamalar: "Koltuk takımı bitti · Eylül ayından itibaren ayda ₺3.500 boşta".
+// Taksit takibinin doğal ödülü; "Tamam" ile kapanır (OzetEkrani okur ve kapatılanları cihazda saklar).
+struct BitenTaksitKarti: View {
+    let bitenler: [BitenTaksit]
+    let kapat: () -> Void
+
+    var body: some View {
+        Kart {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "checkmark.seal.fill").font(.title2).foregroundStyle(Tema.iyi)
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(bitenler.prefix(3)) { b in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("{0} bitti", b.desc)).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(2)
+                            Text(L("{0} ayından itibaren ayda {1} boşta.", AyOzetiEkrani.ayAdi(b.freeFrom), Bicim.tl(b.monthly, fraction: false)))
+                                .font(.footnote).foregroundStyle(Tema.metin2).monospacedDigit()
+                        }
+                    }
+                    if bitenler.count > 3 {
+                        Text(L("ve {0} taksit daha", bitenler.count - 3)).font(.footnote).foregroundStyle(Tema.metin3)
+                    }
+                }
+                Spacer(minLength: 4)
+                Button(L("Tamam"), action: kapat)
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Tema.yuzey2, in: Capsule())
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// Ay kapanışı: ayın ilk on gününde geçen ayın özeti hazır ("Ekim özeti hazır"); dokununca AyOzetiEkrani, basılı tutunca
+// "Kapat" (OzetEkrani okur; geçen ay ödeme yoksa kart yoktur).
+struct AyKapanisiKarti: View {
+    let ozet: AyOzeti
+    let ac: () -> Void
+    let kapat: () -> Void
+
+    var body: some View {
+        Button(action: ac) {
+            Kart {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "calendar.badge.checkmark").font(.title2).foregroundStyle(Tema.metin2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("{0} özeti hazır", AyOzetiEkrani.ayAdi(ozet.month))).font(.body.weight(.semibold)).foregroundStyle(Tema.metin)
+                        Text(AyOzetiEkrani.tekSatir(ozet)).font(.footnote).foregroundStyle(Tema.metin2).monospacedDigit().lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .contextMenu { Button(L("Kapat"), systemImage: "xmark", action: kapat) }
     }
 }
 

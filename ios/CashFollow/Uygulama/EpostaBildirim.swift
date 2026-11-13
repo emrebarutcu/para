@@ -72,7 +72,7 @@ enum EpostaBildirim {
         let i = UNMutableNotificationContent()
         i.sound = .default
         i.threadIdentifier = "eposta"
-        i.userInfo = ["sekme": 2]   // Harcamalar
+        i.userInfo = ["sekme": 2, "tur": "inbox"]   // Harcamalar
         return i
     }
 
@@ -93,20 +93,28 @@ enum EpostaBildirim {
     }
 }
 
-// Bildirime dokununca: e-posta bildirimi Harcamalar sekmesini açar (userInfo "sekme"). Ödeme hatırlatmaları eskisi gibi
-// yalnızca uygulamayı açar. Uygulama önündeyken bildirim gösterilmez (willPresent yok: iOS'un varsayılanı).
+// Bildirime dokununca ilgili sekme açılır (userInfo "sekme": e-posta → Harcamalar, ödeme ve taksit bitişi → Özet, kesim
+// günü → Kartlar), ay özeti bildirimi özeti de gösterir ("ozet"); notification_opened bildirimin türüyle yazılır ("tur").
+// Uygulama önündeyken bildirim gösterilmez (willPresent yok: iOS'un varsayılanı).
 final class BildirimTemsilcisi: NSObject, UNUserNotificationCenterDelegate {
     static let shared = BildirimTemsilcisi()
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        guard let sekme = response.notification.request.content.userInfo["sekme"] as? Int else { return }
-        await MainActor.run { Yonlendirici.shared.sekme = sekme }
+        let info = response.notification.request.content.userInfo
+        let tur = info["tur"] as? String ?? "other", sekme = info["sekme"] as? Int, ozet = info["ozet"] as? Bool == true
+        await MainActor.run {
+            Analitik.olay("notification_opened", ["kind": tur])
+            if let sekme { Yonlendirici.shared.sekme = sekme }
+            if ozet { Yonlendirici.shared.ayOzeti = true }
+        }
     }
 }
 
 // Açılacak sekme (bildirimden); AnaEkran dinler. Uygulama bildirimle açıldıysa da değer bekler, ekran gelince okunur.
+// ayOzeti: ay özeti bildirimine dokunuldu (Özet'teki AyKapanisiKarti özeti açar).
 @MainActor
 final class Yonlendirici: ObservableObject {
     static let shared = Yonlendirici()
     @Published var sekme: Int?
+    @Published var ayOzeti = false
 }

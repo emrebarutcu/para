@@ -491,6 +491,9 @@ struct HatirlatmaBolumu: View {
     @State private var gun = Hatirlatma.gunOnce
     @State private var saat = Calendar.current.date(bySettingHour: Hatirlatma.dakika / 60, minute: Hatirlatma.dakika % 60, second: 0, of: Date()) ?? Date()
     @State private var reddedildi = false
+    @State private var kesim = Hatirlatma.kesim
+    @State private var bitis = Hatirlatma.bitis
+    @State private var ayOzeti = Hatirlatma.ayOzeti
 
     var body: some View {
         Section {
@@ -508,6 +511,9 @@ struct HatirlatmaBolumu: View {
                     ForEach([2, 3, 7], id: \.self) { Text(L("{0} gün kala", $0)).tag($0) }
                 }
                 DatePicker(L("Saat"), selection: $saat, displayedComponents: .hourAndMinute)
+                Toggle(L("Kesim gününden bir gün önce"), isOn: $kesim)
+                Toggle(L("Taksit bitince"), isOn: $bitis)
+                Toggle(L("Ay özeti"), isOn: $ayOzeti)
             }
             if reddedildi {
                 Button(L("Bildirim izni kapalı: iPhone Ayarları'nda aç")) {
@@ -519,6 +525,9 @@ struct HatirlatmaBolumu: View {
             Text(L("Kart ekstresi, kredi ve borç taksitlerinin ödeme gününü hatırlatır. Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez."))
         }
         .onChange(of: gun) { _, v in Hatirlatma.gunOnce = v; Task { await Hatirlatma.kur(model) } }
+        .onChange(of: kesim) { _, v in Hatirlatma.kesim = v; Task { await Hatirlatma.kur(model) } }
+        .onChange(of: bitis) { _, v in Hatirlatma.bitis = v; Task { await Hatirlatma.kur(model) } }
+        .onChange(of: ayOzeti) { _, v in Hatirlatma.ayOzeti = v; Task { await Hatirlatma.kur(model) } }
         .onChange(of: saat) { _, v in
             let c = Calendar.current.dateComponents([.hour, .minute], from: v)
             Hatirlatma.dakika = (c.hour ?? 10) * 60 + (c.minute ?? 0)

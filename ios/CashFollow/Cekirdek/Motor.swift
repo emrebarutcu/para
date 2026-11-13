@@ -201,6 +201,28 @@ final class Motor {
         try JSONDecoder().decode(VarlikSerisi?.self, from: call("asset", [range, seriesJSON]))
     }
 
+    // ── Kayıt kolaylıkları, kutlama, ay kapanışı, kesim günleri (icgoru.js; kopru.js) ──
+
+    // Harcama formunun işyeri önerileri: q yazılan metin (boşsa en son kullanılanlar)
+    func merchants(_ q: String = "", limit: Int = 6) -> [Isyeri] {
+        (try? JSONDecoder().decode([Isyeri].self, from: call("merchants", [q, limit]))) ?? []
+    }
+
+    // Son ödemesi from–to (YYYY-MM-DD) arasında olan taksitli harcamalar
+    func finishing(from: String, to: String) -> [BitenTaksit] {
+        (try? JSONDecoder().decode([BitenTaksit].self, from: call("finishing", [from, to]))) ?? []
+    }
+
+    // Ay kapanışı: month "YYYY-MM"; boşsa geçen ay
+    func monthSummary(_ month: String = "") -> AyOzeti? {
+        try? JSONDecoder().decode(AyOzeti.self, from: call("monthSummary", [month]))
+    }
+
+    // Kartların bugünden sonraki ilk hesap kesimleri
+    func cutoffs() -> [KesimGunu] {
+        (try? JSONDecoder().decode([KesimGunu].self, from: call("cutoffs", []))) ?? []
+    }
+
     // ── Eşitleme (tablo.js; Senkron.swift) ─────────────────────────────────────
 
     private func sync(_ fn: String, _ args: [Any]) throws -> JSValue {

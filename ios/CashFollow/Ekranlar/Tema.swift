@@ -241,6 +241,28 @@ struct Avatar: View {
     }
 }
 
+// Harcamanın kategorisi, gri yuvarlakta ince simge. Tek kişilik kullanımda harcama satırının başında kişinin baş harfi
+// yerine durur (her satırda aynı harf bir şey söylemez; liste ne alındığıyla taranır). Kategorisi yoksa etiket simgesi.
+struct KategoriSimgesi: View {
+    let kategori: String?
+    var boyut: CGFloat = 36
+
+    private static let simgeler: [String: String] = [
+        "market": "cart", "yeme": "fork.knife", "ulasim": "car", "alisveris": "bag", "elektronik": "desktopcomputer",
+        "ev": "house", "fatura": "doc.text", "saglik": "cross.case", "egitim": "book", "eglence": "gamecontroller",
+        "seyahat": "airplane", "diger": "square.grid.2x2",
+    ]
+
+    var body: some View {
+        Image(systemName: kategori.flatMap { Self.simgeler[$0] } ?? "tag")
+            .font(.system(size: boyut * 0.42, weight: .medium))
+            .foregroundStyle(Tema.metin2)
+            .frame(width: boyut, height: boyut)
+            .background(Tema.yuzey2, in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+
 // Renkli nokta + ad (kişi / kart lejantı)
 struct RenkliAd: View {
     let ad: String

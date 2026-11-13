@@ -81,6 +81,15 @@ final class Model: ObservableObject {
     func kisiRengi(_ key: String) -> Color { Tema.seri(renkler.people[key] ?? 0) }
     func kartRengi(_ key: String) -> Color { key == "Nakit" ? Tema.nakit : Tema.seri(renkler.cards[key] ?? 0) }
 
+    // Tek kişi mi (harcama satırında kişinin baş harfi yerine kategori simgesi); revision değişince yeniden okunur
+    private var kisiOnbellek: (rev: Int, n: Int)?
+    var tekKisi: Bool {
+        if let c = kisiOnbellek, c.rev == revision { return c.n <= 1 }
+        let n = (try? read("list_people") as KisiListesi)?.people.count ?? 1
+        kisiOnbellek = (revision, n)
+        return n <= 1
+    }
+
     private func engine() throws -> Motor {
         guard let motor else { throw AracHatasi(message: startupError ?? L("Uygulama çekirdeği açılamadı"), user: false) }
         return motor

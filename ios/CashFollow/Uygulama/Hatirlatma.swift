@@ -6,11 +6,31 @@ import UserNotifications
 //   yakın ödemeler Özet'in hesabından (get_overview: elle ödenen kartın ödenmiş ekstresi düşer), sonrası Akış'tan
 //   (get_cashflow, 3 ay); borç / kredi taksitleri get_overview → debts.upcoming.
 // Aynı günün ödemeleri tek bildirimde. iOS en fazla 64 bekleyen bildirim tutar; en yakın 40 gün kurulur.
+// Aynı anahtarla (hatırlatmalar açıksa) üç bildirim daha, hepsi seçilen saatte ve Ayarlar'dan ayrı ayrı kapatılabilir:
+//   kesim günü   hesap kesiminden bir gün önce: bugün alınan hangi gün, kesimden sonra alınan hangi gün ödenir
+//   taksit bitişi  son taksidin ödendiği günün ertesi günü: "Koltuk takımı bitti", boşalan aylık tutar
+//   ay özeti     ayın ilk günü: geçen ayın özeti hazır (AyOzetiEkrani)
+// Bildirime dokununca ilgili sekme açılır (userInfo "sekme"; BildirimTemsilcisi) ve notification_opened yazılır ("tur").
 @MainActor
 enum Hatirlatma {
     private static let onEk = "odeme-"
+    private static let kesimEki = "kesim-", bitisEki = "bitis-", ozetEki = "ayozeti-"
     private static let enFazla = 40
     private static let d = UserDefaults.standard
+
+    // Ek bildirimler (varsayılan açık; hatırlatmalar kapalıysa hiçbiri gönderilmez)
+    nonisolated static var kesim: Bool {
+        get { UserDefaults.standard.object(forKey: "hatirlatma.kesim") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "hatirlatma.kesim") }
+    }
+    nonisolated static var bitis: Bool {
+        get { UserDefaults.standard.object(forKey: "hatirlatma.bitis") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "hatirlatma.bitis") }
+    }
+    nonisolated static var ayOzeti: Bool {
+        get { UserDefaults.standard.object(forKey: "hatirlatma.ayozeti") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "hatirlatma.ayozeti") }
+    }
 
     static var acik: Bool {
         get { d.bool(forKey: "hatirlatma.acik") }
@@ -62,7 +82,8 @@ enum Hatirlatma {
 
     private static func temizle() async {
         let c = UNUserNotificationCenter.current()
-        let eski = await c.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(onEk) }
+        let ekler = [onEk, kesimEki, bitisEki, ozetEki]
+        let eski = await c.pendingNotificationRequests().map(\.identifier).filter { id in ekler.contains { id.hasPrefix($0) } }
         c.removePendingNotificationRequests(withIdentifiers: eski)
     }
 
@@ -108,9 +129,69 @@ enum Hatirlatma {
             icerik.body = satirlar.joined(separator: "\n")
             icerik.sound = .default
             icerik.threadIdentifier = "odeme"
-            let tetik = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: zaman), repeats: false)
-            try? await c.add(UNNotificationRequest(identifier: onEk + tarih, content: icerik, trigger: tetik))
+            icerik.userInfo = ["sekme": 0, "tur": "payment"]   // Özet: sıradaki ödemeler
+            try? await c.add(UNNotificationRequest(identifier: onEk + tarih, content: icerik, trigger: tetik(zaman)))
             kurulan += 1
+        }
+        await ekleriKur(model.motor, c)
+    }
+
+    private static func tetik(_ zaman: Date) -> UNCalendarNotificationTrigger {
+        UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: zaman), repeats: false)
+    }
+
+    // Günün (YYYY-MM-DD) n gün öncesi / sonrası, seçilen saatte; geçmişse nil
+    private static func saatinde(_ tarih: String, gun n: Int, simdi: Date = Date()) -> Date? {
+        let cal = Calendar.current
+        guard let gun = Bicim.date(tarih), let g = cal.date(byAdding: .day, value: n, to: cal.startOfDay(for: gun)),
+              let z = cal.date(bySettingHour: dakika / 60, minute: dakika % 60, second: 0, of: g), z > simdi else { return nil }
+        return z
+    }
+
+    private static func ayAdi(_ ym: String) -> String { AyOzetiEkrani.ayAdi(ym) }
+
+    // Kesim günü, taksit bitişi ve ay özeti bildirimleri (kur'dan; eskileri temizlenmiş, izin var)
+    private static func ekleriKur(_ motor: Motor?, _ c: UNUserNotificationCenter) async {
+        guard let motor else { return }
+        let bugun = Bicim.key(Date())
+        if kesim {
+            // Her kartın sıradaki kesimi, bir gün önce: "Yarın Bonus kesimi"
+            for k in motor.cutoffs().prefix(8) {
+                guard let zaman = saatinde(k.cut, gun: -1) else { continue }
+                let i = UNMutableNotificationContent()
+                i.title = L("Yarın {0} kesimi", k.card)
+                i.body = L("Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.", Bicim.day(k.dueBefore), Bicim.day(k.dueAfter))
+                i.sound = .default
+                i.threadIdentifier = "kesim"
+                i.userInfo = ["sekme": 3, "tur": "cutoff"]   // Kartlar
+                try? await c.add(UNNotificationRequest(identifier: "\(kesimEki)\(k.card)-\(k.cut)", content: i, trigger: tetik(zaman)))
+            }
+        }
+        if bitis, let son = Calendar.current.date(byAdding: .day, value: 60, to: Date()) {
+            // Önümüzdeki iki ayda biten taksitler, son ödemenin ertesi günü
+            for b in motor.finishing(from: bugun, to: Bicim.key(son)).prefix(10) {
+                guard let zaman = saatinde(b.date, gun: 1) else { continue }
+                let i = UNMutableNotificationContent()
+                i.title = L("{0} bitti", b.desc)
+                i.body = L("{0} ayından itibaren ayda {1} boşta.", ayAdi(b.freeFrom), Bicim.tl(b.monthly, fraction: false))
+                i.sound = .default
+                i.threadIdentifier = "bitis"
+                i.userInfo = ["sekme": 0, "tur": "installment_finished"]   // Özet: kutlama kartı
+                try? await c.add(UNNotificationRequest(identifier: bitisEki + b.id, content: i, trigger: tetik(zaman)))
+            }
+        }
+        if ayOzeti {
+            // Bu ayın özeti gelecek ayın ilk günü (veri değiştikçe yeniden kurulur; ay içinde ödeme yoksa gönderilmez)
+            let ay = String(bugun.prefix(7))
+            if let o = motor.monthSummary(ay), o.paid > 0.004, let zaman = saatinde(o.next.month + "-01", gun: 0) {
+                let i = UNMutableNotificationContent()
+                i.title = L("{0} özetin hazır", ayAdi(o.month))
+                i.body = AyOzetiEkrani.tekSatir(o)
+                i.sound = .default
+                i.threadIdentifier = "ayozeti"
+                i.userInfo = ["sekme": 0, "tur": "month_summary", "ozet": true]
+                try? await c.add(UNNotificationRequest(identifier: ozetEki + o.month, content: i, trigger: tetik(zaman)))
+            }
         }
     }
 
