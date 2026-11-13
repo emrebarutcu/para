@@ -129,6 +129,8 @@
         </dl>
         <!-- Sonraki ayın altında: gösterilen aya göre hafifliyor mu, artıyor mu -->
         <p class="hero-diff" id="nextDiff" hidden></p>
+        <!-- İyi haber, tek satır (icgoru.js headline): ay sonunda kalan serbest nakit ya da bugünün kartı; Premium istemez -->
+        <details class="hero-good" id="heroGood" hidden><summary></summary><p></p></details>
       </div>
 
       <section class="panel" id="upcomingPanel">
@@ -1088,7 +1090,7 @@
         </details>
         <p class="hint">Asistan, izin verdiğin hesabın verisini okuyup değiştirebilir; yaptığı değişiklikler burada anında görünür.</p>
         <p class="hint warn-text" id="aiLoginNote" hidden>Bu özellik bulut hesabıyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.</p>
-        <p class="hint warn-text" id="aiPremiumNote" hidden>Asistan bağlantısı CashFollow Premium ile çalışır. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).</p>
+        <p class="hint warn-text" id="aiPremiumNote" hidden>Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).</p>
         <div class="settings-group" id="aiAppsGroup" hidden>
           <span class="group-label">Bağlı uygulamalar</span>
           <ul class="ai-apps" id="aiApps"></ul>

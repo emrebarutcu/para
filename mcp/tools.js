@@ -2310,7 +2310,7 @@ export const TOOLS = [
   {
     name: "get_insights",
     title: "Insights (İçgörüler)",
-    description: "The app's insight cards, most important first: free cash this month (cash coming in — lira and money market funds: income, collections — minus card and cash installments, spending, debt payments and investments; a buy / sale for lira is a transfer, not income; borrowed money and expected collections not counted) or the first month that runs short (spending and payments over cash coming in), installment-to-income ratio for the next months, cards close to their limit, an upcoming jump in payments, a category spending more than usual, which card gives the latest first payment for a purchase made today, recurring payments (subscriptions, rent), debt and loan payments that are late or due within 7 days and statements of cards paid by hand that are past their due day unpaid (borc-vade), money owed to the user that is due — card shares and late receivables (alacak), other people's share this month (only when no card is tracked), the month installments end. Texts are Turkish; data has the numbers.",
+    description: "The app's insight cards, most important first: free cash this month (cash coming in — lira and money market funds: income, collections — minus card and cash installments, spending, debt payments and investments; a buy / sale for lira is a transfer, not income; borrowed money and expected collections not counted) or the first month that runs short (spending and payments over cash coming in), installment-to-income ratio for the next months, cards close to their limit, an upcoming jump in payments, a category spending more than usual, which card gives the latest first payment for a purchase made today, recurring payments (subscriptions, rent), debt and loan payments that are late or due within 7 days and statements of cards paid by hand that are past their due day unpaid (borc-vade), money owed to the user that is due — card shares and late receivables (alacak), other people's share this month (only when no card is tracked), the month installments end. Warnings come first, then good news, then the rest. free: shown in the app without Premium (free cash, last installment, today's card); headline: the one-line version the app shows on top of the summary (free cash left at the end of the month, else today's card), or null. Texts are Turkish; data has the numbers.",
     inputSchema: obj(),
     annotations: READ,
     async run(args, ctx) {
@@ -2318,7 +2318,8 @@ export const TOOLS = [
       const rates = await ratesOrNull(ctx, state);
       // Nakit: uygulamanın varsayılan tanımı (TL ve TL para piyasası fonları; fon bilgisi fiyatla gelir)
       const cash = code => V.isCash(code, V.cashDefault(homeOf(state)), rates?.market?.[code]);
-      return { today: ctx.today, insights: I.insights(state, { today: ctx.today, rates: rates?.rates, cash }), currency: homeOf(state) };
+      const insights = I.insights(state, { today: ctx.today, rates: rates?.rates, cash });
+      return { today: ctx.today, insights, headline: I.headline(insights), currency: homeOf(state) };
     },
   },
   {
@@ -2464,7 +2465,7 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Buy now, pay later (only in countries where it is offered, with that country's providers; see "This account" below): add_purchase bnpl = "Pay in 4": the first payment on the purchase date, then every 2 weeks, from a card (each on the statement of its own date) or cash; what is not charged yet is owed to the provider (list_debts bnpl, debtsByKind.bnpl). Affirm's monthly plans are not Pay in 4: record them as a loan or regular installments.
 - Bonus payment (only in Japan, ボーナス払い; see "This account" below): add_purchase / update_purchase bonus "once" puts the whole card purchase on the due day of the card's next bonus month (default August for the summer bonus, January for winter; add_card / update_card bonus_months changes them), "twice" splits it across the next two bonuses (ボーナス2回払い). The bonus is the first whose month is at least 2 months after the purchase's statement cutoff. It counts in the card's statements, limit and cash flow like any payment.
 - Bank e-mails (the *_inbox* tools and try_bank_email: Turkish bank notifications turned into purchases) are only available for accounts in Turkey for now.
-- Using CashFollow through an assistant needs CashFollow Premium (a subscription in the iPhone app). If a tool answers that Premium is needed, tell the user how to subscribe instead of retrying.
+- Without CashFollow Premium (a subscription in the iPhone app) only get_overview works (due this month, upcoming payments); every other tool, and all writing, needs Premium. If a tool answers that Premium is needed, tell the user how to subscribe instead of retrying.
 - Reply to the user in their language (the app is in Turkish and English).`;
 
 // ---------- Ülkeye göre araçlar (para.js features) ----------

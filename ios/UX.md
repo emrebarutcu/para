@@ -9,7 +9,7 @@ Puan: 1 (yapılamıyor / çok zor) … 5 (hızlı ve açık). Üç sütun: 7.1.0
 
 | Sekme | Yanıtladığı soru | İçerik |
 |-------|------------------|--------|
-| Özet | Bu ay ne ödeyeceğim, sırada ne var, param yetecek mi? | Bu ay ödenecek (ödenen / kalan, gelecek ay hafifliyor mu, son taksit), sıradaki 5 ödeme, 2 içgörü, Nakit; yeri gelince biten taksidin kutlaması ve geçen ayın özeti |
+| Özet | Bu ay ne ödeyeceğim, sırada ne var, param yetecek mi? | Bu ay ödenecek (ödenen / kalan, gelecek ay hafifliyor mu, son taksit, iyi haber satırı: ay sonunda kalan serbest nakit ya da bugünün kartı), sıradaki 5 ödeme, 2 içgörü (ücretsizde iyi haberler, gerisi kilitli), Nakit; yeri gelince biten taksidin kutlaması ve geçen ayın özeti |
 | Akış | Önümüzdeki aylarda hangi gün ne ödeyeceğim? | 12 aylık grafik, ay ay ödeme günleri; "Sonraki 12 ayı da göster" |
 | Harcamalar | Neye harcadım? | Liste ya da Kategoriler; kişi süzgeci, arama, bitenler altta |
 | Kartlar | Kartlarım, kredilerim, kim bana borçlu? | Toplam borç, kartlar, kartından harcayanlar, borç / alacaklar |

@@ -349,7 +349,7 @@ struct PremiumBolumu: View {
                 Satir(title: L("Durum"), value: durum)
                 if abonelik.cihaz != nil { Button(L("Aboneliği yönet")) { yonet = true } }
             } else {
-                Text(L("Ücretsiz sürüm: {0} kart, yalnızca sen. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", Abonelik.ucretsizKart))
+                Text(L("Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", Abonelik.ucretsizKart, Abonelik.ucretsizKisi))
                     .font(.footnote).foregroundStyle(.secondary)
                 Button(L("Premium'a geç")) { sayfa = .premium }.font(.body.weight(.semibold))
                 Button(L("Satın alımları geri yükle")) { Task { await abonelik.geriYukle() } }

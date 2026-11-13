@@ -452,11 +452,10 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   ölçülür. `merchant_suggestion_used` (öneriye dokunuldu), `notification_opened` (`kind`: payment, cutoff,
   installment_finished, month_summary, inbox), `installment_finished_shown` (kutlama kartı ilk kez göründü; `count`),
   `month_summary_opened` (`source`: overview, notification), `month_summary_shared`.
-- Karşılama denemesi: PostHog'da çok değişkenli bayrak **`onboarding_flow`**, kollar `control` (eski giriş ekranı) ve
-  `eylem` (yeni akış); "Persist flag across authentication" açık. Bayrak yokken herkes yeni akışı görür (`variant: default`);
-  1,5 saniyede gelmezse de yeni akış (`fallback`, çözümlemeden çıkarılır). %100 `control` yeni akışı uzaktan kapatır.
-  Olaylarda `$feature/onboarding_flow`; birincil ölçü ilk hafta geri dönüş (1–7. günde `app_opened`), etkinleşme ikincil
-  (akış kartı ve harcamayı kendisi yazdığı için tek başına karar vermez). Simülatörde yeni kurulumda `-karsilama` akışı açar.
+- Karşılama: A/B denemesi yok (Kasım 2026 kararı; kol başına ~2.900 kurulum gerekiyordu). Her yeni kurulum yeni akışı
+  görür, `onboarding_flow` bayrağı okunmaz; olaylarda `variant: default`. Etki önce / sonra kohortlarıyla ölçülür:
+  birincil ölçü ilk hafta geri dönüş (1–7. günde `app_opened`), etkinleşme ikincil (akış kartı ve harcamayı kendisi
+  yazdığı için tek başına karar vermez). Simülatörde yeni kurulumda `-karsilama` akışı açar.
 
 #### Abonelik (CashFollow Premium)
 
@@ -466,9 +465,12 @@ Fiyat ve deneme App Store Connect'te; kodda fiyat yok. Asistanı
 bağlama iPhone'da Ayarlar → CashFollow Premium → Yapay zekâ asistanı (`Ekranlar/AsistanEkrani.swift`; web'deki Yapay zekâ
 penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
 
-- **Ücretsiz sürüm:** 2 kart, yalnızca kullanıcının kendisi (1 kişi), Özet, harcamalar ve taksitler, borçlar
-  (`Abonelik.ucretsizKart`, `ucretsizKisi`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir miyim?",
-  içgörüler, Varlığın seyri, kart borcu geri ödeme planı, asistan (MCP) bağlantısı. Sınırı aşan eski kart ve kişiler kalır;
+- **Ücretsiz sürüm:** 2 kart, 2 kişi (kullanıcı ve eşi gibi biri), Özet, harcamalar ve taksitler, borçlar
+  (`Abonelik.ucretsizKart`, `ucretsizKisi`; web `FREE_CARDS`, `FREE_PEOPLE`); iyi haber içgörüleri (serbest nakit, son
+  taksit, bugünün kartı: `icgoru.js` `FREE`; biri Özet'in tepesinde tek satır, `headline`); asistanda yalnızca özet
+  okuması (`get_overview`; `mcp/server.js` `FREE_TOOLS`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir
+  miyim?", öbür içgörüler (uyarılar, öneriler), Varlığın seyri, kart borcu geri ödeme planı, asistanın öbür araçları
+  (yazma dahil). Sınırı aşan eski kart ve kişiler kalır;
   yalnızca yenisi eklenemez. **Web** aynı sınırları uygular (`app.js` → CashFollow Premium; web'de "Alabilir miyim?" ve
   borç planı yok): satın alma yok, Premium iPhone'da alınır ve hesaba bağlanınca web'de de açılır. Web hesabın satırını
   oturum açılınca ve sekme öne gelince (en sık dakikada bir) okur, son değeri saklar; girişsiz web ücretsizdir.

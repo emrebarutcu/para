@@ -372,8 +372,17 @@ struct Icgoruler: Decodable {
         let tone: String?
         let title: String
         let text: String
+        let free: Bool?   // Premium istemez (serbest nakit, son taksit, bugünün kartı; icgoru.js FREE)
+    }
+    // Özet'in tepesindeki tek satır (icgoru.js headline): ay sonunda kalan serbest nakit ya da bugünün kartı
+    struct Tepe: Decodable, Hashable {
+        let id: String
+        let tone: String?
+        let title: String
+        let text: String
     }
     let insights: [Icgoru]
+    let headline: Tepe?
 }
 
 struct KategoriHarcamasi: Decodable {

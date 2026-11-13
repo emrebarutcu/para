@@ -4,7 +4,7 @@ import UIKit
 // Yapay zekâ asistanı: CashFollow'u Claude, ChatGPT ya da Gemini'ye bağlama (MCP, cashfollow.app/mcp; web'deki Yapay zekâ
 // penceresiyle aynı bağlantılar, app.js AI_CLIENTS). Claude'un bağlantısı "özel bağlayıcı ekle" penceresini adresi dolu açar;
 // ChatGPT ve Gemini'de adres panoya kopyalanır, eklendiği sayfa açılır. Asistan CashFollow izin sayfasını açar, kullanıcı
-// giriş yapıp izin verir. Araç çağrıları Premium ister (mcp/server.js).
+// giriş yapıp izin verir. Özet okuması dışındaki araç çağrıları Premium ister (mcp/server.js FREE_TOOLS).
 struct AsistanEkrani: View {
     @EnvironmentObject private var model: Model
     @EnvironmentObject private var abonelik: Abonelik
@@ -45,7 +45,7 @@ struct AsistanEkrani: View {
                         Text(L("Asistan bulut hesabıyla çalışır: önce Ayarlar → Hesap'tan giriş yap.")).font(.footnote).foregroundStyle(Tema.uyari)
                     }
                     if !abonelik.premium {
-                        Text(L("Asistan bağlantısı CashFollow Premium ile çalışır.")).font(.footnote).foregroundStyle(Tema.uyari)
+                        Text(L("Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir.")).font(.footnote).foregroundStyle(Tema.uyari)
                         Button(L("Premium'a geç")) { odeme = true }.font(.body.weight(.semibold))
                     }
                 }

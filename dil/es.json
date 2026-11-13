@@ -575,9 +575,7 @@
  "Koşullar": "Términos",
  "Gizlilik": "Privacidad",
  "Yapay zekâ asistanını bağla": "Conecta tu asistente de IA",
- "Ücretsiz sürüm: {0} kart, yalnızca sen. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Versión gratuita: {0} tarjetas, solo tú. Premium añade el asistente de IA (Claude, ChatGPT), tarjetas y personas ilimitadas, Flujo de caja, ¿Me lo puedo permitir?, consejos y patrimonio neto en el tiempo.",
  "Asistan bulut hesabıyla çalışır: önce Ayarlar → Hesap'tan giriş yap.": "El asistente funciona con una cuenta en la nube: primero inicia sesión en Ajustes → Cuenta.",
- "Asistan bağlantısı CashFollow Premium ile çalışır.": "La conexión con el asistente funciona con CashFollow Premium.",
  "Kendiliğinden yenilenir, istediğin zaman iptal et.": "Se renueva automáticamente; cancela cuando quieras.",
  "Sınırsız kart": "Tarjetas ilimitadas",
  "Sıradaki ödeme": "Próximo pago",
@@ -1303,7 +1301,6 @@
  "claude mcp add --transport http cashfollow <adres>": "claude mcp add --transport http cashfollow <address>",
  "Asistan, izin verdiğin hesabın verisini okuyup değiştirebilir; yaptığı değişiklikler burada anında görünür.": "El asistente puede leer y cambiar los datos de la cuenta que autorices; sus cambios aparecen aquí al instante.",
  "Bu özellik bulut hesabıyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.": "Esta función necesita una cuenta en la nube. Primero inicia sesión en Ajustes → Cuenta.",
- "Asistan bağlantısı CashFollow Premium ile çalışır. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Las conexiones con asistentes requieren CashFollow Premium. Puedes conseguir Premium en la app de iPhone (Ajustes → CashFollow Premium).",
  "Bağlı uygulamalar": "Apps conectadas",
  "Giriş yap ya da hesap oluştur; verilerin cihazların arasında eşitlensin ve yedekte dursun.": "Inicia sesión o crea una cuenta para sincronizar tus datos entre dispositivos y tener una copia de seguridad.",
  "Kayıt olarak {0}'nı ve {1}'nı kabul edersin.": "Al crear una cuenta aceptas los {0} y la {1}.",
@@ -1402,7 +1399,6 @@
  "Kilidi aç": "Desbloquear",
  "1 gün kala": "1 día antes",
  "CashFollow Premium iPhone uygulamasından alınır (Ayarlar → CashFollow Premium). Aynı hesapla giriş yaptığında burada da açılır.": "CashFollow Premium se compra en la app de iPhone (Ajustes → CashFollow Premium). Inicia sesión con la misma cuenta y también se activará aquí.",
- "Excel'deki her sayfa bir kişi. Ücretsiz sürümde yalnızca sen varsın; başka kişiler için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Cada hoja del Excel es una persona. La versión gratuita solo te incluye a ti; para otras personas necesitas CashFollow Premium (se compra en la app de iPhone).",
  "Ülkeni seç": "Elige tu país",
  "Kartına bu ay ne ödeyeceğini bil": "Sabe cuánto pagarás este mes con tu tarjeta",
  "Kartını ve bir harcamanı gir; ödeme gününü ve tutarını hemen gör.": "Añade tu tarjeta y una compra y ve al momento la fecha y el importe a pagar.",
@@ -1514,5 +1510,10 @@
  "Yarın {0} kesimi": "{0}: el extracto cierra mañana",
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "Compras hasta mañana: vencen el {0}. Después: el {1}.",
  "{0} özetin hazır": "Tu resumen de {0} está listo",
- "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Tu plan de pagos para los próximos meses: cada día de pago, sus cuotas y la parte de cada persona."
+ "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Tu plan de pagos para los próximos meses: cada día de pago, sus cuotas y la parte de cada persona.",
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir.": "Sin Premium, el asistente solo puede leer tu resumen: lo que vence este mes y los próximos pagos. Para añadir registros y todo lo demás hace falta CashFollow Premium.",
+ "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Versión gratuita: {0} tarjetas, {1} personas. Premium añade el asistente de IA (Claude, ChatGPT), tarjetas y personas ilimitadas, Flujo de caja, ¿Me lo puedo permitir?, consejos y patrimonio neto en el tiempo.",
+ "Ay sonunda {0} serbest kalıyor": "A fin de mes quedan {0} libres",
+ "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Cada hoja del Excel es una persona. La versión gratuita permite hasta {0} personas; para más necesitas CashFollow Premium (se compra en la app de iPhone).",
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Sin Premium, el asistente solo puede leer tu resumen: lo que vence este mes y los próximos pagos. Para añadir registros y todo lo demás hace falta CashFollow Premium. Puedes conseguir Premium en la app de iPhone (Ajustes → CashFollow Premium)."
 }

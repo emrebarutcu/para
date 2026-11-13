@@ -1890,6 +1890,12 @@ a.hero-eq { display: block; width: fit-content; }
 .hero-diff { display: flex; align-items: center; gap: 3px; margin-top: 3px; font-size: 12px; font-weight: 600; line-height: 16px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .hero-diff.down { color: var(--ok); }
 .hero-diff .ic { width: 13px; height: 13px; stroke-width: 2.3; }
+/* İyi haber satırı: dokununca açıklaması açılır */
+.hero-good { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.hero-good summary { display: flex; align-items: center; gap: 6px; font-weight: 600; cursor: pointer; list-style: none; }
+.hero-good summary::-webkit-details-marker { display: none; }
+.hero-good summary .ic { width: 16px; height: 16px; flex: none; color: var(--ok); }
+.hero-good p { margin: 4px 0 0 22px; line-height: 1.5; color: var(--text-2); }
 /* Son taksit: ay adı ve yıl; dar ekranda ay kısa */
 .hero-stats .d-short { display: none; }
 @media (max-width: 480px) {

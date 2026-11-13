@@ -10,7 +10,7 @@ import StoreKit
 final class Abonelik: ObservableObject {
     static let kimlikler = ["yearly", "monthly", "weekly"].map { "app.cashfollow.ios.premium.\($0)" }
     static let ucretsizKart = 2
-    static let ucretsizKisi = 1
+    static let ucretsizKisi = 2   // sen ve bir kişi daha (eşin gibi)
 
     // Hesabın sunucudaki satırı (yalnızca okunur; RLS)
     struct HesapSatiri: Decodable, Equatable {
