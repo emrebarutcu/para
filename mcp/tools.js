@@ -1263,7 +1263,7 @@ export const TOOLS = [
   {
     name: "get_overview",
     title: "Overview (Özet)",
-    description: "Dashboard summary like the app's Özet tab: amount due in the month, next month's total, remaining total, the next upcoming payments, per-person and per-card figures (card and cash purchases; in the month totals card statements count on their due day whatever the payment mode; cards not counted — track_statements false — are left out). upcomingPayments: on a card paid by hand (auto_pay false) only what is not paid yet of each statement (covered = the part already paid; statements paid or paid ahead are left out), and its unpaid statements past their due day come first with late: true; a card's nextPayment likewise. Debt and loan installments the user pays are separate, under debts (in TRY; upcoming in their own asset); debts.unpaidCardStatements lists cards paid by hand with statements past or at their due day not yet marked paid (pay_debt card=…).",
+    description: "Dashboard summary like the app's Özet tab: amount due in the month, next month's total, remaining total, the next upcoming payments, per-person and per-card figures (card and cash purchases; in the month totals card statements count on their due day whatever the payment mode; cards not counted — track_statements false — are left out). upcomingPayments: on a card paid by hand (auto_pay false) only what is not paid yet of each statement (covered = the part already paid; statements paid or paid ahead are left out), and its unpaid statements past their due day come first with late: true; a card's nextPayment likewise. Debt and loan installments the user pays are separate, under debts (in TRY; upcoming in their own asset); debts.unpaidCardStatements lists cards paid by hand with statements past or at their due day not yet marked paid (pay_debt card=…). progress (current month only): paid and left of dueThisMonth and the next day something is due; lastInstallmentMonth: the month the last installment is paid, repeating purchases without an end (rent, subscriptions) left out.",
     inputSchema: obj({ month: S.month("Month to summarize, YYYY-MM. Default: current month.") }),
     annotations: READ,
     async run(args, ctx) {
@@ -1300,6 +1300,10 @@ export const TOOLS = [
         // Süresiz tekrarlayan (hesaba katılan) harcama varsa ödemeler bitmez: null, endless true
         lastPaymentMonth: endless ? null : (m => (m ? T.monthKey(m.idx) : null))([...months].reverse().find(m => m.total > EPS)),
         ...(endless && { endless: true }),
+        // Taksitlerin bittiği ay: süresiz tekrarlar (kira, abonelik) sayılmadan (icgoru.js lastInstallment)
+        lastInstallmentMonth: I.lastInstallment(state, today),
+        // İçinde bulunulan ayda ödenenler ve kalan (Özet'teki ilerleme; icgoru.js progress)
+        ...(start === from && (({ paid, left, next }) => ({ progress: { paid, left, next } }))(I.progress(state, today))),
         upcomingPayments: upcoming.map(x => x.view),
         people: state.people.map(p => ({
           name: p.name,

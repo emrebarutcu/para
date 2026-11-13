@@ -323,3 +323,84 @@ test("kategori: öğrenilen kategori aynı işyerinin farklı yazılışına da 
   assert.equal(r.category, "eglence");
   assert.ok(r.confidence > 0.5 && r.confidence <= 1);
 });
+
+// ── Özet'in tepesi, kutlama, işyeri önerileri, ay kapanışı ──
+const ornek = () => {
+  const s = T.hydrate(base());
+  s.installments.push({ id: "tv", personId: "ben", cardId: "bonus", desc: "Televizyon", total: 6000, count: 6, date: "2026-09-01" });   // 29 Eyl … 28 Şub
+  s.installments.push({ id: "kira", personId: "ben", desc: "Kira", total: 5000, count: 1, date: "2026-10-05" });                          // nakit, 5 Eki
+  s.installments.push({ id: "mig", personId: "ben", cardId: "world", desc: "Migros", total: 1200, count: 1, date: "2026-09-20", category: "market" });   // 5 Eki
+  return s;
+};
+
+test("ayın ilerlemesi: günü geçen ödendi, bugünkü ve sonrakiler kalan; elle ödenen kartın açık ekstresi kalandır", () => {
+  const s = ornek();
+  assert.deepEqual(I.progress(s, TODAY), { idx: T.parseDate(TODAY).idx, total: 7200, paid: 6200, left: 1000, next: "2026-10-29" });
+  assert.deepEqual((({ paid, left, next }) => ({ paid, left, next }))(I.progress(s, "2026-10-01")), { paid: 0, left: 7200, next: "2026-10-05" });
+  assert.deepEqual((({ paid, left, next }) => ({ paid, left, next }))(I.progress(s, "2026-10-05")), { paid: 0, left: 7200, next: "2026-10-05" });   // bugünkü kalandır
+  assert.deepEqual((({ paid, left, next }) => ({ paid, left, next }))(I.progress(s, "2026-10-31")), { paid: 7200, left: 0, next: null });
+  // World elle ödeniyor: 5 Ekim ekstresi "Ödendi" denene kadar kalandır; sıradaki gün yine 29 Ekim
+  s.cards[1].manualSince = "2026-09-01";
+  s.cards[1].trackSince = "2026-08-01";
+  assert.deepEqual((({ paid, left, next }) => ({ paid, left, next }))(I.progress(s, TODAY)), { paid: 5000, left: 2200, next: "2026-10-29" });
+  assert.deepEqual((({ total, paid, left, next }) => ({ total, paid, left, next }))(I.progress(T.hydrate(base()), TODAY)), { total: 0, paid: 0, left: 0, next: null });
+});
+
+test("son taksit ayı: süresiz tekrarlar sayılmaz; kalan ödeme yoksa null", () => {
+  const s = ornek();
+  assert.equal(I.lastInstallment(s, TODAY), "2027-02");
+  s.installments.push({ id: "ev", personId: "ben", desc: "Ev kirası", total: 9000, count: 1, date: "2026-01-01", repeat: 0 });
+  assert.equal(I.lastInstallment(s, TODAY), "2027-02");                      // kira bitmez ama taksitlerin bittiği ay bellidir
+  assert.ok(!ids(I.insights(s, { today: TODAY })).includes("bitis"));         // içgörü ise süresiz varken çıkmaz
+  assert.equal(I.lastInstallment(s, "2027-03-01"), null);
+  assert.equal(I.lastInstallment(T.hydrate(base()), TODAY), null);
+});
+
+test("biten taksitler: son ödemesi aralıkta olan taksitli harcamalar; peşin ve tekrarlayan değil", () => {
+  const s = ornek();
+  s.installments.push({ id: "kol", personId: "ali", cardId: "bonus", desc: "Koltuk", total: 3000, count: 3, date: "2026-08-01", category: "ev" });   // 29 Ağu, 29 Eyl, 29 Eki
+  s.installments.push({ id: "ev", personId: "ben", desc: "Ev kirası", total: 9000, count: 1, date: "2026-01-01", repeat: 0 });
+  assert.deepEqual(I.finishing(s, "2026-10-01", "2026-10-31"), [{ id: "kol", desc: "Koltuk", date: "2026-10-29", monthly: 1000, count: 3, freeFrom: "2026-11" }]);
+  assert.deepEqual(I.finishing(s, "2026-11-01", "2027-01-31"), []);
+  assert.deepEqual(ids(I.finishing(s, "2026-10-01", "2027-12-31")), ["kol", "tv"]);
+  // Hesaba katılmayan kartın taksidi kutlanmaz
+  s.cards[0].trackOff = true;
+  assert.deepEqual(I.finishing(s, "2026-10-01", "2027-12-31"), []);
+});
+
+test("işyeri önerileri: aynı işyeri bir kez, son kart / taksit / kategoriyle; yazılana göre süzülür", () => {
+  const s = ornek();
+  s.installments.push({ id: "mig2", personId: "ben", cardId: "bonus", desc: "Migros", total: 800, count: 1, date: "2026-10-10", category: "market" });
+  s.installments.push({ id: "tek", personId: "ben", cardId: "silinmis", desc: "Teknosa", total: 9000, count: 6, date: "2026-09-15", category: "elektronik" });
+  const all = I.merchants(s);
+  assert.deepEqual(all.map(m => m.desc), ["Migros", "Kira", "Teknosa", "Televizyon"]);
+  assert.deepEqual(all[0], { desc: "Migros", cardId: "bonus", count: 1, category: "market", personId: "ben", total: 800, uses: 2 });
+  assert.equal(all[2].cardId, null);                                   // kartı silinmiş: nakit gibi
+  assert.deepEqual(I.merchants(s, "tek").map(m => [m.desc, m.count, m.category]), [["Teknosa", 6, "elektronik"]]);
+  assert.deepEqual(I.merchants(s, "TE").map(m => m.desc), ["Teknosa", "Televizyon"]);
+  assert.deepEqual(I.merchants(s, "gros").map(m => m.desc), ["Migros"]);   // içinde geçen de
+  assert.deepEqual(I.merchants(s, "Migros"), []);                          // yazılan zaten o
+  assert.equal(I.merchants(s, "", 2).length, 2);
+  assert.deepEqual(I.merchants(s, "yok"), []);
+});
+
+test("ay kapanışı: ödenen, önceki ve sonraki ay, biten taksitler, kategoriler", () => {
+  const s = ornek();
+  s.installments.push({ id: "kol", personId: "ali", cardId: "bonus", desc: "Koltuk", total: 3000, count: 3, date: "2026-08-01", category: "ev" });
+  s.installments.push({ id: "mig2", personId: "ben", cardId: "bonus", desc: "Migros", total: 2000, count: 1, date: "2026-10-10", category: "market" });   // 29 Eki
+  const o = I.monthSummary(s, T.parseDate("2026-10-01").idx, "2026-11-03");
+  assert.equal(o.month, "2026-10");
+  assert.equal(o.paid, 10200);            // Televizyon 1000 + Kira 5000 + Migros 1200 + Koltuk 1000 + Migros 2000
+  assert.equal(o.previous, 2000);         // Eylül: Televizyon 1000 + Koltuk 1000
+  assert.deepEqual(o.next, { month: "2026-11", total: 1000 });
+  assert.deepEqual(ids(o.finished), ["kol"]);
+  assert.equal(o.freed, 1000);
+  assert.equal(o.added, 2);               // Ekim'de eklenen: Kira, Migros
+  assert.equal(o.spent, 7000);
+  // Ortalama, harcaması olan önceki aylardan (Ağustos: Koltuk; Eylül: Migros 1200): 1200 / 2
+  assert.deepEqual(o.top, { id: "market", name: "Market", value: 2000, average: 600 });
+  assert.deepEqual(o.rising, { id: "market", name: "Market", value: 2000, average: 600 });
+  // Harcaması olmayan ay: sıfırlar, kategoriler null
+  const bos = I.monthSummary(T.hydrate(base()), T.parseDate("2026-10-01").idx, "2026-11-03");
+  assert.deepEqual([bos.paid, bos.previous, bos.next.total, bos.finished.length, bos.added, bos.top, bos.rising], [0, 0, 0, 0, 0, null, null]);
+});

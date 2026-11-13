@@ -359,3 +359,33 @@ test("Japonya: bonus ödemesi sabitlerde ve araçlarda, başka ülkede yok", asy
   const us = await e.call("add_purchase", { description: "TV", amount: 900, bonus: "once", card: "JCB" });
   assert.equal(us.err.user, true);
 });
+
+// Özet'in tepesi (get_overview progress, lastInstallmentMonth) ve Swift'in çağırdığı yardımcılar: işyeri önerileri,
+// biten taksitler, ay kapanışı, kesim günleri (icgoru.js; web aynı işlevleri kullanır)
+test("Özet'in tepesi, işyeri önerileri, biten taksit, ay kapanışı ve kesim günleri", async () => {
+  const e = engine();
+  await e.call("add_card", { name: "Bonus", limit: 50000, cutoff_day: 10, due_day: 20 });
+  await e.call("add_purchase", { description: "Telefon", amount: 12000, installments: 3, date: "2026-08-05", card: "Bonus", category: "elektronik" });   // 20 Ağu, 20 Eyl, 20 Eki
+  await e.call("add_purchase", { description: "Kira", amount: 5000, date: "2026-10-28", card: "nakit" });   // 28 Eki
+  const o = await e.call("get_overview", {}, "2026-10-25");
+  assert.equal(o.ok.dueThisMonth, 9000);
+  assert.deepEqual(o.ok.progress, { paid: 4000, left: 5000, next: "2026-10-28" });
+  assert.equal(o.ok.lastInstallmentMonth, "2026-10");
+  // Başka ayın özetinde ilerleme yok
+  assert.equal((await e.call("get_overview", { month: "2026-11" }, "2026-10-25")).ok.progress, undefined);
+  const K = e.sandbox.Kopru;
+  const m = JSON.parse(K.merchants("", 6));
+  assert.deepEqual(m.map(x => x.desc), ["Kira", "Telefon"]);
+  assert.deepEqual([m[1].count, m[1].category, m[1].total], [3, "elektronik", 12000]);
+  assert.deepEqual(JSON.parse(K.merchants("tel")).map(x => x.desc), ["Telefon"]);
+  assert.deepEqual(JSON.parse(K.finishing("2026-10-01", "2026-10-31")).map(x => [x.desc, x.date, x.monthly, x.freeFrom]), [["Telefon", "2026-10-20", 4000, "2026-11"]]);
+  const s = JSON.parse(K.monthSummary("2026-10"));
+  assert.deepEqual([s.month, s.paid, s.previous, s.next.total, s.freed], ["2026-10", 9000, 4000, 0, 4000]);
+  assert.equal(JSON.parse(K.monthSummary("")).month.length, 7);   // verilmezse geçen ay
+  // Kesim günü: bugünden sonraki ilk kesim; o güne kadar alınan ve sonrası ayrı günlerde ödenir
+  const c = JSON.parse(K.cutoffs());
+  assert.equal(c.length, 1);
+  assert.equal(c[0].card, "Bonus");
+  assert.match(c[0].cut, /^\d{4}-\d{2}-10$/);
+  assert.ok(c[0].dueBefore < c[0].dueAfter && c[0].dueBefore > c[0].cut);
+});

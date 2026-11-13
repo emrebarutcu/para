@@ -495,7 +495,124 @@
     return out.map((x, i) => ({ ...x, i })).sort((a, b) => rank[a.tone] - rank[b.tone] || a.i - b.i).map(({ i, ...x }) => x);
   }
 
-  const api = { insights, monthFlows, categoryBreakdown, spendingByMonth, recurring, cardTiming, HORIZON };
+  // ---------- Özet'in tepesi, kutlama, işyeri önerileri, ay kapanışı (web, iPhone ve asistan aynı hesabı kullanır) ----------
+  const cardOf = (state, p) => state.cards.find(c => c.id === p.cardId) ?? null;
+
+  // Ayın ilerlemesi: bugünün ayında ödenecek kart ve nakit ödemelerinden ödenenler ve kalan. Günü gelmemiş ödemeler
+  // (bugünkü dahil; Sıradaki ödemeler'le aynı) ve elle ödenen kartların o aydaki kapanmamış ekstreleri kalandır
+  // (borc.js cardState); gerisi ödenmiş sayılır. { idx, total, paid, left, next: kalanların ilk günü | null }
+  function progress(state, today = T.todayKey()) {
+    home = P.homeOf(state);
+    const t = T.parseDate(today).idx;
+    const month = B.cashflow(state, t, t, today)[0];
+    const total = month?.total || 0;
+    const manual = new Map();
+    for (const c of state.cards) {
+      if (!B.tracked(c) || !B.manual(c)) continue;
+      const cs = B.cardState(state, c, today, undefined, T.dateKey(t, 31));
+      if (cs.manualFrom <= today) manual.set(c.id, cs);   // elle mod yarın başlıyorsa bugün otomatik gibi
+    }
+    const open = [];
+    for (const ev of month?.events ?? []) {
+      if (ev.ignored) continue;
+      const cs = manual.get(ev.cardId);
+      if (cs && ev.date >= cs.manualFrom) continue;        // elle ödenen kart: ekstrelerinden (aşağıda)
+      if (ev.date >= today) open.push({ date: ev.date, amount: ev.total });
+    }
+    for (const cs of manual.values()) {
+      for (const x of cs.statements) {
+        if (x.auto || T.parseDate(x.key)?.idx !== t || x.amount - x.covered <= EPS) continue;
+        open.push({ date: x.key, amount: x.amount - x.covered });
+      }
+    }
+    const left = Math.max(0, Math.min(total, open.reduce((s, x) => s + x.amount, 0)));
+    const next = open.map(x => x.date).filter(d => d >= today).sort()[0] ?? null;
+    return { idx: t, total: round(total), paid: round(total - left), left: round(left), next };
+  }
+
+  // Son taksit ayı ("YYYY-MM"): sonu belli harcamaların son ödemesinin ayı; kalan ödeme yoksa null. Süresiz
+  // tekrarlananlar (kira, abonelik) sayılmaz: onlar bitmez, taksitlerin bittiği ay yine de bellidir.
+  function lastInstallment(state, today = T.todayKey()) {
+    home = P.homeOf(state);
+    const t = T.parseDate(today).idx;
+    let last = -Infinity;
+    for (const p of paying(state, known(state).purchases)) {
+      if (T.assetOf(p, home) !== home || T.endless(p)) continue;
+      const pays = T.payments(p, cardOf(state, p));
+      if (pays.length) last = Math.max(last, pays[pays.length - 1].idx);
+    }
+    return last >= t ? T.monthKey(last) : null;
+  }
+
+  // Biten taksitler: son ödemesi from–to arasında olan taksitli harcamalar (en az 2 ödeme; tekrarlayan, şimdi al sonra
+  // öde ve bonus ödemesi değil; ana para biriminde). Kutlama kartı, bildirimi ve ay kapanışı için.
+  // [{ id, desc, date (son ödeme günü), monthly (boşalan aylık tutar), count, freeFrom: boşalan ilk ay "YYYY-MM" }]
+  function finishing(state, from, to) {
+    home = P.homeOf(state);
+    const out = [];
+    for (const p of paying(state, known(state).purchases)) {
+      if (T.repeats(p) || T.bnpl(p) || T.bonus(p) || T.assetOf(p, home) !== home || T.planLength(p) < 2) continue;
+      const last = T.payments(p, cardOf(state, p)).at(-1);
+      if (!last || last.key < from || last.key > to) continue;
+      out.push({ id: p.id, desc: p.desc, date: last.key, monthly: round(T.perInstallment(p)), count: T.planLength(p), freeFrom: T.monthKey(last.idx + 1) });
+    }
+    return out.sort(byDate);
+  }
+
+  // İşyeri önerileri (harcama formu): önceki harcamaların adları, aynı işyeri (kategori.js keyOf) bir kez, en son
+  // kullanılan kart, taksit sayısı ve kategorisiyle; en yeni önce. q yazılıyorsa adı onunla başlayanlar, sonra içerenler.
+  // [{ desc, cardId (null: nakit), count, category (null: yok), personId, total (son tutar), uses }]
+  function merchants(state, q = "", limit = 6) {
+    home = P.homeOf(state);
+    const cards = new Set(state.cards.map(c => c.id));
+    const seen = new Map();
+    const list = known(state).purchases.filter(p => String(p.desc ?? "").trim())
+      .map((p, i) => ({ p, i })).sort((a, b) => (a.p.date === b.p.date ? b.i - a.i : (a.p.date ?? "") < (b.p.date ?? "") ? 1 : -1));
+    for (const { p } of list) {
+      const desc = p.desc.trim(), key = K.keyOf(desc) || desc.toLocaleLowerCase(D.locale());
+      const old = seen.get(key);
+      if (old) { old.uses++; continue; }
+      seen.set(key, {
+        key, desc, cardId: cards.has(p.cardId) ? p.cardId : null, count: T.bnpl(p) || T.bonus(p) ? 1 : T.planLength(p),
+        category: K.valid(p.category) ? p.category : null, personId: p.personId, total: round(p.total), uses: 1,
+      });
+    }
+    const needle = K.keyOf(q) || String(q ?? "").trim().toLocaleLowerCase(D.locale());
+    const all = [...seen.values()];
+    const hits = !needle ? all
+      : [...all.filter(m => m.key.startsWith(needle)), ...all.filter(m => !m.key.startsWith(needle) && m.key.includes(needle))]
+        .filter(m => m.key !== needle || m.desc !== String(q).trim());   // yazılan zaten oysa önerilmez
+    return hits.slice(0, limit).map(({ key, ...m }) => m);
+  }
+
+  // Ay kapanışı: bir ayın özeti (idx: ay; bugünün ayından önceki aylar için anlamlıdır).
+  // { month, paid (ayın kart ve nakit ödemeleri), previous (önceki ayın ödemeleri), next: { month, total } (sonraki ay),
+  //   finished (o ay biten taksitler; finishing), freed (bitenlerin aylık toplamı), spent (o ay yapılan harcama),
+  //   added (o ay eklenen harcama sayısı), top: en büyük kategori, rising: 3 ay ortalamasına göre en çok artan kategori
+  //   ({ id, name, value, average }; yoksa null) }
+  function monthSummary(state, idx, today = T.todayKey(), rates = null) {
+    home = P.homeOf(state);
+    const months = B.cashflow(state, idx - 1, idx + 1, today);
+    const at = i => months.find(m => m.idx === i)?.total || 0;
+    const finished = finishing(state, T.dateKey(idx, 1), T.dateKey(idx, 31));
+    const cats = categoryBreakdown(state, idx, rates);
+    const row = r => (r ? { id: r.id, name: r.name, value: round(r.value), average: r.average == null ? null : round(r.average) } : null);
+    const rising = cats.rows.filter(r => r.id && r.average != null && r.average > EPS && r.value > r.average)
+      .sort((a, b) => (b.value - b.average) - (a.value - a.average))[0];
+    const from = T.dateKey(idx, 1), to = T.dateKey(idx, 31);
+    return {
+      month: T.monthKey(idx), paid: round(at(idx)), previous: round(at(idx - 1)),
+      next: { month: T.monthKey(idx + 1), total: round(at(idx + 1)) },
+      finished, freed: round(finished.reduce((s, f) => s + f.monthly, 0)),
+      spent: round(cats.total), added: known(state).purchases.reduce((n, p) => n + R.between(p, from, to).length, 0),
+      top: row(cats.rows.find(r => r.id)), rising: row(rising),
+    };
+  }
+
+  const api = {
+    insights, monthFlows, categoryBreakdown, spendingByMonth, recurring, cardTiming, HORIZON,
+    progress, lastInstallment, finishing, merchants, monthSummary,
+  };
   if (node) module.exports = api;
   else root.Icgoru = api;
 })(this);
