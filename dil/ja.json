@@ -1309,7 +1309,6 @@
  "Kayıt olarak {0}'nı ve {1}'nı kabul edersin.": "登録すると、{0}と{1}に同意したものとみなされます。",
  "Kullanım Koşulları": "利用規約",
  "Gizlilik Politikası": "プライバシーポリシー",
- "Çevrimdışı devam et": "オフラインで続ける",
  "Verilerin yalnızca bu cihazda saklanır.": "データはこのデバイスにのみ保存されます。",
  "E-postana şifre sıfırlama linki gönderilir.": "パスワード再設定用のリンクをメールでお送りします。",
  "← Geri": "← 戻る",
@@ -1514,5 +1513,6 @@
  "Senin önümüzdeki 12 ayın": "あなたのこの先12か月",
  "Yarın {0} kesimi": "{0}の締め日は明日です",
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "明日までの買い物は{0}の支払い。それ以降は{1}。",
- "{0} özetin hazır": "{0}のまとめができました"
+ "{0} özetin hazır": "{0}のまとめができました",
+ "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "今後数か月の支払いプラン：支払日ごとの分割払いと各人の負担分。"
 }

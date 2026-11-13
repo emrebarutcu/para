@@ -1309,7 +1309,6 @@
  "Kayıt olarak {0}'nı ve {1}'nı kabul edersin.": "Door te registreren ga je akkoord met de {0} en het {1}.",
  "Kullanım Koşulları": "Gebruiksvoorwaarden",
  "Gizlilik Politikası": "Privacybeleid",
- "Çevrimdışı devam et": "Offline doorgaan",
  "Verilerin yalnızca bu cihazda saklanır.": "Je gegevens staan alleen op dit apparaat.",
  "E-postana şifre sıfırlama linki gönderilir.": "We mailen je een link om je wachtwoord te resetten.",
  "← Geri": "← Terug",
@@ -1514,5 +1513,6 @@
  "Senin önümüzdeki 12 ayın": "Je komende 12 maanden",
  "Yarın {0} kesimi": "{0}: afschrift sluit morgen",
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "Aankopen t/m morgen: te betalen op {0}. Daarna: {1}.",
- "{0} özetin hazır": "Je terugblik {0} staat klaar"
+ "{0} özetin hazır": "Je terugblik {0} staat klaar",
+ "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Je betaalplan voor de komende maanden: elke betaaldag, de termijnen erin en ieders aandeel."
 }

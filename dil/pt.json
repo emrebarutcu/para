@@ -1309,7 +1309,6 @@
  "Kayıt olarak {0}'nı ve {1}'nı kabul edersin.": "Ao criar a conta, você concorda com os {0} e a {1}.",
  "Kullanım Koşulları": "Termos de Uso",
  "Gizlilik Politikası": "Política de Privacidade",
- "Çevrimdışı devam et": "Continuar offline",
  "Verilerin yalnızca bu cihazda saklanır.": "Seus dados ficam salvos só neste aparelho.",
  "E-postana şifre sıfırlama linki gönderilir.": "Vamos enviar por e-mail um link para redefinir sua senha.",
  "← Geri": "← Voltar",
@@ -1514,5 +1513,6 @@
  "Senin önümüzdeki 12 ayın": "Seus próximos 12 meses",
  "Yarın {0} kesimi": "{0}: a fatura fecha amanhã",
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "Compras até amanhã: vencem em {0}. Depois: {1}.",
- "{0} özetin hazır": "Seu resumo de {0} está pronto"
+ "{0} özetin hazır": "Seu resumo de {0} está pronto",
+ "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Seu plano de pagamentos para os próximos meses: cada dia de pagamento, as parcelas dele e a parte de cada pessoa."
 }

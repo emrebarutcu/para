@@ -1309,7 +1309,6 @@
  "Kayıt olarak {0}'nı ve {1}'nı kabul edersin.": "بإنشاء حساب، فإنك توافق على {0} و{1}.",
  "Kullanım Koşulları": "شروط الاستخدام",
  "Gizlilik Politikası": "سياسة الخصوصية",
- "Çevrimdışı devam et": "المتابعة دون اتصال",
  "Verilerin yalnızca bu cihazda saklanır.": "بياناتك مخزّنة على هذا الجهاز فقط.",
  "E-postana şifre sıfırlama linki gönderilir.": "سنرسل إليك رابطاً عبر البريد الإلكتروني لإعادة تعيين كلمة المرور.",
  "← Geri": "→ رجوع",
@@ -1514,5 +1513,6 @@
  "Senin önümüzdeki 12 ayın": "أشهرك الـ12 القادمة",
  "Yarın {0} kesimi": "{0}: يصدر كشف الحساب غدًا",
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "مشتريات حتى الغد: تُستحق {0}. بعد ذلك: {1}.",
- "{0} özetin hazır": "ملخص {0} جاهز"
+ "{0} özetin hazır": "ملخص {0} جاهز",
+ "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "خطة الدفع للأشهر القادمة: كل يوم دفع، والأقساط فيه، وحصة كل شخص."
 }

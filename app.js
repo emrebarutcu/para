@@ -1951,7 +1951,7 @@ function renderFlow(months) {
   if (lock) {
     els.flowTable.hidden = true;
     els.flowList.hidden = false;
-    els.flowList.replaceChildren(premiumLock(L("Ödeme planı"), L("Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler, kişilerin payı ve 12 aylık grafik."), "cash_flow"));
+    els.flowList.replaceChildren(premiumLock(L("Ödeme planı"), L("Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı."), "cash_flow"));   // 12 aylık grafik web'de ücretsiz, hemen üstte
     return;
   }
   for (const b of els.flowMode.querySelectorAll("button")) {

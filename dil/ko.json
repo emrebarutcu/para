@@ -1309,7 +1309,6 @@
  "Kayıt olarak {0}'nı ve {1}'nı kabul edersin.": "회원가입 시 {0} 및 {1}에 동의하게 돼요.",
  "Kullanım Koşulları": "이용약관",
  "Gizlilik Politikası": "개인정보 처리방침",
- "Çevrimdışı devam et": "오프라인으로 계속",
  "Verilerin yalnızca bu cihazda saklanır.": "데이터가 이 기기에만 저장돼요.",
  "E-postana şifre sıfırlama linki gönderilir.": "비밀번호 재설정 링크를 이메일로 보내드려요.",
  "← Geri": "← 뒤로",
@@ -1514,5 +1513,6 @@
  "Senin önümüzdeki 12 ayın": "나의 앞으로 12개월",
  "Yarın {0} kesimi": "{0} 명세서 마감이 내일입니다",
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "내일까지 구매분: {0} 결제. 그 이후: {1}.",
- "{0} özetin hazır": "{0} 요약이 준비됐어요"
+ "{0} özetin hazır": "{0} 요약이 준비됐어요",
+ "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "앞으로 몇 달의 결제 계획: 결제일별 할부 내역과 사람별 몫."
 }

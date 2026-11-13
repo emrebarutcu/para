@@ -1309,7 +1309,6 @@
  "Kayıt olarak {0}'nı ve {1}'nı kabul edersin.": "By signing up you agree to the {0} and the {1}.",
  "Kullanım Koşulları": "Terms of Use",
  "Gizlilik Politikası": "Privacy Policy",
- "Çevrimdışı devam et": "Continue offline",
  "Verilerin yalnızca bu cihazda saklanır.": "Your data is stored only on this device.",
  "E-postana şifre sıfırlama linki gönderilir.": "We'll email you a link to reset your password.",
  "← Geri": "← Back",
@@ -1514,5 +1513,6 @@
  "Senin önümüzdeki 12 ayın": "Your next 12 months",
  "Yarın {0} kesimi": "{0} statement closes tomorrow",
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "Buy by tomorrow: due {0}. After that: {1}.",
- "{0} özetin hazır": "Your {0} recap is ready"
+ "{0} özetin hazır": "Your {0} recap is ready",
+ "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Your payment plan for the months ahead: every payment day, the installments in it and each person's share."
 }

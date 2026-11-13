@@ -1309,7 +1309,6 @@
  "Kayıt olarak {0}'nı ve {1}'nı kabul edersin.": "Registrandoti accetti: {0} e {1}.",
  "Kullanım Koşulları": "Termini di utilizzo",
  "Gizlilik Politikası": "Informativa sulla privacy",
- "Çevrimdışı devam et": "Continua offline",
  "Verilerin yalnızca bu cihazda saklanır.": "I tuoi dati sono salvati solo su questo dispositivo.",
  "E-postana şifre sıfırlama linki gönderilir.": "Ti invieremo via email un link per reimpostare la password.",
  "← Geri": "← Indietro",
@@ -1514,5 +1513,6 @@
  "Senin önümüzdeki 12 ayın": "I tuoi prossimi 12 mesi",
  "Yarın {0} kesimi": "{0}: l'estratto conto chiude domani",
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "Acquisti fino a domani: scadenza {0}. Dopo: {1}.",
- "{0} özetin hazır": "Il tuo riepilogo di {0} è pronto"
+ "{0} özetin hazır": "Il tuo riepilogo di {0} è pronto",
+ "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Il piano dei pagamenti per i prossimi mesi: ogni giorno di pagamento, le rate incluse e la quota di ogni persona."
 }

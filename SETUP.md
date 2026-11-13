@@ -511,8 +511,11 @@ alınca Supabase'te `subscriptions` satırı (`environment = Sandbox`) ve asista
 ---
 
 Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.
-Giriş yapmamış kullanıcıya ilk açılışta giriş / kayıt penceresi çıkar; altındaki "Çevrimdışı devam et" seçilirse
-pencere bir daha çıkmaz (`para.offline`), Özet'in üstünde verilerin yalnızca bu cihazda durduğunu söyleyen bir not görünür.
+Giriş yapmamış kullanıcıya ilk açılışta karşılama penceresi çıkar (iPhone'un ilk ekranı gibi: "Kartına bu ay ne
+ödeyeceğini bil", ülke, birincil düğme **Hesap açmadan başla**, altında "Hesabım var, giriş yap" ile giriş / kayıt formu).
+"Hesap açmadan başla" seçilirse pencere bir daha çıkmaz (`para.offline`), Özet'te üç adımlı **Başlarken** paneli karşılar
+(kart, harcama, maaş; bitince ya da "Gizle" ile kaybolur, `para.baslarken.gizli`) ve üstünde verilerin yalnızca bu cihazda
+durduğunu söyleyen bir not görünür.
 Girişsiz kullanımın verisi `cashflow.v1`'de, hesabınki `cashflow.v1.<kullanıcı id>`'de durur. Girişsizken veri girilmiş
 cihazda giriş yapılınca kullanıcı seçer: **Hesabıma taşı** (önce hesaptaki veri çekilir, cihazdakiler eklenir; aynı id'li
 kayıt bir kez, aynı adlı kişi ve aynı son 4 haneli / aynı adlı kart birleşir, kartta erken takip tarihi kalır —
@@ -531,11 +534,14 @@ yazılmadan bu duruma gelinirse o son kayıt geri gelir.
 
 ## 4. Kartlar ve nakit akışı
 
-Uygulama altı sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, dönemlik nakit grafiği, sıradaki ödemeler,
-kişiler, kategoriler, aylık grafik),
-**Akış** (ödemeler ay ay, tarih + kart bazında, borç ve kredi ödemeleri her ayın altında ayrı; "Tablo" görünümü Excel'deki
-ay × kişi özeti), **Harcamalar** (mobilde "Harcama"), **Kartlar**, **Borçlar** ve **Varlıklar**. Yeni harcama
-(Varlıklar'da yeni hareket, Borçlar'da borç ya da alacak) `+` düğmesiyle eklenir; içe/dışa aktarma ve tema ayarlardadır.
+Uygulama beş sekmeden oluşur (1.1.0; iPhone'la aynı): **Özet** yalnızca "bu ay ve yakında" — bu ayın ödemesi (ödenen /
+kalan çubuğu, sonraki ay hafifliyor mu, taksitlerin bittiği ay), sıradaki ödemeler, içgörüler, dönemlik nakit grafiği;
+hiç veri yokken yalnızca Başlarken. **Akış** (üstte ücretsiz 12 aylık grafik ve ayın girdi / çıktıları; ödeme planı ay
+ay, tarih + kart bazında, borç ve kredi ödemeleri her ayın altında ayrı; "Tablo" görünümü Excel'deki ay × kişi özeti),
+**Harcamalar** (mobilde "Harcama"; Liste ya da Kategoriler), **Kartlar** ("Kartlar ve borçlar": toplam borç, kartlar,
+kişiler, borç ve alacaklar; eski Borçlar sekmesi buraya katıldı, `#borclar` adresi bu görünümü borçlar bölümünde açar) ve
+**Varlıklar**. Yeni harcama (Varlıklar'da yeni hareket, Kartlar'da borç ya da alacak) `+` düğmesiyle eklenir; içe/dışa
+aktarma ve tema ayarlardadır.
 Harcamalar listesi **Sırala**'dan sıradaki ödemeye (varsayılan; bitenler son ödemeye göre), en yeniye (alış günü), en
 yüksek toplama (TL karşılığı; taksitlide toplam, tekrarlayanda bir seferlik) ya da ada göre dizilir; seçim cihazda
 kalır (`para.purchaseSort`).
