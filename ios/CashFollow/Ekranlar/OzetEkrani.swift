@@ -189,10 +189,11 @@ struct BuAyKarti: View {
             BuyukTutar(deger: o.dueThisMonth)
                 .contentTransition(.numericText(value: o.dueThisMonth))   // değişen tutar eski değerden yenisine sayar
                 .animation(.snappy(duration: 0.5), value: o.dueThisMonth)
+            // İlerleme büyük tutarın hemen altında (çubuk onun ne kadarının ödendiğini gösterir); borç ödemeleri ayrı satır
+            if let p = o.progress, o.dueThisMonth > 0.004 { ilerleme(p) }
             if let d = o.debts?.dueThisMonth, d > 0.004 {
                 Text(L("+ {0} borç ödemesi", Bicim.tl(d))).font(.subheadline).foregroundStyle(Tema.metin2).monospacedDigit()
             }
-            if let p = o.progress, o.dueThisMonth > 0.004 { ilerleme(p) }
             Ayirici()
             HStack(alignment: .top, spacing: 0) {
                 VStack(alignment: .leading, spacing: 3) {

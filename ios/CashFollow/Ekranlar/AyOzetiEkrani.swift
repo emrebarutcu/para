@@ -96,7 +96,8 @@ struct AyOzetiKarti: View {
             }
             Ayirici()
             VStack(spacing: 8) {
-                Satir(title: L("Gelecek ay ({0})", AyOzetiEkrani.ayAdi(ozet.next.month)), value: Bicim.tl(ozet.next.total, fraction: false))
+                // Özet geçen ayındır: "gelecek ay" demek içinde bulunulan ayı karıştırır; ayın adıyla yazılır ("Kasım ödemesi")
+                Satir(title: L("{0} ödemesi", AyOzetiEkrani.ayAdi(ozet.next.month)), value: Bicim.tl(ozet.next.total, fraction: false))
                 if ozet.spent > 0.004 {
                     Satir(title: L("Ay içinde harcanan"), value: Bicim.tl(ozet.spent, fraction: false))
                 }
