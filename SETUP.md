@@ -446,6 +446,12 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
   `inbox_card_assigned` (`set_last4`: son 4 hane karta yazıldı mı), `inbox_notifications` (`enabled`).
+- Kayıt, bildirim ve geri dönüş (iPhone; ürün çalışmasının ölçüleri): `purchase_added` olayında `source` kaydın nereden
+  geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email`: onay bekleyen banka e-postası;
+  web'de `web`) — otomatik ve yarı otomatik kaydın payı bununla, kayıt süresi `add_opened` ile `purchase_added` arasından
+  ölçülür. `merchant_suggestion_used` (öneriye dokunuldu), `notification_opened` (`kind`: payment, cutoff,
+  installment_finished, month_summary, inbox), `installment_finished_shown` (kutlama kartı ilk kez göründü; `count`),
+  `month_summary_opened` (`source`: overview, notification), `month_summary_shared`.
 - Karşılama denemesi: PostHog'da çok değişkenli bayrak **`onboarding_flow`**, kollar `control` (eski giriş ekranı) ve
   `eylem` (yeni akış); "Persist flag across authentication" açık. Bayrak yokken herkes yeni akışı görür (`variant: default`);
   1,5 saniyede gelmezse de yeni akış (`fallback`, çözümlemeden çıkarılır). %100 `control` yeni akışı uzaktan kapatır.
@@ -455,7 +461,8 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
 #### Abonelik (CashFollow Premium)
 
 Haftalık, aylık, yıllık otomatik yenilenen abonelik (StoreKit 2, `Uygulama/Abonelik.swift`, ödeme ekranı
-`Ekranlar/PremiumEkrani.swift`: önde yapay zekâ asistanı). Fiyat ve deneme App Store Connect'te; kodda fiyat yok. Asistanı
+`Ekranlar/PremiumEkrani.swift`: önde çekirdek vaat ve kullanıcının kendi 12 ayı, yapay zekâ asistanı özellik listesinde).
+Fiyat ve deneme App Store Connect'te; kodda fiyat yok. Asistanı
 bağlama iPhone'da Ayarlar → CashFollow Premium → Yapay zekâ asistanı (`Ekranlar/AsistanEkrani.swift`; web'deki Yapay zekâ
 penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
 
@@ -954,7 +961,7 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 | Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı; elde tutulan fon ve hisseler `holdings`: adet, fiyat, kâr; alacak, borç, Varlık, Özvarlık), `list_entries`, `add_entry` (fon ve hisse: `asset` `FON:AFT` / `BIST:THYAO`, `price`, `settle`), `update_entry`, `delete_entry`, `search_market` (TEFAS fon arama; fon ve hisse fiyatları) |
 | Borçlar / alacaklar | `list_debts` (Eldeki / Alacak / Borç / Varlık / Özvarlık toplamları, kart borçları ve kişi payları, nakit taksitler, kart payları, borçlar), `get_debt` (ödeme planı), `add_debt` (borç aldım / verdim / kredi; tek tutar ya da taksitli; `auto_pay`: kredide varsayılan true, kişiyle borçta false; `dry_run` ile önizleme), `update_debt` (kapatma dahil; kayıt tarihi ile bugün arasında taksiti olanda `auto_pay` değişmez, hata döner), `delete_debt` (ödemeleriyle), `pay_debt` (ödeme / tahsilat; kart payı için `person`; elle ödenen kartın ekstresi için `card`: `amount` verilmezse ödemesi gelen (yoksa kesilmiş ekstre), kısmi olabilir; `close` kendiliğinden ödenen borcu bugünle kapatır), `delete_debt_payment` (kart ödemesi dahil; kapanmış borcu yeniden açar: `reopened`) |
 | Banka e-postaları | `get_inbox_address` (adres ve `lastEmail`: gelen son e-posta), `renew_inbox_address`, `list_inbox` (`kind`: purchase / verification / test; doğrulamada bağlantı ve Gmail onay kodu; `lastEmail`), `check_inbox` (deneme e-postasını işlendi yapar: `tests`), `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
-| İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |
+| İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `get_month_summary` (ay kapanışı: ödenen, biten taksitler, gelecek ay, öne çıkan kategori), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |
 | Yedek | `export_data` (kişiler, kartlar, harcamalar, varlık hareketleri ve borçlar; Ayarlar → Dışa aktar ile aynı), `import_data` |
 
 Ödeme tarihleri ve borç hesapları uygulamayla aynı kodla (`taksit.js`, `borc.js`, `eposta.js`) hesaplanır; doğrulama

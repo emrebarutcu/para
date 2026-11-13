@@ -44,8 +44,8 @@ Sırayla yapılacaklar. Her biri ayrı PR olarak, web, iPhone ve asistanda birli
 **Sorun:** onay bekleyenler yalnızca Harcamalar sekmesinin üstünde. Özet'te açılan kullanıcı görmüyor.
 
 **Çözüm:**
-- Özet'te üstte küçük kart: "2 e-posta onay bekliyor" → dokununca Harcamalar. Harcamalar sekmesinde de rozet (iPhone
-  `.badge`).
+- ✓ (1.1.0, iPhone) Özet'te üstte küçük kart: "2 e-posta onay bekliyor" → dokununca Harcamalar. Harcamalar sekmesinde
+  de rozet (iPhone `.badge`).
 - iPhone: listede sola kaydır → Yok say, sağa kaydır → Ekle. Kartı belli olanda (tek dokunuş) doğrudan ekler.
 - Web: aynı kart Özet'te; Harcamalar sekme adında sayı.
 

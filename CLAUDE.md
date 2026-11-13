@@ -39,7 +39,7 @@ xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/CashFollo
 xcrun simctl launch booted app.cashfollow.ios -oz-denetim          # öz-denetim → Documents/oz-denetim.txt
 xcrun simctl launch booted app.cashfollow.ios -ornek -sekme 0      # örnek veriyle (Uygulama/Ornek.swift)
 #   -ulke US -AppleLanguages "(en)" -AppleLocale en_US  → İngilizce, ABD örnek verisi
-#   -bos → verisi olmayan yeni kullanıcı; -galeri 1…6 → grafikler ve formlar; -tur sekme0,galeri3 → ekran turu
+#   -bos → verisi olmayan yeni kullanıcı; -galeri 1…9 → grafikler, formlar, kartlar; -tur sekme0,galeri3 → ekran turu
 
 # Supabase SQL (yayından önce gereken geçişler)
 sh supabase/sql.sh supabase/gecis/<sürüm>.sql

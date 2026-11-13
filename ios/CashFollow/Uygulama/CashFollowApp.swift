@@ -93,6 +93,7 @@ struct AnaEkran: View {
 
 // iPhone'da en fazla 5 sekme: borç ve krediler Kartlar'da, Ayarlar Özet'teki dişlide
 struct Sekmeler: View {
+    @EnvironmentObject private var model: Model
     @Binding var sekme: Int
 
     var body: some View {
@@ -100,6 +101,7 @@ struct Sekmeler: View {
             OzetEkrani().tabItem { Label(L("Özet"), systemImage: "house") }.tag(0)
             AkisEkrani().tabItem { Label(L("Akış"), systemImage: "calendar") }.tag(1)
             HarcamalarEkrani().tabItem { Label(L("Harcamalar"), systemImage: "list.bullet.rectangle") }.tag(2)
+                .badge(model.epostalar.count)   // onay bekleyen banka e-postaları
             BorclarEkrani().tabItem { Label(L("Kartlar"), systemImage: "creditcard") }.tag(3)
             VarliklarEkrani().tabItem { Label(L("Varlıklar"), systemImage: "banknote") }.tag(4)
         }

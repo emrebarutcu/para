@@ -76,7 +76,7 @@ jobs:
           }
           TR='-AppleLanguages (tr) -AppleLocale tr_TR'
           EN='-AppleLanguages (en) -AppleLocale en_US'
-          HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,sekme0,sekme1,sekme2,sekme3,sekme4
+          HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,galeri9,sekme0,sekme1,sekme2,sekme3,sekme4
           TANITIM=tanitim0,tanitim1,tanitim2,tanitim3,tanitim4
           if [ "${{ inputs.karsilama }}" = "true" ]; then
             # Ara adımlar (boş kart adı, seçilmemiş kesim günü) ve akıştan sonra Kartlar ile Özet

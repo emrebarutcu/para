@@ -21,6 +21,7 @@ struct OzetEkrani: View {
         NavigationStack {
             Sayfa {
                 CevrimdisiNotu()
+                if !model.epostalar.isEmpty { EpostaOnayNotu(sayi: model.epostalar.count) }
                 if !baslarkenGizli, let d = baslarken, !d.bitti { BaslarkenKarti(durum: d) }
                 Okunan(tool: "get_overview") { (o: Ozet) in
                     // Hiç ödeme yoksa (yeni kullanıcı) sıfırlarla dolu kartlar gösterilmez; Başlarken yeter
@@ -148,6 +149,27 @@ struct OzetEkrani: View {
         odeme = .kart(id: c.id, ad: c.name, tutar: c.tracking?.unpaid ?? p.total, asgari: c.tracking?.revolving?.minimumDue)
     }
 
+}
+
+// Banka e-postalarından onay bekleyenler: Özet'te açan da görsün (bekleyenler Harcamalar'ın üstünde; dokununca oraya)
+struct EpostaOnayNotu: View {
+    let sayi: Int
+
+    var body: some View {
+        Button { Yonlendirici.shared.sekme = 2 } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "envelope.badge").font(.system(size: 18)).foregroundStyle(Tema.metin2)
+                Text(sayi == 1 ? L("Bir e-posta onay bekliyor") : L("{0} e-posta onay bekliyor", sayi))
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
+            }
+            .padding(14)
+            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Tema.cizgi, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 // Bu ay ödenecek: büyük tutar ve ayın ilerlemesi (ödenen / kalan, sıradaki gün), borç ödemeleri; altında gelecek ay

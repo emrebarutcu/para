@@ -382,6 +382,10 @@ test("Özet'in tepesi, işyeri önerileri, biten taksit, ay kapanışı ve kesim
   const s = JSON.parse(K.monthSummary("2026-10"));
   assert.deepEqual([s.month, s.paid, s.previous, s.next.total, s.freed], ["2026-10", 9000, 4000, 0, 4000]);
   assert.equal(JSON.parse(K.monthSummary("")).month.length, 7);   // verilmezse geçen ay
+  // Asistanın aracı aynı hesabı verir (get_month_summary; verilmezse bugünden önceki ay)
+  const arac = await e.call("get_month_summary", { month: "2026-10" }, "2026-11-03");
+  assert.deepEqual([arac.ok.month, arac.ok.paid, arac.ok.freed, arac.ok.finished.map(x => x.desc), arac.ok.currency], ["2026-10", 9000, 4000, ["Telefon"], "TRY"]);
+  assert.equal((await e.call("get_month_summary", {}, "2026-11-03")).ok.month, "2026-10");
   // Kesim günü: bugünden sonraki ilk kesim; o güne kadar alınan ve sonrası ayrı günlerde ödenir
   const c = JSON.parse(K.cutoffs());
   assert.equal(c.length, 1);

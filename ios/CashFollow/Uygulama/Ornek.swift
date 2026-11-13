@@ -4,7 +4,8 @@ import SwiftUI
 // Örnek veriyle açılış (CI'da ekran görüntüleri: .github/workflows/ekran.yml). "-ornek" ile girişsiz, örnek veriyle açılır;
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
 // 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: kredi formu, 5: döviz formu, 6: Ayarlar,
-// 7: CashFollow Premium ödeme ekranı, 8: yapay zekâ asistanı; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
+// 7: CashFollow Premium ödeme ekranı, 8: yapay zekâ asistanı, 9: Özet'te yeri gelince görünen kartlar — biten taksit,
+// ay kapanışı; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
 // (kilitler) görünür. Turda "tanitimN" (0…4) ilk açılış akışının N. ekranı (KarsilamaEkrani, cevaplar dolu; "-bos" ile);
 // "tanitimNbos" o adımın cevabı boş (kart adı yazılmamış, kesim günü seçilmemiş).
 // Gerçek kullanımda hiçbiri yoktur. Gerçek ilk açılış akışını simülatörde denemek: yeni kurulumda "-karsilama".
@@ -184,8 +185,29 @@ struct GrafikGalerisi: View {
             PremiumEkrani(neden: "gallery")
         } else if sayfa == 8 {
             AsistanEkrani()
+        } else if sayfa == 9 {
+            yeriGelince
         } else {
             galeri
+        }
+    }
+
+    // Özet'te yeri gelince görünen kartlar, örnek değerlerle (gerçek veride tarihe bağlıdır): biten taksidin kutlaması,
+    // "geçen ayın özeti hazır" ve ay kapanışının kartı
+    private var yeriGelince: some View {
+        let tr = ulke == "TR"
+        let biten = BitenTaksit(id: "p7", desc: tr ? "Koltuk takımı" : "Sofa", date: "2026-10-20", monthly: tr ? 3500 : 180, count: 12, freeFrom: "2026-11")
+        let market = AyOzeti.Kategori(id: "market", name: tr ? "Market" : "Groceries", value: tr ? 9200 : 460, average: tr ? 7400 : 380)
+        let ozet = AyOzeti(month: "2026-10", paid: tr ? 49955 : 2480, previous: tr ? 52300 : 2610,
+                           next: AyOzeti.Sonraki(month: "2026-11", total: tr ? 42075 : 2190), finished: [biten], freed: biten.monthly,
+                           spent: tr ? 38200 : 1930, added: 14, top: market, rising: market)
+        return NavigationStack {
+            Sayfa {
+                BitenTaksitKarti(bitenler: [biten], kapat: {})
+                AyKapanisiKarti(ozet: ozet, ac: {}, kapat: {})
+                AyOzetiKarti(ozet: ozet)
+            }
+            .navigationTitle(L("Özet"))
         }
     }
 
