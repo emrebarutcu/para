@@ -28,7 +28,10 @@ function getStorageKey() {
 const MAX_MONTHS = 60;           // akışta gösterilecek en fazla ay
 const CHART_MONTHS = 12;         // özetteki grafikte gösterilecek ay
 const CASH_COLOR = "var(--cash)";
-const VIEWS = ["ozet", "akis", "harcamalar", "kartlar", "borclar", "varliklar"];
+const VIEWS = ["ozet", "akis", "harcamalar", "kartlar", "varliklar"];
+// Eski Borçlar sekmesi Kartlar'ın borçlar bölümüdür (#debtSection): #borclar o görünümü açar ve bölüme kaydırır
+const VIEW_ALIAS = { borclar: "kartlar" };
+const DEBT_SECTION = "debtSection";
 const COUNT_PRESETS = [1, 2, 3, 4, 6, 9, 12];
 const FREQ_PRESETS = [["", L("Bir kez")], ["day", L("Günde bir")], ["week", L("Haftada bir")], ["month", L("Ayda bir")], ["other", L("Diğer")]];   // tekrar sıklığı
 const TIMES_PRESETS = [[0, L("Süresiz")], [3, L("{0} kez", 3)], [6, L("{0} kez", 6)], [12, L("{0} kez", 12)]];   // kaç kez tekrarlar
@@ -37,7 +40,7 @@ const CAL_WEEKDAYS = [L("Pzt"), L("Sal"), L("Çar"), L("Per"), L("Cum"), L("Cmt"
 const PREF = { theme: "para.theme", chartBy: "para.chartBy", flowMode: "para.flowMode", timelineMode: "para.timelineMode", rates: "para.rates",
   cashStart: "para.cashStart", cashMode: "para.cashMode", timelineStart: "para.timelineStart", trackNotice: "para.trackNotice",
   purchaseSort: "para.purchaseSort", prices: "para.prices", settle: "para.settle", cashDef: "para.cashDef",
-  assetRange: "para.assetRange", history: "para.history", country: "para.ulke" };
+  assetRange: "para.assetRange", history: "para.history", country: "para.ulke", startHidden: "para.baslarken.gizli" };
 const PURCHASE_SORTS = ["next", "new", "amount", "name"];   // Harcamalar sıralaması (index.html #purchaseSort)
 const RATES_TTL = 10 * 60_000;   // kurlar bu kadar süre taze sayılır (/api/kur da bu kadar saklar)
 const RATES_RETRY = 60_000;      // kur alınamazsa yeniden deneme aralığı
@@ -65,6 +68,7 @@ let chartBy = readPref(PREF.chartBy) === "card" ? "card" : "person";
 let flowMode = readPref(PREF.flowMode) === "table" ? "table" : "list";
 let personFilter = "all";
 let showDone = false;
+let purchaseMode = "list";    // Harcamalar: list | categories (ayın harcamaları kategoriye göre)
 let purchaseSort = PURCHASE_SORTS.includes(readPref(PREF.purchaseSort)) ? readPref(PREF.purchaseSort) : "next";
 let openEventKey = null;      // akışta açılan ödeme
 let focusIdx = null;          // akışta vurgulanan ay (grafikten gelince)
@@ -113,6 +117,7 @@ let fundListLoading = null;
 let lastSettle = readPref(PREF.settle) !== "0";   // fon / hisse alışı TL bakiyesine işlensin (formda son seçilen)
 let priceTouched = false;     // formdaki birim fiyatı kullanıcı yazdı (güncel fiyatla doldurulmaz)
 let insightsOpen = false;     // özette bütün içgörüler açık
+let cashHelpOpen = false;     // Nakit grafiğinin açıklaması açık ("?")
 let categoryTouched = false;  // formda kategoriyi kullanıcı seçti
 let categorySource = null;    // formdaki kategori kimden: "user" | "memory" (aynı işyerine önceki seçim) | "ai"
 let suggestTimer = 0;
@@ -250,7 +255,22 @@ function todayIndex() {
 
 function viewFromHash() {
   const v = location.hash.slice(1);
-  return VIEWS.includes(v) ? v : "ozet";
+  return VIEWS.includes(v) ? v : VIEW_ALIAS[v] ?? "ozet";
+}
+
+// #borclar (eski sekme, kayıtlı bağlantılar): Kartlar açılır, borçlar bölümüne kaydırılır; adres #kartlar olur
+function followAlias() {
+  if (location.hash !== "#borclar") return;
+  pendingScroll ??= DEBT_SECTION;
+  history.replaceState(null, "", "#kartlar");
+}
+
+// Kartlar'daki borçlar bölümünü açar: side verilirse Borçlarım / Alacaklarım seçilir; target kaydırılacak öğe
+// (bölümün kendisi ya da içindeki bir satır)
+function showDebts(side, target = DEBT_SECTION) {
+  if (side) { debtSide = side; debtClosedOpen = false; }
+  pendingScroll = target;
+  if (view === "kartlar") render(); else location.hash = "#kartlar";
 }
 
 // Kuruş hanesi para birimine göre (para.js digits): yen 0, Kuveyt dinarı 3
@@ -397,34 +417,48 @@ function lastPaymentIndex() {
   return Math.max(last, B.carryIndex(state, T.todayKey()));   // döner kredide devreden bakiyenin ekstresi
 }
 
-let toastTimer = 0;
-function toast(message) {
+// Kısa bildirim. sub: ikinci satır (bir kaydın sonucu; daha uzun kalır). wait: ekranda iki satırlı bir sonuç varsa onu
+// kesmez, o kapanınca gösterilir (kayıttan sonra gelen kategori önerisi gibi)
+let toastTimer = 0, toastHold = 0, toastQueue = 0;
+function toast(message, { sub = null, wait = false } = {}) {
+  clearTimeout(toastQueue);
+  if (wait && Date.now() < toastHold) {
+    toastQueue = setTimeout(() => toast(message, { sub }), toastHold - Date.now() + 200);
+    return;
+  }
   const t = els.toast;
-  t.textContent = message;
+  t.replaceChildren(el("span", "", message), ...(sub ? [el("small", "", sub)] : []));
+  t.classList.toggle("two", !!sub);
   t.hidden = false;
   t.style.animation = "none";
   void t.offsetWidth;
   t.style.animation = "";
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+  const ms = sub ? 4500 : 2200;
+  toastHold = sub ? Date.now() + ms : 0;
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 
 // ---------- Elements ----------
 const $ = id => document.getElementById(id);
 const els = {
   tabs: $("tabs"),
-  heroLabel: $("heroLabel"), heroAmount: $("heroAmount"), heroDebt: $("heroDebt"),
-  nextLabel: $("nextLabel"), nextTotal: $("nextTotal"),
-  remaining: $("remainingTotal"), endLabel: $("endLabel"),
-  upcoming: $("upcomingList"), peopleSummary: $("peopleSummary"),
+  startPanel: $("startPanel"), startSteps: $("startSteps"), startHide: $("startHide"), overviewEmpty: $("overviewEmpty"),
+  heroPanel: $("heroPanel"), heroLabel: $("heroLabel"), heroAmount: $("heroAmount"), heroDebt: $("heroDebt"),
+  heroProgress: $("heroProgress"), heroStats: $("heroStats"),
+  nextLabel: $("nextLabel"), nextTotal: $("nextTotal"), nextDiff: $("nextDiff"),
+  remaining: $("remainingTotal"), endStat: $("endStat"), endLabel: $("endLabel"),
+  upcomingPanel: $("upcomingPanel"), upcoming: $("upcomingList"),
+  peoplePanel: $("peoplePanel"), peopleMonth: $("peopleMonth"), peopleSummary: $("peopleSummary"),
   timelineKind: $("timelineKind"), timelineMode: $("timelineMode"), timelineSum: $("timelineSum"),
   timelineRange: $("timelineRange"), timelineStart: $("timelineStart"),
-  timelineCal: $("timelineCal"), timeline: $("timeline"),
+  timelineCal: $("timelineCal"), timeline: $("timeline"), timelinePanel: $("timelinePanel"),
   chartBy: $("chartBy"), legend: $("chartLegend"), chart: $("planChart"), chartEmpty: $("chartEmpty"),
   tooltip: $("chartTooltip"),
-  cashRange: $("cashRange"), cashStart: $("cashStart"), cashMode: $("cashMode"), cashSum: $("cashSum"), cashChart: $("cashChart"), cashEmpty: $("cashEmpty"), cashNote: $("cashNote"),
-  flowMode: $("flowMode"), flowList: $("flowList"), flowTable: $("flowTable"), table: $("planTable"),
-  personFilter: $("personFilter"), purchaseWrap: $("purchaseWrap"), managePeople: $("managePeople"),
+  cashPanel: $("cashPanel"), cashRange: $("cashRange"), cashStart: $("cashStart"), cashMode: $("cashMode"), cashSum: $("cashSum"), cashChart: $("cashChart"), cashEmpty: $("cashEmpty"),
+  cashNote: $("cashNote"), cashHelp: $("cashHelp"),
+  flowPlan: $("flowPlan"), flowHead: $("flowHead"), flowMode: $("flowMode"), flowList: $("flowList"), flowTable: $("flowTable"), table: $("planTable"),
+  purchaseMode: $("purchaseMode"), personFilter: $("personFilter"), purchaseWrap: $("purchaseWrap"), managePeople: $("managePeople"),
   purchaseTools: $("purchaseTools"), purchaseSort: $("purchaseSort"), inboxWrap: $("inboxWrap"),
   cardGrid: $("cardGrid"), addCard: $("addCard"),
   assetLabel: $("assetLabel"), assetTotal: $("assetTotal"), ratesNote: $("ratesNote"), rateStats: $("rateStats"),
@@ -479,7 +513,7 @@ const els = {
   eventItems: $("eventItems"), eventToFlow: $("eventToFlow"), eventState: $("eventState"), eventOk: $("eventOk"), eventPay: $("eventPay"),
   peopleSheet: $("peopleSheet"), peopleEdit: $("peopleEdit"), personAddForm: $("personAddForm"), peopleLock: $("peopleLock"),
   settingsSheet: $("settingsSheet"), settingsBtn: $("settingsBtn"), themeSeg: $("themeSeg"),
-  countrySelect: $("countrySelect"), authCountry: $("authCountry"),
+  countrySelect: $("countrySelect"), authCountry: $("authCountry"), welcomeCountry: $("welcomeCountry"),
   cashDefBtn: $("cashDefBtn"), cashDefText: $("cashDefText"), cashDefSheet: $("cashDefSheet"), cashDefList: $("cashDefList"),
   cashDefReset: $("cashDefReset"),
   inboxBtn: $("inboxBtn"), inboxSheet: $("inboxSheet"), inboxLoginNote: $("inboxLoginNote"), inboxSetup: $("inboxSetup"), inboxBanks: $("inboxBanks"),
@@ -489,7 +523,7 @@ const els = {
   aiLocalTitle: $("aiLocalTitle"), aiLocalSub: $("aiLocalSub"), aiModeSeg: $("aiModeSeg"), aiProgress: $("aiProgress"),
   aiBackfill: $("aiBackfill"), aiAddNote: $("aiAddNote"), aiOther: $("aiOther"),
   insightPanel: $("insightPanel"), insightList: $("insightList"), insightMore: $("insightMore"),
-  catPanel: $("catPanel"), catList: $("catList"), catTotal: $("catTotal"), catNote: $("catNote"),
+  catPanel: $("catPanel"), catList: $("catList"), catTotal: $("catTotal"), catNote: $("catNote"), catEmpty: $("catEmpty"),
   categoryChips: $("categoryChips"), categoryHint: $("categoryHint"),
   inboxCheck: $("inboxCheck"), inboxRenew: $("inboxRenew"), inboxTry: $("inboxTry"), inboxTryResult: $("inboxTryResult"),
   moveModal: $("moveModal"), moveSummary: $("moveSummary"), moveKeepBtn: $("moveKeepBtn"), moveDropBtn: $("moveDropBtn"), moveMsg: $("moveMsg"),
@@ -518,49 +552,159 @@ function render() {
   if (view === "ozet") renderOverview(months, start, last);
   if (view === "akis") renderFlow(months);
   if (view === "harcamalar") renderPurchases();
-  if (view === "kartlar") renderCards();
-  if (view === "borclar") { renderDebts(); loadRates(); }
+  if (view === "kartlar") { renderCards(); renderPeopleSummary(); renderDebts(); loadRates(); }
   if (view === "varliklar") { renderAssets(); loadRates(); }
 
-  const adding = view === "varliklar" ? "entry" : view === "borclar" ? (debtSide === "debt" ? "debt" : "receivable") : "purchase";
+  // + düğmesi bulunulan görünümün işini açar: Varlıklar'da hareket, Kartlar'da borç / alacak (kart "Kart ekle" ile), diğerlerinde harcama
+  const adding = view === "varliklar" ? "entry" : view === "kartlar" ? (debtSide === "debt" ? "debt" : "receivable") : "purchase";
   els.addLabel.textContent = { entry: L("Hareket"), debt: L("Borç"), receivable: L("Alacak"), purchase: L("Harcama") }[adding];
   els.fab.setAttribute("aria-label", { entry: L("Hareket ekle"), debt: L("Borç ekle"), receivable: L("Alacak ekle"), purchase: L("Harcama ekle") }[adding]);
 
   if (pendingScroll) {
     const target = document.getElementById(pendingScroll);
     pendingScroll = null;
-    target?.scrollIntoView({ block: "center" });
+    target?.scrollIntoView({ block: target.id === DEBT_SECTION ? "start" : "center" });   // bölüm başından, satır ortada
   }
 }
 
 // ---------- Özet ----------
+// Yalnızca "bu ay ve yakında" (iPhone'daki Özet gibi): Başlarken, bu ay ödenecek, sıradaki ödemeler, içgörüler, nakit.
+// Hiç ödeme yokken (yeni kullanıcı ya da her şey ödenmiş: kalan ödeme, sıradaki ödeme ve bu ayın ödemesi yok) sıfırlarla
+// dolu paneller gösterilmez; Nakit, veri ya da bir gelir olunca görünür.
 function renderOverview(months, start, last) {
-  const at = idx => months.find(m => m.idx === idx);
-  els.heroLabel.textContent = start === todayIndex() ? L("Bu ay ödenecek") : L("{0} ayında ödenecek", T.monthName(start));
-  setMoney(els.heroAmount, at(start)?.total || 0);
-  els.nextLabel.textContent = T.monthName(start + 1);
-  els.nextTotal.textContent = fmt(at(start + 1)?.total || 0);
-  els.remaining.textContent = fmt(months.reduce((s, m) => s + m.total, 0));
-  // Son taksit: ödenecek bir şey kalan son ay; süresiz tekrarlayan (hesaba katılan) harcama varsa bitmez
-  const endless = knownPurchases().some(p => T.assetOf(p, HOME) === HOME && T.endless(p) && !(cardById(p.cardId) && !B.tracked(cardById(p.cardId))));
-  const lastDue = [...months].reverse().find(m => m.total > EPS);
-  els.endLabel.textContent = endless ? L("Süresiz") : lastDue ? `${T.monthShort(lastDue.idx)} ${T.yearOf(lastDue.idx)}` : "—";
-  // Ayın borç ve kredi ödemeleri ayrı satırda (yukarıdaki tutar yalnızca kart ve nakit ödemeleri); dokununca Borçlar
-  const debtDue = dueSum(B.paymentsDue(state, T.todayKey(), T.dateKey(start, 1), T.dateKey(start, 31)), curRates());
+  const t = todayIndex();
+  const rows = upcomingRows(last);
+  const ahead = start === t ? months : last >= t ? cashflow(t, Math.min(last, t + MAX_MONTHS - 1)) : [];
+  const empty = !rows.length && !(ahead.reduce((sum, m) => sum + m.total, 0) > EPS);
+
+  const steps = renderStart();
+  els.heroPanel.hidden = els.upcomingPanel.hidden = empty;
+  if (!empty) {
+    renderHero(months, start);
+    renderUpcoming(rows);
+  }
+  renderInsights();
+  const cash = !empty || steps.gelir;
+  els.cashPanel.hidden = !cash;
+  if (cash) renderCash();
+  // Gösterecek hiçbir şey kalmadıysa (veri yok, Başlarken gizlendi) boş sayfa yerine ilk harcamaya çağrı
+  const nothing = empty && !cash && els.startPanel.hidden && els.insightPanel.hidden;
+  els.overviewEmpty.hidden = !nothing;
+  els.overviewEmpty.replaceChildren(...(nothing ? [firstPurchaseState()] : []));
+}
+
+// Bu ay ödenecek: tutar, ayın borç ödemeleri, (yalnızca bugünün ayında) ayın ilerlemesi; altında sonraki ay ve bu aya
+// göre hafifliyor mu, kalan ödemelerin toplamı ve taksitlerin bittiği ay (icgoru.js progress, lastInstallment;
+// iPhone'daki BuAyKarti gibi)
+function renderHero(months, start) {
+  const at = idx => months.find(m => m.idx === idx)?.total || 0;
+  const today = T.todayKey();
+  const current = start === todayIndex();
+  els.heroLabel.textContent = current ? L("Bu ay ödenecek") : L("{0} ayında ödenecek", T.monthName(start));
+  setMoney(els.heroAmount, at(start));
+  // Ayın borç ve kredi ödemeleri ayrı satırda (yukarıdaki tutar yalnızca kart ve nakit ödemeleri); dokununca Borçlarım
+  const debtDue = dueSum(B.paymentsDue(state, today, T.dateKey(start, 1), T.dateKey(start, 31)), curRates());
   els.heroDebt.hidden = !(debtDue > EPS);
   els.heroDebt.textContent = L("+ {0} borç ödemesi ›", fmt(debtDue));
 
-  renderInsights();
-  renderCash();
-  renderUpcoming(last);
-  renderPeopleSummary(months, start);
-  renderTimeline(start);
-  renderCategories(start);
+  // İlerleme: ödenen kısım yeşil çubukta; altında "₺33.175 ödendi" ve "kalan ₺16.780 · 20 Kas" (kalan yoksa "Hepsi ödendi")
+  const p = current ? I.progress(state, today) : null;
+  const shown = !!p && p.total > EPS;
+  els.heroProgress.hidden = !shown;
+  if (shown) {
+    const ratio = Math.min(1, Math.max(0, p.paid / p.total));
+    const bar = el("div", "bar");
+    bar.setAttribute("role", "progressbar");
+    bar.setAttribute("aria-valuemin", "0");
+    bar.setAttribute("aria-valuemax", "100");
+    bar.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
+    bar.setAttribute("aria-label", L("Bu ay ödenecek"));
+    const fill = el("span");
+    fill.style.width = `${ratio * 100}%`;
+    bar.append(fill);
+    const text = el("div", "hero-progress-text");
+    if (p.left <= EPS) {
+      const done = el("span", "done");
+      done.append(icon("check"), document.createTextNode(L("Hepsi ödendi")));
+      text.append(done);
+    } else {
+      text.append(el("span", "paid", p.paid > EPS ? L("{0} ödendi", fmtWhole(p.paid)) : ""),
+        el("span", "left", p.next ? L("kalan {0} · {1}", fmtWhole(p.left), fmtDayShort(p.next)) : L("kalan {0}", fmtWhole(p.left))));
+    }
+    els.heroProgress.replaceChildren(bar, text);
+  }
 
-  chartMonths = months.slice(0, CHART_MONTHS);
-  renderLegend(chartMonths);
-  renderChart(chartMonths);
+  els.nextLabel.textContent = T.monthName(start + 1);
+  els.nextTotal.textContent = fmt(at(start + 1));
+  // Sonraki ay gösterilen aydan hafifse yeşil "↓ ₺7.880 hafifliyor", ağırsa sakin "↑ ₺2.000 artıyor"; aynıysa yok
+  const diff = at(start + 1) - at(start);
+  const moving = Math.abs(diff) >= 1;
+  els.nextDiff.hidden = !moving;
+  els.heroStats.classList.toggle("has-diff", moving);
+  if (moving) {
+    els.nextDiff.className = "hero-diff " + (diff < 0 ? "down" : "up");
+    els.nextDiff.replaceChildren(icon(diff < 0 ? "arrow-down" : "arrow-up"),
+      document.createTextNode(diff < 0 ? L("{0} hafifliyor", fmtWhole(-diff)) : L("{0} artıyor", fmtWhole(diff))));
+  }
+  els.remaining.textContent = fmt(months.reduce((sum, m) => sum + m.total, 0));
+  // Son taksit: sonu belli harcamaların son ödemesinin ayı (süresiz tekrarlar sayılmaz); kalan taksit yoksa kutu yok
+  const end = I.lastInstallment(state, today);
+  els.endStat.hidden = !end;
+  els.heroStats.classList.toggle("two", !end);
+  if (end) els.endLabel.textContent = monthLong(T.monthIndex(end));
 }
+
+// ---------- Başlarken ----------
+// Yeni kullanıcının üç adımı (iPhone'daki BaslarkenKarti; metinler aynı): kart, harcama, maaş. Yapılan adım işaretlenir
+// ve üstü çizilir; üçü bitince ya da "Gizle" ile panel kaybolur (gizleme bu cihazda kalır).
+// Gelir: bir giriş, ana para biriminde ya da karşılığı bakiyeden ödenmeden gelen döviz / altın; bakiyeden alınan döviz /
+// altın (aktarım) ve fon / hisse gelir değildir.
+function startSteps() {
+  return {
+    kart: state.cards.length > 0,
+    harcama: knownPurchases().length > 0,
+    gelir: knownEntries().some(e => e.amount > 0 && !V.market(e.asset) && !V.settled(e, HOME)),
+  };
+}
+
+function renderStart() {
+  const d = startSteps();
+  els.startPanel.hidden = (d.kart && d.harcama && d.gelir) || readPref(PREF.startHidden) === "1";
+  if (els.startPanel.hidden) return d;
+  // item: iPhone'daki adların aynısı (EkleSecim.id); maaş adımında giriş formu "Maaş" yazılı ve ayda bir tekrarla açılır
+  const steps = [
+    ["kart", L("Kredi kartını ekle"), L("Kesim ve son ödeme günüyle"), d.kart, () => openCardSheet()],
+    ["harcama", L("Bir harcama ekle"), L("Taksitliyse taksit sayısıyla"), d.harcama, () => openPurchaseSheet()],
+    ["hareket.gelir", L("Maaşını ekle"), L("Her ay tekrarlanır; nakdin hesaplanır"), d.gelir,
+      () => openEntrySheet(null, HOME, { desc: L("Maaş"), repeat: 0, personId: state.people[0]?.id })],
+  ];
+  els.startSteps.replaceChildren(...steps.map(([item, title, sub, done, open], i) => {
+    const li = el("li");
+    const b = el("button", "start-step" + (done ? " done" : ""));
+    b.type = "button";
+    b.disabled = done;
+    const no = el("span", "start-no");
+    no.setAttribute("aria-hidden", "true");
+    no.append(done ? icon("tick") : document.createTextNode(String(i + 1)));
+    const text = el("span", "row-text");
+    text.append(el("strong", "", title), el("small", "", sub));
+    b.append(no, text);
+    if (!done) b.append(icon("right"));
+    b.addEventListener("click", () => {
+      window.Analitik?.event("onboarding_step_opened", { item, surface: "checklist" });
+      open();
+    });
+    li.append(b);
+    return li;
+  }));
+  return d;
+}
+
+els.startHide.addEventListener("click", () => {
+  writePref(PREF.startHidden, "1");
+  window.Analitik?.event("onboarding_hidden", { surface: "checklist" });
+  render();
+});
 
 // ---------- İçgörüler (icgoru.js) ----------
 function renderInsights() {
@@ -597,25 +741,29 @@ function insightAction(x) {
   if (x.action.kind === "entry") openEntrySheet(null, HOME, { desc: L("Maaş"), repeat: 0 });
   else if (x.action.kind === "ai") openAiSheet();
   else if (x.action.kind === "share") {
+    // Tek kişiyse özeti doğrudan paylaşılır; değilse Kartlar'daki Kişiler listesi (her satırda paylaş düğmesi)
     const person = x.data.length === 1 ? personById(x.data[0].personId) : null;
-    if (person) sharePerson(person, T.monthIndex(currentMonth));
-    else els.peopleSummary.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (person) sharePerson(person, todayIndex());
+    else { pendingScroll = "peoplePanel"; location.hash = "#kartlar"; }
   } else if (x.action.kind === "debt") {
-    // borc-vade → Borçlarım, alacak → Alacaklarım
-    debtSide = x.id === "alacak" ? "receivable" : "debt";
-    debtClosedOpen = false;
-    location.hash = "#borclar";
+    showDebts(x.id === "alacak" ? "receivable" : "debt");   // borc-vade → Borçlarım, alacak → Alacaklarım
   }
 }
 
 els.insightMore.addEventListener("click", () => { insightsOpen = !insightsOpen; renderInsights(); });
 
-// Ayın harcamaları kategoriye göre (harcama tarihine göre; taksitli alışveriş tamamıyla), önceki 3 ayın ortalamasıyla
+// Ayın harcamaları kategoriye göre (harcama tarihine göre; taksitli alışveriş tamamıyla), önceki 3 ayın ortalamasıyla.
+// Harcamalar → Kategoriler; ay panelin başlığındaki ay seçiciyle değişir.
 function renderCategories(idx) {
   const b = I.categoryBreakdown(state, idx, curRates());
-  els.catPanel.hidden = !b.total;
-  if (!b.total) return;
-  els.catTotal.textContent = fmt(b.total);
+  els.catTotal.textContent = b.total ? fmt(b.total) : "";
+  els.catEmpty.hidden = !!b.total;
+  els.catNote.hidden = !b.total;
+  if (!b.total) {
+    els.catEmpty.textContent = L("Bu dönemde harcama yok.");
+    els.catList.replaceChildren();
+    return;
+  }
   const max = b.rows[0].value;
   els.catList.replaceChildren(...b.rows.map(r => {
     const li = el("li", "cat-row" + (r.id ? "" : " none"));
@@ -643,7 +791,7 @@ function renderCategories(idx) {
 // Kart / nakit ödemeleri ve borç / kredi ödemeleri tarih sırasıyla, ilk 4'ü; gecikmişler en üstte. Elle ödenen kartın
 // ekstreleri borc.js'ten: ödenmiş ya da önceden ödenmiş olan düşer, ödenmemiş geçmiş ekstre "gecikti" ile kalır, ileriki
 // ekstrenin kapanmamış kısmı (süresiz tekrarların ileriki tekrarları dahil: until ufku)
-function renderUpcoming(last) {
+function upcomingRows(last) {
   const today = T.todayKey();
   const from = todayIndex();
   const until = T.dateKey(from + 24, 31);
@@ -662,8 +810,12 @@ function renderUpcoming(last) {
     }
   }
   const debts = B.paymentsDue(state, today, today, until).filter(f => !f.paid);
-  const rows = [...events.map(ev => ({ date: ev.date, ev })), ...cards, ...debts.map(f => ({ date: f.date, late: !!f.late, f }))]
+  return [...events.map(ev => ({ date: ev.date, ev })), ...cards, ...debts.map(f => ({ date: f.date, late: !!f.late, f }))]
     .sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0) || a.date.localeCompare(b.date)).slice(0, 4);
+}
+
+function renderUpcoming(rows) {
+  const today = T.todayKey();
   els.upcoming.replaceChildren();
   if (!rows.length) {
     els.upcoming.append(el("li", "empty", state.installments.length || state.debts.length ? L("Yaklaşan ödeme yok") : L("Henüz harcama yok")));
@@ -720,7 +872,7 @@ function openEvent(ev) {
   if (idx < T.monthIndex(currentMonth)) currentMonth = T.monthKey(idx);
   openEventKey = ev.key;
   pendingScroll = `ev-${ev.key}`;
-  location.hash = "#akis";
+  if (view === "akis") render(); else location.hash = "#akis";   // Girdi ve çıktılar da Akış'ta: adres değişmeyebilir
 }
 
 // Girdi ve çıktıların dönemi (liste ve takvim): seçilen günden bir ay sonrasının bir gün öncesine; 1'i seçiliyse ayın
@@ -1244,10 +1396,15 @@ function eventItemRows(ev) {
   });
 }
 
-// İlk kişi uygulamayı kullanan; diğerlerine (aile üyesi ya da kartını kullanan) ayın ödeme özeti gönderilebilir.
-// Takipteki kartta payı olan kişide alt satır alacaktır (ödemesi gelen ya da geciken kısmıyla); dokununca kart payı
-// penceresi açılır.
-function renderPeopleSummary(months, start) {
+// Kişilerin bu ayki payı (Kartlar; birden çok kişi varsa: tek kişide Özet'in tepesiyle aynıdır). İlk kişi uygulamayı
+// kullanan; diğerlerine (aile üyesi ya da kartını kullanan) ayın ödeme özeti gönderilebilir. Takipteki kartta payı olan
+// kişide alt satır alacaktır (ödemesi gelen ya da geciken kısmıyla); dokununca kart payı penceresi açılır.
+function renderPeopleSummary() {
+  els.peoplePanel.hidden = state.people.length < 2;
+  if (els.peoplePanel.hidden) return;
+  const start = todayIndex(), last = lastPaymentIndex();
+  const months = last >= start ? cashflow(start, Math.min(last, start + MAX_MONTHS - 1)) : [];
+  els.peopleMonth.textContent = monthLong(start);
   const thisMonth = months.find(m => m.idx === start);
   const today = T.todayKey();
   const shares = B.shares(state, today);
@@ -1477,12 +1634,13 @@ function renderChart(months) {
     const i = Number(hit.dataset.i);
     const m = months[i];
     const col = svg.querySelector(`.col[data-i="${i}"]`);
-    // Sütuna tıklayınca akışta o aya git
+    // Sütuna tıklayınca ödeme planında o aya git (plan kilitliyse gidilecek yer yok)
     const go = () => {
       hideTooltip();
+      if (locked()) return;
       focusIdx = m.idx;
       pendingScroll = `m-${m.idx}`;
-      location.hash = "#akis";
+      render();
     };
     hit.addEventListener("click", go);
     hit.addEventListener("keydown", e => {
@@ -1622,13 +1780,27 @@ function renderCash() {
   const svg = els.cashChart;
   hideTooltip();
   els.cashEmpty.hidden = data.any;
+  // Altta tek satır: nakit sayılanlar, "Değiştir" ve (varsa) dahil olmayanlar; grafiğin uzun açıklaması "?" ile açılır
   els.cashNote.hidden = !data.any;
+  els.cashHelp.hidden = !data.any || !cashHelpOpen;
   const change = el("button", "link", L("Değiştir"));
   change.type = "button";
   change.addEventListener("click", openCashDefSheet);
-  els.cashNote.replaceChildren(L("Nakit: {0}.", cashDefText()) + " ", change, " · " + L("Grafikte nakdin girdileri ve çıktıları (tekrarlayanlar dahil), kart ekstreleri, nakit taksitler, borç ve alacak ödemeleri var. Ekstreler son ödeme gününde görünür; ödemediğin geçmiş ekstreler bugünde gösterilir. Hesaba katılmayan kartlar grafikte yok.")
-    + (cashDef.some(c => c !== HOME) ? " " + L("Döviz, altın ve fonlar bugünkü kur ve fiyatla {0} çevrilir.", homeEk("ye")) : "")
-    + (data.missing.length ? " " + L("Kuru ya da fiyatı alınamayan {0} dahil değil.", data.missing.map(c => lowerName(V.asset(c).name)).join(", ")) : ""));
+  const help = el("button", "help-btn");
+  help.type = "button";
+  help.setAttribute("aria-label", L("Açıklama"));
+  help.setAttribute("aria-expanded", String(cashHelpOpen));
+  help.setAttribute("aria-controls", "cashHelp");
+  help.append(icon("help"));
+  help.addEventListener("click", () => {
+    cashHelpOpen = !cashHelpOpen;
+    els.cashHelp.hidden = !cashHelpOpen;
+    help.setAttribute("aria-expanded", String(cashHelpOpen));
+  });
+  els.cashNote.replaceChildren(L("Nakit: {0}.", cashDefText()) + " ", change,
+    ...(data.missing.length ? [" · " + L("Kuru ya da fiyatı alınamayan {0} dahil değil.", data.missing.map(c => lowerName(V.asset(c).name)).join(", "))] : []), help);
+  els.cashHelp.textContent = L("Grafikte nakdin girdileri ve çıktıları (tekrarlayanlar dahil), kart ekstreleri, nakit taksitler, borç ve alacak ödemeleri var. Ekstreler son ödeme gününde görünür; ödemediğin geçmiş ekstreler bugünde gösterilir. Hesaba katılmayan kartlar grafikte yok.")
+    + (cashDef.some(c => c !== HOME) ? " " + L("Döviz, altın ve fonlar bugünkü kur ve fiyatla {0} çevrilir.", homeEk("ye")) : "");
   svg.style.display = data.any ? "" : "none";
   svg.setAttribute("aria-label", net ? L("{0} – {1} dönem net nakit hareketi", fmtDayShort(from), fmtDayShort(to)) : L("{0} – {1} nakit bakiyesi", fmtDayShort(from), fmtDayShort(to)));
   if (!data.any) {
@@ -1757,11 +1929,23 @@ function showCashTooltip(day, net, x, y) {
 }
 
 // ---------- Akış ----------
+// Üstte ücretsiz paneller: 12 aylık grafik (Aylık ödemeler) ve ayın girdi / çıktıları. Ayların ödeme planı (liste / tablo)
+// Premium'dur: kilitliyken yerinde Premium notu durur ve ücretsiz panellerin altına iner; açıkken grafiğin hemen altındadır.
 function renderFlow(months) {
-  els.flowMode.hidden = locked();
-  if (locked()) {
+  chartMonths = months.slice(0, CHART_MONTHS);
+  renderLegend(chartMonths);
+  renderChart(chartMonths);
+  renderTimeline(T.monthIndex(currentMonth));
+
+  const lock = locked();
+  if (lock !== (els.timelinePanel.nextElementSibling === els.flowPlan)) {
+    if (lock) els.timelinePanel.after(els.flowPlan); else els.timelinePanel.before(els.flowPlan);
+  }
+  els.flowHead.hidden = lock;
+  if (lock) {
     els.flowTable.hidden = true;
-    els.flowList.replaceChildren(premiumLock(L("Akış"), L("Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler, kişilerin payı ve 12 aylık grafik."), "cash_flow"));
+    els.flowList.hidden = false;
+    els.flowList.replaceChildren(premiumLock(L("Ödeme planı"), L("Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler, kişilerin payı ve 12 aylık grafik."), "cash_flow"));
     return;
   }
   for (const b of els.flowMode.querySelectorAll("button")) {
@@ -1957,10 +2141,37 @@ function emptyState(iconName, title, text, action) {
   return box;
 }
 
+// Hiç harcama yokken ilk harcamaya çağrı (Harcamalar; Özet'te gösterecek başka bir şey kalmadıysa orada da)
+function firstPurchaseState() {
+  const btn = el("button", "btn btn-primary");
+  btn.type = "button";
+  btn.append(icon("plus"), document.createTextNode(L("Harcama ekle")));
+  btn.addEventListener("click", () => openPurchaseSheet());
+  return emptyState("receipt", L("Henüz harcama yok"),
+    L("Peşin ya da taksitli harcamalarını ekle; ödeme tarihlerini kartının kesim ve son ödeme gününe göre hesaplarım."), btn);
+}
+
 // ---------- Harcamalar ----------
+// Liste ya da Kategoriler (ayın harcamaları kategoriye göre; hiç harcama yokken yalnızca liste ve boş durumu)
 function renderPurchases() {
   const today = T.todayKey();
   if (personFilter !== "all" && !personById(personFilter)) personFilter = "all";
+  const any = knownPurchases().length > 0;
+  if (!any) purchaseMode = "list";
+  els.purchaseMode.hidden = !any;
+  for (const b of els.purchaseMode.querySelectorAll("button")) {
+    b.classList.toggle("active", b.dataset.mode === purchaseMode);
+    b.setAttribute("aria-pressed", String(b.dataset.mode === purchaseMode));
+  }
+  const cats = purchaseMode === "categories";
+  els.catPanel.hidden = !cats;
+  els.personFilter.hidden = cats;
+  if (cats) {
+    els.inboxWrap.hidden = els.purchaseTools.hidden = true;
+    els.purchaseWrap.replaceChildren();
+    renderCategories(T.monthIndex(currentMonth));
+    return;
+  }
 
   const all = knownPurchases().map(p => {
     const pays = upcomingPayments(p, today);
@@ -1996,12 +2207,7 @@ function renderPurchases() {
   els.purchaseTools.hidden = mine.length < 2;
   els.purchaseWrap.replaceChildren();
   if (!mine.length) {
-    const btn = el("button", "btn btn-primary");
-    btn.type = "button";
-    btn.append(icon("plus"), document.createTextNode(L("Harcama ekle")));
-    btn.addEventListener("click", () => openPurchaseSheet());
-    els.purchaseWrap.append(emptyState("receipt", L("Henüz harcama yok"),
-      L("Peşin ya da taksitli harcamalarını ekle; ödeme tarihlerini kartının kesim ve son ödeme gününe göre hesaplarım."), btn));
+    els.purchaseWrap.append(firstPurchaseState());
     return;
   }
 
@@ -2027,8 +2233,14 @@ function purchaseList(items, today) {
   return panel;
 }
 
+// Harcama satırının başı: birden çok kişi varsa kişinin baş harfleri; tek kişide (her satırda aynı harf olurdu)
+// kategorinin simgesi (index.html i-k-<kategori>), kategorisizde fiş
+function purchaseMark(p) {
+  if (state.people.length > 1) return avatar(personById(p.personId));
+  return markOf(icon(K.valid(p.category) ? `k-${p.category}` : "receipt"));
+}
+
 function purchaseRow({ p, pays, plan, left, paid, next }, today) {
-  const person = personById(p.personId);
   const per = T.perInstallment(p);
   const code = T.assetOf(p, HOME);
   const rule = T.repeats(p) ? R.rule(p) : null;
@@ -2089,7 +2301,7 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
     side.append(el("span", "amount", fmt(p.total)), el("span", "sub", next ? L("{0} ödenecek", relDays(next, today).toLocaleLowerCase(D.locale())) : L("ödendi")));
   }
 
-  row.append(avatar(person), main, side);
+  row.append(purchaseMark(p), main, side);
   row.addEventListener("click", () => openPurchaseSheet(p));
   row.addEventListener("keydown", e => { if (e.key === "Enter") openPurchaseSheet(p); });
   return row;
@@ -2210,7 +2422,7 @@ function loadRates() {
       try { localStorage.setItem(PREF.rates, JSON.stringify(rates)); } catch {}
     })
     .catch(() => { ratesFailed = true; })
-    .finally(() => { ratesLoading = null; if (["varliklar", "ozet", "borclar", "harcamalar"].includes(view)) render(); });
+    .finally(() => { ratesLoading = null; if (["varliklar", "ozet", "akis", "kartlar", "harcamalar"].includes(view)) render(); });
   return ratesLoading;
 }
 
@@ -2263,7 +2475,7 @@ function loadPrices() {
       savePrices();
     })
     .catch(() => { pricesFailed = true; })
-    .finally(() => { pricesLoading = null; if (["varliklar", "ozet", "borclar"].includes(view)) render(); if (els.entrySheet.open) updateEntryForm(); });
+    .finally(() => { pricesLoading = null; if (["varliklar", "ozet", "kartlar"].includes(view)) render(); if (els.entrySheet.open) updateEntryForm(); });
   return pricesLoading;
 }
 
@@ -2450,7 +2662,7 @@ function renderAssets() {
     tile.append(name, el("div", "asset-bal", fmt(t.receivable.total)),
       el("div", "asset-try", [t.receivable.cards > EPS && L("kartını kullananlar"), t.receivable.people > EPS && L("borç verdiğin kişiler"),
         t.receivable.cardCredit > EPS && L("karta fazla ödediğin")].filter(Boolean).join(" · ")));
-    tile.addEventListener("click", () => { debtSide = "receivable"; debtClosedOpen = false; location.hash = "#borclar"; });
+    tile.addEventListener("click", () => showDebts("receivable"));
     els.assetGrid.append(tile);
   }
 
@@ -3358,8 +3570,8 @@ els.debtSideSeg.addEventListener("click", e => {
   render();
 });
 els.trackNoteOk.addEventListener("click", () => { writePref(PREF.trackNotice, "1"); render(); });
-// Özet'teki borç ödemesi satırı ve Varlıklar'daki eşitlik satırı Borçlarım'a götürür (bağlantı: #borclar)
-for (const a of [els.heroDebt, els.assetEq]) a.addEventListener("click", () => { debtSide = "debt"; debtClosedOpen = false; });
+// Özet'teki borç ödemesi satırı ve Varlıklar'daki eşitlik satırı Kartlar'daki Borçlarım'a götürür
+for (const a of [els.heroDebt, els.assetEq]) a.addEventListener("click", e => { e.preventDefault(); showDebts("debt"); });
 els.balanceHintBtn.addEventListener("click", () => openEntrySheet(null, HOME, { desc: L("Açılış bakiyesi"), personId: state.people[0]?.id }));
 
 // ---------- Sheets ----------
@@ -3804,7 +4016,7 @@ async function classifyAfterSave(id) {
   state.installments = state.installments.map(x => (x.id === id ? { ...x, category: r.category, categoryBy: "ai" } : x));
   saveState();
   render();
-  toast(`${cur.desc} · ${K.category(r.category).name}`);
+  toast(`${cur.desc} · ${K.category(r.category).name}`, { wait: true });   // kaydın sonucu ekrandaysa ondan sonra
 }
 
 function collectPurchase() {
@@ -4065,6 +4277,8 @@ els.purchaseForm.addEventListener("submit", e => {
     if (known) Object.assign(p, { category: known, categoryBy: "ai" });
   }
   const id = editingId ?? uid();
+  const adding = !editingId;
+  const totals = adding ? monthTotals() : null;   // ekleme: ayların ödemesi önce → sonra (kaydın sonucu)
   if (editingId) {
     state.installments = state.installments.map(x => (x.id === editingId ? { id: x.id, personId, ...p } : x));
   } else {
@@ -4086,14 +4300,42 @@ els.purchaseForm.addEventListener("submit", e => {
   els.purchaseSheet.close();
   const nudge = !p.category && !YZ.enabled && YZ.mode !== "local" && !aiNudged;
   if (nudge) aiNudged = true;
-  toast((editingId ? L("Harcama güncellendi") : L("Harcama eklendi"))
-    + (p.category ? ` · ${K.category(p.category).name}`
-      : !nudge ? ""
-      : " · " + (YZ.mode === "cloud" ? L("giriş yapınca kategoriler otomatik önerilir") : L("kategori önerisi için Ayarlar → Yapay zekâ"))));
+  const nudgeText = !nudge ? "" : YZ.mode === "cloud" ? L("giriş yapınca kategoriler otomatik önerilir") : L("kategori önerisi için Ayarlar → Yapay zekâ");
+  if (adding) {
+    // Ekleme sessizce kapanmaz: ilk ödeme günü ve ödemesi değişen ayın toplamı önce → sonra (iPhone'daki bant gibi);
+    // yapay zekâ önerisi notu varsa ardından
+    const { title, sub } = saveResult(p, totals);
+    toast(title, { sub });
+    if (nudge) toast(nudgeText.replace(/^./, c => c.toLocaleUpperCase(D.locale())), { wait: true });
+    // iPhone'daki purchase_added ile aynı özellikler (HarcamalarEkrani.swift); "Alabilir miyim?" önizlemesi web'de yok
+    window.Analitik?.event("purchase_added", { installments: p.count, repeat: T.repeats(p), bnpl: !!p.bnpl, bonus: p.bonus ? p.count : 0,
+      cash: !p.cardId, afford_shown: false, source: "web" });
+  } else {
+    toast(L("Harcama güncellendi") + (p.category ? ` · ${K.category(p.category).name}` : nudge ? " · " + nudgeText : ""));
+  }
   editingId = null;
   render();
   classifyAfterSave(id);
 });
+
+// Ayların kart ve nakit ödemeleri (bugünün ayından son ödemeye): ay → toplam
+function monthTotals() {
+  const t = todayIndex(), last = lastPaymentIndex();
+  return new Map((last >= t ? cashflow(t, Math.min(last, t + MAX_MONTHS - 1)) : []).map(m => [m.idx, m.total]));
+}
+
+// Eklenen harcamanın sonucu: "Kaydedildi · ilk ödeme 20 Kas" ve, bu ayın ya da ilk ödemenin düştüğü ayın ödemesi
+// değiştiyse, "Kasım ödemen ₺48.080 → ₺50.480" (before: eklemeden önceki monthTotals)
+function saveResult(p, before) {
+  const first = T.payments(firstOccurrence(p), cardById(p.cardId))[0]?.key;
+  const title = first ? L("Kaydedildi · ilk ödeme {0}", fmtDayShort(first)) : L("Harcama eklendi");
+  const after = monthTotals();
+  const changed = idx => idx != null && Math.abs((after.get(idx) || 0) - (before.get(idx) || 0)) > EPS;
+  const idx = [todayIndex(), first ? T.parseDate(first).idx : null].find(changed);
+  const sub = idx == null ? null
+    : L("{0} ödemen {1} → {2}", T.monthName(idx), fmtWhole(before.get(idx) || 0), fmtWhole(after.get(idx) || 0));
+  return { title, sub };
+}
 
 els.purchaseCopy.addEventListener("click", () => {
   const p = state.installments.find(x => x.id === editingId);
@@ -4125,7 +4367,7 @@ confirmTap(els.purchaseDelete, () => {
 
 for (const b of document.querySelectorAll("[data-add-purchase]")) {
   b.addEventListener("click", () => (view === "varliklar" ? openEntrySheet()
-    : view === "borclar" ? openDebtSheet(null, { type: debtSide === "debt" ? "borrowed" : "lent" })
+    : view === "kartlar" ? openDebtSheet(null, { type: debtSide === "debt" ? "borrowed" : "lent" })
     : openPurchaseSheet()));
 }
 
@@ -4527,14 +4769,11 @@ els.cardPaysLink.addEventListener("click", () => {
   openPaySheet({ cardId: id });
 });
 
-// Kartın borcu Borçlar'da: Borçlarım'da kartın satırına kaydırılır
+// Kartın borcu: Kartlar'daki Borçlarım'da kartın satırına kaydırılır
 els.cardDebtLink.addEventListener("click", () => {
   const id = editingCardId;
   els.cardSheet.close();
-  debtSide = "debt";
-  debtClosedOpen = false;
-  pendingScroll = `debt-card-${id}`;
-  if (view === "borclar") render(); else location.hash = "#borclar";
+  showDebts("debt", `debt-card-${id}`);
 });
 
 // ---------- Varlık girişi formu ----------
@@ -6341,6 +6580,7 @@ function fillCountries(select, selected) {
 }
 fillCountries(els.countrySelect, currentCountry());
 fillCountries(els.authCountry, guessCountry());
+fillCountries(els.welcomeCountry, guessCountry());   // ilk açılış (sync.js): hesap açmadan başlayanın ülkesi
 els.countrySelect.addEventListener("change", async () => {
   const code = els.countrySelect.value;
   try {
@@ -6574,6 +6814,7 @@ async function importExcel(file) {
 
 // ---------- Navigation ----------
 window.addEventListener("hashchange", () => {
+  followAlias();
   const next = viewFromHash();
   if (next !== view) {
     view = next;
@@ -6640,6 +6881,13 @@ els.timelineStart.addEventListener("change", () => {
   render();
 });
 
+els.purchaseMode.addEventListener("click", e => {
+  const mode = e.target.closest("button")?.dataset.mode;
+  if (!mode || mode === purchaseMode) return;
+  purchaseMode = mode;
+  render();
+});
+
 els.purchaseSort.addEventListener("change", () => {
   purchaseSort = els.purchaseSort.value;
   writePref(PREF.purchaseSort, purchaseSort);
@@ -6666,7 +6914,8 @@ let resizeFrame = 0;
 window.addEventListener("resize", () => {
   cancelAnimationFrame(resizeFrame);
   resizeFrame = requestAnimationFrame(() => {
-    if (view === "ozet") { renderChart(chartMonths); renderCash(); }
+    if (view === "ozet" && !els.cashPanel.hidden) renderCash();
+    if (view === "akis") renderChart(chartMonths);
     if (view === "varliklar") renderAssetChart(entryFilter);
   });
 });
@@ -6787,6 +7036,7 @@ document.addEventListener("visibilitychange", () => {
 
 // Girişsiz veride kartlar açılışta takibe girer (oturum açıksa hesabın verisi eşitlemeden sonra, onSynced'de)
 if (!stateOwner) ensureCardTracking();
+followAlias();
 render();
 window.Analitik?.event("app_opened", { signed_in: !!window.CF_USER_ID });
 window.Analitik?.loadFlags();

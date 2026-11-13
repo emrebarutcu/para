@@ -9,8 +9,8 @@
   let onSyncedCb = null;
   let inboxChannel = null;
   let dataChannel = null;
-  let welcome = false;
-  let loginFor = null;   // onAuthLogin'in çağrıldığı kullanıcı   // ilk açılıştaki giriş penceresi: kapatılamaz, "Çevrimdışı devam et" ile geçilir
+  let welcome = false;   // ilk açılış penceresi: kapatılamaz; "Hesap açmadan başla" ile ya da giriş yapınca geçilir
+  let loginFor = null;   // onAuthLogin'in çağrıldığı kullanıcı
 
   // Görünen metinler (dil.js): tarayıcı Türkçe değilse İngilizcesi; sözlüğü dil-sayfa.js bu betikten önce yükler
   const L = window.Dil.t;
@@ -23,10 +23,13 @@
 
   // ── Modal helpers — IIFE scope so onAuthStateChange can reach them ──────────
   function showView(id) {
-    ['authLoginForm','authForgotForm','authResetForm','authLoggedIn'].forEach(v => {
+    ['authWelcome','authLoginForm','authForgotForm','authResetForm','authLoggedIn'].forEach(v => {
       const el = document.getElementById(v);
       if (el) v === id ? el.removeAttribute('hidden') : el.setAttribute('hidden', '');
     });
+    // Karşılamanın kendi başlığı var; pencerenin başlık satırı (ad ve kapat) yalnızca diğer görünümlerde
+    document.getElementById('authHead')?.toggleAttribute('hidden', id === 'authWelcome');
+    document.getElementById('authModal')?.querySelector('.modal-box')?.setAttribute('aria-labelledby', id === 'authWelcome' ? 'welcomeTitle' : 'authTitle');
   }
 
   function openModal() {
@@ -50,32 +53,35 @@
     setWelcome(false);
   }
 
+  // İlk açılış penceresi iki görünümdür: karşılama (authWelcome: ne işe yaradığı, ülke, "Hesap açmadan başla") ve
+  // "Hesabım var, giriş yap" ile açılan giriş / kayıt formu ("← Geri" ile karşılamaya dönülür). İkisi de kapatılamaz.
   function setWelcome(on) {
     welcome = on;
     const title = document.getElementById('authTitle');
     if (title) title.textContent = on ? L('CashFollow\'a hoş geldin') : L('Bulut senkronizasyonu');
     document.getElementById('authClose')?.toggleAttribute('hidden', on);
     document.getElementById('authWelcomeDesc')?.toggleAttribute('hidden', !on);
-    document.getElementById('authOffline')?.toggleAttribute('hidden', !on);
+    document.getElementById('authBackBtn')?.toggleAttribute('hidden', !on);
     showCountry();
   }
 
-  // Ülke seçimi: kayıtta ve ilk açılışta (çevrimdışı devam edene de); ana para birimi ondan (para.js)
+  // Ülke seçimi: ilk açılışta karşılamada (hesap açmadan başlayana da), kayıtta formda; ana para birimi ondan (para.js)
   let authModeNow = 'login';
   function showCountry() {
-    document.getElementById('authCountry')?.toggleAttribute('hidden', !(welcome || authModeNow === 'register'));
+    document.getElementById('authCountry')?.toggleAttribute('hidden', authModeNow !== 'register');
     document.getElementById('authLegal')?.toggleAttribute('hidden', authModeNow !== 'register');
   }
 
-  // Giriş yapılmamış ve çevrimdışı devam seçilmemişse giriş / kayıt penceresi açılır
+  // Giriş yapılmamış ve hesap açmadan başlamak seçilmemişse karşılama açılır: önce ne işe yaradığı ve hesapsız yol
   function maybeWelcome() {
     if (user || hasStoredSession()) return;
     try { if (localStorage.getItem(OFFLINE_PREF)) return; } catch { return; }
     const modal = document.getElementById('authModal');
     if (!modal || !modal.hidden) return;
-    showView('authLoginForm');
     setWelcome(true);
+    showView('authWelcome');
     modal.removeAttribute('hidden');
+    document.getElementById('authOfflineBtn')?.focus();
   }
 
   // Ağ yokken süresi dolmuş oturum yenilenemez ve getSession boş döner; kayıtlı oturum varsa kullanıcı girişsiz sayılmaz
@@ -142,7 +148,8 @@
       window.CF_USER_ID = user?.id || null;
       renderBtn(user);
       if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
-        if (event === 'SIGNED_IN' && !document.getElementById('authLoginForm')?.hidden) closeModal();
+        // Giriş formu ya da karşılama açıksa pencere kapanır (başka sekmede giriş yapıldıysa karşılama da)
+        if (event === 'SIGNED_IN' && (welcome || !document.getElementById('authLoginForm')?.hidden)) closeModal();
         // Aynı oturum için bir kez: SIGNED_IN sekme öne gelince de gelir, şifre sıfırlama bağlantısı yalnızca PASSWORD_RECOVERY verir
         if (loginFor !== user.id) {
           loginFor = user.id;
@@ -497,12 +504,23 @@
     document.getElementById('authOverlay')?.addEventListener('click', () => { if (!welcome) closeModal(); });
     document.getElementById('authClose')?.addEventListener('click', closeModal);
     document.getElementById('offlineLoginBtn')?.addEventListener('click', openModal);
+    // Hesap açmadan başla: ülke cihaza yazılır, pencere kapanır; Özet'te "Başlarken" karşılar (app.js)
     document.getElementById('authOfflineBtn')?.addEventListener('click', () => {
       try { localStorage.setItem(OFFLINE_PREF, '1'); } catch {}
-      const country = document.getElementById('authCountry')?.value;
+      const country = document.getElementById('welcomeCountry')?.value;
       if (country) window.setCountry?.(country);
+      window.Analitik?.event('started_without_account', { country: country || 'TR', source: 'welcome' });
       closeModal();
     });
+    // Hesabım var: giriş / kayıt formu; karşılamada seçilen ülke kayıt formuna taşınır
+    document.getElementById('authHaveBtn')?.addEventListener('click', () => {
+      const country = document.getElementById('welcomeCountry')?.value;
+      const select = document.getElementById('authCountry');
+      if (country && select) select.value = country;
+      showView('authLoginForm');
+      document.getElementById('authEmail')?.focus();
+    });
+    document.getElementById('authBackBtn')?.addEventListener('click', () => showView('authWelcome'));
 
     // Giriş / Kayıt tabs
     document.querySelectorAll('.auth-tab').forEach(tab => {

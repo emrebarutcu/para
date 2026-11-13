@@ -329,7 +329,7 @@ a { color: inherit; }
   left: 0; right: 0; bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--surface) 86%, transparent);
   backdrop-filter: saturate(1.6) blur(18px);
@@ -352,7 +352,7 @@ a { color: inherit; }
 .tabs a .ic { width: 22px; height: 22px; }
 .tabs a.active { color: var(--text); }
 .tabs a.active .ic { stroke-width: 2.1; }
-/* Altı sekme dar ekranda sığsın: hücre küçülebilir, ad sığmazsa üç noktayla biter; "Harcamalar" mobilde kısa */
+/* Beş sekme dar ekranda sığsın: hücre küçülebilir, ad sığmazsa üç noktayla biter; "Harcamalar" mobilde kısa */
 .tabs a { min-width: 0; }
 .tabs a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tabs .tab-l { display: none; }
@@ -1292,6 +1292,9 @@ a.btn { text-decoration: none; }
   animation: toast .22s ease;
   white-space: nowrap;
 }
+/* İki satırlı sonuç (harcama eklendi): "Kaydedildi · ilk ödeme 20 Kas" ve altında ayın ödemesi önce → sonra */
+.toast.two { display: flex; flex-direction: column; gap: 1px; width: max-content; max-width: calc(100vw - 24px); border-radius: 18px; white-space: normal; }
+.toast small { font-size: 13px; font-weight: 500; opacity: .78; font-variant-numeric: tabular-nums; }
 @keyframes toast { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 /* ── Auth modal (sync.js) ── */
@@ -1339,9 +1342,18 @@ a.btn { text-decoration: none; }
 .move-actions { display: flex; flex-direction: column; gap: 8px; }
 .move-actions .row-btn:disabled { opacity: .6; cursor: progress; }
 #moveDropBtn > .ic { color: var(--danger); }
-.auth-offline { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.auth-offline small { font-size: 12px; color: var(--text-3); }
-.auth-offline .auth-forgot { text-decoration: underline; text-underline-offset: 3px; }
+/* İlk açılış (karşılama): önce ne işe yaradığı ve hesapsız yol; giriş / kayıt "Hesabım var, giriş yap" ile */
+.welcome { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.welcome .logo { width: 44px; height: 44px; border-radius: 14px; }
+.welcome .logo-mark { width: 36px; height: 36px; }
+.welcome-title { font-size: 24px; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; margin-top: 4px; }
+.welcome .modal-desc { margin: 0; font-size: 15px; }
+.welcome-trust { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-3); }
+.welcome-trust .ic { width: 15px; height: 15px; }
+.welcome-country { margin: 4px 0 2px; }
+.welcome .btn { height: 48px; font-size: 15px; }
+.welcome-note { font-size: 12px; color: var(--text-3); text-align: center; }
+.auth-back { display: block; margin-top: 4px; }
 
 /* ── Yapay zekâ erişim izni (oauth/consent.html) ── */
 .consent-page { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
@@ -1447,7 +1459,7 @@ a.btn { text-decoration: none; }
   .toast { bottom: 28px; }
 }
 
-/* Altı sekme başlıkta: dar masaüstünde marka adı gizlenir, sekmeler sıkışır */
+/* Beş sekme başlıkta: dar masaüstünde marka adı gizlenir, sekmeler sıkışır */
 @media (min-width: 900px) and (max-width: 1099px) {
   .brand-name { display: none; }
   .tabs a { padding: 7px 10px; gap: 6px; }
@@ -1642,7 +1654,9 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .rep-times .inline-input { align-self: flex-start; }
 
 /* ── Borçlar ── */
-.hero-stats > div { display: flex; flex-direction: column; justify-content: space-between; }   /* iki satırlık etikette tutarlar hizalı */
+/* İki satırlık etikette tutarlar hizalı: etiket üstte, tutar (ve altındaki fark satırı) altta */
+.hero-stats > div { display: flex; flex-direction: column; }
+.hero-stats dt { margin-bottom: auto; padding-bottom: 3px; }
 .debt-groups { display: flex; flex-direction: column; gap: 18px; }
 .debt-group > .panel-head { padding: 0 4px; }
 .debt-group > .panel-head .panel-note { font-variant-numeric: tabular-nums; }
@@ -1828,3 +1842,78 @@ a.hero-eq { display: block; width: fit-content; }
 .flow > .premium-lock, #cardGrid > .premium-lock { grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
 #peopleLock .premium-lock, #assetLock .premium-lock { padding-top: 8px; }
 .insights li:has(> .premium-lock) { list-style: none; }
+
+/* ── Başlarken (Özet): yeni kullanıcının üç adımı; yapılan işaretli ve üstü çizili ── */
+.start-desc { margin: -4px 0 4px; font-size: 14px; color: var(--text-2); }
+.start-steps { list-style: none; margin: 0; padding: 0; }
+.start-steps li + li { border-top: 1px solid var(--line); }
+.start-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+}
+.start-step:disabled { cursor: default; }
+.start-step > .ic { width: 16px; height: 16px; color: var(--text-3); }
+.start-step:hover:not(:disabled) > .ic { color: var(--text); }
+.start-no {
+  width: 30px; height: 30px;
+  flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 14px;
+  font-weight: 700;
+}
+.start-no .ic { width: 16px; height: 16px; stroke-width: 2.6; }
+.start-step.done .start-no { background: var(--ok); color: var(--surface); }
+.start-step.done .row-text strong { color: var(--text-3); text-decoration: line-through; }
+
+/* ── Özet'in tepesi: ayın ilerlemesi (ödenen kısım "iyi" yeşiliyle) ve sonraki ayın farkı ── */
+.hero-progress { display: flex; flex-direction: column; gap: 7px; margin: -4px 0 16px; }
+.hero-progress .bar { flex: none; width: 100%; max-width: none; height: 6px; }
+.hero-progress .bar > span { background: var(--ok); }
+.hero-progress-text { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.hero-progress-text span { white-space: nowrap; }
+.hero-progress-text .paid { font-weight: 600; color: var(--text); }
+.hero-progress-text .done { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--ok); }
+.hero-progress-text .done .ic { width: 16px; height: 16px; }
+.hero-stats dd.hero-diff { display: flex; align-items: center; gap: 3px; margin-top: 2px; font-size: 12px; line-height: 16px; letter-spacing: 0; color: var(--text-3); }
+.hero-stats dd.hero-diff.down { color: var(--ok); }
+.hero-diff .ic { width: 13px; height: 13px; stroke-width: 2.3; }
+/* Fark satırı yalnızca ilk kutuda: diğer kutuların tutarı onunla aynı hizada kalsın */
+.hero-stats.has-diff > div:not(:first-child) { padding-bottom: 18px; }
+
+/* ── Nakit: altta nakit sayılanlar ve "Değiştir"; grafiğin açıklaması "?" ile açılır ── */
+.help-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px; height: 28px;
+  margin-block: -6px;
+  margin-inline-start: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  vertical-align: middle;
+}
+.help-btn:hover, .help-btn[aria-expanded="true"] { color: var(--text); }
+.help-btn .ic { width: 17px; height: 17px; }
+.cash-panel #cashHelp { margin-top: 6px; }
+
+/* ── Akış: ödeme planının başlığı (Liste / Tablo); Harcamalar → Kategoriler ── */
+.flow-plan { display: flex; flex-direction: column; }
+.flow-plan > .panel-head { padding: 0 4px; }
+.cat-panel .panel-head { flex-wrap: wrap; }
+.cat-panel .panel-note { font-variant-numeric: tabular-nums; }
+
+/* ── Kartlar ve borçlar: borçlar bölümü (eski Borçlar sekmesi; #borclar buraya kaydırır) ── */
+.debt-section { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 76px; }
+@media (min-width: 900px) { .debt-section { gap: 20px; } }
