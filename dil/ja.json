@@ -1515,5 +1515,9 @@
  "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "無料版：カード{0}枚、メンバー{1}人。Premiumなら、AIアシスタント（Claude、ChatGPT）、カードとメンバーの無制限、キャッシュフロー、「買えるかな？」、インサイト、純資産の推移が使えます。",
  "Ay sonunda {0} serbest kalıyor": "月末に{0}が自由に使える見込みです",
  "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Excelの各シートが1人に対応します。無料版は最大{0}人までです。それ以上はCashFollow Premiumが必要です（iPhoneアプリで購入）。",
- "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Premiumがない場合、アシスタントはサマリー（今月の支払い額と今後の支払い）の読み取りのみできます。記録の追加やその他の機能にはCashFollow Premiumが必要です。PremiumはiPhoneアプリで入手できます（設定 → CashFollow Premium）。"
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Premiumがない場合、アシスタントはサマリー（今月の支払い額と今後の支払い）の読み取りのみできます。記録の追加やその他の機能にはCashFollow Premiumが必要です。PremiumはiPhoneアプリで入手できます（設定 → CashFollow Premium）。",
+ "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "アプリはロックされています。金額を見るにはCashFollowを開いてください。",
+ "Bu ay ödemen yok.": "今月の支払いはありません。",
+ "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "今月の支払いは{0}です。支払い済み{1}、残り{2}。",
+ "Bu ay {0} ödenecek.": "今月の支払いは{0}です。"
 }

@@ -1515,5 +1515,9 @@
  "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Versione gratuita: {0} carte, {1} persone. Premium aggiunge l'assistente IA (Claude, ChatGPT), carte e persone illimitate, Flusso di cassa, Posso permettermelo?, approfondimenti e patrimonio netto nel tempo.",
  "Ay sonunda {0} serbest kalıyor": "A fine mese restano liberi {0}",
  "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Ogni foglio del file Excel è una persona. La versione gratuita consente fino a {0} persone; per averne di più serve CashFollow Premium (si acquista nell'app per iPhone).",
- "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Senza Premium l'assistente può leggere solo il tuo riepilogo: quanto è dovuto questo mese e i prossimi pagamenti. Per aggiungere registrazioni e per tutto il resto serve CashFollow Premium. Puoi ottenere Premium nell'app per iPhone (Impostazioni → CashFollow Premium)."
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Senza Premium l'assistente può leggere solo il tuo riepilogo: quanto è dovuto questo mese e i prossimi pagamenti. Per aggiungere registrazioni e per tutto il resto serve CashFollow Premium. Puoi ottenere Premium nell'app per iPhone (Impostazioni → CashFollow Premium).",
+ "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "L'app è bloccata: apri CashFollow per vedere l'importo.",
+ "Bu ay ödemen yok.": "Questo mese non hai pagamenti.",
+ "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "Questo mese sono dovuti {0}: {1} pagati, {2} restanti.",
+ "Bu ay {0} ödenecek.": "Questo mese sono dovuti {0}."
 }

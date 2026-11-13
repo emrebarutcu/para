@@ -52,6 +52,7 @@ struct CashFollowApp: App {
 struct AnaEkran: View {
     @EnvironmentObject private var model: Model
     @State private var sekme = Ornek.sekme
+    @State private var kisayol: KisayolHarcamasi?
 
     var body: some View {
         Group {
@@ -77,6 +78,12 @@ struct AnaEkran: View {
             sekme = yeni
             Yonlendirici.shared.sekme = nil
         }
+        // "Harcama ekle" kısayolu: form verilen tutar, ad ve taksitle açılır (karşılama sürerken açılmaz)
+        .onReceive(Yonlendirici.shared.$harcama.compactMap { $0 }) { taslak in
+            Yonlendirici.shared.harcama = nil
+            if !model.showWelcome { kisayol = taslak }
+        }
+        .sheet(item: $kisayol) { HarcamaFormu(kisayol: $0) }
         // İlk açılış: yeni kullanıcıya karşılama akışı (KarsilamaEkrani), daha önce kullanmış olana giriş ekranı
         .fullScreenCover(isPresented: $model.showWelcome) {
             KarsilamaKapisi()

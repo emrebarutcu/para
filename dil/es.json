@@ -1515,5 +1515,9 @@
  "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Versión gratuita: {0} tarjetas, {1} personas. Premium añade el asistente de IA (Claude, ChatGPT), tarjetas y personas ilimitadas, Flujo de caja, ¿Me lo puedo permitir?, consejos y patrimonio neto en el tiempo.",
  "Ay sonunda {0} serbest kalıyor": "A fin de mes quedan {0} libres",
  "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Cada hoja del Excel es una persona. La versión gratuita permite hasta {0} personas; para más necesitas CashFollow Premium (se compra en la app de iPhone).",
- "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Sin Premium, el asistente solo puede leer tu resumen: lo que vence este mes y los próximos pagos. Para añadir registros y todo lo demás hace falta CashFollow Premium. Puedes conseguir Premium en la app de iPhone (Ajustes → CashFollow Premium)."
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Sin Premium, el asistente solo puede leer tu resumen: lo que vence este mes y los próximos pagos. Para añadir registros y todo lo demás hace falta CashFollow Premium. Puedes conseguir Premium en la app de iPhone (Ajustes → CashFollow Premium).",
+ "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "La app está bloqueada: abre CashFollow para ver el importe.",
+ "Bu ay ödemen yok.": "No tienes pagos este mes.",
+ "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "Este mes vencen {0}: {1} pagados, quedan {2}.",
+ "Bu ay {0} ödenecek.": "Este mes vencen {0}."
 }

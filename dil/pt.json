@@ -1515,5 +1515,9 @@
  "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Versão grátis: {0} cartões, {1} pessoas. O Premium inclui o assistente de IA (Claude, ChatGPT), cartões e pessoas ilimitados, Fluxo de caixa, Cabe no bolso?, insights e patrimônio líquido ao longo do tempo.",
  "Ay sonunda {0} serbest kalıyor": "Sobram {0} livres no fim do mês",
  "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Cada planilha do Excel é uma pessoa. A versão gratuita permite até {0} pessoas; mais do que isso exige o CashFollow Premium (comprado no app para iPhone).",
- "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Sem o Premium, o assistente só consegue ler o seu resumo: o que vence este mês e os próximos pagamentos. Adicionar registros e todo o resto exigem o CashFollow Premium. Você pode assinar o Premium no app para iPhone (Ajustes → CashFollow Premium)."
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Sem o Premium, o assistente só consegue ler o seu resumo: o que vence este mês e os próximos pagamentos. Adicionar registros e todo o resto exigem o CashFollow Premium. Você pode assinar o Premium no app para iPhone (Ajustes → CashFollow Premium).",
+ "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "O app está bloqueado: abra o CashFollow para ver o valor.",
+ "Bu ay ödemen yok.": "Você não tem pagamentos este mês.",
+ "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "Este mês vencem {0}: {1} pagos, faltam {2}.",
+ "Bu ay {0} ödenecek.": "Este mês vencem {0}."
 }

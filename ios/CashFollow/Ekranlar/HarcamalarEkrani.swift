@@ -489,6 +489,7 @@ struct HarcamaFormu: View {
     var eposta: Eposta? = nil   // onay bekleyen banka e-postasından önceden doldurulur
     var yine: Harcama? = nil    // "Yine": bu harcamanın adı, tutarı, kartı, taksidi ve kategorisiyle; tarih bugün
     var isyeri: Isyeri? = nil   // + düğmesindeki son işyeri: adı, kartı, taksidi ve kategorisi dolu; tutar yazılır
+    var kisayol: KisayolHarcamasi? = nil   // "Harcama ekle" kısayolu (Kisayollar.swift): verilen tutar, ad ve taksit dolu
     @AppStorage("harcama.sonKart") private var sonKart = ""
     @AppStorage("harcama.sonBnpl") private var sonBnpl = "klarna"
     @State private var bnpl = false            // Pay in 4: 4 ödeme, 2 haftada bir (ülkede varsa; para.js features)
@@ -792,7 +793,14 @@ struct HarcamaFormu: View {
             if let e = eposta { doldur(e); kaynak = "email" }
             else if let y = yine { doldur(yine: y) }
             else if let m = isyeri { uygula(m); tutarOdak = true }
-            else if let o = ornek { amount = o.tutar; desc = o.ad; count = o.taksit } else { tutarOdak = true }
+            else if let o = ornek { amount = o.tutar; desc = o.ad; count = o.taksit }
+            else if let k = kisayol {
+                if let t = k.tutar, t > 0 { amount = t.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2))) }
+                desc = k.ad ?? ""
+                count = min(max(k.taksit ?? 1, 1), 60)
+                kaynak = "shortcut"
+                if amount.isEmpty { tutarOdak = true }
+            } else { tutarOdak = true }
             taksitli = count > 1
         }
         yuklendi = true

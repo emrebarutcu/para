@@ -102,7 +102,7 @@ etkileri önce / sonra kohortlarıyla okunur.
    - 10 kayıttan sonra ya da 7. gün yedekleme önerisi.
 7. **Nakit açığı uyarısı:** bakiye sıfırın altına düşecekse iki gün önce bildirim, ayda en fazla bir kez
    (`Motor.cash`).
-8. **App Intents / Kısayollar:** "Bu ay ne ödeyeceğim?" ve "Harcama ekle". Siri, Spotlight, eylem düğmesi ve Cüzdan
+8. **App Intents / Kısayollar** (yapıldı, 1.2.0): "Bu ay ne ödeyeceğim?" ve "Harcama ekle". Siri, Spotlight, eylem düğmesi ve Cüzdan
    otomasyonu buradan gelir.
 9. **Web eşitliği:** ✓ (1.1.0)
    - Başlarken paneli;

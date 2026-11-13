@@ -1,0 +1,5 @@
+/* Siri cümleleri (Uygulama/Kisayollar.swift → CashFollowKisayollari); anahtar Türkçe cümle */
+"${applicationName} bu ay ne ödeyeceğim" = "What will I pay this month in ${applicationName}";
+"${applicationName} ile bu ayın ödemesi" = "${applicationName} payments this month";
+"${applicationName} ile harcama ekle" = "Add a purchase in ${applicationName}";
+"${applicationName} harcama ekle" = "${applicationName} add purchase";

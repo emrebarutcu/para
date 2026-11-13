@@ -1515,5 +1515,9 @@
  "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Version gratuite : {0} cartes, {1} personnes. Premium ajoute l'assistant IA (Claude, ChatGPT), cartes et personnes illimitées, Trésorerie, Puis-je me le permettre ?, analyses et évolution du patrimoine net.",
  "Ay sonunda {0} serbest kalıyor": "Il reste {0} de libre à la fin du mois",
  "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Chaque feuille du fichier Excel est une personne. La version gratuite permet jusqu'à {0} personnes ; au-delà, il faut CashFollow Premium (achat dans l'app iPhone).",
- "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Sans Premium, l'assistant ne peut lire que votre résumé : ce qui est dû ce mois-ci et les prochains paiements. L'ajout d'opérations et tout le reste nécessitent CashFollow Premium. Vous pouvez obtenir Premium dans l'app iPhone (Réglages → CashFollow Premium)."
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Sans Premium, l'assistant ne peut lire que votre résumé : ce qui est dû ce mois-ci et les prochains paiements. L'ajout d'opérations et tout le reste nécessitent CashFollow Premium. Vous pouvez obtenir Premium dans l'app iPhone (Réglages → CashFollow Premium).",
+ "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "L'app est verrouillée : ouvrez CashFollow pour voir le montant.",
+ "Bu ay ödemen yok.": "Rien à payer ce mois-ci.",
+ "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "{0} à payer ce mois-ci : {1} payés, {2} restants.",
+ "Bu ay {0} ödenecek.": "{0} à payer ce mois-ci."
 }

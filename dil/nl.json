@@ -1515,5 +1515,9 @@
  "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Gratis versie: {0} kaarten, {1} personen. Premium voegt de AI-assistent (Claude, ChatGPT), onbeperkt kaarten en personen, Cashflow, Kan ik het betalen?, inzichten en nettovermogen in de tijd toe.",
  "Ay sonunda {0} serbest kalıyor": "Eind van de maand blijft {0} vrij over",
  "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Elk blad in het Excel-bestand is een persoon. De gratis versie staat maximaal {0} personen toe; voor meer heb je CashFollow Premium nodig (te koop in de iPhone-app).",
- "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Zonder Premium kan de assistent alleen je overzicht lezen: wat je deze maand moet betalen en de komende betalingen. Voor het toevoegen van gegevens en al het andere heb je CashFollow Premium nodig. Je kunt Premium nemen in de iPhone-app (Instellingen → CashFollow Premium)."
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Zonder Premium kan de assistent alleen je overzicht lezen: wat je deze maand moet betalen en de komende betalingen. Voor het toevoegen van gegevens en al het andere heb je CashFollow Premium nodig. Je kunt Premium nemen in de iPhone-app (Instellingen → CashFollow Premium).",
+ "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "De app is vergrendeld: open CashFollow om het bedrag te zien.",
+ "Bu ay ödemen yok.": "Deze maand hoef je niets te betalen.",
+ "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "Deze maand te betalen: {0}. Betaald {1}, nog {2}.",
+ "Bu ay {0} ödenecek.": "Deze maand te betalen: {0}."
 }

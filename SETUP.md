@@ -447,11 +447,14 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
   `inbox_card_assigned` (`set_last4`: son 4 hane karta yazıldı mı), `inbox_notifications` (`enabled`).
 - Kayıt, bildirim ve geri dönüş (iPhone; ürün çalışmasının ölçüleri): `purchase_added` olayında `source` kaydın nereden
-  geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email`: onay bekleyen banka e-postası;
+  geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email`: onay bekleyen banka e-postası,
+  `shortcut`: "Harcama ekle" kısayolu;
   web'de `web`) — otomatik ve yarı otomatik kaydın payı bununla, kayıt süresi `add_opened` ile `purchase_added` arasından
   ölçülür. `merchant_suggestion_used` (öneriye dokunuldu), `notification_opened` (`kind`: payment, cutoff,
   installment_finished, month_summary, inbox), `installment_finished_shown` (kutlama kartı ilk kez göründü; `count`),
-  `month_summary_opened` (`source`: overview, notification), `month_summary_shared`.
+  `month_summary_opened` (`source`: overview, notification), `month_summary_shared`. Kısayollar (App Intents,
+  `Uygulama/Kisayollar.swift`): `shortcut_run` (`intent`: add_purchase, due_this_month); tepedeki iyi haber satırı
+  açılınca `insight_headline_opened` (`id`).
 - Karşılama: A/B denemesi yok (Kasım 2026 kararı; kol başına ~2.900 kurulum gerekiyordu). Her yeni kurulum yeni akışı
   görür, `onboarding_flow` bayrağı okunmaz; olaylarda `variant: default`. Etki önce / sonra kohortlarıyla ölçülür:
   birincil ölçü ilk hafta geri dönüş (1–7. günde `app_opened`), etkinleşme ikincil (akış kartı ve harcamayı kendisi

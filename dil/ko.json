@@ -1515,5 +1515,9 @@
  "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "무료 버전: 카드 {0}장, 사람 {1}명. Premium에서는 AI 어시스턴트(Claude, ChatGPT), 카드와 사람 무제한, 현금 흐름, 살 수 있을까요?, 인사이트, 순자산 추이를 이용할 수 있어요.",
  "Ay sonunda {0} serbest kalıyor": "월말에 {0}이(가) 여유로 남아요",
  "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Excel의 각 시트는 한 사람입니다. 무료 버전은 최대 {0}명까지이며, 그 이상은 CashFollow Premium이 필요합니다(iPhone 앱에서 구입).",
- "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Premium이 없으면 어시스턴트는 요약(이번 달 결제 금액과 다가오는 결제)만 읽을 수 있어요. 기록 추가와 그 밖의 기능은 CashFollow Premium이 필요해요. Premium은 iPhone 앱에서 구독할 수 있어요 (설정 → CashFollow Premium)."
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Premium이 없으면 어시스턴트는 요약(이번 달 결제 금액과 다가오는 결제)만 읽을 수 있어요. 기록 추가와 그 밖의 기능은 CashFollow Premium이 필요해요. Premium은 iPhone 앱에서 구독할 수 있어요 (설정 → CashFollow Premium).",
+ "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "앱이 잠겨 있어요. 금액을 보려면 CashFollow를 여세요.",
+ "Bu ay ödemen yok.": "이번 달에는 결제할 금액이 없어요.",
+ "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "이번 달 결제 금액은 {0}이에요. {1} 결제 완료, {2} 남음.",
+ "Bu ay {0} ödenecek.": "이번 달 결제 금액은 {0}이에요."
 }

@@ -1515,5 +1515,9 @@
  "Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.": "Gratisversion: {0} Karten, {1} Personen. Premium bietet den KI-Assistenten (Claude, ChatGPT), unbegrenzt Karten und Personen, Cashflow, Kann ich mir das leisten?, Einblicke und Nettovermögen im Verlauf.",
  "Ay sonunda {0} serbest kalıyor": "Am Monatsende bleiben {0} frei",
  "Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).": "Jedes Blatt der Excel-Datei ist eine Person. Die kostenlose Version erlaubt bis zu {0} Personen; für mehr brauchst du CashFollow Premium (Kauf in der iPhone-App).",
- "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Ohne Premium kann der Assistent nur deine Übersicht lesen: was diesen Monat fällig ist und die nächsten Zahlungen. Für das Hinzufügen von Einträgen und alles Weitere brauchst du CashFollow Premium. Premium bekommst du in der iPhone-App (Einstellungen → CashFollow Premium)."
+ "Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).": "Ohne Premium kann der Assistent nur deine Übersicht lesen: was diesen Monat fällig ist und die nächsten Zahlungen. Für das Hinzufügen von Einträgen und alles Weitere brauchst du CashFollow Premium. Premium bekommst du in der iPhone-App (Einstellungen → CashFollow Premium).",
+ "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "Die App ist gesperrt: Öffne CashFollow, um den Betrag zu sehen.",
+ "Bu ay ödemen yok.": "Diesen Monat ist nichts fällig.",
+ "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "Diesen Monat sind {0} fällig: {1} bezahlt, {2} offen.",
+ "Bu ay {0} ödenecek.": "Diesen Monat sind {0} fällig."
 }
