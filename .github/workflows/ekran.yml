@@ -102,15 +102,25 @@ jobs:
           # her abonelik için istediği görüntü
           tur en-ucretsiz- light galeri7,galeri8,sekme0,sekme1 -ucretsiz -ulke US $EN
           tur ucretsiz- light galeri7 -ucretsiz $TR
-          # Mağaza görüntüleri (-vitrin): üstte tek cümlelik başlık, altında ekran; mağazadaki her dilde, o ülkenin para
-          # birimiyle (magaza/ayarlar.json → ekranlar; Ornek.swift Vitrin). Önek: vitrin- Türkçe, <dil>-vitrin- ötekiler
+          # Mağaza görüntüleri (vitrin): üstte tek cümlelik başlık, altında ekran bir telefonun içinde; mağazadaki her
+          # dilde, o ülkenin para birimiyle (magaza/ayarlar.json → ekranlar; Ornek.swift Vitrin). İki geçiş: önce ekranların
+          # kendisi çekilir ve uygulamanın Documents/vitrin klasörüne konur, sonra -vitrin turu başlıklı hâlini çizer.
+          # Önek: vitrin- Türkçe, <dil>-vitrin- ötekiler
           VITRIN=sekme0,galeri3,sekme1,sekme3,sekme2,sekme4
-          tur vitrin- light "$VITRIN" -vitrin $TR
-          tur en-vitrin- light "$VITRIN" -vitrin -ulke US $EN
+          vitrin() {  # önek, uygulama argümanları…
+            vonek=$1; shift
+            tur "ham-$vonek" light "$VITRIN" "$@"
+            mkdir -p "$DATA/Documents/vitrin"
+            for v in $(echo "$VITRIN" | tr ',' ' '); do cp "out/ham-$vonek$v-light.png" "$DATA/Documents/vitrin/$v.png"; done
+            tur "$vonek" light "$VITRIN" -vitrin "$@"
+            rm -f out/ham-*
+          }
+          vitrin vitrin- $TR
+          vitrin en-vitrin- -ulke US $EN
           for satir in "gb GB en en_GB" "de DE de de_DE" "fr FR fr fr_FR" "es ES es es_ES" "it IT it it_IT" \
                        "nl NL nl nl_NL" "ar SA ar ar_SA" "ja JP ja ja_JP"; do
             set -- $satir
-            tur "$1-vitrin-" light "$VITRIN" -vitrin -ulke "$2" -AppleLanguages "($3)" -AppleLocale "$4"
+            vitrin "$1-vitrin-" -ulke "$2" -AppleLanguages "($3)" -AppleLocale "$4"
           done
           # Koyu tema yalnızca elle çalıştırınca istenirse (Actions → Ekran görüntüleri → koyu)
           if [ "${{ inputs.koyu }}" = "true" ]; then tur "" dark "$HEPSI" $TR; fi

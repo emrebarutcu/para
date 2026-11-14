@@ -27,10 +27,13 @@ enum Ornek {
         return a[i + 1].split(separator: ",").map(String.init)
     }
 
-    // "-vitrin": mağaza görüntüleri — turun her adımında üstte tek cümlelik bir başlık, altında ekran bir telefonun
-    // içinde (Vitrin; ekran.yml "vitrin" turları, magaza/ayarlar.json → ekranlar). Başlığı olmayan adım olduğu gibi
-    // çekilir. Başlıktaki "|" satırın bölüneceği yerdir: her dilin çevirisi kendi yerini verir (son satırda tek sözcük
-    // kalmasın; Japoncada sözcük arası boşluk yok). Bir satır 22 harfi geçmezse yazı küçülmez.
+    // "-vitrin": mağaza görüntüleri — turun her adımı üstte tek cümlelik bir başlık, altında o ekranın görüntüsü bir
+    // telefonun içinde (Vitrin). İki geçişte çekilir (ekran.yml "vitrin"): önce ekranların kendisi (bayraksız tur), iş
+    // akışı görüntüleri Documents/vitrin/<adım>.png olarak uygulamaya koyar, sonra -vitrin turu başlıklı hâlini çizer.
+    // Ekran canlı küçültülmez: küçültülen gezinme çubuğu sistemin kenar boşluklarını kaybediyor (büyük başlık kenara
+    // yapışıyor); görüntüsü uygulamanın birebir kendisidir. Başlığı olmayan adım olduğu gibi çekilir. Başlıktaki "|"
+    // satırın bölüneceği yerdir: her dilin çevirisi kendi yerini verir (son satırda tek sözcük kalmasın; Japoncada sözcük
+    // arası boşluk yok). Bir satır 22 harfi geçmezse yazı küçülmez.
     static let vitrin = CommandLine.arguments.contains("-vitrin")
     static func vitrinBasligi(_ adim: String) -> String? {
         let b: String
@@ -44,6 +47,10 @@ enum Ornek {
         default: return nil
         }
         return b.replacingOccurrences(of: "|", with: "\n")
+    }
+    static func vitrinGoruntusu(_ adim: String) -> UIImage? {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return UIImage(contentsOfFile: docs.appendingPathComponent("vitrin/\(adim).png").path)
     }
 
     // "-ulke US": örnek veri o ülkede (Türkiye dışında İngilizce adlar, tutarlar dolar ölçeğinde: veriUS)
@@ -282,17 +289,22 @@ struct TurEkrani: View {
         }
         .id(ad.hasPrefix("sekme") ? "sekmeler" : ad)
         Group {
-            // Mağaza görüntüsü: başlığı olan adım başlığıyla ve küçültülmüş ekranla (Vitrin)
-            if Ornek.vitrin, let baslik = Ornek.vitrinBasligi(ad) { Vitrin(baslik: baslik) { ekran } } else { ekran }
+            // Mağaza görüntüsü: başlığı olan adım başlığıyla ve ekranın önceden çekilmiş görüntüsüyle (Vitrin)
+            if Ornek.vitrin, let baslik = Ornek.vitrinBasligi(ad) {
+                Vitrin(baslik: baslik, goruntu: Ornek.vitrinGoruntusu(ad))
+            } else {
+                ekran
+            }
         }
         .task(id: i) { await adim(ad) }
     }
 
     private func adim(_ ad: String) async {
         if ad.hasPrefix("sekme"), let n = Int(ad.dropFirst(5)) { sekme = n }
-        // Çizilsin, veriler (araçlar, grafikler) yüklensin; ilk adımda soğuk başlangıç için biraz daha. Mağaza
-        // görüntülerinde daha uzun: Varlıklar'ın seyri kur geçmişini ağdan okur, 1,2 saniyede her zaman yetişmiyor
-        try? await Task.sleep(for: .milliseconds(Ornek.vitrin ? (ad == "sekme4" ? 4500 : 3000) : i == 0 ? 2500 : 1200))
+        // Çizilsin, veriler (araçlar, grafikler) yüklensin; ilk adımda soğuk başlangıç için biraz daha. Varlıklar'ın
+        // seyri kur geçmişini ağdan okur: 1,2 saniyede her zaman yetişmiyor (grafik yerine yükleniyor işareti çekilmişti)
+        let vitrinde = Ornek.vitrin && Ornek.vitrinBasligi(ad) != nil   // yalnızca hazır bir görüntü çizilir
+        try? await Task.sleep(for: .milliseconds(vitrinde ? (i == 0 ? 1500 : 1000) : ad == "sekme4" ? 4500 : i == 0 ? 2500 : 1200))
         try? ad.write(to: Self.isaret, atomically: true, encoding: .utf8)
         while FileManager.default.fileExists(atPath: Self.isaret.path) {
             try? await Task.sleep(for: .milliseconds(100))
@@ -301,14 +313,12 @@ struct TurEkrani: View {
     }
 }
 
-// Mağaza görüntüsü (-vitrin): koyu zeminde üstte tek cümlelik başlık, altında ekran bir telefonun içinde küçültülmüş
-// (kenarlı, köşeleri yuvarlak; saat ve pil çizimdir). Uygulamanın kendi çizimi olduğu için her dilde ve yazıda (Arapça,
-// Japonca) doğru dizilir; ayrı bir görüntü düzenleme adımı gerekmez. Gerçek durum çubuğu ve ana ekran çizgisi gizlenir.
-struct Vitrin<Icerik: View>: View {
-    @EnvironmentObject private var model: Model
-    @EnvironmentObject private var kilit: Kilit
+// Mağaza görüntüsü (-vitrin): koyu zeminde üstte tek cümlelik başlık, altında ekranın görüntüsü bir telefonun içinde
+// (kenarlı, köşeleri yuvarlak). Başlığı uygulama çizdiği için her dilde ve yazıda (Arapça, Japonca) doğru dizilir; ayrı
+// bir görüntü düzenleme aracı gerekmez. Durum çubuğu ve ana ekran çizgisi gizlenir (telefonun içindeki görüntüde var).
+struct Vitrin: View {
     let baslik: String
-    @ViewBuilder let icerik: () -> Icerik
+    let goruntu: UIImage?
     private static var olcek: CGFloat { 0.74 }
     private static var kenar: CGFloat { 11 }        // telefonun kenarı (küçültülmeden önce)
     private static var altBosluk: CGFloat { 28 }
@@ -316,7 +326,6 @@ struct Vitrin<Icerik: View>: View {
 
     var body: some View {
         GeometryReader { dis in
-            let ust = max(dis.safeAreaInsets.top, 54), alt = max(dis.safeAreaInsets.bottom, 21)
             let w = dis.size.width, h = dis.size.height + dis.safeAreaInsets.top + dis.safeAreaInsets.bottom
             let s = Self.olcek, k = Self.kenar * s, r = Self.yaricap * s
             // Telefonun üst kenarı: başlık bunun üstündeki boşlukta, Dynamic Island'ın altında durur
@@ -332,98 +341,20 @@ struct Vitrin<Icerik: View>: View {
                     .lineLimit(baslik.split(separator: "\n").count).minimumScaleFactor(0.7)
                     .frame(width: w - 48, height: max(telefonUstu - 66, 40))
                     .padding(.top, 58)
-                SanalEkran(olcek: s, ust: ust, alt: alt,
-                           icerik: AnyView(icerik().environmentObject(model).environmentObject(model.abonelik)
-                                               .environmentObject(kilit).tint(Tema.metin)))
-                    .frame(width: w * s, height: h * s)
-                    .background(Tema.zemin)
-                    .overlay(alignment: .top) {
-                        durumCubugu.frame(width: w, height: ust).scaleEffect(s, anchor: .top)
-                            .frame(width: w * s, height: ust * s, alignment: .top)
-                    }
-                    .overlay(alignment: .bottom) { Capsule().fill(Tema.metin).frame(width: 144 * s, height: 5 * s).padding(.bottom, 8 * s) }
-                    .clipShape(RoundedRectangle(cornerRadius: r, style: .continuous))
-                    .padding(k)
-                    .background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: r + k, style: .continuous))
-                    .overlay { RoundedRectangle(cornerRadius: r + k, style: .continuous).strokeBorder(Color.white.opacity(0.28), lineWidth: 1.5) }
-                    .padding(.top, telefonUstu)
+                Group {
+                    if let goruntu { Image(uiImage: goruntu).resizable().interpolation(.high) } else { Tema.zemin }
+                }
+                .frame(width: w * s, height: h * s)
+                .clipShape(RoundedRectangle(cornerRadius: r, style: .continuous))
+                .padding(k)
+                .background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: r + k, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: r + k, style: .continuous).strokeBorder(Color.white.opacity(0.28), lineWidth: 1.5) }
+                .padding(.top, telefonUstu)
             }
             .frame(width: w, height: h)
             .ignoresSafeArea()
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-    }
-
-    // Telefonun durum çubuğu (çizim): saat, Dynamic Island, sinyal ve pil
-    private var durumCubugu: some View {
-        ZStack {
-            HStack {
-                Text(verbatim: "9:41").font(.system(size: 17, weight: .semibold))
-                Spacer()
-                HStack(spacing: 6) {
-                    Image(systemName: "cellularbars")
-                    Image(systemName: "wifi")
-                    Image(systemName: "battery.100percent")
-                }
-                .font(.system(size: 16, weight: .semibold))
-            }
-            .padding(.leading, 52).padding(.trailing, 38)
-            Capsule().fill(Color.black).frame(width: 125, height: 37)
-        }
-        .foregroundStyle(Tema.metin)
-        .frame(height: 37)
-        .padding(.top, 14)
-        .frame(maxHeight: .infinity, alignment: .top)
-    }
-}
-
-// Telefonun ekranı (Vitrin): içerik kendi UIHostingController'ında tam ekran boyutunda dizilir, görünümü UIKit dönüşümüyle
-// küçültülür. SwiftUI'nin scaleEffect'iyle küçültülen gezinme çubuğu sistemin kenar boşluklarını kaybeder (büyük başlık
-// ve arama kutusu kenara yapışır); ayrı bir denetleyicinin kökünde kenar boşluğu ve güvenli alan (durum çubuğu ve ana
-// ekran çizgisi kadar) elle verilir, içerik gerçek telefondaki gibi dizilir. Ortam nesnelerini Vitrin aktarır.
-private struct SanalEkran: UIViewControllerRepresentable {
-    let olcek: CGFloat
-    let ust: CGFloat
-    let alt: CGFloat
-    let icerik: AnyView
-
-    func makeUIViewController(context: Context) -> SanalEkranKabi {
-        let kap = SanalEkranKabi()
-        let ev = UIHostingController(rootView: icerik)
-        ev.view.backgroundColor = .clear
-        kap.addChild(ev)
-        kap.view.addSubview(ev.view)
-        ev.didMove(toParent: kap)
-        kap.ev = ev
-        ayarla(kap)
-        return kap
-    }
-
-    func updateUIViewController(_ kap: SanalEkranKabi, context: Context) {
-        kap.ev?.rootView = icerik
-        ayarla(kap)
-    }
-
-    private func ayarla(_ kap: SanalEkranKabi) {
-        kap.olcek = olcek
-        kap.ev?.additionalSafeAreaInsets = UIEdgeInsets(top: ust, left: 0, bottom: alt, right: 0)
-        kap.ev?.view.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
-        kap.view.setNeedsLayout()
-    }
-}
-
-private final class SanalEkranKabi: UIViewController {
-    var ev: UIHostingController<AnyView>?
-    var olcek: CGFloat = 1
-
-    // İçerik kabın 1 / ölçek katı boyutunda dizilir, ölçekle küçültülünce kabı tam doldurur
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        guard let v = ev?.view, olcek > 0 else { return }
-        let b = view.bounds
-        v.bounds = CGRect(x: 0, y: 0, width: b.width / olcek, height: b.height / olcek)
-        v.center = CGPoint(x: b.midX, y: b.midY)
-        v.transform = CGAffineTransform(scaleX: olcek, y: olcek)
     }
 }

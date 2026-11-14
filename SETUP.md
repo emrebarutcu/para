@@ -432,7 +432,8 @@ bir sonraki gönderimde depodakiyle ezilir; değişiklik `magaza/`'da yapılır.
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
   6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir; API'de `APP_IPHONE_67`). Mağazaya
   gidenler **vitrin** görüntüleridir (`-vitrin`, `Ornek.swift` → `Vitrin`): üstte tek cümlelik başlık, altında ekran bir
-  telefonun içinde. Her mağaza dilinin kendi takımı vardır, uygulamanın o dildeki hâli ve o ülkenin para birimiyle:
+  telefonun içinde. İki geçişte çekilir: önce ekranın kendisi, sonra o görüntü başlıklı çerçeveye yerleştirilir (ekran
+  canlı küçültülmez; küçültülen gezinme çubuğu kenar boşluklarını kaybediyor). Her mağaza dilinin kendi takımı vardır, uygulamanın o dildeki hâli ve o ülkenin para birimiyle:
   `vitrin-*` Türkçe, `en-vitrin-*` ABD, `gb-`, `de-`, `fr-`, `es-`, `it-`, `nl-`, `ar-`, `ja-vitrin-*`. Başlıklar
   `Ornek.vitrinBasligi`'nda, çevirileri `dil/<kod>.json`'da (başlıktaki `|` satırın bölüneceği yerdir, her dil kendi
   yerini verir; bir satır 22 harfi geçmezse yazı küçülmez); arama sonucunda yalnızca ilk üç görüntü göründüğü için sıra
