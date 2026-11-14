@@ -1516,14 +1516,14 @@
  "{0} özetin hazır": "Tu resumen de {0} está listo",
  "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Tu plan de pagos para los próximos meses: cada día de pago, sus cuotas y la parte de cada persona.",
  "App Store'da aç": "Abrir en el App Store",
- "Bu ay ne ödeyeceğini bil": "Sabe cuánto pagas este mes",
- "Almadan önce sor: alabilir miyim?": "Antes de comprar: ¿me lo puedo permitir?",
- "Önümüzdeki 12 ay tek bakışta": "Tus próximos 12 meses de un vistazo",
- "Kartların, limitlerin, borçların": "Tarjetas, límites y deudas en un solo lugar",
- "Her taksit ne zaman bitiyor": "Mira cuándo termina cada plazo",
- "Neyin var, nasıl değişiyor": "Lo que tienes y cómo cambia",
  "Kira": "Alquiler",
  "Uçak bileti": "Vuelo",
  "Taşıt kredisi": "Préstamo del coche",
- "Buzdolabı": "Frigorífico"
+ "Buzdolabı": "Frigorífico",
+ "Bu ay ne|ödeyeceğini bil": "Sabe cuánto|pagas este mes",
+ "Almadan önce sor:|alabilir miyim?": "Antes de comprar:|¿me lo puedo permitir?",
+ "Önümüzdeki 12 ay|tek bakışta": "Tus próximos 12 meses|de un vistazo",
+ "Kartlar, limitler,|borçlar tek yerde": "Tarjetas, límites|y deudas, todo junto",
+ "Her taksit|ne zaman bitiyor": "Mira cuándo termina|cada plazo",
+ "Neyin var,|nasıl değişiyor": "Lo que tienes|y cómo cambia"
 }

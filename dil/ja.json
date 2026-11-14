@@ -1516,14 +1516,14 @@
  "{0} özetin hazır": "{0}のまとめができました",
  "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "今後数か月の支払いプラン：支払日ごとの分割払いと各人の負担分。",
  "App Store'da aç": "App Storeで開く",
- "Bu ay ne ödeyeceğini bil": "今月の支払額がすぐわかる",
- "Almadan önce sor: alabilir miyim?": "買う前に確認：買っても大丈夫？",
- "Önümüzdeki 12 ay tek bakışta": "この先12か月をひと目で",
- "Kartların, limitlerin, borçların": "カード、利用枠、借入をまとめて",
- "Her taksit ne zaman bitiyor": "分割払いがいつ終わるかわかる",
- "Neyin var, nasıl değişiyor": "資産とその推移がわかる",
  "Kira": "家賃",
  "Uçak bileti": "航空券",
  "Taşıt kredisi": "自動車ローン",
- "Buzdolabı": "冷蔵庫"
+ "Buzdolabı": "冷蔵庫",
+ "Bu ay ne|ödeyeceğini bil": "今月の支払額が|すぐわかる",
+ "Almadan önce sor:|alabilir miyim?": "買う前に確認：|買っても大丈夫？",
+ "Önümüzdeki 12 ay|tek bakışta": "この先12か月をひと目で",
+ "Kartlar, limitler,|borçlar tek yerde": "カード、利用枠、借入を|まとめて",
+ "Her taksit|ne zaman bitiyor": "分割払いが|いつ終わるかわかる",
+ "Neyin var,|nasıl değişiyor": "資産とその推移がわかる"
 }

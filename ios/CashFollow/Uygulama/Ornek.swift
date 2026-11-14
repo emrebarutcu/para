@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 // Örnek veriyle açılış (CI'da ekran görüntüleri: .github/workflows/ekran.yml). "-ornek" ile girişsiz, örnek veriyle açılır;
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
@@ -26,19 +27,23 @@ enum Ornek {
         return a[i + 1].split(separator: ",").map(String.init)
     }
 
-    // "-vitrin": mağaza görüntüleri — turun her adımında üstte tek cümlelik bir başlık, altında ekranın küçültülmüş hâli
-    // (Vitrin; ekran.yml "vitrin" turları, magaza/ayarlar.json → ekranlar). Başlığı olmayan adım olduğu gibi çekilir.
+    // "-vitrin": mağaza görüntüleri — turun her adımında üstte tek cümlelik bir başlık, altında ekran bir telefonun
+    // içinde (Vitrin; ekran.yml "vitrin" turları, magaza/ayarlar.json → ekranlar). Başlığı olmayan adım olduğu gibi
+    // çekilir. Başlıktaki "|" satırın bölüneceği yerdir: her dilin çevirisi kendi yerini verir (son satırda tek sözcük
+    // kalmasın; Japoncada sözcük arası boşluk yok). Bir satır 22 harfi geçmezse yazı küçülmez.
     static let vitrin = CommandLine.arguments.contains("-vitrin")
     static func vitrinBasligi(_ adim: String) -> String? {
+        let b: String
         switch adim {
-        case "sekme0": return L("Bu ay ne ödeyeceğini bil")
-        case "galeri3": return L("Almadan önce sor: alabilir miyim?")
-        case "sekme1": return L("Önümüzdeki 12 ay tek bakışta")
-        case "sekme3": return L("Kartların, limitlerin, borçların")
-        case "sekme2": return L("Her taksit ne zaman bitiyor")
-        case "sekme4": return L("Neyin var, nasıl değişiyor")
+        case "sekme0": b = L("Bu ay ne|ödeyeceğini bil")
+        case "galeri3": b = L("Almadan önce sor:|alabilir miyim?")
+        case "sekme1": b = L("Önümüzdeki 12 ay|tek bakışta")
+        case "sekme3": b = L("Kartlar, limitler,|borçlar tek yerde")
+        case "sekme2": b = L("Her taksit|ne zaman bitiyor")
+        case "sekme4": b = L("Neyin var,|nasıl değişiyor")
         default: return nil
         }
+        return b.replacingOccurrences(of: "|", with: "\n")
     }
 
     // "-ulke US": örnek veri o ülkede (Türkiye dışında İngilizce adlar, tutarlar dolar ölçeğinde: veriUS)
@@ -298,8 +303,9 @@ struct TurEkrani: View {
 // Mağaza görüntüsü (-vitrin): koyu zeminde üstte tek cümlelik başlık, altında ekran bir telefonun içinde küçültülmüş
 // (kenarlı, köşeleri yuvarlak; saat ve pil çizimdir). Uygulamanın kendi çizimi olduğu için her dilde ve yazıda (Arapça,
 // Japonca) doğru dizilir; ayrı bir görüntü düzenleme adımı gerekmez. Gerçek durum çubuğu ve ana ekran çizgisi gizlenir.
-// İçerik güvenli alanın altından başlatılır (üstünde çizilen durum çubuğu): gezinme çubuğu yerinde durur.
 struct Vitrin<Icerik: View>: View {
+    @EnvironmentObject private var model: Model
+    @EnvironmentObject private var kilit: Kilit
     let baslik: String
     @ViewBuilder let icerik: () -> Icerik
     private static var olcek: CGFloat { 0.74 }
@@ -309,33 +315,37 @@ struct Vitrin<Icerik: View>: View {
 
     var body: some View {
         GeometryReader { dis in
-            let ust = max(dis.safeAreaInsets.top, 54)
+            let ust = max(dis.safeAreaInsets.top, 54), alt = max(dis.safeAreaInsets.bottom, 21)
             let w = dis.size.width, h = dis.size.height + dis.safeAreaInsets.top + dis.safeAreaInsets.bottom
-            let s = Self.olcek, k = Self.kenar
+            let s = Self.olcek, k = Self.kenar * s, r = Self.yaricap * s
             // Telefonun üst kenarı: başlık bunun üstündeki boşlukta, Dynamic Island'ın altında durur
-            let telefonUstu = h - Self.altBosluk - (h + 2 * k) * s
+            let telefonUstu = h - Self.altBosluk - h * s - 2 * k
             ZStack(alignment: .top) {
-                Color(red: 0.02, green: 0.024, blue: 0.03)
+                Color.black   // tepesi düz siyah: simülatörün çizdiği Dynamic Island görünmez
                 RadialGradient(colors: [Tema.marka.opacity(0.55), Tema.marka.opacity(0)], center: UnitPoint(x: 0.5, y: 0.62),
                                startRadius: 0, endRadius: h * 0.52)
                 Text(baslik)
                     .font(.system(size: 36, weight: .bold)).foregroundStyle(.white)
-                    .multilineTextAlignment(.center).lineLimit(3).minimumScaleFactor(0.7)
+                    .multilineTextAlignment(.center)
+                    // Satırları başlık verir ("|"): sığmayan satır alta kaymaz, yazı küçülür
+                    .lineLimit(baslik.split(separator: "\n").count).minimumScaleFactor(0.7)
                     .frame(width: w - 48, height: max(telefonUstu - 66, 40))
                     .padding(.top, 58)
-                VStack(spacing: 0) {
-                    durumCubugu.frame(width: w, height: ust)
-                    icerik().frame(width: w, height: h - ust)
-                }
-                .background(Tema.zemin)
-                .overlay(alignment: .bottom) { Capsule().fill(Tema.metin).frame(width: 144, height: 5).padding(.bottom, 8) }
-                .clipShape(RoundedRectangle(cornerRadius: Self.yaricap, style: .continuous))
-                .background { RoundedRectangle(cornerRadius: Self.yaricap + k, style: .continuous).fill(Color(white: 0.09)).padding(-k) }
-                .overlay {
-                    RoundedRectangle(cornerRadius: Self.yaricap + k, style: .continuous).strokeBorder(Color.white.opacity(0.28), lineWidth: 2).padding(-k)
-                }
-                .scaleEffect(s, anchor: .bottom)
-                .offset(y: -(Self.altBosluk + k * s))
+                SanalEkran(olcek: s, ust: ust, alt: alt,
+                           icerik: AnyView(icerik().environmentObject(model).environmentObject(model.abonelik)
+                                               .environmentObject(kilit).tint(Tema.metin)))
+                    .frame(width: w * s, height: h * s)
+                    .background(Tema.zemin)
+                    .overlay(alignment: .top) {
+                        durumCubugu.frame(width: w, height: ust).scaleEffect(s, anchor: .top)
+                            .frame(width: w * s, height: ust * s, alignment: .top)
+                    }
+                    .overlay(alignment: .bottom) { Capsule().fill(Tema.metin).frame(width: 144 * s, height: 5 * s).padding(.bottom, 8 * s) }
+                    .clipShape(RoundedRectangle(cornerRadius: r, style: .continuous))
+                    .padding(k)
+                    .background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: r + k, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: r + k, style: .continuous).strokeBorder(Color.white.opacity(0.28), lineWidth: 1.5) }
+                    .padding(.top, telefonUstu)
             }
             .frame(width: w, height: h)
             .ignoresSafeArea()
@@ -364,5 +374,55 @@ struct Vitrin<Icerik: View>: View {
         .frame(height: 37)
         .padding(.top, 14)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+// Telefonun ekranı (Vitrin): içerik kendi UIHostingController'ında tam ekran boyutunda dizilir, görünümü UIKit dönüşümüyle
+// küçültülür. SwiftUI'nin scaleEffect'iyle küçültülen gezinme çubuğu sistemin kenar boşluklarını kaybeder (büyük başlık
+// ve arama kutusu kenara yapışır); ayrı bir denetleyicinin kökünde kenar boşluğu ve güvenli alan (durum çubuğu ve ana
+// ekran çizgisi kadar) elle verilir, içerik gerçek telefondaki gibi dizilir. Ortam nesnelerini Vitrin aktarır.
+private struct SanalEkran: UIViewControllerRepresentable {
+    let olcek: CGFloat
+    let ust: CGFloat
+    let alt: CGFloat
+    let icerik: AnyView
+
+    func makeUIViewController(context: Context) -> SanalEkranKabi {
+        let kap = SanalEkranKabi()
+        let ev = UIHostingController(rootView: icerik)
+        ev.view.backgroundColor = .clear
+        kap.addChild(ev)
+        kap.view.addSubview(ev.view)
+        ev.didMove(toParent: kap)
+        kap.ev = ev
+        ayarla(kap)
+        return kap
+    }
+
+    func updateUIViewController(_ kap: SanalEkranKabi, context: Context) {
+        kap.ev?.rootView = icerik
+        ayarla(kap)
+    }
+
+    private func ayarla(_ kap: SanalEkranKabi) {
+        kap.olcek = olcek
+        kap.ev?.additionalSafeAreaInsets = UIEdgeInsets(top: ust, left: 0, bottom: alt, right: 0)
+        kap.ev?.view.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+        kap.view.setNeedsLayout()
+    }
+}
+
+private final class SanalEkranKabi: UIViewController {
+    var ev: UIHostingController<AnyView>?
+    var olcek: CGFloat = 1
+
+    // İçerik kabın 1 / ölçek katı boyutunda dizilir, ölçekle küçültülünce kabı tam doldurur
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let v = ev?.view, olcek > 0 else { return }
+        let b = view.bounds
+        v.bounds = CGRect(x: 0, y: 0, width: b.width / olcek, height: b.height / olcek)
+        v.center = CGPoint(x: b.midX, y: b.midY)
+        v.transform = CGAffineTransform(scaleX: olcek, y: olcek)
     }
 }

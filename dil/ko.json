@@ -1516,14 +1516,14 @@
  "{0} özetin hazır": "{0} 요약이 준비됐어요",
  "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "앞으로 몇 달의 결제 계획: 결제일별 할부 내역과 사람별 몫.",
  "App Store'da aç": "App Store에서 열기",
- "Bu ay ne ödeyeceğini bil": "이번 달 결제액을 한눈에",
- "Almadan önce sor: alabilir miyim?": "사기 전에 확인: 살 수 있을까요?",
- "Önümüzdeki 12 ay tek bakışta": "앞으로 12개월을 한눈에",
- "Kartların, limitlerin, borçların": "카드, 한도, 빚을 한곳에서",
- "Her taksit ne zaman bitiyor": "할부가 언제 끝나는지 한눈에",
- "Neyin var, nasıl değişiyor": "내 자산과 그 변화를 한눈에",
  "Kira": "월세",
  "Uçak bileti": "항공권",
  "Taşıt kredisi": "자동차 대출",
- "Buzdolabı": "냉장고"
+ "Buzdolabı": "냉장고",
+ "Bu ay ne|ödeyeceğini bil": "이번 달 결제액을|한눈에",
+ "Almadan önce sor:|alabilir miyim?": "사기 전에 확인:|살 수 있을까요?",
+ "Önümüzdeki 12 ay|tek bakışta": "앞으로 12개월을|한눈에",
+ "Kartlar, limitler,|borçlar tek yerde": "카드, 한도, 빚을|한곳에서",
+ "Her taksit|ne zaman bitiyor": "할부가 언제 끝나는지|한눈에",
+ "Neyin var,|nasıl değişiyor": "내 자산과 그 변화를|한눈에"
 }

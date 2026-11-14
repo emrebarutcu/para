@@ -1516,14 +1516,14 @@
  "{0} özetin hazır": "Your {0} recap is ready",
  "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Your payment plan for the months ahead: every payment day, the installments in it and each person's share.",
  "App Store'da aç": "Open in the App Store",
- "Bu ay ne ödeyeceğini bil": "Know what you'll pay this month",
- "Almadan önce sor: alabilir miyim?": "Ask before you buy: can I afford it?",
- "Önümüzdeki 12 ay tek bakışta": "Your next 12 months at a glance",
- "Kartların, limitlerin, borçların": "Cards, limits and debts in one place",
- "Her taksit ne zaman bitiyor": "See when every payment plan ends",
- "Neyin var, nasıl değişiyor": "What you own, and how it changes",
  "Kira": "Rent",
  "Uçak bileti": "Flight",
  "Taşıt kredisi": "Car loan",
- "Buzdolabı": "Refrigerator"
+ "Buzdolabı": "Refrigerator",
+ "Bu ay ne|ödeyeceğini bil": "Know what you'll|pay this month",
+ "Almadan önce sor:|alabilir miyim?": "Ask before you buy:|can I afford it?",
+ "Önümüzdeki 12 ay|tek bakışta": "Your next 12 months|at a glance",
+ "Kartlar, limitler,|borçlar tek yerde": "Cards, limits, debts|in one place",
+ "Her taksit|ne zaman bitiyor": "See when every|payment plan ends",
+ "Neyin var,|nasıl değişiyor": "What you own,|and how it changes"
 }

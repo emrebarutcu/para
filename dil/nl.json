@@ -1516,14 +1516,14 @@
  "{0} özetin hazır": "Je terugblik {0} staat klaar",
  "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Je betaalplan voor de komende maanden: elke betaaldag, de termijnen erin en ieders aandeel.",
  "App Store'da aç": "Open in de App Store",
- "Bu ay ne ödeyeceğini bil": "Weet wat je deze maand betaalt",
- "Almadan önce sor: alabilir miyim?": "Vóór je koopt: kan ik het betalen?",
- "Önümüzdeki 12 ay tek bakışta": "Je komende 12 maanden in één oogopslag",
- "Kartların, limitlerin, borçların": "Kaarten, limieten en schulden op één plek",
- "Her taksit ne zaman bitiyor": "Zie wanneer elke termijn afloopt",
- "Neyin var, nasıl değişiyor": "Wat je hebt en hoe het verandert",
  "Kira": "Huur",
  "Uçak bileti": "Vlucht",
  "Taşıt kredisi": "Autolening",
- "Buzdolabı": "Koelkast"
+ "Buzdolabı": "Koelkast",
+ "Bu ay ne|ödeyeceğini bil": "Weet wat je|deze maand betaalt",
+ "Almadan önce sor:|alabilir miyim?": "Vóór je koopt:|kan ik het betalen?",
+ "Önümüzdeki 12 ay|tek bakışta": "Je komende 12 maanden|in één oogopslag",
+ "Kartlar, limitler,|borçlar tek yerde": "Kaarten, limieten en|schulden op één plek",
+ "Her taksit|ne zaman bitiyor": "Zie wanneer elke|termijn afloopt",
+ "Neyin var,|nasıl değişiyor": "Wat je hebt en|hoe het verandert"
 }

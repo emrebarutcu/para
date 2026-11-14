@@ -1516,14 +1516,14 @@
  "{0} özetin hazır": "Votre bilan est prêt : {0}",
  "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Votre plan de paiement des mois à venir : chaque jour de paiement, ses mensualités et la part de chacun.",
  "App Store'da aç": "Ouvrir dans l'App Store",
- "Bu ay ne ödeyeceğini bil": "Sachez ce que vous payez ce mois-ci",
- "Almadan önce sor: alabilir miyim?": "Avant d'acheter : puis-je me le permettre ?",
- "Önümüzdeki 12 ay tek bakışta": "Vos 12 prochains mois en un coup d'œil",
- "Kartların, limitlerin, borçların": "Cartes, plafonds et dettes au même endroit",
- "Her taksit ne zaman bitiyor": "Voyez quand chaque paiement se termine",
- "Neyin var, nasıl değişiyor": "Ce que vous possédez, et son évolution",
  "Kira": "Loyer",
  "Uçak bileti": "Billet d'avion",
  "Taşıt kredisi": "Crédit auto",
- "Buzdolabı": "Réfrigérateur"
+ "Buzdolabı": "Réfrigérateur",
+ "Bu ay ne|ödeyeceğini bil": "Sachez ce que vous|payez ce mois-ci",
+ "Almadan önce sor:|alabilir miyim?": "Avant d'acheter :|puis-je me l'offrir ?",
+ "Önümüzdeki 12 ay|tek bakışta": "Vos 12 prochains mois|en un coup d'œil",
+ "Kartlar, limitler,|borçlar tek yerde": "Cartes, plafonds|et dettes réunis",
+ "Her taksit|ne zaman bitiyor": "Voyez quand chaque|paiement se termine",
+ "Neyin var,|nasıl değişiyor": "Ce que vous possédez|et son évolution"
 }
