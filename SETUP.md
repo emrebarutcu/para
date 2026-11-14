@@ -420,16 +420,24 @@ bir sonraki gönderimde depodakiyle ezilir; değişiklik `magaza/`'da yapılır.
   App Store Connect'te kalır.
 - **Sürüm:** düzenlenebilir mağaza sürümünün numarası `version.js`'teki sürüme çekilir (yoksa açılır), o sürümün en yeni
   geçerli build'i seçilir. O sürümün build'i yoksa numara değişmez (uyarı yazılır): önce TestFlight, sonra yeniden
-  `gonder`. Sürüm incelemedeyken `gonder` çalıştırılmaz (yeni sürüm açmaya çalışır).
+  `gonder`. Sürüm incelemedeyken `gonder` çalıştırılmaz (yeni sürüm açmaya çalışır). Uygulama yayındayken ad, alt
+  başlık, kategori ve yeni diller yayındaki uygulama bilgisine yazılamaz: `gonder` önce yeni sürümü açar, sonra uygulama
+  bilgisini yazar (App Store Connect yeni sürümle düzenlenebilir bir kopya oluşturur). Bu sıra 1.1.0'la ilk kez
+  denenecek: ilk `gonder`'in çıktısında "Uygulama bilgisi" bölümüne bakılır.
 - **Elle kalanlar** (API'de yok ya da kişisel bilgi; depo herkese açık, günlükte yalnızca "dolu / boş" yazılır): App
   Privacy, inceleme iletişim bilgileri (ad, telefon, e-posta) ve notları, anlaşmalar / vergi / banka. İçerik hakları
   beyanı `ayarlar.json → icerikHaklari`'nda (kur, altın, fon ve hisse fiyatları dışarıdan: `USES_THIRD_PARTY_CONTENT`).
 - **Adresler:** destek `https://cashfollow.app/support`, gizlilik `https://cashfollow.app/privacy` (ikisi de İngilizce;
   `support.html`, `privacy.html`). Destek e-postası `support@cashfollow.app` (Cloudflare yönlendirmesi).
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
-  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir; API'de `APP_IPHONE_67`). `en-*`
-  İngilizce (ABD örnek verisi), ötekiler Türkçe. Japonca ve diğer diller şimdilik İngilizce görüntüleri kullanır.
-  Sıra `ayarlar.json`'da: arama sonucunda ilk üç görüntü göründüğü için önce Özet, "Alabilir miyim?" formu ve Akış.
+  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir; API'de `APP_IPHONE_67`). Mağazaya
+  gidenler **vitrin** görüntüleridir (`-vitrin`, `Ornek.swift` → `Vitrin`): üstte tek cümlelik başlık, altında ekran bir
+  telefonun içinde. Her mağaza dilinin kendi takımı vardır, uygulamanın o dildeki hâli ve o ülkenin para birimiyle:
+  `vitrin-*` Türkçe, `en-vitrin-*` ABD, `gb-`, `de-`, `fr-`, `es-`, `it-`, `nl-`, `ar-`, `ja-vitrin-*`. Başlıklar
+  `Ornek.vitrinBasligi`'nda, çevirileri `dil/<kod>.json`'da; arama sonucunda yalnızca ilk üç görüntü göründüğü için sıra
+  (`ayarlar.json`) Özet, "Alabilir miyim?" formu, Akış, sonra Kartlar, Harcamalar, Varlıklar. Başlık bir faydayı söyler
+  ("Bu ay ne ödeyeceğini bil"), ekranın adını değil. Başlıksız `sekme*` / `en-*` görüntüleri belgeler ve inceleme içindir.
+  Mağaza metni ya da ekranlar değişince: önce bu iş akışı (dal varsayılan), sonra `magaza` → `kuru`.
 - **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı; hepsi kullanıcıya bağlı, takip yok):
   - Contact Info → E-posta adresi: App Functionality.
   - Financial Info → Other Financial Info: App Functionality.
