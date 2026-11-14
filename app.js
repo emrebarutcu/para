@@ -184,8 +184,6 @@ window.onAuthLogout = function () {
 // Abonelik): 2 kart, 2 kişi, iyi haber içgörüleri; Akış, öbür içgörüler, Varlığın seyri ve asistan Premium. Sınırı aşan eski
 // kart ve kişiler kalır, yalnızca yenisi eklenemez. Girişsiz web ücretsizdir. Durum bilinmezken (oturum henüz okunmadı ya da
 // bağlantı yok ve önceki okuma yok) kilit gösterilmez; son okunan değer saklanır, telefonda alınca sekme öne gelince açılır.
-// Mağaza sayfası (ülkesiz adres: App Store kullanıcının ülkesine yönlendirir); kilitlerdeki bağlantı ve QR (appstore-qr.svg)
-const APP_STORE_URL = "https://apps.apple.com/app/id6829311425";
 // Ücretsiz tat: Akış'ın ödeme planında bu ay ve sonraki ay Premium'suz açık (iPhone: Abonelik.tatAy). PostHog'da
 // free_taste bayrağının "off" kolu kapatır; bayrak yoksa açıktır.
 const TASTE_MONTHS = 2;
@@ -237,10 +235,11 @@ function premiumLock(title, desc, reason) {
   if (title) head.append(el("strong", "", title));
   head.append(badge);
   box.append(head, el("p", "", desc), el("p", "hint", L("CashFollow Premium iPhone uygulamasından alınır (Ayarlar → CashFollow Premium). Aynı hesapla giriş yaptığında burada da açılır.")));
-  // Mağaza bağlantısı; geniş ekranda (bilgisayar) telefonla okutmak için QR da
+  // Premium iPhone'dan alınır: kilit çıkmaz sokak olmasın diye mağaza sayfasına bağlantı (config.js APP_STORE_URL);
+  // geniş ekranda (bilgisayar) telefonla okutmak için QR da (appstore-qr.svg aynı adresi taşır)
   const store = el("div", "premium-store");
   const link = el("a", "btn btn-primary sm", L("App Store'da aç"));
-  link.href = APP_STORE_URL;
+  link.href = window.APP_STORE_URL;
   link.target = "_blank";
   link.rel = "noopener";
   link.addEventListener("click", () => window.Analitik?.event("app_store_opened", { reason }));

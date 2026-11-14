@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 // Örnek veriyle açılış (CI'da ekran görüntüleri: .github/workflows/ekran.yml). "-ornek" ile girişsiz, örnek veriyle açılır;
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
@@ -24,6 +25,25 @@ enum Ornek {
         let a = CommandLine.arguments
         guard let i = a.firstIndex(of: "-tur"), i + 1 < a.count else { return nil }
         return a[i + 1].split(separator: ",").map(String.init)
+    }
+
+    // "-vitrin": mağaza görüntüleri — turun her adımında üstte tek cümlelik bir başlık, altında ekran bir telefonun
+    // içinde (Vitrin; ekran.yml "vitrin" turları, magaza/ayarlar.json → ekranlar). Başlığı olmayan adım olduğu gibi
+    // çekilir. Başlıktaki "|" satırın bölüneceği yerdir: her dilin çevirisi kendi yerini verir (son satırda tek sözcük
+    // kalmasın; Japoncada sözcük arası boşluk yok). Bir satır 22 harfi geçmezse yazı küçülmez.
+    static let vitrin = CommandLine.arguments.contains("-vitrin")
+    static func vitrinBasligi(_ adim: String) -> String? {
+        let b: String
+        switch adim {
+        case "sekme0": b = L("Bu ay ne|ödeyeceğini bil")
+        case "galeri3": b = L("Almadan önce sor:|alabilir miyim?")
+        case "sekme1": b = L("Önümüzdeki 12 ay|tek bakışta")
+        case "sekme3": b = L("Kartlar, limitler,|borçlar tek yerde")
+        case "sekme2": b = L("Her taksit|ne zaman bitiyor")
+        case "sekme4": b = L("Neyin var,|nasıl değişiyor")
+        default: return nil
+        }
+        return b.replacingOccurrences(of: "|", with: "\n")
     }
 
     // "-ulke US": örnek veri o ülkede (Türkiye dışında İngilizce adlar, tutarlar dolar ölçeğinde: veriUS)
@@ -112,17 +132,24 @@ enum Ornek {
         ]
     }
 
-    // ABD örneği: dolar, ABD kartları (kesim / son ödeme), taksit planı (Amex Plan It gibi), maaş, kira, araba kredisi
+    // ABD örneği: dolar, ABD kartları (kesim / son ödeme), taksit planı (Amex Plan It gibi), maaş, kira, araba kredisi.
+    // Başka ülkede (mağazanın yerel görüntüleri: -ulke DE -AppleLanguages (de)…) aynı veri o ülkenin para biriminde;
+    // yalnızca ABD'ye özgü adlar yerine genel adlar (uygulamanın dilinde) ve dünya markaları; yende tutarlar 150, riyalde 4 katı.
+    private static var yerel: Bool { ulke != "US" }
+    static var olcek: Double { ulke == "JP" ? 150 : ulke == "SA" ? 4 : 1 }
+    private static func tutar(_ x: Double) -> Double { olcek == 1 ? x : (x * olcek).rounded() }
     private static func veriUS() -> [String: Any] {
+        // Ülkenin para birimi (gelir ve borçlar onunla yazılır; harcamalar zaten ana para biriminde)
+        let para = Locale(identifier: "en_\(ulke)").currency?.identifier ?? "USD"
         let harcama: (String, String, String?, Double, Int, Int, String) -> [String: Any] = { id, desc, card, total, count, gunOnce, cat in
-            var p: [String: Any] = ["id": id, "personId": "ben", "desc": desc, "total": total, "count": count, "date": gun(-gunOnce),
+            var p: [String: Any] = ["id": id, "personId": "ben", "desc": desc, "total": tutar(total), "count": count, "date": gun(-gunOnce),
                                     "category": cat, "categoryBy": "user"]
             if let card { p["cardId"] = card }
             return p
         }
         var sam = harcama("p9", "Nike", "amex", 180, 1, 9, "alisveris")
         sam["personId"] = "sam"
-        var kira = harcama("p10", "Rent", nil, 2400, 1, 150, "ev")
+        var kira = harcama("p10", yerel ? L("Kira") : "Rent", nil, 2400, 1, 150, "ev")
         kira["repeat"] = 0
         var spotify = harcama("p11", "Spotify", "chase", 11.99, 1, 120, "eglence")
         spotify["repeat"] = 0
@@ -134,34 +161,34 @@ enum Ornek {
         var macbook = harcama("p13", "MacBook Air", "chase", 1299, 1, 0, "elektronik")
         macbook["date"] = gunOnce(son, 45)
         return [
-            "people": [["id": "ben", "name": "Me", "color": 0], ["id": "sam", "name": "Sam", "color": 1]],
+            "people": [["id": "ben", "name": L("Ben"), "color": 0], ["id": "sam", "name": "Sam", "color": 1]],
             "cards": [
-                ["id": "chase", "name": "Chase Sapphire", "limit": 12000, "cutoffDay": 3, "dueDay": 28, "color": 0, "trackSince": gun(-150),
+                ["id": "chase", "name": yerel ? "Visa Platinum" : "Chase Sapphire", "limit": tutar(12000), "cutoffDay": 3, "dueDay": 28, "color": 0, "trackSince": gun(-150),
                  "manualSince": gunOnce(son, 20), "apr": 24.99],
-                ["id": "amex", "name": "Amex Gold", "limit": 8000, "cutoffDay": 18, "dueDay": 12, "color": 2, "trackSince": gun(-150)],
+                ["id": "amex", "name": "Amex Gold", "limit": tutar(8000), "cutoffDay": 18, "dueDay": 12, "color": 2, "trackSince": gun(-150)],
             ],
             "installments": [
                 harcama("p1", "iPhone 17 Pro", "amex", 1199, 12, 40, "elektronik"),
-                harcama("p2", "Whole Foods", "chase", 142.35, 1, 4, "market"),
-                harcama("p3", "Trader Joe's", "chase", 88.20, 1, 11, "market"),
-                harcama("p4", "Delta flight", "chase", 486, 1, 25, "seyahat"),
-                harcama("p5", "Chipotle", "amex", 24.80, 1, 2, "yeme"),
+                harcama("p2", yerel ? L("Market") : "Whole Foods", "chase", 142.35, 1, 4, "market"),
+                harcama("p3", yerel ? "Amazon" : "Trader Joe's", "chase", 88.20, 1, 11, "market"),
+                harcama("p4", yerel ? L("Uçak bileti") : "Delta flight", "chase", 486, 1, 25, "seyahat"),
+                harcama("p5", yerel ? "Starbucks" : "Chipotle", "amex", 24.80, 1, 2, "yeme"),
                 harcama("p6", "Shell", "chase", 52.10, 1, 6, "ulasim"),
-                harcama("p7", "IKEA sofa", "amex", 1350, 6, 70, "ev"),
+                harcama("p7", yerel ? "IKEA" : "IKEA sofa", "amex", 1350, 6, 70, "ev"),
                 harcama("p8", "Netflix", "chase", 15.49, 1, 3, "eglence"),
                 sam, kira, spotify, dyson, macbook,
             ],
             "entries": [
-                ["id": "e1", "personId": "ben", "asset": "USD", "amount": 6200, "desc": "Paycheck", "date": gun(-150), "repeat": 0],
-                ["id": "e2", "personId": "ben", "asset": "USD", "amount": 9500, "desc": "Opening balance", "date": gun(-151)],
+                ["id": "e1", "personId": "ben", "asset": para, "amount": tutar(6200), "desc": yerel ? L("Maaş") : "Paycheck", "date": gun(-150), "repeat": 0],
+                ["id": "e2", "personId": "ben", "asset": para, "amount": tutar(9500), "desc": yerel ? L("Açılış bakiyesi") : "Opening balance", "date": gun(-151)],
             ],
             "debts": [
                 // 48 × 465 $ (amount toplamdır)
-                ["id": "d1", "kind": "loan", "personId": "ben", "party": "Ally Auto", "asset": "USD", "amount": 22320, "principal": 18000,
+                ["id": "d1", "kind": "loan", "personId": "ben", "party": yerel ? L("Taşıt kredisi") : "Ally Auto", "asset": para, "amount": tutar(22320), "principal": tutar(18000),
                  "date": gun(-120), "due": gun(-90), "count": 48],
-                ["id": "d2", "kind": "person", "side": "receivable", "personId": "ben", "party": "Alex", "asset": "USD", "amount": 250,
-                 "principal": 250, "date": gun(-12), "due": gun(10)],
-                ["id": "d3", "kind": "payment", "personId": "ben", "cardId": "chase", "amount": 500, "date": gunOnce(son, 1)],
+                ["id": "d2", "kind": "person", "side": "receivable", "personId": "ben", "party": "Alex", "asset": para, "amount": tutar(250),
+                 "principal": tutar(250), "date": gun(-12), "due": gun(10)],
+                ["id": "d3", "kind": "payment", "personId": "ben", "cardId": "chase", "amount": tutar(500), "date": gunOnce(son, 1)],
             ],
         ]
     }
@@ -174,7 +201,8 @@ struct GrafikGalerisi: View {
 
     var body: some View {
         if sayfa == 3 {
-            HarcamaFormu(ornek: ulke != "TR" ? ("1800", "Refrigerator", 6) : ("36000", "Buzdolabı", 6))
+            HarcamaFormu(ornek: ulke == "TR" ? ("36000", "Buzdolabı", 6) : ulke == "US" ? ("1800", "Refrigerator", 6)
+                         : (String(Int(1800 * Ornek.olcek)), L("Buzdolabı"), 6))
         } else if sayfa == 4 {
             BorcFormu(baslangic: "loan")
         } else if sayfa == 5 {
@@ -243,7 +271,7 @@ struct TurEkrani: View {
 
     var body: some View {
         let ad = adimlar[min(i, adimlar.count - 1)]
-        Group {
+        let ekran = Group {
             if ad.hasPrefix("galeri"), let n = Int(ad.dropFirst(6)) {
                 GrafikGalerisi(sayfa: n)
             } else if ad.hasPrefix("tanitim"), let n = Int(ad.dropFirst(7).prefix(while: \.isNumber)) {
@@ -253,17 +281,149 @@ struct TurEkrani: View {
             }
         }
         .id(ad.hasPrefix("sekme") ? "sekmeler" : ad)
+        Group {
+            // Mağaza görüntüsü: başlığı olan adım başlığıyla ve küçültülmüş ekranla (Vitrin)
+            if Ornek.vitrin, let baslik = Ornek.vitrinBasligi(ad) { Vitrin(baslik: baslik) { ekran } } else { ekran }
+        }
         .task(id: i) { await adim(ad) }
     }
 
     private func adim(_ ad: String) async {
         if ad.hasPrefix("sekme"), let n = Int(ad.dropFirst(5)) { sekme = n }
-        // Çizilsin, veriler (araçlar, grafikler) yüklensin; ilk adımda soğuk başlangıç için biraz daha
-        try? await Task.sleep(for: .milliseconds(i == 0 ? 2500 : 1200))
+        // Çizilsin, veriler (araçlar, grafikler) yüklensin; ilk adımda soğuk başlangıç için biraz daha. Mağaza
+        // görüntülerinde daha uzun: Varlıklar'ın seyri kur geçmişini ağdan okur, 1,2 saniyede her zaman yetişmiyor
+        try? await Task.sleep(for: .milliseconds(Ornek.vitrin ? (ad == "sekme4" ? 4500 : 3000) : i == 0 ? 2500 : 1200))
         try? ad.write(to: Self.isaret, atomically: true, encoding: .utf8)
         while FileManager.default.fileExists(atPath: Self.isaret.path) {
             try? await Task.sleep(for: .milliseconds(100))
         }
         if i + 1 < adimlar.count { i += 1 }
+    }
+}
+
+// Mağaza görüntüsü (-vitrin): koyu zeminde üstte tek cümlelik başlık, altında ekran bir telefonun içinde küçültülmüş
+// (kenarlı, köşeleri yuvarlak; saat ve pil çizimdir). Uygulamanın kendi çizimi olduğu için her dilde ve yazıda (Arapça,
+// Japonca) doğru dizilir; ayrı bir görüntü düzenleme adımı gerekmez. Gerçek durum çubuğu ve ana ekran çizgisi gizlenir.
+struct Vitrin<Icerik: View>: View {
+    @EnvironmentObject private var model: Model
+    @EnvironmentObject private var kilit: Kilit
+    let baslik: String
+    @ViewBuilder let icerik: () -> Icerik
+    private static var olcek: CGFloat { 0.74 }
+    private static var kenar: CGFloat { 11 }        // telefonun kenarı (küçültülmeden önce)
+    private static var altBosluk: CGFloat { 28 }
+    private static var yaricap: CGFloat { 60 }
+
+    var body: some View {
+        GeometryReader { dis in
+            let ust = max(dis.safeAreaInsets.top, 54), alt = max(dis.safeAreaInsets.bottom, 21)
+            let w = dis.size.width, h = dis.size.height + dis.safeAreaInsets.top + dis.safeAreaInsets.bottom
+            let s = Self.olcek, k = Self.kenar * s, r = Self.yaricap * s
+            // Telefonun üst kenarı: başlık bunun üstündeki boşlukta, Dynamic Island'ın altında durur
+            let telefonUstu = h - Self.altBosluk - h * s - 2 * k
+            ZStack(alignment: .top) {
+                Color.black   // tepesi düz siyah: simülatörün çizdiği Dynamic Island görünmez
+                RadialGradient(colors: [Tema.marka.opacity(0.55), Tema.marka.opacity(0)], center: UnitPoint(x: 0.5, y: 0.62),
+                               startRadius: 0, endRadius: h * 0.52)
+                Text(baslik)
+                    .font(.system(size: 36, weight: .bold)).foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    // Satırları başlık verir ("|"): sığmayan satır alta kaymaz, yazı küçülür
+                    .lineLimit(baslik.split(separator: "\n").count).minimumScaleFactor(0.7)
+                    .frame(width: w - 48, height: max(telefonUstu - 66, 40))
+                    .padding(.top, 58)
+                SanalEkran(olcek: s, ust: ust, alt: alt,
+                           icerik: AnyView(icerik().environmentObject(model).environmentObject(model.abonelik)
+                                               .environmentObject(kilit).tint(Tema.metin)))
+                    .frame(width: w * s, height: h * s)
+                    .background(Tema.zemin)
+                    .overlay(alignment: .top) {
+                        durumCubugu.frame(width: w, height: ust).scaleEffect(s, anchor: .top)
+                            .frame(width: w * s, height: ust * s, alignment: .top)
+                    }
+                    .overlay(alignment: .bottom) { Capsule().fill(Tema.metin).frame(width: 144 * s, height: 5 * s).padding(.bottom, 8 * s) }
+                    .clipShape(RoundedRectangle(cornerRadius: r, style: .continuous))
+                    .padding(k)
+                    .background(Color(white: 0.09), in: RoundedRectangle(cornerRadius: r + k, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: r + k, style: .continuous).strokeBorder(Color.white.opacity(0.28), lineWidth: 1.5) }
+                    .padding(.top, telefonUstu)
+            }
+            .frame(width: w, height: h)
+            .ignoresSafeArea()
+        }
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
+    }
+
+    // Telefonun durum çubuğu (çizim): saat, Dynamic Island, sinyal ve pil
+    private var durumCubugu: some View {
+        ZStack {
+            HStack {
+                Text(verbatim: "9:41").font(.system(size: 17, weight: .semibold))
+                Spacer()
+                HStack(spacing: 6) {
+                    Image(systemName: "cellularbars")
+                    Image(systemName: "wifi")
+                    Image(systemName: "battery.100percent")
+                }
+                .font(.system(size: 16, weight: .semibold))
+            }
+            .padding(.leading, 52).padding(.trailing, 38)
+            Capsule().fill(Color.black).frame(width: 125, height: 37)
+        }
+        .foregroundStyle(Tema.metin)
+        .frame(height: 37)
+        .padding(.top, 14)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+// Telefonun ekranı (Vitrin): içerik kendi UIHostingController'ında tam ekran boyutunda dizilir, görünümü UIKit dönüşümüyle
+// küçültülür. SwiftUI'nin scaleEffect'iyle küçültülen gezinme çubuğu sistemin kenar boşluklarını kaybeder (büyük başlık
+// ve arama kutusu kenara yapışır); ayrı bir denetleyicinin kökünde kenar boşluğu ve güvenli alan (durum çubuğu ve ana
+// ekran çizgisi kadar) elle verilir, içerik gerçek telefondaki gibi dizilir. Ortam nesnelerini Vitrin aktarır.
+private struct SanalEkran: UIViewControllerRepresentable {
+    let olcek: CGFloat
+    let ust: CGFloat
+    let alt: CGFloat
+    let icerik: AnyView
+
+    func makeUIViewController(context: Context) -> SanalEkranKabi {
+        let kap = SanalEkranKabi()
+        let ev = UIHostingController(rootView: icerik)
+        ev.view.backgroundColor = .clear
+        kap.addChild(ev)
+        kap.view.addSubview(ev.view)
+        ev.didMove(toParent: kap)
+        kap.ev = ev
+        ayarla(kap)
+        return kap
+    }
+
+    func updateUIViewController(_ kap: SanalEkranKabi, context: Context) {
+        kap.ev?.rootView = icerik
+        ayarla(kap)
+    }
+
+    private func ayarla(_ kap: SanalEkranKabi) {
+        kap.olcek = olcek
+        kap.ev?.additionalSafeAreaInsets = UIEdgeInsets(top: ust, left: 0, bottom: alt, right: 0)
+        kap.ev?.view.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20)
+        kap.view.setNeedsLayout()
+    }
+}
+
+private final class SanalEkranKabi: UIViewController {
+    var ev: UIHostingController<AnyView>?
+    var olcek: CGFloat = 1
+
+    // İçerik kabın 1 / ölçek katı boyutunda dizilir, ölçekle küçültülünce kabı tam doldurur
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let v = ev?.view, olcek > 0 else { return }
+        let b = view.bounds
+        v.bounds = CGRect(x: 0, y: 0, width: b.width / olcek, height: b.height / olcek)
+        v.center = CGPoint(x: b.midX, y: b.midY)
+        v.transform = CGAffineTransform(scaleX: olcek, y: olcek)
     }
 }

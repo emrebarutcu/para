@@ -394,25 +394,51 @@ bir sonraki gönderimde depodakiyle ezilir; değişiklik `magaza/`'da yapılır.
   sayfası** → Run workflow (dosya `main`'de olmalı) ya da her dalda etiketle: `git tag magaza-gonder-2 && git push origin
   magaza-gonder-2` (`magaza-oku-*`, `magaza-kuru-*`). `claude/magaza*` dalına `magaza/` değişikliği itilince kendiliğinden
   `kuru` çalışır. **İncelemeye göndermez**: o adım elle, App Store Connect → Add for Review.
-- **Metinler:** `magaza/<dil>.md` (ad, alt başlık, anahtar kelimeler, tanıtım metni, açıklama; başlıklar sabit, karakter
-  sınırları denetlenir): `tr.md` Türkçe (uygulamanın ana dili), `en.md` İngilizce (ABD), `ja.md` Japonca. Yeni dil:
-  `magaza/<kod>.md` ve `ayarlar.json → diller`'e App Store Connect'in dil kodu.
-- **`magaza/ayarlar.json`:** adresler, kategori (`FINANCE`), telif, fiyat (ücretsiz; yalnızca hiç ayarlanmamışsa yazılır),
+- **Metinler:** `magaza/<dil>.md` (ad, alt başlık, anahtar kelimeler, tanıtım metni, açıklama, yenilikler; başlıklar
+  sabit, karakter sınırları denetlenir: `python3 ios/scripts/asc_magaza.py denetle`): `tr.md` Türkçe (uygulamanın ana
+  dili), `en.md` İngilizce (ABD), `en-gb.md` İngilizce (Birleşik Krallık), `ja.md` Japonca, `de.md`, `fr.md`, `es.md`
+  (İspanya), `it.md`, `nl.md`, `ar.md` (Körfez). Yalnızca uygulamanın ülke olarak desteklediği pazarların dilleri var
+  (`para.js` → `COUNTRIES`): Kore ve Brezilya ülke listesine girince `ko` ve `pt-BR` eklenir. Yeni dil: `magaza/<kod>.md`
+  ve `ayarlar.json → diller`'e App Store Connect'in dil kodu; aynı yerde o dilin ekran görüntüleri ve abonelik adları.
+- **Aramada bulunma (ASO) kuralları** — metinler bunlara göre yazıldı, değiştirirken korunur:
+  - Ad en ağır alandır: marka ve o pazarın en güçlü terimi ("Taksit Takibi", "BNPL Bill Tracker", "Raten & Zahlungen").
+    Alt başlık sıradaki terimleri taşır ve okunur bir cümle parçasıdır.
+  - Anahtar kelimeler tek tek sözcüktür, virgülden sonra boşluk yoktur; adda ya da alt başlıkta geçen sözcük
+    yinelenmez (App Store alanları birleştirir), başka markaların adı yazılmaz (yönerge 2.3.7), 100 karakter doldurulur.
+  - Açıklama aramada sayılmaz, ikna içindir: ilk iki satır "devamı"ndan önce görünür ve uygulamanın ne yaptığını söyler.
+    Ücretsiz olmayan özellik ücretsizmiş gibi yazılmaz (son paragraf Premium'da olanı söyler).
+  - Ad ve alt başlık yalnızca yeni sürümle değişir; anahtar kelimeler, açıklama ve yenilikler de sürüme bağlıdır.
+    Tanıtım metni her zaman değiştirilebilir (duyuru için).
+  - Arama hacmi ölçülmedi: terimler o dilde bu tür uygulamaların aranma biçimine göre seçildi. Yayından sonra App Store
+    Connect → Analytics → Sources'ta arama gösterimi ve dönüşüm izlenir; tutmayan terim değiştirilir.
+- **Mağaza kimliği:** `6829311425` (`https://apps.apple.com/app/id6829311425`). Web'de `config.js` → `APP_STORE_URL`
+  (Premium kilitlerindeki "App Store'da aç") ve `index.html`'deki `apple-itunes-app` (iPhone'da Safari'nin uygulama bandı).
+- **`magaza/ayarlar.json`:** adresler, kategori (`FINANCE`, ikincil `PRODUCTIVITY`), telif, fiyat (ücretsiz; yalnızca hiç ayarlanmamışsa yazılır),
   yaş sınırı bildirimi (`yas`: hepsi yok), satılan ülkeler (`ulkeler.haric`: Çin, ICP lisansı gerektiği için), her dilin
   ekran görüntüleri (`ekran-goruntuleri` dalındaki dosya adları, sırayla; aynıysa yeniden yüklenmez), abonelik grubu ve
   ürünlerinin dil metinleri (`abonelik`; ad ≤30, açıklama ≤55) ve abonelik ülkeleri. Abonelik fiyatı ve ücretsiz deneme
   App Store Connect'te kalır.
 - **Sürüm:** düzenlenebilir mağaza sürümünün numarası `version.js`'teki sürüme çekilir (yoksa açılır), o sürümün en yeni
   geçerli build'i seçilir. O sürümün build'i yoksa numara değişmez (uyarı yazılır): önce TestFlight, sonra yeniden
-  `gonder`. Sürüm incelemedeyken `gonder` çalıştırılmaz (yeni sürüm açmaya çalışır).
+  `gonder`. Sürüm incelemedeyken `gonder` çalıştırılmaz (yeni sürüm açmaya çalışır). Uygulama yayındayken ad, alt
+  başlık, kategori ve yeni diller yayındaki uygulama bilgisine yazılamaz: `gonder` önce yeni sürümü açar, sonra uygulama
+  bilgisini yazar (App Store Connect yeni sürümle düzenlenebilir bir kopya oluşturur). Bu sıra 1.1.0'la ilk kez
+  denenecek: ilk `gonder`'in çıktısında "Uygulama bilgisi" bölümüne bakılır.
 - **Elle kalanlar** (API'de yok ya da kişisel bilgi; depo herkese açık, günlükte yalnızca "dolu / boş" yazılır): App
   Privacy, inceleme iletişim bilgileri (ad, telefon, e-posta) ve notları, anlaşmalar / vergi / banka. İçerik hakları
   beyanı `ayarlar.json → icerikHaklari`'nda (kur, altın, fon ve hisse fiyatları dışarıdan: `USES_THIRD_PARTY_CONTENT`).
 - **Adresler:** destek `https://cashfollow.app/support`, gizlilik `https://cashfollow.app/privacy` (ikisi de İngilizce;
   `support.html`, `privacy.html`). Destek e-postası `support@cashfollow.app` (Cloudflare yönlendirmesi).
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
-  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir; API'de `APP_IPHONE_67`). `en-*`
-  İngilizce (ABD örnek verisi), ötekiler Türkçe. Japonca sayfa şimdilik İngilizce görüntüleri kullanır.
+  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir; API'de `APP_IPHONE_67`). Mağazaya
+  gidenler **vitrin** görüntüleridir (`-vitrin`, `Ornek.swift` → `Vitrin`): üstte tek cümlelik başlık, altında ekran bir
+  telefonun içinde. Her mağaza dilinin kendi takımı vardır, uygulamanın o dildeki hâli ve o ülkenin para birimiyle:
+  `vitrin-*` Türkçe, `en-vitrin-*` ABD, `gb-`, `de-`, `fr-`, `es-`, `it-`, `nl-`, `ar-`, `ja-vitrin-*`. Başlıklar
+  `Ornek.vitrinBasligi`'nda, çevirileri `dil/<kod>.json`'da (başlıktaki `|` satırın bölüneceği yerdir, her dil kendi
+  yerini verir; bir satır 22 harfi geçmezse yazı küçülmez); arama sonucunda yalnızca ilk üç görüntü göründüğü için sıra
+  (`ayarlar.json`) Özet, "Alabilir miyim?" formu, Akış, sonra Kartlar, Harcamalar, Varlıklar. Başlık bir faydayı söyler
+  ("Bu ay ne ödeyeceğini bil"), ekranın adını değil. Başlıksız `sekme*` / `en-*` görüntüleri belgeler ve inceleme içindir.
+  Mağaza metni ya da ekranlar değişince: önce bu iş akışı (dal varsayılan), sonra `magaza` → `kuru`.
 - **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı; hepsi kullanıcıya bağlı, takip yok):
   - Contact Info → E-posta adresi: App Functionality.
   - Financial Info → Other Financial Info: App Functionality.
@@ -473,7 +499,7 @@ penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
   taksit, bugünün kartı: `icgoru.js` `FREE`; biri Özet'in tepesinde tek satır, `headline`); asistanda yalnızca özet
   okuması (`get_overview`; `mcp/server.js` `FREE_TOOLS`); Akış'ta bu ay ve sonraki ayın ödeme planı (ücretsiz tat:
   `Abonelik.tatAy`, web `TASTE_MONTHS`; PostHog'da `free_taste` bayrağının `off` kolu kapatır, bayrak yoksa açıktır).
-  Web kilitlerinde App Store bağlantısı ve geniş ekranda QR (`APP_STORE_URL`, `appstore-qr.svg`; `app_store_opened`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir
+  Web kilitlerinde App Store bağlantısı ve geniş ekranda QR (`config.js` `APP_STORE_URL`, `appstore-qr.svg`; `app_store_opened`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir
   miyim?", öbür içgörüler (uyarılar, öneriler), Varlığın seyri, kart borcu geri ödeme planı, asistanın öbür araçları
   (yazma dahil). Sınırı aşan eski kart ve kişiler kalır;
   yalnızca yenisi eklenemez. **Web** aynı sınırları uygular (`app.js` → CashFollow Premium; web'de "Alabilir miyim?" ve
