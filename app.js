@@ -231,12 +231,23 @@ function premiumLock(title, desc, reason) {
   if (title) head.append(el("strong", "", title));
   head.append(badge);
   box.append(head, el("p", "", desc), el("p", "hint", L("CashFollow Premium iPhone uygulamasından alınır (Ayarlar → CashFollow Premium). Aynı hesapla giriş yaptığında burada da açılır.")));
+  // Premium iPhone'dan alınır: kilit çıkmaz sokak olmasın diye mağaza sayfasına bağlantı (config.js APP_STORE_URL)
+  const actions = el("div", "premium-lock-actions");
   if (!window.syncGetUser?.() && window.syncOpenAuth) {
     const b = el("button", "btn btn-primary sm", L("Giriş yap"));
     b.type = "button";
     b.addEventListener("click", () => window.syncOpenAuth());
-    box.append(b);
+    actions.append(b);
   }
+  if (window.APP_STORE_URL) {
+    const a = el("a", "btn btn-ghost sm", L("App Store'da aç"));
+    a.href = window.APP_STORE_URL;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.addEventListener("click", () => window.Analitik?.event("app_store_opened", { reason }));
+    actions.append(a);
+  }
+  if (actions.childElementCount) box.append(actions);
   if (!paywallSeen.has(reason)) { paywallSeen.add(reason); window.Analitik?.event("paywall_shown", { reason }); }
   return box;
 }

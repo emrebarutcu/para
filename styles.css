@@ -1838,6 +1838,8 @@ a.hero-eq { display: block; width: fit-content; }
 .premium-lock p { font-size: 14px; color: var(--text-2); line-height: 1.5; }
 .premium-lock .hint { font-size: 13px; color: var(--text-3); }
 .premium-lock-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.premium-lock-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.premium-lock-actions a.btn { text-decoration: none; }
 .premium-lock-head strong { font-size: 15px; font-weight: 600; color: var(--text); }
 .premium-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); }
 .premium-badge .ic { width: 14px; height: 14px; }
