@@ -1838,6 +1838,12 @@ a.hero-eq { display: block; width: fit-content; }
 .premium-lock p { font-size: 14px; color: var(--text-2); line-height: 1.5; }
 .premium-lock .hint { font-size: 13px; color: var(--text-3); }
 .premium-lock-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+/* Mağaza bağlantısı ve QR: QR yalnızca geniş ekranda (telefonda bağlantıya dokunulur) */
+.premium-store { display: flex; flex-wrap: wrap; gap: 8px; }
+.premium-store a.btn { text-decoration: none; }
+.premium-qr { display: none; margin: 4px 0 0; align-items: center; gap: 10px; font-size: 12px; color: var(--text-3); }
+.premium-qr img { border-radius: 8px; background: #fff; }
+@media (min-width: 720px) and (hover: hover) { .premium-qr { display: flex; } }
 .premium-lock-head strong { font-size: 15px; font-weight: 600; color: var(--text); }
 .premium-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-2); }
 .premium-badge .ic { width: 14px; height: 14px; }

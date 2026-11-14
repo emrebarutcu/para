@@ -1519,5 +1519,9 @@
  "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "De app is vergrendeld: open CashFollow om het bedrag te zien.",
  "Bu ay ödemen yok.": "Deze maand hoef je niets te betalen.",
  "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "Deze maand te betalen: {0}. Betaald {1}, nog {2}.",
- "Bu ay {0} ödenecek.": "Deze maand te betalen: {0}."
+ "Bu ay {0} ödenecek.": "Deze maand te betalen: {0}.",
+ "Sonraki aylar": "Latere maanden",
+ "App Store'da aç": "Open in de App Store",
+ "App Store sayfasının QR kodu": "QR-code van de App Store-pagina",
+ "iPhone'unla okut": "Scan met je iPhone"
 }

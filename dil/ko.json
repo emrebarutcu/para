@@ -1519,5 +1519,9 @@
  "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "앱이 잠겨 있어요. 금액을 보려면 CashFollow를 여세요.",
  "Bu ay ödemen yok.": "이번 달에는 결제할 금액이 없어요.",
  "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "이번 달 결제 금액은 {0}이에요. {1} 결제 완료, {2} 남음.",
- "Bu ay {0} ödenecek.": "이번 달 결제 금액은 {0}이에요."
+ "Bu ay {0} ödenecek.": "이번 달 결제 금액은 {0}이에요.",
+ "Sonraki aylar": "이후 달",
+ "App Store'da aç": "App Store에서 열기",
+ "App Store sayfasının QR kodu": "App Store 페이지 QR 코드",
+ "iPhone'unla okut": "iPhone으로 스캔하세요"
 }

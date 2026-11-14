@@ -152,12 +152,13 @@ etkileri önce / sonra kohortlarıyla okunur.
   otomasyon rehberi (tetikleyiciler gerçek cihazda doğrulanmadan yazılmaz) → WidgetKit (küçük, orta, kilit ekranı).
 - **Karşılama denemesi yapılmıyor:** yeni akış herkese açık, `onboarding_flow` okunmaz; önce / sonra kohortlarıyla
   ölçülür. "Deneme sürerken ilk haftayı değiştiren şey yayınlanmaz" kuralı kalktı.
-- **Web'den satın alma şimdi yok:** web kilitlerine App Store bağlantısı ve QR gelecek (mağaza bağlantısı bekleniyor).
+- **Web'den satın alma şimdi yok:** web kilitlerinde App Store bağlantısı ve (geniş ekranda) QR var.
 - **Asistanda özet okuması ücretsiz** (`get_overview`: bu ay ödenecek, sıradaki ödemeler); öbür araçlar ve yazma Premium.
+- **Akış'ın ilk 2 ayı ücretsiz** (bu ay ve sonraki ay; 14 Kasım): sonrası ve iPhone'da 12 aylık grafik Premium. Bayrak
+  `free_taste`: `off` kolu kapatır, bayrak yoksa açık.
 
 ## Karar bekleyenler
 
-- Akış'ın ilk 2–3 ayı ücretsiz olsun mu (yukarıda 3; bayrak `free_taste`)?
 - Son ödeme günü tahmini (Türkiye'de kesim + 10, başka ülkede + 21) uygun mu? Aynı ekranda değiştirilebiliyor.
 - Satın alma formunda ücretsiz kullanıcıya ödeme planı gösterilsin mi? Dürüstlük düzeltmesi, ama "Alabilir miyim?"
   ödeme ekranı görüntülenmesini azaltabilir.

@@ -184,6 +184,12 @@ window.onAuthLogout = function () {
 // Abonelik): 2 kart, 2 kişi, iyi haber içgörüleri; Akış, öbür içgörüler, Varlığın seyri ve asistan Premium. Sınırı aşan eski
 // kart ve kişiler kalır, yalnızca yenisi eklenemez. Girişsiz web ücretsizdir. Durum bilinmezken (oturum henüz okunmadı ya da
 // bağlantı yok ve önceki okuma yok) kilit gösterilmez; son okunan değer saklanır, telefonda alınca sekme öne gelince açılır.
+// Mağaza sayfası (ülkesiz adres: App Store kullanıcının ülkesine yönlendirir); kilitlerdeki bağlantı ve QR (appstore-qr.svg)
+const APP_STORE_URL = "https://apps.apple.com/app/id6829311425";
+// Ücretsiz tat: Akış'ın ödeme planında bu ay ve sonraki ay Premium'suz açık (iPhone: Abonelik.tatAy). PostHog'da
+// free_taste bayrağının "off" kolu kapatır; bayrak yoksa açıktır.
+const TASTE_MONTHS = 2;
+const freeTaste = () => window.Analitik?.flag("free_taste") !== "off";
 const FREE_CARDS = 2, FREE_PEOPLE = 2;   // ücretsiz sürüm: 2 kart, 2 kişi (sen ve eşin gibi biri)
 const PREMIUM_TTL = 60_000;        // öne gelince en sık bu aralıkla yeniden sorulur
 let premium = null;                // true / false / null (bilinmiyor)
@@ -231,12 +237,27 @@ function premiumLock(title, desc, reason) {
   if (title) head.append(el("strong", "", title));
   head.append(badge);
   box.append(head, el("p", "", desc), el("p", "hint", L("CashFollow Premium iPhone uygulamasından alınır (Ayarlar → CashFollow Premium). Aynı hesapla giriş yaptığında burada da açılır.")));
+  // Mağaza bağlantısı; geniş ekranda (bilgisayar) telefonla okutmak için QR da
+  const store = el("div", "premium-store");
+  const link = el("a", "btn btn-primary sm", L("App Store'da aç"));
+  link.href = APP_STORE_URL;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.addEventListener("click", () => window.Analitik?.event("app_store_opened", { reason }));
+  store.append(link);
   if (!window.syncGetUser?.() && window.syncOpenAuth) {
-    const b = el("button", "btn btn-primary sm", L("Giriş yap"));
+    const b = el("button", "btn btn-ghost sm", L("Giriş yap"));
     b.type = "button";
     b.addEventListener("click", () => window.syncOpenAuth());
-    box.append(b);
+    store.append(b);
   }
+  const qr = el("figure", "premium-qr");
+  const img = new Image(88, 88);
+  img.src = "appstore-qr.svg";
+  img.alt = L("App Store sayfasının QR kodu");
+  img.loading = "lazy";
+  qr.append(img, el("figcaption", "", L("iPhone'unla okut")));
+  box.append(store, qr);
   if (!paywallSeen.has(reason)) { paywallSeen.add(reason); window.Analitik?.event("paywall_shown", { reason }); }
   return box;
 }
@@ -1946,18 +1967,20 @@ function showCashTooltip(day, net, x, y) {
 
 // ---------- Akış ----------
 // Üstte ücretsiz paneller: 12 aylık grafik (Aylık ödemeler) ve ayın girdi / çıktıları. Ayların ödeme planı (liste / tablo)
-// Premium'dur: kilitliyken yerinde Premium notu durur ve ücretsiz panellerin altına iner; açıkken grafiğin hemen altındadır.
+// Premium'dur; ücretsiz tat açıkken (freeTaste) bu ay ve sonraki ay liste olarak açıktır, sonrası için kilit durur. Tat
+// kapalıyken: kilitliyken yerinde Premium notu durur ve ücretsiz panellerin altına iner; açıkken grafiğin hemen altındadır.
 function renderFlow(months) {
   chartMonths = months.slice(0, CHART_MONTHS);
   renderLegend(chartMonths);
   renderChart(chartMonths);
   renderTimeline(T.monthIndex(currentMonth));
 
-  const lock = locked();
+  const taste = locked() && freeTaste();   // ücretsiz tat: liste, ilk TASTE_MONTHS ay; sonrası kilitli
+  const lock = locked() && !taste;
   if (lock !== (els.timelinePanel.nextElementSibling === els.flowPlan)) {
     if (lock) els.timelinePanel.after(els.flowPlan); else els.timelinePanel.before(els.flowPlan);
   }
-  els.flowHead.hidden = lock;
+  els.flowHead.hidden = lock || taste;
   if (lock) {
     els.flowTable.hidden = true;
     els.flowList.hidden = false;
@@ -1977,10 +2000,19 @@ function renderFlow(months) {
   const due = B.paymentsDue(state, today, T.dateKey(start, 1), "9999-12-31");
   const lastDue = due.length ? T.parseDate(due[due.length - 1].date).idx : -Infinity;
   const lastIdx = months.length ? months[months.length - 1].idx : start - 1;
-  const list = flowMode === "list" && lastDue > lastIdx
+  const all = flowMode === "list" && lastDue > lastIdx
     ? cashflow(start, Math.min(lastDue, start + MAX_MONTHS - 1))
     : months;
+  const tasteEnd = todayIndex() + TASTE_MONTHS - 1;
+  const list = taste ? all.filter(m => m.idx <= tasteEnd) : all;
+  const more = taste && (all.some(m => m.idx > tasteEnd) || start > tasteEnd);
+  const tasteLock = () => premiumLock(L("Sonraki aylar"), L("Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı."), "cash_flow");
 
+  if (!list.length && more) {
+    els.flowList.hidden = false;
+    els.flowList.append(tasteLock());
+    return;
+  }
   if (!list.length) {
     els.flowList.hidden = false;
     els.flowList.append(emptyState("flow",
@@ -1989,7 +2021,7 @@ function renderFlow(months) {
     return;
   }
 
-  if (flowMode === "table") {
+  if (flowMode === "table" && !taste) {
     els.flowList.hidden = true;
     els.flowTable.hidden = false;
     renderTable(months);
@@ -2052,6 +2084,7 @@ function renderFlow(months) {
     }
     els.flowList.append(block);
   }
+  if (more) els.flowList.append(tasteLock());
 }
 
 // Bir ödemede (tarih + kart) ödenen taksitler

@@ -471,7 +471,9 @@ penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
 - **Ücretsiz sürüm:** 2 kart, 2 kişi (kullanıcı ve eşi gibi biri), Özet, harcamalar ve taksitler, borçlar
   (`Abonelik.ucretsizKart`, `ucretsizKisi`; web `FREE_CARDS`, `FREE_PEOPLE`); iyi haber içgörüleri (serbest nakit, son
   taksit, bugünün kartı: `icgoru.js` `FREE`; biri Özet'in tepesinde tek satır, `headline`); asistanda yalnızca özet
-  okuması (`get_overview`; `mcp/server.js` `FREE_TOOLS`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir
+  okuması (`get_overview`; `mcp/server.js` `FREE_TOOLS`); Akış'ta bu ay ve sonraki ayın ödeme planı (ücretsiz tat:
+  `Abonelik.tatAy`, web `TASTE_MONTHS`; PostHog'da `free_taste` bayrağının `off` kolu kapatır, bayrak yoksa açıktır).
+  Web kilitlerinde App Store bağlantısı ve geniş ekranda QR (`APP_STORE_URL`, `appstore-qr.svg`; `app_store_opened`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir
   miyim?", öbür içgörüler (uyarılar, öneriler), Varlığın seyri, kart borcu geri ödeme planı, asistanın öbür araçları
   (yazma dahil). Sınırı aşan eski kart ve kişiler kalır;
   yalnızca yenisi eklenemez. **Web** aynı sınırları uygular (`app.js` → CashFollow Premium; web'de "Alabilir miyim?" ve

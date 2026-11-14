@@ -1519,5 +1519,9 @@
  "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "O app está bloqueado: abra o CashFollow para ver o valor.",
  "Bu ay ödemen yok.": "Você não tem pagamentos este mês.",
  "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "Este mês vencem {0}: {1} pagos, faltam {2}.",
- "Bu ay {0} ödenecek.": "Este mês vencem {0}."
+ "Bu ay {0} ödenecek.": "Este mês vencem {0}.",
+ "Sonraki aylar": "Próximos meses",
+ "App Store'da aç": "Abrir na App Store",
+ "App Store sayfasının QR kodu": "Código QR da página na App Store",
+ "iPhone'unla okut": "Escaneie com o iPhone"
 }

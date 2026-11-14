@@ -1519,5 +1519,9 @@
  "Uygulama kilitli: tutarı görmek için CashFollow'u aç.": "Die App ist gesperrt: Öffne CashFollow, um den Betrag zu sehen.",
  "Bu ay ödemen yok.": "Diesen Monat ist nichts fällig.",
  "Bu ay {0} ödenecek: {1} ödendi, kalan {2}.": "Diesen Monat sind {0} fällig: {1} bezahlt, {2} offen.",
- "Bu ay {0} ödenecek.": "Diesen Monat sind {0} fällig."
+ "Bu ay {0} ödenecek.": "Diesen Monat sind {0} fällig.",
+ "Sonraki aylar": "Spätere Monate",
+ "App Store'da aç": "Im App Store öffnen",
+ "App Store sayfasının QR kodu": "QR-Code der App-Store-Seite",
+ "iPhone'unla okut": "Mit dem iPhone scannen"
 }
