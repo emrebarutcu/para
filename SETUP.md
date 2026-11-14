@@ -434,7 +434,8 @@ bir sonraki gönderimde depodakiyle ezilir; değişiklik `magaza/`'da yapılır.
   gidenler **vitrin** görüntüleridir (`-vitrin`, `Ornek.swift` → `Vitrin`): üstte tek cümlelik başlık, altında ekran bir
   telefonun içinde. Her mağaza dilinin kendi takımı vardır, uygulamanın o dildeki hâli ve o ülkenin para birimiyle:
   `vitrin-*` Türkçe, `en-vitrin-*` ABD, `gb-`, `de-`, `fr-`, `es-`, `it-`, `nl-`, `ar-`, `ja-vitrin-*`. Başlıklar
-  `Ornek.vitrinBasligi`'nda, çevirileri `dil/<kod>.json`'da; arama sonucunda yalnızca ilk üç görüntü göründüğü için sıra
+  `Ornek.vitrinBasligi`'nda, çevirileri `dil/<kod>.json`'da (başlıktaki `|` satırın bölüneceği yerdir, her dil kendi
+  yerini verir; bir satır 22 harfi geçmezse yazı küçülmez); arama sonucunda yalnızca ilk üç görüntü göründüğü için sıra
   (`ayarlar.json`) Özet, "Alabilir miyim?" formu, Akış, sonra Kartlar, Harcamalar, Varlıklar. Başlık bir faydayı söyler
   ("Bu ay ne ödeyeceğini bil"), ekranın adını değil. Başlıksız `sekme*` / `en-*` görüntüleri belgeler ve inceleme içindir.
   Mağaza metni ya da ekranlar değişince: önce bu iş akışı (dal varsayılan), sonra `magaza` → `kuru`.

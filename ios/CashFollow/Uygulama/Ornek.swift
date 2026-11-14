@@ -290,8 +290,9 @@ struct TurEkrani: View {
 
     private func adim(_ ad: String) async {
         if ad.hasPrefix("sekme"), let n = Int(ad.dropFirst(5)) { sekme = n }
-        // Çizilsin, veriler (araçlar, grafikler) yüklensin; ilk adımda soğuk başlangıç için biraz daha
-        try? await Task.sleep(for: .milliseconds(i == 0 ? 2500 : 1200))
+        // Çizilsin, veriler (araçlar, grafikler) yüklensin; ilk adımda soğuk başlangıç için biraz daha. Mağaza
+        // görüntülerinde daha uzun: Varlıklar'ın seyri kur geçmişini ağdan okur, 1,2 saniyede her zaman yetişmiyor
+        try? await Task.sleep(for: .milliseconds(Ornek.vitrin ? (ad == "sekme4" ? 4500 : 3000) : i == 0 ? 2500 : 1200))
         try? ad.write(to: Self.isaret, atomically: true, encoding: .utf8)
         while FileManager.default.fileExists(atPath: Self.isaret.path) {
             try? await Task.sleep(for: .milliseconds(100))
