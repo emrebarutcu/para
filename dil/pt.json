@@ -1515,5 +1515,15 @@
  "Yarına kadarki alışveriş: son ödeme {0}. Sonrası: {1}.": "Compras até amanhã: vencem em {0}. Depois: {1}.",
  "{0} özetin hazır": "Seu resumo de {0} está pronto",
  "Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı.": "Seu plano de pagamentos para os próximos meses: cada dia de pagamento, as parcelas dele e a parte de cada pessoa.",
- "App Store'da aç": "Abrir na App Store"
+ "App Store'da aç": "Abrir na App Store",
+ "Bu ay ne ödeyeceğini bil": "Saiba quanto você paga este mês",
+ "Almadan önce sor: alabilir miyim?": "Antes de comprar: cabe no bolso?",
+ "Önümüzdeki 12 ay tek bakışta": "Seus próximos 12 meses num relance",
+ "Kartların, limitlerin, borçların": "Cartões, limites e dívidas num só lugar",
+ "Her taksit ne zaman bitiyor": "Veja quando cada parcela termina",
+ "Neyin var, nasıl değişiyor": "O que você tem e como muda",
+ "Kira": "Aluguel",
+ "Uçak bileti": "Passagem aérea",
+ "Taşıt kredisi": "Financiamento do carro",
+ "Buzdolabı": "Geladeira"
 }

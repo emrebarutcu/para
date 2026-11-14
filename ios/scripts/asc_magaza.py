@@ -624,8 +624,10 @@ def gonder(ay, klasor):
         print(f"{loc}: " + ", ".join(f"{k} {len(v)}/{SINIR[k]}" for k, v in m.items()))
     app = uygulama(ay)
     bolum("Uygulama", gonder_uygulama, app, ay)
-    bolum("Uygulama bilgisi (ad, alt başlık, gizlilik adresi, kategori, yaş)", gonder_bilgi, app, ay, mt)
+    # Önce sürüm: uygulama yayındayken ad, alt başlık, kategori ve yeni diller yayındaki uygulama bilgisine yazılamaz;
+    # App Store Connect yeni sürüm açılınca düzenlenebilir bir uygulama bilgisi oluşturur (app_info onu seçer)
     v = bolum("Sürüm", gonder_surum, app, ay)
+    bolum("Uygulama bilgisi (ad, alt başlık, gizlilik adresi, kategori, yaş)", gonder_bilgi, app, ay, mt)
     if v:
         bolum("Build", gonder_build, app, v)
         bolum("Sürüm metinleri (açıklama, anahtar kelimeler, tanıtım, adresler)", gonder_surum_metinleri, v, ay, mt)
