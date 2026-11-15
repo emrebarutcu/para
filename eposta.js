@@ -129,6 +129,15 @@
       if (cut) part = part.slice(cut[0].length);
       return cleanMerchant(part);
     }
+    // Banka mesajlarında (SMS) işyeri çoğu kez büyük harfle, tutardan önce yazılır: "… tarihinde A101 den 125,50 TL lik …",
+    // "… 14:32'de TRENDYOL'dan 1.299,90 TL tutarında …"
+    const from = /((?:[A-ZÇĞİÖŞÜ0-9][A-ZÇĞİÖŞÜ0-9&.*\/-]*\s?){1,5}?)\s*['’]?\s*(?:[dt][ae]n|[DT][AE]N)\s+(?:[\d.,]+\s*(?:TL|TRY|₺)|(?:TL|TRY|₺)\s*[\d.,]+)/.exec(text);
+    if (from) {
+      let part = from[1];
+      const cut = fold(part).match(MERCHANT_CUT);
+      if (cut) part = part.slice(cut[0].length);
+      return cleanMerchant(part);
+    }
     return null;
   }
 
@@ -163,6 +172,50 @@
       : null;
     r.ok = !r.reason;
     return r;
+  }
+
+  // ── Banka mesajı (SMS) ──
+  // iPhone'da Kısayollar otomasyonu gelen mesajın metnini uygulamaya verir (Mesajlar.swift); metin telefonda okunur.
+  // Mesaj kutusuna harcama bildiriminden başkası da düşer: tek kullanımlık şifre (tutarı ve işyerini de yazar, harcamadan
+  // ÖNCE gelir: eklenirse harcama iki kez sayılır), ekstre ve borç bildirimi, karta ödeme, havale, kampanya.
+  const SMS_OTP = /(\bsifre|dogrulama kodu|onay kodu|guvenlik kodu|tek kullanimlik|\botp\b|paylasmayin)/;
+  const SMS_SPEND = /(harcama|alisveris|islem(iniz|i)?\s+(gerceklesti|yapil)|lik islem|provizyon|\bpesin\b|taksit)/;
+  const SMS_OTHER = /(ekstre|son odeme|asgari|hesap ozeti|borcunuz|donem borcu|havale|\beft\b|\bfast\b|yatiril|cekil|\bmaas|kampanya|basvuru|(kartiniza|hesabiniza)[^\n]{0,40}odeme)/;
+
+  // Kuralların gördüğü: "otp" (şifre mesajı), "spend" (harcama bildirimi), "other" (harcama değil: tutar yok ya da
+  // ekstre, ödeme, havale…), "unsure" (tutar var ama harcama olduğunu söyleyen bir söz yok)
+  function smsKind(body) {
+    const f = fold(plainText(body));
+    if (SMS_OTP.test(f)) return "otp";
+    if (!findAmount(f)) return "other";
+    const spend = SMS_SPEND.test(f);
+    if (SMS_OTHER.test(f) && !spend) return "other";
+    return spend ? "spend" : "unsure";
+  }
+
+  // Mesajla ne yapılacağı. hint: telefondaki modelin (Apple Intelligence, MesajZekasi.swift) okuduğu
+  // { purchase: bool, merchant, amount: "1.250,00" (mesajda yazdığı gibi) }; model yoksa null: yalnızca kurallar.
+  // → { skip: true }: harcama değil, hiçbir yere yazılmaz.
+  // → { merchant, doubt }: harcama sayılır. merchant: işyeri (modelinki, mesajda gerçekten geçiyorsa; yoksa kuralınki).
+  //   doubt: kendiliğinden eklenmemesinin nedeni (onaya düşer) ya da null. Model sayıları da okur: tutarı kuralın
+  //   okuduğuyla uyuşmazsa ya da ikisi harcama olup olmadığında anlaşamazsa harcama eklenmez, kullanıcıya sorulur.
+  function sms(body, hint, parsed) {
+    const rule = smsKind(body);
+    const says = hint ? !!hint.purchase : null;
+    if (rule === "otp" || (rule === "other" && says !== true) || (rule === "unsure" && says === false)) return { skip: true };
+    const p = parsed || parse({ body });
+    const f = fold(plainText(body));
+    const m = hint && typeof hint.merchant === "string" ? cleanMerchant(hint.merchant) : null;
+    const merchant = m && f.includes(fold(m)) ? m : p.merchant;
+    let doubt = null;
+    if (says === false || (says === null && rule === "unsure") || rule === "other") doubt = "Not sure this is a purchase";
+    else if (hint && hint.amount != null && p.amount != null) {
+      const a = toAmount(String(hint.amount).replace(/[^\d.,]/g, "") || "0");
+      // Taksitli mesajda model taksit tutarını, kural toplamı okumuş olabilir (ikisi de mesajda yazar)
+      const same = x => Math.abs(x - a) < 0.005;
+      if (!(same(p.amount) || (p.count > 1 && same(Math.round(p.amount / p.count * 100) / 100)))) doubt = "Amount could not be confirmed";
+    }
+    return { merchant, doubt };
   }
 
   // ── Kurulum e-postaları (harcama değildir) ──
@@ -211,7 +264,7 @@
   // e-postaları da okunmaya çalışılır; okunamayan onaya düşer. Web'deki Banka e-postaları penceresi ve asistan buradan okur.
   const BANKS = ["Yapı Kredi"];
 
-  const api = { parse, plainText, fold, toAmount, verification, isTest, kind, TEST_SUBJECT, BANKS };
+  const api = { parse, plainText, fold, toAmount, verification, isTest, kind, sms, smsKind, TEST_SUBJECT, BANKS };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Eposta = api;
 })(this);

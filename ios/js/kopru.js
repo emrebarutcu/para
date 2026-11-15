@@ -10,7 +10,8 @@
 //   native.save(json)      veriyi kaydeder (araç değiştirdiyse)
 //   native.random(n)       → n rastgele bayt (dizi)
 //   native.log(level, msg)
-// Banka e-postaları (check_inbox, list_inbox): Swift işlenmemişleri setInbox ile verir (yukarıda inbox).
+// Banka e-postaları (check_inbox, list_inbox): Swift işlenmemişleri setInbox ile verir (yukarıda inbox). Telefona gelen
+// banka mesajları (SMS) aynı listeye eksi kimlikle ve source "sms" ile girer; onlar yalnızca telefonda durur.
 (function (root) {
   const T = root.Taksit, V = root.Varlik, K = root.Kategori, Tablo = root.Tablo, N = root.Nakit, P = root.Para;
 
@@ -92,6 +93,11 @@
       rows: rowsJson ? JSON.parse(rowsJson) : [], granted: new Set(grantedJson ? JSON.parse(grantedJson) : []), released: [],
       latest: Array.isArray(latest) ? latest[0] ?? null : latest,
     };
+  }
+  // Banka mesajı (SMS) kuyruğa alınmasın mı: şifre, ekstre gibi harcama olmayan mesajlar hiçbir yere yazılmaz
+  // (eposta.js sms; hint: telefondaki modelin okuduğu, Mesajlar.swift)
+  function smsSkip(text, hintJson) {
+    return !!root.Eposta.sms(String(text ?? ""), hintJson ? JSON.parse(hintJson) : null).skip;
   }
   function inboxReleased() {
     const out = inbox.released;
@@ -310,7 +316,7 @@
   };
 
   root.Kopru = {
-    loadTools, toScript, setRates, setPrices, setHome, setCountry, setCashDef, setInbox, inboxReleased, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
+    loadTools, toScript, setRates, setPrices, setHome, setCountry, setCashDef, setInbox, inboxReleased, smsSkip, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
     merchants, finishing, monthSummary, cutoffs,
     defaultState: () => JSON.stringify(T.defaultState()),
   };

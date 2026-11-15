@@ -652,6 +652,7 @@ function withRemembered(state, p) {
 function emailItem(state, row) {
   const mail = { body: row.body, subject: row.subject, sender: row.sender, receivedAt: row.received_at };
   const parsed = E.parse(mail);
+  if (row.source === "sms") return smsItem(state, row, parsed);
   if (E.isTest(mail)) return { row, parsed, card: null, reason: "Test e-mail", kind: "test" };
   const verify = E.verification(mail);
   if (verify) return { row, parsed, card: null, reason: verify.gmail ? "Gmail forwarding confirmation" : "Address verification", kind: "verification", verify };
@@ -661,6 +662,23 @@ function emailItem(state, row) {
   return { row, parsed, card, reason, kind: "purchase" };
 }
 
+// Banka mesajı (SMS; iPhone'da Kısayollar otomasyonu verir, yalnızca telefonda durur: Mesajlar.swift). row.hint telefondaki
+// modelin okuduğudur (eposta.js sms). Harcama olmayan mesaj (şifre, ekstre…) kuyruğa alınmaz; alındıysa kind "other" olur
+// ve işlendi sayılır. Kuralla model anlaşamazsa, ya da aynı kartta aynı gün aynı tutarda bir harcama zaten varsa
+// (e-postası da gelmiş olabilir) kendiliğinden eklenmez, onaya düşer.
+function smsItem(state, row, parsed) {
+  const s = E.sms(row.body, row.hint || null, parsed);
+  if (s.skip) return { row, parsed, card: null, reason: "Not a purchase", kind: "other" };
+  const p = { ...parsed, merchant: s.merchant };
+  const card = emailCard(state, p);
+  const same = card && state.installments.some(x => x.cardId === card.id && x.date === p.date && Math.abs(x.total - p.amount) < 0.005);
+  const reason = p.reason
+    || (card ? null : p.last4 ? `No card with last4 ${p.last4}` : "Card could not be read")
+    || s.doubt
+    || (same ? "Looks like a purchase already added" : null);
+  return { row, parsed: p, card, reason, kind: "purchase" };
+}
+
 function emailView(x, { body = false } = {}) {
   const { row, parsed, card, reason, kind, verify } = x;
   const v = {
@@ -668,6 +686,7 @@ function emailView(x, { body = false } = {}) {
     receivedAt: row.received_at,
     sender: row.sender ?? null,
     subject: row.subject ?? null,
+    ...(row.source === "sms" && { source: "sms" }),
     kind,
     parsed: {
       amount: parsed.amount, currency: parsed.currency, date: parsed.date, installments: parsed.count,
