@@ -101,7 +101,7 @@ struct AyarlarEkrani: View {
                             }
                         }
                         Button(L("Kişi ekle")) {
-                            // Ücretsiz sürümde yalnızca kullanıcının kendisi (Abonelik.ucretsizKisi)
+                            // Ücretsiz sürümde en fazla Abonelik.ucretsizKisi kişi (kullanıcı ve bir kişi daha)
                             if abonelik.premium || l.people.count < Abonelik.ucretsizKisi { newPerson = ""; addingPerson = true }
                             else { sayfa = .kisiSiniri }
                         }

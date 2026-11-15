@@ -1,0 +1,8 @@
+/* Kısayolların başlık ve parametre adları (Uygulama/Kisayollar.swift); anahtar Türkçe metin */
+"Harcama ekle" = "지출 추가";
+"Bu ay ne ödeyeceğim?" = "이번 달에 얼마를 내나요?";
+"Tutar" = "금액";
+"Ne alındı?" = "무엇을 샀나요?";
+"Taksit sayısı" = "할부 개월 수";
+"Harcama formunu açar. Tutar, ne alındığı ve taksit sayısı verilirse form dolu gelir." = "지출 입력 화면을 엽니다. 금액, 구입한 것, 할부 개월 수를 주면 입력된 상태로 열립니다.";
+"Bu ay ödenecek tutarı, ödeneni ve kalanı söyler." = "이번 달 결제 금액과 이미 낸 금액, 남은 금액을 알려 줍니다.";

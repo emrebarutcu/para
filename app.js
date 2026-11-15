@@ -181,10 +181,14 @@ window.onAuthLogout = function () {
 // ---------- CashFollow Premium ----------
 // Web'de satın alma yok: Premium iPhone uygulamasından alınır ve hesaba bağlanır (subscriptions; mcp/abonelik.js). Web
 // hesabın satırına bakar (tablo.js premium: iPhone ve asistanla aynı kural). Ücretsiz sürüm iPhone'daki gibi (SETUP.md →
-// Abonelik): 2 kart, yalnızca kullanıcının kendisi; Akış, İçgörüler, Varlığın seyri ve asistan Premium. Sınırı aşan eski
+// Abonelik): 2 kart, 2 kişi, iyi haber içgörüleri; Akış, öbür içgörüler, Varlığın seyri ve asistan Premium. Sınırı aşan eski
 // kart ve kişiler kalır, yalnızca yenisi eklenemez. Girişsiz web ücretsizdir. Durum bilinmezken (oturum henüz okunmadı ya da
 // bağlantı yok ve önceki okuma yok) kilit gösterilmez; son okunan değer saklanır, telefonda alınca sekme öne gelince açılır.
-const FREE_CARDS = 2, FREE_PEOPLE = 1;
+// Ücretsiz tat: Akış'ın ödeme planında bu ay ve sonraki ay Premium'suz açık (iPhone: Abonelik.tatAy). PostHog'da
+// free_taste bayrağının "off" kolu kapatır; bayrak yoksa açıktır.
+const TASTE_MONTHS = 2;
+const freeTaste = () => window.Analitik?.flag("free_taste") !== "off";
+const FREE_CARDS = 2, FREE_PEOPLE = 2;   // ücretsiz sürüm: 2 kart, 2 kişi (sen ve eşin gibi biri)
 const PREMIUM_TTL = 60_000;        // öne gelince en sık bu aralıkla yeniden sorulur
 let premium = null;                // true / false / null (bilinmiyor)
 let premiumUser = undefined;       // durumu tutulan kullanıcı (girişsizse null)
@@ -231,23 +235,28 @@ function premiumLock(title, desc, reason) {
   if (title) head.append(el("strong", "", title));
   head.append(badge);
   box.append(head, el("p", "", desc), el("p", "hint", L("CashFollow Premium iPhone uygulamasından alınır (Ayarlar → CashFollow Premium). Aynı hesapla giriş yaptığında burada da açılır.")));
-  // Premium iPhone'dan alınır: kilit çıkmaz sokak olmasın diye mağaza sayfasına bağlantı (config.js APP_STORE_URL)
-  const actions = el("div", "premium-lock-actions");
+  // Premium iPhone'dan alınır: kilit çıkmaz sokak olmasın diye mağaza sayfasına bağlantı (config.js APP_STORE_URL);
+  // geniş ekranda (bilgisayar) telefonla okutmak için QR da (appstore-qr.svg aynı adresi taşır)
+  const store = el("div", "premium-store");
+  const link = el("a", "btn btn-primary sm", L("App Store'da aç"));
+  link.href = window.APP_STORE_URL;
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.addEventListener("click", () => window.Analitik?.event("app_store_opened", { reason }));
+  store.append(link);
   if (!window.syncGetUser?.() && window.syncOpenAuth) {
-    const b = el("button", "btn btn-primary sm", L("Giriş yap"));
+    const b = el("button", "btn btn-ghost sm", L("Giriş yap"));
     b.type = "button";
     b.addEventListener("click", () => window.syncOpenAuth());
-    actions.append(b);
+    store.append(b);
   }
-  if (window.APP_STORE_URL) {
-    const a = el("a", "btn btn-ghost sm", L("App Store'da aç"));
-    a.href = window.APP_STORE_URL;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.addEventListener("click", () => window.Analitik?.event("app_store_opened", { reason }));
-    actions.append(a);
-  }
-  if (actions.childElementCount) box.append(actions);
+  const qr = el("figure", "premium-qr");
+  const img = new Image(88, 88);
+  img.src = "appstore-qr.svg";
+  img.alt = L("App Store sayfasının QR kodu");
+  img.loading = "lazy";
+  qr.append(img, el("figcaption", "", L("iPhone'unla okut")));
+  box.append(store, qr);
   if (!paywallSeen.has(reason)) { paywallSeen.add(reason); window.Analitik?.event("paywall_shown", { reason }); }
   return box;
 }
@@ -458,7 +467,7 @@ const els = {
   startPanel: $("startPanel"), startSteps: $("startSteps"), startHide: $("startHide"), overviewEmpty: $("overviewEmpty"),
   heroPanel: $("heroPanel"), heroLabel: $("heroLabel"), heroAmount: $("heroAmount"), heroDebt: $("heroDebt"),
   heroProgress: $("heroProgress"), heroStats: $("heroStats"),
-  nextLabel: $("nextLabel"), nextTotal: $("nextTotal"), nextDiff: $("nextDiff"),
+  nextLabel: $("nextLabel"), nextTotal: $("nextTotal"), nextDiff: $("nextDiff"), heroGood: $("heroGood"),
   remaining: $("remainingTotal"), endStat: $("endStat"), endLabel: $("endLabel"),
   upcomingPanel: $("upcomingPanel"), upcoming: $("upcomingList"),
   peoplePanel: $("peoplePanel"), peopleMonth: $("peopleMonth"), peopleSummary: $("peopleSummary"),
@@ -507,7 +516,7 @@ const els = {
   shareSheet: $("shareSheet"), shareHead: $("shareHead"), shareStats: $("shareStats"), shareItems: $("shareItems"),
   sharePaysBox: $("sharePaysBox"), sharePays: $("sharePays"), shareRemind: $("shareRemind"), sharePaid: $("sharePaid"),
   addLabel: $("addLabel"), fab: document.querySelector(".fab"),
-  purchaseSheet: $("purchaseSheet"), purchaseForm: $("purchaseForm"), purchaseTitle: $("purchaseTitle"),
+  purchaseSheet: $("purchaseSheet"), purchaseForm: $("purchaseForm"), purchaseTitle: $("purchaseTitle"), quickHint: $("quickHint"),
   purchaseDelete: $("purchaseDelete"), purchasePreview: $("purchasePreview"),
   countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"), personField: $("personField"),
   purchaseSum: $("purchaseSum"), purchaseStatus: $("purchaseStatus"), purchaseCopy: $("purchaseCopy"),
@@ -556,9 +565,17 @@ function render() {
 
   for (const n of document.querySelectorAll(".js-month-label")) n.textContent = monthLong(start);
   for (const s of document.querySelectorAll(".view")) s.hidden = s.dataset.view !== view;
+  // Durum sekmesi iki görünümü taşır (kartlar, varliklar): sekme ikisinde de seçili, bağlantısı en son açılan yüze gider
+  const durum = view === "kartlar" || view === "varliklar";
+  const tab = durum ? "durum" : view;
   for (const a of els.tabs.querySelectorAll("a")) {
-    a.classList.toggle("active", a.dataset.view === view);
-    if (a.dataset.view === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    a.classList.toggle("active", a.dataset.view === tab);
+    if (a.dataset.view === tab) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    if (durum && a.dataset.view === "durum") a.setAttribute("href", `#${view}`);
+  }
+  for (const a of document.querySelectorAll(".durum-seg a")) {
+    a.classList.toggle("active", a.dataset.durum === view);
+    if (a.dataset.durum === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
 
   if (view === "ozet") renderOverview(months, start, last);
@@ -595,7 +612,7 @@ function renderOverview(months, start, last) {
     renderHero(months, start);
     renderUpcoming(rows);
   }
-  renderInsights();
+  renderInsights(!empty && start === t);
   const cash = !empty || steps.gelir;
   els.cashPanel.hidden = !cash;
   if (cash) renderCash();
@@ -724,19 +741,29 @@ els.startHide.addEventListener("click", () => {
 });
 
 // ---------- İçgörüler (icgoru.js) ----------
-function renderInsights() {
-  const list = I.insights(state, { today: T.todayKey(), rates: curRates(), cash: isCashCode });
-  els.insightPanel.hidden = !list.length;
-  if (locked() && list.length) {
-    els.insightMore.hidden = true;
-    const li = el("li");
-    li.append(premiumLock(null, L("{0} içgörü hazır: harcama alışkanlıkların, yaklaşan yükler ve öneriler.", list.length), "insights"));
-    els.insightList.replaceChildren(li);
-    return;
+// İyi haberler (free: serbest nakit, son taksit, bugünün kartı) Premium istemez; gerisi kilitli. Tepedeki tek satır
+// (headline) "Bu ay ödenecek"in altında, yalnızca bu ay gösterilirken; listede yinelenmez.
+function renderInsights(top) {
+  const all = I.insights(state, { today: T.todayKey(), rates: curRates(), cash: isCashCode });
+  const head = top ? I.headline(all) : null;
+  els.heroGood.hidden = !head;
+  if (head) {
+    els.heroGood.querySelector("summary").replaceChildren(icon(head.id === "kart" ? "card" : "check"), document.createTextNode(head.title));
+    els.heroGood.querySelector("p").textContent = head.text;
   }
+  const rest = all.filter(x => x.id !== head?.id);
+  const list = locked() ? rest.filter(x => x.free) : rest;
+  const hiddenCount = rest.length - list.length;
+  els.insightPanel.hidden = !rest.length;
   els.insightMore.hidden = list.length <= INSIGHTS_SHOWN;
   els.insightMore.textContent = insightsOpen ? L("Daha az") : L("Tümü ({0})", list.length);
-  els.insightList.replaceChildren(...(insightsOpen ? list : list.slice(0, INSIGHTS_SHOWN)).map(insightItem));
+  const items = (insightsOpen ? list : list.slice(0, INSIGHTS_SHOWN)).map(insightItem);
+  if (hiddenCount) {
+    const li = el("li");
+    li.append(premiumLock(null, L("{0} içgörü hazır: harcama alışkanlıkların, yaklaşan yükler ve öneriler.", hiddenCount), "insights"));
+    items.push(li);
+  }
+  els.insightList.replaceChildren(...items);
 }
 
 function insightItem(x) {
@@ -767,7 +794,7 @@ function insightAction(x) {
   }
 }
 
-els.insightMore.addEventListener("click", () => { insightsOpen = !insightsOpen; renderInsights(); });
+els.insightMore.addEventListener("click", () => { insightsOpen = !insightsOpen; render(); });
 
 // Ayın harcamaları kategoriye göre (harcama tarihine göre; taksitli alışveriş tamamıyla), önceki 3 ayın ortalamasıyla.
 // Harcamalar → Kategoriler; ay panelin başlığındaki ay seçiciyle değişir.
@@ -1947,18 +1974,20 @@ function showCashTooltip(day, net, x, y) {
 
 // ---------- Akış ----------
 // Üstte ücretsiz paneller: 12 aylık grafik (Aylık ödemeler) ve ayın girdi / çıktıları. Ayların ödeme planı (liste / tablo)
-// Premium'dur: kilitliyken yerinde Premium notu durur ve ücretsiz panellerin altına iner; açıkken grafiğin hemen altındadır.
+// Premium'dur; ücretsiz tat açıkken (freeTaste) bu ay ve sonraki ay liste olarak açıktır, sonrası için kilit durur. Tat
+// kapalıyken: kilitliyken yerinde Premium notu durur ve ücretsiz panellerin altına iner; açıkken grafiğin hemen altındadır.
 function renderFlow(months) {
   chartMonths = months.slice(0, CHART_MONTHS);
   renderLegend(chartMonths);
   renderChart(chartMonths);
   renderTimeline(T.monthIndex(currentMonth));
 
-  const lock = locked();
+  const taste = locked() && freeTaste();   // ücretsiz tat: liste, ilk TASTE_MONTHS ay; sonrası kilitli
+  const lock = locked() && !taste;
   if (lock !== (els.timelinePanel.nextElementSibling === els.flowPlan)) {
     if (lock) els.timelinePanel.after(els.flowPlan); else els.timelinePanel.before(els.flowPlan);
   }
-  els.flowHead.hidden = lock;
+  els.flowHead.hidden = lock || taste;
   if (lock) {
     els.flowTable.hidden = true;
     els.flowList.hidden = false;
@@ -1978,10 +2007,19 @@ function renderFlow(months) {
   const due = B.paymentsDue(state, today, T.dateKey(start, 1), "9999-12-31");
   const lastDue = due.length ? T.parseDate(due[due.length - 1].date).idx : -Infinity;
   const lastIdx = months.length ? months[months.length - 1].idx : start - 1;
-  const list = flowMode === "list" && lastDue > lastIdx
+  const all = flowMode === "list" && lastDue > lastIdx
     ? cashflow(start, Math.min(lastDue, start + MAX_MONTHS - 1))
     : months;
+  const tasteEnd = todayIndex() + TASTE_MONTHS - 1;
+  const list = taste ? all.filter(m => m.idx <= tasteEnd) : all;
+  const more = taste && (all.some(m => m.idx > tasteEnd) || start > tasteEnd);
+  const tasteLock = () => premiumLock(L("Sonraki aylar"), L("Önümüzdeki ayların ödeme planı: her ödeme günü, içindeki taksitler ve kişilerin payı."), "cash_flow");
 
+  if (!list.length && more) {
+    els.flowList.hidden = false;
+    els.flowList.append(tasteLock());
+    return;
+  }
   if (!list.length) {
     els.flowList.hidden = false;
     els.flowList.append(emptyState("flow",
@@ -1990,7 +2028,7 @@ function renderFlow(months) {
     return;
   }
 
-  if (flowMode === "table") {
+  if (flowMode === "table" && !taste) {
     els.flowList.hidden = true;
     els.flowTable.hidden = false;
     renderTable(months);
@@ -2053,6 +2091,7 @@ function renderFlow(months) {
     }
     els.flowList.append(block);
   }
+  if (more) els.flowList.append(tasteLock());
 }
 
 // Bir ödemede (tarih + kart) ödenen taksitler
@@ -2170,7 +2209,24 @@ function firstPurchaseState() {
 
 // ---------- Harcamalar ----------
 // Liste ya da Kategoriler (ayın harcamaları kategoriye göre; hiç harcama yokken yalnızca liste ve boş durumu)
+// Ekstre ipucu: elle beş ve üstü harcama girmiş kullanıcıya bir kez; "Nasıl?" yapay zekâ penceresini açar, açınca ya da
+// kapatınca bir daha görünmez
+const STATEMENT_TIP_KEY = "para.ipucu.ekstre";
+const statementTipSeen = () => { try { return localStorage.getItem(STATEMENT_TIP_KEY) === "1"; } catch { return true; } };
+function hideStatementTip() {
+  try { localStorage.setItem(STATEMENT_TIP_KEY, "1"); } catch { /* özel pencere */ }
+  $("statementTip").hidden = true;
+}
+$("statementTipClose").addEventListener("click", hideStatementTip);
+$("statementTipOpen").addEventListener("click", () => {
+  hideStatementTip();
+  window.Analitik?.event("statement_tip_opened");
+  openAiSheet();
+  $("statementHelp").scrollIntoView({ block: "center" });
+});
+
 function renderPurchases() {
+  $("statementTip").hidden = state.installments.length < 5 || statementTipSeen();
   const today = T.todayKey();
   if (personFilter !== "all" && !personById(personFilter)) personFilter = "all";
   const any = knownPurchases().length > 0;
@@ -2411,7 +2467,7 @@ function renderCards() {
   els.addCard.hidden = full;
   if (full) {
     add.hidden = true;
-    els.cardGrid.append(premiumLock(L("Yeni kart"), L("Ücretsiz sürüm: {0} kart, yalnızca sen. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", FREE_CARDS), "cards"));
+    els.cardGrid.append(premiumLock(L("Yeni kart"), L("Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", FREE_CARDS, FREE_PEOPLE), "cards"));
   }
 }
 
@@ -3836,6 +3892,7 @@ function openPurchaseSheet(p, draft) {
   renderPurchaseStatus(p);
   syncChecked(f);
   updatePurchasePreview();
+  els.quickHint.hidden = !!src;   // tek satır ipucu yalnızca yeni ve boş formda
   openSheet(els.purchaseSheet);
   if (!p) f.elements.amount.focus();
   if (src?.desc && !categorySource) suggestCategory();   // düzenlenen ya da e-postadan gelen kategorisiz harcama
@@ -4211,9 +4268,27 @@ function updatePurchasePreview() {
   }
 }
 
+// Tek satırla kayıt: yeni harcamada tutar boşken ada "buzdolabı 36000 bonus 6 taksit" yazıp Enter'a basınca form dolar
+// (taksit.js parseLine; sure: ad içindeki sayı tutar sanılmaz). Kaydı kullanıcı onaylar.
+els.purchaseForm.elements.desc.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.isComposing || editingId || inboxDraftId != null || convertingEntryId) return;
+  const f = els.purchaseForm.elements;
+  if (f.amount.value.trim()) return;
+  const r = T.parseLine(f.desc.value, { cards: state.cards, decimal: DECIMAL });
+  if (!r?.sure) return;
+  e.preventDefault();
+  openPurchaseSheet(null, {
+    desc: r.desc, total: r.amount, count: r.count ?? (Math.round(Number(f.count.value)) || 1),
+    cardId: r.cardId == null ? f.card.value : r.cardId === T.CASH ? "" : r.cardId,
+    personId: f.person.value, date: f.date.value,
+  });
+  window.Analitik?.event("quick_line_used", { installments: r.count != null, card: r.cardId != null });
+});
+
 els.purchaseForm.addEventListener("input", e => {
   e.target.classList?.remove("invalid");
   const f = els.purchaseForm.elements;
+  if (f.amount.value.trim()) els.quickHint.hidden = true;
   // Peşin / Taksitli: Taksitli'ye geçince Peşin seçiliyse 3 taksit
   if (e.target.name === "plan" && e.target.value === "1" && Math.round(Number(f.count.value)) <= 1) {
     f.count.value = 3;
@@ -6012,7 +6087,7 @@ function renderPeopleSheet() {
   const full = locked() && state.people.length >= FREE_PEOPLE;
   els.personAddForm.hidden = full;
   els.peopleLock.hidden = !full;
-  if (full) els.peopleLock.replaceChildren(premiumLock(L("Kişiler"), L("Ücretsiz sürüm: {0} kart, yalnızca sen. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", FREE_CARDS), "people"));
+  if (full) els.peopleLock.replaceChildren(premiumLock(L("Kişiler"), L("Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", FREE_CARDS, FREE_PEOPLE), "people"));
   els.peopleEdit.replaceChildren();
   for (const p of state.people) {
     const n = state.installments.filter(i => i.personId === p.id).length;
@@ -6806,7 +6881,7 @@ async function importExcel(file) {
 
   const newPeople = result.people.filter(p => !state.people.some(x => T.normalize(x.name) === T.normalize(p.name))).length;
   if (locked() && newPeople && state.people.length + newPeople > FREE_PEOPLE) {
-    throw Object.assign(new Error("premium"), { userMessage: L("Excel'deki her sayfa bir kişi. Ücretsiz sürümde yalnızca sen varsın; başka kişiler için CashFollow Premium gerekir (iPhone uygulamasından alınır).") });
+    throw Object.assign(new Error("premium"), { userMessage: L("Excel'deki her sayfa bir kişi. Ücretsiz sürümde en fazla {0} kişi olur; daha fazlası için CashFollow Premium gerekir (iPhone uygulamasından alınır).", FREE_PEOPLE) });
   }
   let card = state.cards[0];
   const newCard = card ? null : { ...defaultCard(result.dueDay, "kart", nextColor(state.cards)), trackSince: T.todayKey() };

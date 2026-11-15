@@ -4,6 +4,7 @@ import SwiftUI
 // delete_purchase; web'deki Harcamalar sekmesi). Sağ üstteki filtre düğmesi sıralama ve süzgeçleri alttan açar
 // (HarcamaFiltresi).
 struct HarcamalarEkrani: View {
+    @AppStorage("ipucu.ekstre.gizli") private var ekstreIpucuGizli = false
     @EnvironmentObject private var model: Model
     @State private var search = ""
     @State private var kisi = ""                 // "" hepsi, yoksa kişinin kimliği
@@ -34,6 +35,7 @@ struct HarcamalarEkrani: View {
                     }
                 }
                 if search.isEmpty, !model.epostalar.isEmpty { EpostaKarti() }
+                if search.isEmpty, !ekstreIpucuGizli { EkstreIpucu(gizle: { withAnimation { ekstreIpucuGizli = true } }) }
                 if search.isEmpty {
                     Secici(secim: $gorunum, ogeler: [("liste", L("Liste")), ("kategori", L("Kategoriler"))])
                 }
@@ -489,6 +491,7 @@ struct HarcamaFormu: View {
     var eposta: Eposta? = nil   // onay bekleyen banka e-postasından önceden doldurulur
     var yine: Harcama? = nil    // "Yine": bu harcamanın adı, tutarı, kartı, taksidi ve kategorisiyle; tarih bugün
     var isyeri: Isyeri? = nil   // + düğmesindeki son işyeri: adı, kartı, taksidi ve kategorisi dolu; tutar yazılır
+    var kisayol: KisayolHarcamasi? = nil   // "Harcama ekle" kısayolu (Kisayollar.swift): verilen tutar, ad ve taksit dolu
     @AppStorage("harcama.sonKart") private var sonKart = ""
     @AppStorage("harcama.sonBnpl") private var sonBnpl = "klarna"
     @State private var bnpl = false            // Pay in 4: 4 ödeme, 2 haftada bir (ülkede varsa; para.js features)
@@ -529,6 +532,13 @@ struct HarcamaFormu: View {
                         }
                         Ayirici()
                         TextField(L("Ne alındı? (ör. Migros)"), text: $desc).font(.title3)
+                            .submitLabel(.done)
+                            .onSubmit(tekSatir)
+                        // Tek satırla kayıt ipucu: yalnızca yeni ve boş formda
+                        if duzenle == nil, desc.isEmpty, amount.isEmpty, eposta == nil {
+                            Text(L("İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\""))
+                                .font(.footnote).foregroundStyle(Tema.metin3)
+                        }
                         if !oneriler.isEmpty { oneriSatiri }
                     }
 
@@ -712,6 +722,19 @@ struct HarcamaFormu: View {
     }
 
     // Önerilen işyeri: adı, son kullanılan kartı (duruyorsa), taksit sayısı ve kategorisi; tutar ve tarih kullanıcının
+    // Tek satırla kayıt: tutar boşken ada "buzdolabı 36000 bonus 6 taksit" yazıp Bitti'ye basınca form dolar
+    // (taksit.js parseLine). Kaydı kullanıcı onaylar.
+    private func tekSatir() {
+        guard duzenle == nil, (Bicim.parse(amount) ?? 0) <= 0,
+              let r = model.motor?.parseLine(desc, decimal: Bicim.locale.decimalSeparator ?? ","), r.sure else { return }
+        amount = r.amount.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2)))
+        desc = r.desc
+        if let n = r.count { count = min(max(n, 1), 60); taksitli = count > 1 }
+        if let k = r.cardId, k == "nakit" || cards.contains(where: { $0.id == k }) { card = k }
+        kaynak = "quick"
+        Analitik.olay("quick_line_used", ["installments": r.count != nil, "card": r.cardId != nil])
+    }
+
     private func uygula(_ m: Isyeri) {
         desc = m.desc
         if let c = m.cardId { if cards.contains(where: { $0.id == c }) { card = c } } else { card = "nakit" }
@@ -792,7 +815,14 @@ struct HarcamaFormu: View {
             if let e = eposta { doldur(e); kaynak = "email" }
             else if let y = yine { doldur(yine: y) }
             else if let m = isyeri { uygula(m); tutarOdak = true }
-            else if let o = ornek { amount = o.tutar; desc = o.ad; count = o.taksit } else { tutarOdak = true }
+            else if let o = ornek { amount = o.tutar; desc = o.ad; count = o.taksit }
+            else if let k = kisayol {
+                if let t = k.tutar, t > 0 { amount = t.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2))) }
+                desc = k.ad ?? ""
+                count = min(max(k.taksit ?? 1, 1), 60)
+                kaynak = "shortcut"
+                if amount.isEmpty { tutarOdak = true }
+            } else { tutarOdak = true }
             taksitli = count > 1
         }
         yuklendi = true
@@ -921,6 +951,38 @@ struct AlabilirMiyim: View {
                     .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// Bir kez gösterilen ipucu: elle beş ve üstü harcama girmiş kullanıcıya ekstreyi asistana verebileceği söylenir.
+// "Nasıl?" asistan ekranını açar; açınca ya da kapatınca bir daha görünmez.
+struct EkstreIpucu: View {
+    let gizle: () -> Void
+    @State private var acik = false
+
+    var body: some View {
+        Okunan(tool: "list_people") { (k: KisiListesi) in
+            if k.people.reduce(0, { $0 + $1.purchaseCount }) >= 5 {
+                Kart(dolgu: 14) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "sparkles").font(.title3).foregroundStyle(Tema.metin2)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(L("Çok harcama mı giriyorsun?")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                            Text(L("Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.")).font(.footnote).foregroundStyle(Tema.metin2)
+                            Button(L("Nasıl?")) {
+                                acik = true
+                                Analitik.olay("statement_tip_opened")
+                            }
+                            .font(.subheadline.weight(.semibold)).padding(.top, 2)
+                        }
+                        Spacer(minLength: 4)
+                        Button(action: gizle) { Image(systemName: "xmark").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3) }
+                            .accessibilityLabel(L("Kapat"))
+                    }
+                }
+                .sheet(isPresented: $acik, onDismiss: gizle) { AsistanEkrani(ekstre: true) }
             }
         }
     }

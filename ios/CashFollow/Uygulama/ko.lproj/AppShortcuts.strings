@@ -1,0 +1,5 @@
+/* Siri cümleleri (Uygulama/Kisayollar.swift → CashFollowKisayollari); anahtar Türkçe cümle */
+"${applicationName} bu ay ne ödeyeceğim" = "${applicationName}에서 이번 달 결제 금액 알려 줘";
+"${applicationName} ile bu ayın ödemesi" = "${applicationName} 이번 달 결제";
+"${applicationName} ile harcama ekle" = "${applicationName}에 지출 추가";
+"${applicationName} harcama ekle" = "${applicationName} 지출 추가";

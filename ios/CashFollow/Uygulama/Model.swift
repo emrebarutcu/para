@@ -20,6 +20,9 @@ final class Model: ObservableObject {
     let abonelik: Abonelik                       // CashFollow Premium (ekranlara ayrı environmentObject olarak verilir)
     private(set) var constants: Sabitler?
 
+    // Ekranın kullandığı Model: uygulamayı açmadan çalışan kısayollar veriyi bundan okur (Kisayollar.swift)
+    static weak var etkin: Model?
+
     private var senkron: Senkron?
     private var chain: Task<Void, Never>?
     private var pushTimer: Task<Void, Never>?
@@ -39,6 +42,7 @@ final class Model: ObservableObject {
         showWelcome = session == nil && !Depo.offlineChosen
         if session != nil, let local = Depo.read(Depo.stateFile(nil)), motor?.isBlank(local) == false { askMove = true }
         abonelik.hesap = { [weak self] in await self?.hesapAnahtari() }
+        if Model.etkin == nil { Model.etkin = self }
     }
 
     // ── Veri ────────────────────────────────────────────────────────────────────

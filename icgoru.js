@@ -491,8 +491,21 @@
       });
     }
 
-    const rank = { warn: 0, info: 1, good: 2 };
-    return out.map((x, i) => ({ ...x, i })).sort((a, b) => rank[a.tone] - rank[b.tone] || a.i - b.i).map(({ i, ...x }) => x);
+    // Sıra: önce uyarılar, sonra iyi haberler, sonra bilgi. free: Premium gerektirmeyen içgörüler (FREE).
+    const rank = { warn: 0, good: 1, info: 2 };
+    return out.map((x, i) => ({ ...x, free: FREE.includes(x.id), i })).sort((a, b) => rank[a.tone] - rank[b.tone] || a.i - b.i).map(({ i, ...x }) => x);
+  }
+
+  // Ücretsiz içgörüler (iyi haberler): serbest nakit, son taksit, bugünün kartı. Gerisi Premium; web, iPhone ve asistan
+  // aynı listeyi kullanır.
+  const FREE = ["serbest", "bitis", "kart"];
+  // Özet'in tepesindeki tek satır: ay sonunda kalan serbest nakit, yoksa bugünün kartı (son taksit zaten tepede yazar).
+  // { id, tone, title, text }: title tek satırlık özet, text içgörünün açıklaması; yoksa null
+  function headline(list) {
+    const free = list.find(x => x.id === "serbest" && x.tone === "good");
+    if (free) return { id: free.id, tone: free.tone, title: L("Ay sonunda {0} serbest kalıyor", fmt(free.data.net)), text: free.text };
+    const card = list.find(x => x.id === "kart");
+    return card ? { id: card.id, tone: "good", title: card.title, text: card.text } : null;
   }
 
   // ---------- Özet'in tepesi, kutlama, işyeri önerileri, ay kapanışı (web, iPhone ve asistan aynı hesabı kullanır) ----------
@@ -612,6 +625,7 @@
   const api = {
     insights, monthFlows, categoryBreakdown, spendingByMonth, recurring, cardTiming, HORIZON,
     progress, lastInstallment, finishing, merchants, monthSummary,
+    FREE, headline,
   };
   if (node) module.exports = api;
   else root.Icgoru = api;

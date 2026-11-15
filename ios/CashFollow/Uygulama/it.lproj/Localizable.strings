@@ -1,0 +1,8 @@
+/* Kısayolların başlık ve parametre adları (Uygulama/Kisayollar.swift); anahtar Türkçe metin */
+"Harcama ekle" = "Aggiungi acquisto";
+"Bu ay ne ödeyeceğim?" = "Quanto pagherò questo mese?";
+"Tutar" = "Importo";
+"Ne alındı?" = "Cosa hai comprato?";
+"Taksit sayısı" = "Numero di rate";
+"Harcama formunu açar. Tutar, ne alındığı ve taksit sayısı verilirse form dolu gelir." = "Apre il modulo dell'acquisto. Se indichi importo, cosa hai comprato e numero di rate, il modulo si apre già compilato.";
+"Bu ay ödenecek tutarı, ödeneni ve kalanı söyler." = "Dice quanto è dovuto questo mese, quanto è stato pagato e quanto resta.";

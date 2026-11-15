@@ -74,7 +74,8 @@ export async function userFor(token, cfg, f) {
   return user;
 }
 
-// Asistan bağlantısı CashFollow Premium ister (abonelik.js; iPhone'da cihazdaki araç çağrıları bunun dışında). Sonuç
+// Asistan CashFollow Premium ister (abonelik.js; iPhone'da cihazdaki araç çağrıları bunun dışında); FREE_TOOLS'taki okuma
+// (özet: bu ay ödenecek, sıradaki ödemeler) Premium'suz da çalışır ki ücretsiz kullanıcı asistanı deneyebilsin. Sonuç
 // token başına bir dakika saklanır: yeni alınan abonelik en geç bir dakikada açılır.
 const premiums = new Map();
 async function premiumFor(token, cfg, f) {
@@ -86,7 +87,8 @@ async function premiumFor(token, cfg, f) {
   premiums.set(token, { premium, exp: now + USER_TTL });
   return premium;
 }
-export const PREMIUM_REQUIRED = "Using CashFollow through an assistant needs CashFollow Premium. The user can subscribe in the CashFollow iPhone app (Settings → CashFollow Premium), then try again.";
+export const FREE_TOOLS = ["get_overview"];
+export const PREMIUM_REQUIRED = "This needs CashFollow Premium: without it an assistant can only read the overview (get_overview: due this month, upcoming payments). The user can subscribe in the CashFollow iPhone app (Settings → CashFollow Premium), then try again.";
 
 const rpcError = (id, code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });
 
@@ -95,7 +97,7 @@ async function callTool(params, ctx) {
   if (!tool) return { error: [-32602, `Unknown tool: ${params?.name}`] };
   const args = params.arguments ?? {};
   if (typeof args !== "object" || Array.isArray(args)) return { error: [-32602, "arguments must be an object"] };
-  if (!(await ctx.premium())) return { result: { content: [{ type: "text", text: PREMIUM_REQUIRED }], isError: true } };
+  if (!FREE_TOOLS.includes(tool.name) && !(await ctx.premium())) return { result: { content: [{ type: "text", text: PREMIUM_REQUIRED }], isError: true } };
   try {
     const out = await tool.run(args, ctx);
     return { result: { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] } };

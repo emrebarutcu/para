@@ -723,9 +723,13 @@ test("kategoriler, içgörüler, kategori dağılımı ve alışveriş simülasy
   const cats = await call("spending_by_category", { month: "2026-10" });
   assert.deepEqual(cats.months[0].categories.map(c => [c.category, c.amount]), [["market", 2100], [null, 800]]);
 
-  const { insights } = await call("get_insights");
+  const { insights, headline } = await call("get_insights");
   const ids = insights.map(x => x.id);
-  assert.deepEqual(ids, ["yuk", "serbest", "bitis"]);   // bugün (18 Eki) iki kartın ilk ödemesi arasında 7 gün var: öneri yok
+  // İyi haberler bilgiden önce; bugün (18 Eki) iki kartın ilk ödemesi arasında 7 gün var: kart önerisi yok
+  assert.deepEqual(ids, ["serbest", "bitis", "yuk"]);
+  assert.deepEqual(insights.map(x => x.free), [true, true, false]);   // serbest nakit ve son taksit Premium istemez
+  assert.equal(headline.id, "serbest");
+  assert.match(headline.title, /27\.900/);   // ay sonunda kalan serbest nakit tek satırda
 
   const sim = await call("simulate_purchase", { amount: 12000, installments: 3, date: "2026-10-20" });
   assert.equal(sim.purchase.card, "Bonus");   // ilk ödemesi en geç (29 Kas)
@@ -1487,7 +1491,7 @@ test("aktarımlar: alış / satış gelir değil; serbest nakitte para piyasası
   assert.equal((await c.call("get_assets")).totalAssetsTry, before);
 });
 
-test("asistan Premium ister: abonesi olmayana araç çağrısı açıklar, bağlantı ve araç listesi çalışır (8.2)", async () => {
+test("asistan Premium ister: abonesi olmayan yalnızca özeti okur, öbür araçlar açıklar; bağlantı ve araç listesi çalışır", async () => {
   const sb = fakeSupabase({ users: { free: { id: "u3" }, ended: { id: "u4" }, paid: { id: "u5" } } });
   const day = 86_400_000;
   sb.db.subscriptions.push(
@@ -1499,6 +1503,9 @@ test("asistan Premium ister: abonesi olmayana araç çağrısı açıklar, bağl
     assert.ok((await c.rpc("initialize", {})).body.result.instructions.includes("CashFollow Premium"));
     assert.ok((await c.rpc("tools/list", {})).body.result.tools.length > 10);
     assert.deepEqual(await c.call("list_cards"), { error: PREMIUM_REQUIRED });
+    assert.deepEqual(await c.call("add_person", { name: "Ayşe" }), { error: PREMIUM_REQUIRED });
+    // Ücretsiz tat: özet (bu ay ödenecek, sıradaki ödemeler) Premium'suz okunur
+    assert.equal((await c.call("get_overview")).dueThisMonth, 0);
   }
   assert.ok(Array.isArray((await client(sb, "paid").call("list_cards")).cards));
   // Bilinmeyen araç Premium'dan önce söylenir

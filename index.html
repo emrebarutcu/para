@@ -76,8 +76,8 @@
       <a href="#ozet" data-view="ozet"><svg class="ic"><use href="#i-home"/></svg><span>Özet</span></a>
       <a href="#akis" data-view="akis"><svg class="ic"><use href="#i-flow"/></svg><span>Akış</span></a>
       <a href="#harcamalar" data-view="harcamalar"><svg class="ic"><use href="#i-receipt"/></svg><span class="tab-s">Harcama</span><span class="tab-l">Harcamalar</span></a>
-      <a href="#kartlar" data-view="kartlar"><svg class="ic"><use href="#i-card"/></svg><span>Kartlar</span></a>
-      <a href="#varliklar" data-view="varliklar"><svg class="ic"><use href="#i-coins"/></svg><span>Varlıklar</span></a>
+      <!-- Durum: Kartlar ve borçlar ile Varlıklar tek sekmede; bağlantı en son açılan yüze gider (app.js render) -->
+      <a href="#kartlar" data-view="durum"><svg class="ic"><use href="#i-pie"/></svg><span>Durum</span></a>
     </nav>
     <div class="header-actions">
       <button type="button" class="btn btn-primary btn-add" data-add-purchase>
@@ -131,6 +131,8 @@
         </dl>
         <!-- Sonraki ayın altında: gösterilen aya göre hafifliyor mu, artıyor mu -->
         <p class="hero-diff" id="nextDiff" hidden></p>
+        <!-- İyi haber, tek satır (icgoru.js headline): ay sonunda kalan serbest nakit ya da bugünün kartı; Premium istemez -->
+        <details class="hero-good" id="heroGood" hidden><summary></summary><p></p></details>
       </div>
 
       <section class="panel" id="upcomingPanel">
@@ -266,6 +268,16 @@
       </div>
       <div class="chips scroll-x" id="personFilter" role="group" aria-label="Kişiye göre süz"></div>
       <div id="inboxWrap" hidden></div>
+      <!-- Bir kez gösterilen ipucu: elle beş ve üstü harcama girene ekstreyi asistana verebileceği söylenir (app.js) -->
+      <div class="tip-card" id="statementTip" hidden>
+        <svg class="ic"><use href="#i-bulb"/></svg>
+        <div class="tip-body">
+          <strong>Çok harcama mı giriyorsun?</strong>
+          <p>Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.</p>
+          <button type="button" class="btn btn-ghost sm" id="statementTipOpen">Nasıl?</button>
+        </div>
+        <button type="button" class="icon-btn sm" id="statementTipClose" aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
       <div class="list-tools" id="purchaseTools" hidden>
         <label class="sort-pick">
           <span>Sırala</span>
@@ -301,6 +313,11 @@
     <!-- Sıra iPhone'daki Kartlar sekmesi gibi: toplam borç, kartlar, kişiler (kartından harcayanlar), borçlar / alacaklar.
          Eski Borçlar sekmesi bu görünümün borçlar bölümüdür: #borclar burayı açar ve o bölüme kaydırır (app.js). -->
     <section class="view" data-view="kartlar" id="view-kartlar" hidden>
+      <!-- Durum sekmesinin iki yüzü: Kartlar ve borçlar | Varlıklar (app.js render) -->
+      <nav class="durum-seg" aria-label="Durum">
+        <a href="#kartlar" data-durum="kartlar">Kartlar ve borçlar</a>
+        <a href="#varliklar" data-durum="varliklar">Varlıklar</a>
+      </nav>
       <div class="view-head">
         <h1>Kartlar ve borçlar</h1>
         <button type="button" class="btn btn-ghost sm" id="addCard">
@@ -351,6 +368,11 @@
 
     <!-- ── Varlıklar ────────────────────────────────────── -->
     <section class="view" data-view="varliklar" id="view-varliklar" hidden>
+      <!-- Durum sekmesinin iki yüzü: Kartlar ve borçlar | Varlıklar (app.js render) -->
+      <nav class="durum-seg" aria-label="Durum">
+        <a href="#kartlar" data-durum="kartlar">Kartlar ve borçlar</a>
+        <a href="#varliklar" data-durum="varliklar">Varlıklar</a>
+      </nav>
       <div class="hero">
         <div class="hero-top">
           <span class="hero-label" id="assetLabel">Varlık</span>
@@ -414,6 +436,8 @@
 
         <input class="desc-input" name="desc" type="text" placeholder="Ne aldın? örn. IKEA" autocomplete="off" list="descList" enterkeyhint="done" required aria-label="Ne aldın?" />
         <datalist id="descList"></datalist>
+        <!-- Tek satırla kayıt (taksit.js parseLine): yalnızca yeni harcamada, tutar ve ad boşken -->
+        <p class="hint quick-hint" id="quickHint">İpucu: tek satırda yaz, Enter'a bas. Örn. "buzdolabı 36000 6 taksit"</p>
 
         <div class="field" id="countField">
           <span class="field-label">Taksit</span>
@@ -1080,6 +1104,13 @@
           <button type="button" class="btn btn-ghost" data-ai-add="gemini" aria-label="Gemini'ye ekle">Gemini</button>
         </div>
         <p class="hint ai-add-note" id="aiAddNote" aria-live="polite" hidden></p>
+        <!-- Ekstreden ekleme: ayrı bir yükleme yok; ekstre asistana verilir, taksitleri o ekler (mcp/tools.js yönergesi) -->
+        <span class="field-label" id="statementHelp">Ekstreden ekle</span>
+        <p class="hint">Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.</p>
+        <div class="copy-row copy-row-lg">
+          <span class="copy-text" id="statementPrompt">Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.</span>
+          <button type="button" class="btn btn-ghost sm" data-copy="statementPrompt">Kopyala</button>
+        </div>
         <details class="ai-other" id="aiOther">
           <summary>Başka bir asistan ya da Claude Code</summary>
           <div class="copy-row copy-row-lg">
@@ -1090,7 +1121,7 @@
         </details>
         <p class="hint">Asistan, izin verdiğin hesabın verisini okuyup değiştirebilir; yaptığı değişiklikler burada anında görünür.</p>
         <p class="hint warn-text" id="aiLoginNote" hidden>Bu özellik bulut hesabıyla çalışır. Önce Ayarlar → Hesap'tan giriş yap.</p>
-        <p class="hint warn-text" id="aiPremiumNote" hidden>Asistan bağlantısı CashFollow Premium ile çalışır. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).</p>
+        <p class="hint warn-text" id="aiPremiumNote" hidden>Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir. Premium'u iPhone uygulamasından alabilirsin (Ayarlar → CashFollow Premium).</p>
         <div class="settings-group" id="aiAppsGroup" hidden>
           <span class="group-label">Bağlı uygulamalar</span>
           <ul class="ai-apps" id="aiApps"></ul>

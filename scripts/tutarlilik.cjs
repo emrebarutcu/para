@@ -1,6 +1,7 @@
 // Tutarlılık denetimi: aynı veriden hesaplanan görünümler birbirini tutuyor mu? Senaryolar (ve rastgele veriler)
 // tarayıcıda uygulamanın kendi koduyla hesaplanır; kurallar:
-//   Varlık (üstteki toplam) = Varlığın seyri'nin bugünü; Nakit grafiğinin bugünü = nakit sayılan bakiyeler;
+//   Varlık (üstteki toplam) = Varlığın seyri'nin bugünü; Nakit grafiğinin bugünü = nakit sayılan bakiyeler (bugün gün
+//   sonunda düşecek ekstre ve borç ödemeleri düşülmüş olarak);
 //   serbest nakit (içgörü) + borç alınan para + beklenen tahsilat = Nakit grafiğinin dönem net'i;
 //   Girdi ve çıktılar'ın Girdi'si = içgörünün geliri; alış / satış (aktarım) Varlık'ı, geliri ve Girdi ve çıktılar
 //   toplamlarını değiştirmez, nakitten nakde aktarım nakdi değiştirmez; ileri tarihli hareket bugünkü bakiyede yok;
@@ -36,6 +37,15 @@ async function inPage(start) {
     let cashExpected = 0;
     for (const [c, amt] of Object.entries(B.totals(state, today, curRates(), "all").balances)) {
       if (isCashCode(c)) cashExpected += V.toTry(amt, c, curRates()) ?? 0;
+    }
+    // Nakit grafiği gün sonunu gösterir (nakit.js cashSeries): bugün ödenecek ekstre, kredi taksiti ya da borç ödemesi gün
+    // sonunda düşer; bakiyelerde ise ertesi gün. Son ödeme gününde ikisi bu kadar ayrışır (ayın 15'inde görüldü).
+    if (isCashCode(P.homeOf(state))) {
+      for (const m of B.cardMoves(state, today, today, today, today)) if (m.planned && m.date === today) cashExpected += m.amount;
+    }
+    for (const f of B.allFlows(state, today, today, today)) {
+      if (f.date !== today || f.paid || !isCashCode(f.asset) || (f.type === "plan" && f.amount > 0)) continue;
+      cashExpected += V.toTry(f.amount, f.asset, curRates()) ?? 0;
     }
     timelineStart = "1"; timelineKind = "all";
     renderTimeline(idx);

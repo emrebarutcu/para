@@ -67,8 +67,8 @@ aşağıdaki kural gereği bu sürümden sonra, yeni tabanla başlatılmalı.
 
 ## Yol haritası
 
-Kural: deneme sürerken ilk haftanın davranışını değiştiren bir şey yayınlanmaz, yoksa ilk hafta geri dönüşü okunamaz.
-Ya denemeden önce ya bitince yayınlanır.
+Karşılama denemesi yapılmadığı için (aşağıda "Verilen kararlar") ilk haftayı değiştiren işler beklemeden yayınlanır;
+etkileri önce / sonra kohortlarıyla okunur.
 
 ### Şimdi (2–4 hafta, küçük PR'lar)
 
@@ -102,7 +102,7 @@ Ya denemeden önce ya bitince yayınlanır.
    - 10 kayıttan sonra ya da 7. gün yedekleme önerisi.
 7. **Nakit açığı uyarısı:** bakiye sıfırın altına düşecekse iki gün önce bildirim, ayda en fazla bir kez
    (`Motor.cash`).
-8. **App Intents / Kısayollar:** "Bu ay ne ödeyeceğim?" ve "Harcama ekle". Siri, Spotlight, eylem düğmesi ve Cüzdan
+8. **App Intents / Kısayollar** (yapıldı, 1.2.0): "Bu ay ne ödeyeceğim?" ve "Harcama ekle". Siri, Spotlight, eylem düğmesi ve Cüzdan
    otomasyonu buradan gelir.
 9. **Web eşitliği:** ✓ (1.1.0)
    - Başlarken paneli;
@@ -143,13 +143,27 @@ Ya denemeden önce ya bitince yayınlanır.
   - 7 günde hatırlatmayı kapatma;
   - çökme.
 
+## Verilen kararlar (13 Kasım 2026)
+
+- **İyi haber içgörüleri ücretsiz:** serbest nakit, son taksit, bugünün kartı (`icgoru.js` `FREE`). Biri Özet'in tepesinde
+  tek satır (`headline`); sıralama uyarı → iyi haber → bilgi. Uyarılar ve öneriler Premium'da.
+- **Ücretsizde 2 kişi** (kullanıcı ve eşi gibi biri); kart sınırı 2 kaldı.
+- **Kısayollar ve widget öne alındı:** sıra App Intents ("Harcama ekle", "Bu ay ne ödeyeceğim?") → banka SMS'i ve Cüzdan
+  otomasyon rehberi (tetikleyiciler gerçek cihazda doğrulanmadan yazılmaz) → WidgetKit (küçük, orta, kilit ekranı).
+- **Karşılama denemesi yapılmıyor:** yeni akış herkese açık, `onboarding_flow` okunmaz; önce / sonra kohortlarıyla
+  ölçülür. "Deneme sürerken ilk haftayı değiştiren şey yayınlanmaz" kuralı kalktı.
+- **Web'den satın alma şimdi yok:** web kilitlerinde App Store bağlantısı ve (geniş ekranda) QR var.
+- **Asistanda özet okuması ücretsiz** (`get_overview`: bu ay ödenecek, sıradaki ödemeler); öbür araçlar ve yazma Premium.
+- **Akış'ın ilk 2 ayı ücretsiz** (bu ay ve sonraki ay; 14 Kasım): sonrası ve iPhone'da 12 aylık grafik Premium. Bayrak
+  `free_taste`: `off` kolu kapatır, bayrak yoksa açık.
+- **Denemeler (15 Kasım):** tek satırla kayıt yapıldı (`taksit.js` `parseLine`; 31 örnek cümle testte). Kartlar ve Varlıklar
+  tek "Durum" sekmesinde birleşti (PostHog'daki `tab_viewed` paylarına bakılmadan; `tab_viewed` hâlâ `cards` / `assets`
+  ayrı yazar, etkisi oradan izlenir). Ekstre yükleme yapılmadı: kullanıcı yormadan asistana (MCP) yönlendirilir —
+  + menüsünde "Ekstreden ekle", Harcamalar'da bir kez görünen ipucu, asistan ekranında kopyalanan hazır istek;
+  asistanın yönergesinde ekstre okuma kuralları (`mcp/tools.js`).
+
 ## Karar bekleyenler
 
-- PostHog'da `onboarding_flow` bayrağı açılsın mı? Önerilen adımlar:
-  1. Önce 1–2 hafta kontrol tabanı toplanır.
-  2. Sonra en az 14 gün 50/50 (iki ekstre dönemi).
-  3. Bayrak açılmazsa herkes yeni akışı görür.
 - Son ödeme günü tahmini (Türkiye'de kesim + 10, başka ülkede + 21) uygun mu? Aynı ekranda değiştirilebiliyor.
 - Satın alma formunda ücretsiz kullanıcıya ödeme planı gösterilsin mi? Dürüstlük düzeltmesi, ama "Alabilir miyim?"
   ödeme ekranı görüntülenmesini azaltabilir.
-- TestFlight'ta herkes yeni akışı görsün mü (bayrak koşulu)?
