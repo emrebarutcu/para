@@ -473,8 +473,11 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
   `inbox_card_assigned` (`set_last4`: son 4 hane karta yazıldı mı), `inbox_notifications` (`enabled`).
+- Banka mesajları (iPhone, SMS): `sms_received` (`result`: added, pending, queued, skipped, off; `ai`: telefondaki
+  model de okudu mu), `sms_setup_opened` (kurulumdan Kısayollar açıldı), `sms_tried` (bir mesaj denendi; `ai`).
+  Mesajın metni, tutarı ya da işyeri gönderilmez. Mesajdan onayla eklenen harcamada `purchase_added` → `source: sms`.
 - Kayıt, bildirim ve geri dönüş (iPhone; ürün çalışmasının ölçüleri): `purchase_added` olayında `source` kaydın nereden
-  geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email`: onay bekleyen banka e-postası;
+  geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email` / `sms`: onay bekleyen banka e-postası ya da mesajı;
   web'de `web`) — otomatik ve yarı otomatik kaydın payı bununla, kayıt süresi `add_opened` ile `purchase_added` arasından
   ölçülür. `merchant_suggestion_used` (öneriye dokunuldu), `notification_opened` (`kind`: payment, cutoff,
   installment_finished, month_summary, inbox), `installment_finished_shown` (kutlama kartı ilk kez göründü; `count`),
@@ -978,6 +981,35 @@ Tutarı, tarihi ya da kartı okunamayan, yabancı para birimli ve iade/iptal e-p
 **Harcamalar** sekmesinde *Ekle* (form doldurulmuş açılır), *Göster* ya da *Yok say* ile beklerler.
 Ayarlar'daki "Bir e-postayı dene" alanına bir bildirim yapıştırıp neyin okunduğunu görebilirsin.
 Adres yenilenirse eskisine gelen e-postalar reddedilir. Sıradaki iyileştirmeler: `YAPILACAKLAR.md`.
+
+### Banka mesajları (SMS) — iPhone
+
+Bankanın harcama **mesajı** da harcama olarak eklenir; e-postanın tersine sunucudan geçmez, hesap gerektirmez ve mesaj
+telefondan çıkmaz. Yalnızca Türkiye'deki hesaplarda (`bankEmails` özelliği, e-postalarla aynı).
+
+- **Nasıl çalışır:** kullanıcı Kısayollar'da bir kez otomasyon kurar (Mesaj → şu sözü içerirse → Hemen Çalıştır →
+  CashFollow'un **Banka mesajından harcama ekle** eylemi, giriş: Kısayol Girdisi). Adımlar uygulamada: Ayarlar →
+  **Banka mesajları (SMS)**. Eylem `Uygulama/Kisayollar.swift` (App Intents; uygulama öne gelmez), giriş
+  `Mesajlar.geldi`.
+- **Okuma:** önce kurallar (`eposta.js` → `smsKind`, `sms`): tek kullanımlık şifre mesajı (tutarı ve işyerini de yazar,
+  harcamadan önce gelir) ve ekstre, karta ödeme, havale, kampanya gibi harcama olmayan mesajlar **hiçbir yere yazılmaz**.
+  Kalanı telefondaki model de okur (`Uygulama/MesajZekasi.swift`: Apple Intelligence, FoundationModels; iOS 26 ve
+  sonrası, destekleyen iPhone'larda ve açıksa; 7 saniyede yanıt gelmezse beklenmez): harcama mı, işyeri, tutar. İşyeri
+  yalnızca mesajda gerçekten geçiyorsa kullanılır; modelin tutarı kuralın okuduğuyla uyuşmazsa ya da ikisi harcama olup
+  olmadığında anlaşamazsa harcama eklenmez, **onaya düşer**. Model yoksa yalnızca kurallar çalışır; şablon bankaya göre
+  değildir (tutar, son 4 hane, taksit her bankada benzer yazılır), tanınmayan biçimde işyeri boş kalabilir.
+- **İşleme:** mesaj telefondaki kuyruğa girer (`Uygulama/Mesajlar.swift`, `mesajlar.json`; eksi kimlik, `source: "sms"`)
+  ve banka e-postalarıyla aynı yoldan işlenir (`Model.checkInbox`, `tools.js` → `smsItem`): okunan ve kartı bulunan
+  harcama ilk kişiye eklenir, kalan Harcamalar → **Bankadan gelenler**'de bekler (kart sorusu, Ekle, Yok say aynı). Aynı
+  kartta aynı gün aynı tutarda harcama varsa (e-postası da gelmiş olabilir) sorulur; aynı mesaj ikinci kez gelirse
+  (iki otomasyon) işlenmez (metnin özeti saklanır, kendisi değil). Uygulama kapalıyken gelen mesaj için uygulama arka
+  planda açılır; model kurulamazsa mesaj sıraya alınır ve uygulama açılınca işlenir.
+- **Deneme:** Ayarlar → Banka mesajları → "Bir mesajı dene" (`try_bank_email` aracına `sms: true`; hiçbir şey kaydedilmez).
+- **Sistemin gösterdiği metinler** (eylemin adı, açıklaması, parametresi) uygulamanın sözlüğüne (`dil/<kod>.json`)
+  ulaşmaz: `Uygulama/<dil>.lproj/Localizable.strings`'tedir, anahtar Türkçe metnin kendisidir (geliştirme dili Türkçe).
+- **Sınanmayanlar:** simülatörde Apple Intelligence yoktur; modelin Türkçe banka mesajlarındaki doğruluğu ve Kısayollar
+  otomasyonunun davranışı gerçek telefonda denenir. Testlerdeki mesajlar bankaların yazış biçimine benzetilmiş
+  örneklerdir (`ios/test/kopru.test.mjs`); gerçek mesaj örnekleri geldikçe eklenir.
 
 ## 7. Yapay zekâ asistanları (MCP)
 
