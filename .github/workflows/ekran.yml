@@ -55,6 +55,10 @@ jobs:
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO build -quiet
       - name: Ekran görüntüleri
+        env:
+          # Elle girilen metinler betiğe doğrudan yazılmaz, ortam değişkeninden okunur
+          OZEL: ${{ inputs.adimlar }}
+          EK: ${{ inputs.ek }}
         run: |
           APP=build/Build/Products/Debug-iphonesimulator/CashFollow.app
           UDID=$(xcrun simctl list devices available -j | python3 -c '
@@ -89,10 +93,9 @@ jobs:
           HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,galeri9,sekme0,sekme1,sekme2,sekme3,sekme4
           TANITIM=tanitim0,tanitim1,tanitim2,tanitim3,tanitim4
           # Yalnızca istenen adımlar (bir ekranı hızlıca görmek için; Actions → Run workflow → adimlar)
-          OZEL="${{ inputs.adimlar }}"
           if [ -n "$OZEL" ]; then
-            tur "" light "$OZEL" ${{ inputs.ek }} $TR
-            tur en- light "$OZEL" ${{ inputs.ek }} -AppleLanguages "(en)" -AppleLocale en_TR
+            tur "" light "$OZEL" $EK $TR
+            tur en- light "$OZEL" $EK -AppleLanguages "(en)" -AppleLocale en_TR
             ls out
             exit 0
           fi
