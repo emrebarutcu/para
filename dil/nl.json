@@ -1558,5 +1558,9 @@
  "Harcama mesajı değil": "Geen uitgavenbericht",
  "Banka mesajları bu hesapta kullanılamıyor": "Bankberichten zijn niet beschikbaar voor dit account",
  "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz.": "Kies Bericht. Typ bij 'Bericht bevat' TL.",
- "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "Dit stel je één keer in en het werkt voor al je banken: elk bericht met TL erin wordt doorgegeven aan CashFollow; wat geen aankoop is (eenmalige codes, afschriften, persoonlijke berichten) wordt weggegooid en nergens bewaard. Je bank moet bij kaartaankopen een sms sturen: krijg je alleen app-meldingen, zet dan sms aan in de instellingen van je bank."
+ "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "Dit stel je één keer in en het werkt voor al je banken: elk bericht met TL erin wordt doorgegeven aan CashFollow; wat geen aankoop is (eenmalige codes, afschriften, persoonlijke berichten) wordt weggegooid en nergens bewaard. Je bank moet bij kaartaankopen een sms sturen: krijg je alleen app-meldingen, zet dan sms aan in de instellingen van je bank.",
+ "harcama": "aankoop",
+ "harcama değil": "geen aankoop",
+ "Telefondaki model: {0}": "Model op het toestel: {0}",
+ "Telefondaki model yanıt vermedi: {0}": "Het model op het toestel gaf geen antwoord: {0}"
 }

@@ -61,8 +61,8 @@ enum MesajZekasi {
 
     // Modelin yanıtı için beklenen en uzun süre (saniye): model ilk çağrıda yüklenir, sonrakiler hızlıdır
     private static var sureSiniri: Double = 10
-    // Son okumanın hatası (yalnızca "-zeka-dene" günlüğü için)
-    private static var sonHata: String?
+    // Son okumanın hatası ("Bir mesajı dene" ve "-zeka-dene" günlüğü gösterir: model neden yanıt vermedi)
+    private(set) static var sonHata: String?
 
     // "-zeka-dene": modelin örnek banka mesajlarını nasıl okuduğu Documents/zeka-deneme.txt dosyasına yazılır (CI: ios.yml,
     // bilgi için; simülatör Mac'in modelini kullanır). Sonuç sınanmaz: model sürümden sürüme değişir, CI'da olmayabilir.

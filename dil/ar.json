@@ -1558,5 +1558,9 @@
  "Harcama mesajı değil": "ليست رسالة إنفاق",
  "Banka mesajları bu hesapta kullanılamıyor": "رسائل البنك غير متاحة لهذا الحساب",
  "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz.": "اختر الرسالة. في «الرسالة تحتوي على» اكتب TL.",
- "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "يُضبط مرة واحدة ويعمل مع كل بنوكك: كل رسالة تحتوي على TL تُسلَّم إلى CashFollow؛ وما ليس عملية شراء (كلمات المرور لمرة واحدة، كشوف الحساب، الرسائل الشخصية) يُستبعد ولا يُحفظ في أي مكان. يجب أن يرسل بنكك رسالة SMS عند الشراء بالبطاقة: إذا كانت تصلك إشعارات التطبيق فقط، فعّل رسائل SMS من إعدادات البنك."
+ "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "يُضبط مرة واحدة ويعمل مع كل بنوكك: كل رسالة تحتوي على TL تُسلَّم إلى CashFollow؛ وما ليس عملية شراء (كلمات المرور لمرة واحدة، كشوف الحساب، الرسائل الشخصية) يُستبعد ولا يُحفظ في أي مكان. يجب أن يرسل بنكك رسالة SMS عند الشراء بالبطاقة: إذا كانت تصلك إشعارات التطبيق فقط، فعّل رسائل SMS من إعدادات البنك.",
+ "harcama": "عملية شراء",
+ "harcama değil": "ليست عملية شراء",
+ "Telefondaki model: {0}": "النموذج على الجهاز: {0}",
+ "Telefondaki model yanıt vermedi: {0}": "لم يُجب النموذج على الجهاز: {0}"
 }

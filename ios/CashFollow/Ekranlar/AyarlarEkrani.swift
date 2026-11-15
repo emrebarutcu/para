@@ -455,6 +455,7 @@ struct MesajAyarlari: View {
     @State private var sonuc: Deneme?
     @State private var deneniyor = false
     @State private var hata: String?
+    @State private var modelNotu: String?   // denemede telefondaki modelin okuduğu ya da neden yanıt vermediği
 
     struct Deneme: Decodable {
         let parsed: Eposta.Okunan
@@ -495,6 +496,7 @@ struct MesajAyarlari: View {
                     .disabled(deneniyor || deneme.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 HataMetni(text: hata)
                 if let s = sonuc { denemeSonucu(s) }
+                if let modelNotu { Text(modelNotu).font(.caption).foregroundStyle(Tema.metin3) }
             } header: { Text(L("Bir mesajı dene")) } footer: {
                 Text(L("Bankadan gelen harcama mesajının metnini yapıştır; hiçbir şey kaydedilmez."))
             }
@@ -543,7 +545,17 @@ struct MesajAyarlari: View {
         deneniyor = true
         Task {
             // Gerçek akıştaki gibi: şifre mesajında model çağrılmaz
-            let ipucu = model.motor?.smsKind(metin) == "otp" ? nil : await MesajZekasi.oku(metin)
+            let sifre = model.motor?.smsKind(metin) == "otp"
+            let ipucu = sifre ? nil : await MesajZekasi.oku(metin)
+            // Modelin ne okuduğu (ya da neden yanıt vermediği) görünsün: telefonda denerken kurulumun parçası
+            if let i = ipucu {
+                let okunan = [i.purchase ? L("harcama") : L("harcama değil"), i.merchant, i.amount].compactMap { $0 }.joined(separator: " · ")
+                modelNotu = L("Telefondaki model: {0}", okunan)
+            } else if !sifre, MesajZekasi.durum == .hazir {
+                modelNotu = L("Telefondaki model yanıt vermedi: {0}", MesajZekasi.sonHata.map { String($0.prefix(120)) } ?? "—")
+            } else {
+                modelNotu = nil
+            }
             var a: [String: Any] = ["text": metin, "sms": true]
             if let i = ipucu {
                 var h: [String: Any] = ["purchase": i.purchase]

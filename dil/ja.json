@@ -1558,5 +1558,9 @@
  "Harcama mesajı değil": "利用通知ではありません",
  "Banka mesajları bu hesapta kullanılamıyor": "このアカウントでは銀行のメッセージを利用できません",
  "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz.": "「メッセージ」を選びます。「メッセージに次を含む」に TL と入力します。",
- "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "設定は一度だけで、すべての銀行に使えます。TL を含むメッセージはすべてCashFollowに渡され、購入でないもの（ワンタイムパスワード、明細、個人的なメッセージ）は破棄され、どこにも保存されません。カード利用時に銀行がSMSを送る必要があります。Appの通知しか届かない場合は、銀行の設定でSMSをオンにしてください。"
+ "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "設定は一度だけで、すべての銀行に使えます。TL を含むメッセージはすべてCashFollowに渡され、購入でないもの（ワンタイムパスワード、明細、個人的なメッセージ）は破棄され、どこにも保存されません。カード利用時に銀行がSMSを送る必要があります。Appの通知しか届かない場合は、銀行の設定でSMSをオンにしてください。",
+ "harcama": "購入",
+ "harcama değil": "購入ではない",
+ "Telefondaki model: {0}": "デバイス上のモデル：{0}",
+ "Telefondaki model yanıt vermedi: {0}": "デバイス上のモデルが応答しませんでした：{0}"
 }

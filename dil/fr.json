@@ -1558,5 +1558,9 @@
  "Harcama mesajı değil": "Pas un message de dépense",
  "Banka mesajları bu hesapta kullanılamıyor": "Les messages de la banque ne sont pas disponibles pour ce compte",
  "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz.": "Choisissez Message. Dans « Le message contient », saisissez TL.",
- "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "Cela se configure une seule fois et fonctionne pour toutes vos banques : chaque message contenant TL est transmis à CashFollow ; ceux qui ne sont pas des achats (codes à usage unique, relevés, messages personnels) sont écartés et ne sont enregistrés nulle part. Votre banque doit envoyer un SMS pour les achats par carte : si vous ne recevez que des notifications de l'app, activez les SMS dans les réglages de votre banque."
+ "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "Cela se configure une seule fois et fonctionne pour toutes vos banques : chaque message contenant TL est transmis à CashFollow ; ceux qui ne sont pas des achats (codes à usage unique, relevés, messages personnels) sont écartés et ne sont enregistrés nulle part. Votre banque doit envoyer un SMS pour les achats par carte : si vous ne recevez que des notifications de l'app, activez les SMS dans les réglages de votre banque.",
+ "harcama": "achat",
+ "harcama değil": "pas un achat",
+ "Telefondaki model: {0}": "Modèle sur l'appareil : {0}",
+ "Telefondaki model yanıt vermedi: {0}": "Le modèle sur l'appareil n'a pas répondu : {0}"
 }
