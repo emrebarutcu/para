@@ -74,6 +74,12 @@ enum Mesajlar {
         return id
     }
 
+    // Örnek veri (Ornek.swift "-mesaj"): kuyruk bu mesajlarla değiştirilir; boşsa temizlenir
+    static func ornek(_ metinler: [String]) {
+        let simdi = ISO8601DateFormatter().string(from: Date())
+        yaz(metinler.enumerated().map { Satir(id: -($0.offset + 1), body: $0.element, received_at: simdi, source: "sms", hint: nil) })
+    }
+
     static func sil(_ ids: [Int]) {
         guard !ids.isEmpty else { return }
         yaz(hepsi().filter { !ids.contains($0.id) })
