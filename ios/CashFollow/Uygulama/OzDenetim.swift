@@ -66,6 +66,23 @@ enum OzDenetim {
                       && Karsilama.varsayilanUlke(kayitli: nil, bolge: "BR", paraBirimi: "BRL", ulkeler: ulkeler) == ""
                       && Karsilama.varsayilanUlke(kayitli: "US", bolge: "DE", paraBirimi: "EUR", ulkeler: ulkeler) == "US"
                       && !Karsilama.varsayilanUlke(kayitli: nil, bolge: nil, paraBirimi: "EUR", ulkeler: ulkeler).isEmpty, "varsayılan ülke")
+            // Özet'in tepesi ve kolaylıklar (icgoru.js; kopru.js): ilerleme, son taksit ayı, işyeri önerileri, biten taksit,
+            // ay kapanışı, kesim günleri
+            let tepe: Ozet = try m.run("get_overview")
+            try check(tepe.progress != nil && (bugun > "2026-12-31" || tepe.lastInstallmentMonth == "2026-12"),
+                      "özetin tepesi: \(String(describing: tepe.progress)) \(tepe.lastInstallmentMonth ?? "-")")
+            let isyerleri = m.merchants()
+            try check(isyerleri.map(\.desc) == ["Telefon"] && isyerleri.first?.count == 3 && isyerleri.first?.category == "elektronik"
+                      && m.merchants("tel").count == 1 && m.merchants("yok").isEmpty, "işyeri önerileri: \(isyerleri)")
+            let biten = m.finishing(from: "2026-12-01", to: "2026-12-31")
+            try check(biten.map(\.desc) == ["Telefon"] && biten.first?.monthly == 4000 && biten.first?.freeFrom == "2027-01", "biten taksit: \(biten)")
+            let kasim = m.monthSummary("2026-11")
+            try check(kasim?.month == "2026-11" && kasim?.paid == 4000 && kasim?.previous == 4000 && kasim?.next.total == 4000
+                      && kasim?.finished.isEmpty == true && m.monthSummary("2026-12")?.freed == 4000, "ay kapanışı: \(String(describing: kasim))")
+            let kesimler = m.cutoffs()
+            try check(kesimler.count == 1 && kesimler.first?.card == "Bonus" && kesimler.first?.cut.hasSuffix("-10") == true
+                      && (kesimler.first?.dueBefore ?? "") < (kesimler.first?.dueAfter ?? ""), "kesim günleri: \(kesimler)")
+            try check(!AyOzetiEkrani.tekSatir(kasim!).isEmpty, "ay özeti satırı")
             let loan = borclar.debts.first { $0.type == "loan" }
             try m.runJSON("pay_debt", ["debt": loan?.id ?? "", "amount": 2500, "date": "2026-10-31"])
             let nakit = try m.cash(start: "1", shift: 0)

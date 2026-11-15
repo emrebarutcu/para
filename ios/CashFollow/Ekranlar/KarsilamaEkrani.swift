@@ -539,7 +539,7 @@ struct KarsilamaEkrani: View {
             _ = try model.write("add_purchase", a, as: HarcamaSonucu.self)
             eklenen += 1
             guard !ornek else { return true }
-            Puanlama.olumluAn()
+            Puanlama.olumluAn(titresim: false)
             let n = taksitSayisi
             Analitik.olay("purchase_added", ["installments": n, "repeat": false, "bnpl": false, "bonus": 0, "cash": kartId == nil,
                                              "afford_shown": false, "source": "onboarding", "is_first": eklenen == 1,

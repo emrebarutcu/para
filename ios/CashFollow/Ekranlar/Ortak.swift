@@ -55,6 +55,7 @@ struct Doluluk: View {
     let used: Double
     let limit: Double
     var renk: Color? = nil
+    var erisim: String? = nil   // sesli okuma etiketi; verilmezse limit kullanımı
 
     var body: some View {
         let ratio = limit > 0 ? min(max(used / limit, 0), 1) : 0
@@ -67,7 +68,7 @@ struct Doluluk: View {
         }
         .frame(height: 6)
         .accessibilityElement()
-        .accessibilityLabel(L("Limitin yüzde {0} kullanıldı", Int((ratio * 100).rounded())))
+        .accessibilityLabel(erisim ?? L("Limitin yüzde {0} kullanıldı", Int((ratio * 100).rounded())))
     }
 }
 

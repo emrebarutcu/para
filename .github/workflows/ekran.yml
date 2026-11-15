@@ -1,6 +1,7 @@
 # iOS ekran görüntüleri: simülatörde örnek veriyle (Uygulama/Ornek.swift) her sekme, grafikler ve formlar; Türkçe ve
 # İngilizce (ABD), açık tema (koyu tema elle çalıştırınca seçilirse). Cihaz en yeni iPhone Pro Max: App Store 6,9 inç
-# (1320 × 2868) görüntü ister, küçükleri bundan kendisi üretir.
+# (1320 × 2868) görüntü ister, küçükleri bundan kendisi üretir. Mağazaya giden görüntüler "vitrin" turlarıdır: her
+# mağaza dilinde, üstte başlıklı (magaza/ayarlar.json → ekranlar).
 # Görüntüler ekran-goruntuleri dalına yazılır (her çalışmada yeniden). claude/grafik* ve claude/abd* dallarına itilince ya da elle çalışır.
 # App Store sayfası görüntüleri ekran-goruntuleri dalından yükler (magaza.yml): bir özelliği denemek için elle
 # çalıştırırken "dal"a başka bir ad verilir (ör. ekran-karsilama), mağazanınkiler değişmez. "karsilama" yalnızca ilk
@@ -76,7 +77,7 @@ jobs:
           }
           TR='-AppleLanguages (tr) -AppleLocale tr_TR'
           EN='-AppleLanguages (en) -AppleLocale en_US'
-          HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,sekme0,sekme1,sekme2,sekme3,sekme4
+          HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,galeri9,sekme0,sekme1,sekme2,sekme3,sekme4
           TANITIM=tanitim0,tanitim1,tanitim2,tanitim3,tanitim4
           if [ "${{ inputs.karsilama }}" = "true" ]; then
             # Ara adımlar (boş kart adı, seçilmemiş kesim günü) ve akıştan sonra Kartlar ile Özet
@@ -101,6 +102,26 @@ jobs:
           # her abonelik için istediği görüntü
           tur en-ucretsiz- light galeri7,galeri8,sekme0,sekme1 -ucretsiz -ulke US $EN
           tur ucretsiz- light galeri7 -ucretsiz $TR
+          # Mağaza görüntüleri (vitrin): üstte tek cümlelik başlık, altında ekran bir telefonun içinde; mağazadaki her
+          # dilde, o ülkenin para birimiyle (magaza/ayarlar.json → ekranlar; Ornek.swift Vitrin). İki geçiş: önce ekranların
+          # kendisi çekilir ve uygulamanın Documents/vitrin klasörüne konur, sonra -vitrin turu başlıklı hâlini çizer.
+          # Önek: vitrin- Türkçe, <dil>-vitrin- ötekiler
+          VITRIN=sekme0,galeri3,sekme1,sekme3,sekme2,sekme4
+          vitrin() {  # önek, uygulama argümanları…
+            vonek=$1; shift
+            tur "ham-$vonek" light "$VITRIN" "$@"
+            mkdir -p "$DATA/Documents/vitrin"
+            for v in $(echo "$VITRIN" | tr ',' ' '); do cp "out/ham-$vonek$v-light.png" "$DATA/Documents/vitrin/$v.png"; done
+            tur "$vonek" light "$VITRIN" -vitrin "$@"
+            rm -f out/ham-*
+          }
+          vitrin vitrin- $TR
+          vitrin en-vitrin- -ulke US $EN
+          for satir in "gb GB en en_GB" "de DE de de_DE" "fr FR fr fr_FR" "es ES es es_ES" "it IT it it_IT" \
+                       "nl NL nl nl_NL" "ar SA ar ar_SA" "ja JP ja ja_JP"; do
+            set -- $satir
+            vitrin "$1-vitrin-" -ulke "$2" -AppleLanguages "($3)" -AppleLocale "$4"
+          done
           # Koyu tema yalnızca elle çalıştırınca istenirse (Actions → Ekran görüntüleri → koyu)
           if [ "${{ inputs.koyu }}" = "true" ]; then tur "" dark "$HEPSI" $TR; fi
           ls out

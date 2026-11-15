@@ -212,6 +212,34 @@
     return JSON.stringify({ span, codes, ...N.assetPoints(state, { today, span, codes, cur: curRates(), series, pid: pid || undefined }) });
   }
 
+  // ── Kayıt kolaylıkları, kutlama ve ay kapanışı (icgoru.js; web aynı işlevleri doğrudan çağırır) ──
+  const I = root.Icgoru;
+  // Harcama formunun işyeri önerileri: q yazılan metin (boşsa en son kullanılanlar)
+  function merchants(q, limit) {
+    return JSON.stringify(I.merchants(loadState(), q || "", Number(limit) || 6));
+  }
+  // Son ödemesi from–to arasında olan taksitli harcamalar (Özet'teki kutlama kartı, bildirim)
+  function finishing(from, to) {
+    return JSON.stringify(I.finishing(loadState(), from, to));
+  }
+  // Ay kapanışı: month "YYYY-MM"; verilmezse geçen ay
+  function monthSummary(month) {
+    const today = todayOf(), t = T.parseDate(today).idx;
+    const m = /^(\d{4})-(\d{2})$/.exec(month || "");
+    const idx = m ? Number(m[1]) * 12 + Number(m[2]) - 1 : t - 1;
+    return JSON.stringify(I.monthSummary(loadState(), idx, today, curRates()));
+  }
+  // Kartların sıradaki kesim günleri (kesim günü bildirimi): bugünden sonraki ilk kesim ve o gün ile ertesi gün yapılan
+  // alışverişin son ödeme günü. Hesaba katılmayan kart yok. [{ card, cut, dueBefore, dueAfter }]
+  function cutoffs() {
+    const today = todayOf(), state = loadState();
+    return JSON.stringify(state.cards.filter(c => root.Borc.tracked(c)).map(c => {
+      let s = T.statementOf(c, today);
+      if (s.cut <= today) s = T.statementOf(c, T.addDays(s.cut, 1));
+      return { card: c.name, cut: s.cut, dueBefore: s.due, dueAfter: T.statementOf(c, T.addDays(s.cut, 1)).due };
+    }));
+  }
+
   // Kişi ve kart renkleri (web'deki --s1…--s8 sırası; kayıttaki color): ada ve kimliğe göre
   function colors() {
     const state = loadState(), out = { people: {}, cards: {} };
@@ -283,6 +311,7 @@
 
   root.Kopru = {
     loadTools, toScript, setRates, setPrices, setHome, setCountry, setCashDef, setInbox, inboxReleased, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
+    merchants, finishing, monthSummary, cutoffs,
     defaultState: () => JSON.stringify(T.defaultState()),
   };
 })(this);

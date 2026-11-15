@@ -65,6 +65,8 @@ struct AnaEkran: View {
                 Sekmeler(sekme: $sekme)
             }
         }
+        // Bir işin sonucu (harcama kaydedildi…) üstte kısa bir bantla
+        .overlay(alignment: .top) { BantGorunumu() }
         // Ödeme hatırlatmaları veri değişince yeniden kurulur (2 sn içindeki değişiklikler bir kez)
         .task(id: model.revision) {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -91,6 +93,7 @@ struct AnaEkran: View {
 
 // iPhone'da en fazla 5 sekme: borç ve krediler Kartlar'da, Ayarlar Özet'teki dişlide
 struct Sekmeler: View {
+    @EnvironmentObject private var model: Model
     @Binding var sekme: Int
 
     var body: some View {
@@ -98,6 +101,7 @@ struct Sekmeler: View {
             OzetEkrani().tabItem { Label(L("Özet"), systemImage: "house") }.tag(0)
             AkisEkrani().tabItem { Label(L("Akış"), systemImage: "calendar") }.tag(1)
             HarcamalarEkrani().tabItem { Label(L("Harcamalar"), systemImage: "list.bullet.rectangle") }.tag(2)
+                .badge(model.epostalar.count)   // onay bekleyen banka e-postaları
             BorclarEkrani().tabItem { Label(L("Kartlar"), systemImage: "creditcard") }.tag(3)
             VarliklarEkrani().tabItem { Label(L("Varlıklar"), systemImage: "banknote") }.tag(4)
         }

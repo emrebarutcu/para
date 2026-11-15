@@ -1,17 +1,21 @@
 import SwiftUI
 import StoreKit
 
-// CashFollow Premium ödeme ekranı (her temada koyu): yapay zekâ asistanı başlığı ve örnek sohbet, Premium'un öteki
-// özellikleri, üç plan (yıllık seçili; ücretsiz deneme ve süresi StoreKit'ten), altta sabit düğme. Fiyat, dönem,
+// CashFollow Premium ödeme ekranı (her temada koyu): başlık uygulamanın çekirdek vaadi ("Önümüzdeki 12 ayı gör, almadan
+// önce sor"), altında kullanıcının kendi önümüzdeki 12 ayı (ilk iki ay açık: zaten gördüğü tutarlar; gerisi bulanık),
+// Premium'un özellikleri (yapay zekâ asistanı da burada), üç plan (yıllık seçili; ücretsiz deneme ve süresi
+// StoreKit'ten), altta sabit düğme. Fiyat, dönem,
 // kendiliğinden yenilenme, Kullanım Koşulları, Gizlilik Politikası ve geri yükleme düğmenin altında (App Store yönergesi
 // 3.1.2). neden: hangi kilitten açıldığı (analitik). Fiyatlar App Store'dan; örnek modunda ABD fiyatları.
 struct PremiumEkrani: View {
     var neden = "settings"
     @EnvironmentObject private var abonelik: Abonelik
+    @EnvironmentObject private var model: Model
     @Environment(\.dismiss) private var dismiss
     @State private var secili = Abonelik.kimlikler[0]
     @State private var denemeUygun: Set<String> = []
     @State private var asistan = false
+    @State private var aylar: [Akis.Ay] = []   // kullanıcının önümüzdeki 12 ayı (önizleme)
 
     // Ekranda bir plan: App Store ürünü ya da (örnek modunda) örnek
     struct Plan: Identifiable {
@@ -25,7 +29,8 @@ struct PremiumEkrani: View {
         var urun: Product?
     }
 
-    private static let ozellikler = [L("Akış"), L("Alabilir miyim?"), L("İçgörüler"), L("Varlığın seyri"), L("Borç planı"), L("Sınırsız kart")]
+    private static let ozellikler = [L("Akış"), L("Alabilir miyim?"), L("İçgörüler"), L("Varlığın seyri"), L("Borç planı"), L("Sınırsız kart"),
+                                     L("Sınırsız kişi"), L("Yapay zekâ asistanı")]
     private static let zemin = Color(red: 0.035, green: 0.04, blue: 0.055)
 
     var body: some View {
@@ -35,12 +40,14 @@ struct PremiumEkrani: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(L("CashFollow Premium"), systemImage: "sparkles").font(.footnote.weight(.semibold)).foregroundStyle(Tema.marka)
-                    Text(L("Paranı yapay zekâyla yönet")).font(.system(size: 30, weight: .bold)).foregroundStyle(.white)
+                    Text(L("Önümüzdeki 12 ayı gör, almadan önce sor")).font(.system(size: 30, weight: .bold)).foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("Claude · ChatGPT · Gemini").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.55))
+                    Text(L("Her ayın ödemesi, paranın yetip yetmeyeceği, ilk ödemesi en geç gelen kart."))
+                        .font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
-                sohbet
+                if aylar.contains(where: { $0.total > 0.004 }) { onizleme }
                 Spacer(minLength: 0)
                 LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 10) {
                     ForEach(Self.ozellikler, id: \.self) { ad in
@@ -88,6 +95,7 @@ struct PremiumEkrani: View {
         }
         .task {
             Analitik.olay("paywall_shown", ["reason": neden])
+            aylar = (try? model.read("get_cashflow", ["months": 12, "include_items": false]) as Akis)?.months ?? []
             await abonelik.urunleriYukle()
             var uygun: Set<String> = []
             for u in abonelik.urunler where await u.subscription?.isEligibleForIntroOffer == true { uygun.insert(u.id) }
@@ -95,34 +103,34 @@ struct PremiumEkrani: View {
         }
     }
 
-    // ── Örnek sohbet ────────────────────────────────────────────────────────
+    // ── Kullanıcının kendi 12 ayı ───────────────────────────────────────────
 
-    private var sohbet: some View {
-        VStack(spacing: 8) {
-            balon(L("Bu ay ne kadar ödeyeceğim?"), ben: true)
-            balon(L("{0} · 2 kart, 3 nakit ödeme", Bicim.tl(4598.91)), ben: false)
-            balon(L("6 taksitle telefon ekle, {0}", Bicim.tl(1200, fraction: false)), ben: true)
-            balon(L("Eklendi · ayda {0}", Bicim.tl(200, fraction: false)), ben: false)
+    // Önümüzdeki 12 ayın ödemeleri çubuklarla: bu ay ve gelecek ay açık (Özet'te zaten gördüğü tutarlar), sonraki aylar
+    // bulanık. Kilitli olanın kendi verisi olduğunu gösterir; tutar yazılmaz.
+    private var onizleme: some View {
+        let enBuyuk = max(aylar.map(\.total).max() ?? 0, 1)
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(L("Senin önümüzdeki 12 ayın")).font(.footnote.weight(.semibold)).foregroundStyle(.white.opacity(0.6))
+            HStack(alignment: .bottom, spacing: 6) {
+                ForEach(Array(aylar.enumerated()), id: \.offset) { i, a in
+                    VStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(i < 2 ? Color.white : Tema.marka)
+                            .frame(height: max(4, CGFloat(92 * a.total / enBuyuk)))
+                            .blur(radius: i < 2 ? 0 : 5)
+                        Text(Bicim.date(a.month + "-01").map { $0.formatted(Bicim.tarih.month(.narrow)) } ?? "")
+                            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(i < 2 ? 0.75 : 0.4)).lineLimit(1).fixedSize()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .bottom)
+                }
+            }
+            .frame(height: 116, alignment: .bottom)
         }
-        .padding(12)
+        .padding(14)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
-    }
-
-    private func balon(_ metin: String, ben: Bool) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            if ben {
-                Spacer(minLength: 40)
-            } else {
-                Image(systemName: "sparkles").font(.caption2.weight(.bold)).foregroundStyle(.white)
-                    .frame(width: 24, height: 24).background(Tema.marka, in: Circle())
-            }
-            Text(metin).font(.subheadline).foregroundStyle(ben ? Color.black : Color.white)
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .background(ben ? Color.white : Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .fixedSize(horizontal: false, vertical: true)
-            if !ben { Spacer(minLength: 24) }
-        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L("Senin önümüzdeki 12 ayın"))
     }
 
     // ── Planlar ─────────────────────────────────────────────────────────────

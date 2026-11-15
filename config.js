@@ -15,3 +15,8 @@ window.INBOX_DOMAIN = 'cashfollow.app';
 // Proje anahtarı herkese açıktır (phc_…). Boşsa analitik kapalı (hiçbir şey gönderilmez). iPhone: Yapilandirma.swift.
 window.POSTHOG_KEY  = 'phc_sEWqvuL259ZcLYGHQXWpnusXvLPMRPF8L4SvAsWHWfPY';
 window.POSTHOG_HOST = 'https://us.i.posthog.com';
+
+// ─── App Store ────────────────────────────────────────────────────────────────
+// iPhone uygulamasının mağaza sayfası (App Store Connect'teki uygulama kimliğiyle). Premium kilitlerindeki "App Store'da aç"
+// bağlantısı; boşsa bağlantı gösterilmez. index.html'deki Safari uygulama bandı (apple-itunes-app) aynı kimliği kullanır.
+window.APP_STORE_URL = 'https://apps.apple.com/app/id6829311425';

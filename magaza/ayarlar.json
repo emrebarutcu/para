@@ -4,7 +4,14 @@
   "diller": {
     "tr": "tr",
     "en": "en-US",
-    "ja": "ja"
+    "ja": "ja",
+    "en-gb": "en-GB",
+    "de": "de-DE",
+    "fr": "fr-FR",
+    "es": "es-ES",
+    "it": "it",
+    "nl": "nl-NL",
+    "ar": "ar-SA"
   },
   "adresler": {
     "destek": "https://cashfollow.app/support",
@@ -12,35 +19,92 @@
     "pazarlama": "https://cashfollow.app"
   },
   "kategori": {
-    "birincil": "FINANCE"
+    "birincil": "FINANCE",
+    "ikincil": "PRODUCTIVITY"
   },
   "fiyat": 0,
   "ekranlar": {
     "tur": "APP_IPHONE_67",
     "diller": {
       "tr": [
-        "sekme0-light.png",
-        "sekme1-light.png",
-        "sekme2-light.png",
-        "sekme3-light.png",
-        "sekme4-light.png",
-        "galeri3-light.png"
+        "vitrin-sekme0-light.png",
+        "vitrin-galeri3-light.png",
+        "vitrin-sekme1-light.png",
+        "vitrin-sekme3-light.png",
+        "vitrin-sekme2-light.png",
+        "vitrin-sekme4-light.png"
       ],
       "en-US": [
-        "en-sekme0-light.png",
-        "en-sekme1-light.png",
-        "en-sekme2-light.png",
-        "en-sekme3-light.png",
-        "en-sekme4-light.png",
-        "en-galeri3-light.png"
+        "en-vitrin-sekme0-light.png",
+        "en-vitrin-galeri3-light.png",
+        "en-vitrin-sekme1-light.png",
+        "en-vitrin-sekme3-light.png",
+        "en-vitrin-sekme2-light.png",
+        "en-vitrin-sekme4-light.png"
       ],
       "ja": [
-        "en-sekme0-light.png",
-        "en-sekme1-light.png",
-        "en-sekme2-light.png",
-        "en-sekme3-light.png",
-        "en-sekme4-light.png",
-        "en-galeri3-light.png"
+        "ja-vitrin-sekme0-light.png",
+        "ja-vitrin-galeri3-light.png",
+        "ja-vitrin-sekme1-light.png",
+        "ja-vitrin-sekme3-light.png",
+        "ja-vitrin-sekme2-light.png",
+        "ja-vitrin-sekme4-light.png"
+      ],
+      "en-GB": [
+        "gb-vitrin-sekme0-light.png",
+        "gb-vitrin-galeri3-light.png",
+        "gb-vitrin-sekme1-light.png",
+        "gb-vitrin-sekme3-light.png",
+        "gb-vitrin-sekme2-light.png",
+        "gb-vitrin-sekme4-light.png"
+      ],
+      "de-DE": [
+        "de-vitrin-sekme0-light.png",
+        "de-vitrin-galeri3-light.png",
+        "de-vitrin-sekme1-light.png",
+        "de-vitrin-sekme3-light.png",
+        "de-vitrin-sekme2-light.png",
+        "de-vitrin-sekme4-light.png"
+      ],
+      "fr-FR": [
+        "fr-vitrin-sekme0-light.png",
+        "fr-vitrin-galeri3-light.png",
+        "fr-vitrin-sekme1-light.png",
+        "fr-vitrin-sekme3-light.png",
+        "fr-vitrin-sekme2-light.png",
+        "fr-vitrin-sekme4-light.png"
+      ],
+      "es-ES": [
+        "es-vitrin-sekme0-light.png",
+        "es-vitrin-galeri3-light.png",
+        "es-vitrin-sekme1-light.png",
+        "es-vitrin-sekme3-light.png",
+        "es-vitrin-sekme2-light.png",
+        "es-vitrin-sekme4-light.png"
+      ],
+      "it": [
+        "it-vitrin-sekme0-light.png",
+        "it-vitrin-galeri3-light.png",
+        "it-vitrin-sekme1-light.png",
+        "it-vitrin-sekme3-light.png",
+        "it-vitrin-sekme2-light.png",
+        "it-vitrin-sekme4-light.png"
+      ],
+      "nl-NL": [
+        "nl-vitrin-sekme0-light.png",
+        "nl-vitrin-galeri3-light.png",
+        "nl-vitrin-sekme1-light.png",
+        "nl-vitrin-sekme3-light.png",
+        "nl-vitrin-sekme2-light.png",
+        "nl-vitrin-sekme4-light.png"
+      ],
+      "ar-SA": [
+        "ar-vitrin-sekme0-light.png",
+        "ar-vitrin-galeri3-light.png",
+        "ar-vitrin-sekme1-light.png",
+        "ar-vitrin-sekme3-light.png",
+        "ar-vitrin-sekme2-light.png",
+        "ar-vitrin-sekme4-light.png"
       ]
     }
   },
@@ -80,7 +144,14 @@
     "grup": {
       "tr": "CashFollow Premium",
       "en-US": "CashFollow Premium",
-      "ja": "CashFollow Premium"
+      "ja": "CashFollow Premium",
+      "en-GB": "CashFollow Premium",
+      "de-DE": "CashFollow Premium",
+      "fr-FR": "CashFollow Premium",
+      "es-ES": "CashFollow Premium",
+      "it": "CashFollow Premium",
+      "nl-NL": "CashFollow Premium",
+      "ar-SA": "CashFollow Premium"
     },
     "urunler": {
       "app.cashfollow.ios.premium.yearly": {
@@ -91,6 +162,34 @@
         "ja": [
           "プレミアム（年額）",
           "すべての機能、カードと人数は無制限"
+        ],
+        "en-GB": [
+          "Premium Yearly",
+          "All features, unlimited cards and people"
+        ],
+        "de-DE": [
+          "Premium Jährlich",
+          "Alle Funktionen, unbegrenzt Karten und Personen"
+        ],
+        "fr-FR": [
+          "Premium annuel",
+          "Toutes les fonctions, cartes et personnes illimitées"
+        ],
+        "es-ES": [
+          "Premium anual",
+          "Todas las funciones, tarjetas y personas ilimitadas"
+        ],
+        "it": [
+          "Premium annuale",
+          "Tutte le funzioni, carte e persone illimitate"
+        ],
+        "nl-NL": [
+          "Premium jaarlijks",
+          "Alle functies, onbeperkt kaarten en personen"
+        ],
+        "ar-SA": [
+          "بريميوم سنوي",
+          "كل المزايا، بطاقات وأشخاص بلا حدود"
         ]
       },
       "app.cashfollow.ios.premium.monthly": {
@@ -101,6 +200,34 @@
         "ja": [
           "プレミアム（月額）",
           "すべての機能、カードと人数は無制限"
+        ],
+        "en-GB": [
+          "Premium Monthly",
+          "All features, unlimited cards and people"
+        ],
+        "de-DE": [
+          "Premium Monatlich",
+          "Alle Funktionen, unbegrenzt Karten und Personen"
+        ],
+        "fr-FR": [
+          "Premium mensuel",
+          "Toutes les fonctions, cartes et personnes illimitées"
+        ],
+        "es-ES": [
+          "Premium mensual",
+          "Todas las funciones, tarjetas y personas ilimitadas"
+        ],
+        "it": [
+          "Premium mensile",
+          "Tutte le funzioni, carte e persone illimitate"
+        ],
+        "nl-NL": [
+          "Premium maandelijks",
+          "Alle functies, onbeperkt kaarten en personen"
+        ],
+        "ar-SA": [
+          "بريميوم شهري",
+          "كل المزايا، بطاقات وأشخاص بلا حدود"
         ]
       },
       "app.cashfollow.ios.premium.weekly": {
@@ -111,6 +238,34 @@
         "ja": [
           "プレミアム（週額）",
           "すべての機能、カードと人数は無制限"
+        ],
+        "en-GB": [
+          "Premium Weekly",
+          "All features, unlimited cards and people"
+        ],
+        "de-DE": [
+          "Premium Wöchentlich",
+          "Alle Funktionen, unbegrenzt Karten und Personen"
+        ],
+        "fr-FR": [
+          "Premium hebdomadaire",
+          "Toutes les fonctions, cartes et personnes illimitées"
+        ],
+        "es-ES": [
+          "Premium semanal",
+          "Todas las funciones, tarjetas y personas ilimitadas"
+        ],
+        "it": [
+          "Premium settimanale",
+          "Tutte le funzioni, carte e persone illimitate"
+        ],
+        "nl-NL": [
+          "Premium wekelijks",
+          "Alle functies, onbeperkt kaarten en personen"
+        ],
+        "ar-SA": [
+          "بريميوم أسبوعي",
+          "كل المزايا، بطاقات وأشخاص بلا حدود"
         ]
       }
     }

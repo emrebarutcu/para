@@ -1263,7 +1263,7 @@ export const TOOLS = [
   {
     name: "get_overview",
     title: "Overview (Özet)",
-    description: "Dashboard summary like the app's Özet tab: amount due in the month, next month's total, remaining total, the next upcoming payments, per-person and per-card figures (card and cash purchases; in the month totals card statements count on their due day whatever the payment mode; cards not counted — track_statements false — are left out). upcomingPayments: on a card paid by hand (auto_pay false) only what is not paid yet of each statement (covered = the part already paid; statements paid or paid ahead are left out), and its unpaid statements past their due day come first with late: true; a card's nextPayment likewise. Debt and loan installments the user pays are separate, under debts (in TRY; upcoming in their own asset); debts.unpaidCardStatements lists cards paid by hand with statements past or at their due day not yet marked paid (pay_debt card=…).",
+    description: "Dashboard summary like the app's Özet tab: amount due in the month, next month's total, remaining total, the next upcoming payments, per-person and per-card figures (card and cash purchases; in the month totals card statements count on their due day whatever the payment mode; cards not counted — track_statements false — are left out). upcomingPayments: on a card paid by hand (auto_pay false) only what is not paid yet of each statement (covered = the part already paid; statements paid or paid ahead are left out), and its unpaid statements past their due day come first with late: true; a card's nextPayment likewise. Debt and loan installments the user pays are separate, under debts (in TRY; upcoming in their own asset); debts.unpaidCardStatements lists cards paid by hand with statements past or at their due day not yet marked paid (pay_debt card=…). progress (current month only): paid and left of dueThisMonth and the next day something is due; lastInstallmentMonth: the month the last installment is paid, repeating purchases without an end (rent, subscriptions) left out.",
     inputSchema: obj({ month: S.month("Month to summarize, YYYY-MM. Default: current month.") }),
     annotations: READ,
     async run(args, ctx) {
@@ -1300,6 +1300,10 @@ export const TOOLS = [
         // Süresiz tekrarlayan (hesaba katılan) harcama varsa ödemeler bitmez: null, endless true
         lastPaymentMonth: endless ? null : (m => (m ? T.monthKey(m.idx) : null))([...months].reverse().find(m => m.total > EPS)),
         ...(endless && { endless: true }),
+        // Taksitlerin bittiği ay: süresiz tekrarlar (kira, abonelik) sayılmadan (icgoru.js lastInstallment)
+        lastInstallmentMonth: I.lastInstallment(state, today),
+        // İçinde bulunulan ayda ödenenler ve kalan (Özet'teki ilerleme; icgoru.js progress)
+        ...(start === from && (({ paid, left, next }) => ({ progress: { paid, left, next } }))(I.progress(state, today))),
         upcomingPayments: upcoming.map(x => x.view),
         people: state.people.map(p => ({
           name: p.name,
@@ -2350,6 +2354,19 @@ export const TOOLS = [
     },
   },
   {
+    name: "get_month_summary",
+    title: "Month summary (Ay kapanışı)",
+    description: "One month in review, like the app's month summary: what was paid that month (card statements and cash installments, on their due days), the month before and the month after, installment purchases whose last installment was paid that month (finished; freed = the monthly amount they free up from then on), what was spent in the month by purchase date, how many purchases were added, the biggest category and the one that rose most against its average of the previous 3 months. Default: the month before the current one.",
+    inputSchema: obj({ month: S.month("Month to review, YYYY-MM. Default: the month before the current one.") }),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const idx = args.month !== undefined ? monthArg(args.month, "month", ctx.today) : T.parseDate(ctx.today).idx - 1;
+      const rates = state.installments.some(p => T.assetOf(p, homeOf(state)) !== homeOf(state)) ? (await ratesOrNull(ctx))?.rates : null;
+      return { ...I.monthSummary(state, idx, ctx.today, rates), currency: homeOf(state) };
+    },
+  },
+  {
     name: "simulate_purchase",
     title: "Simulate purchase",
     description: "What a purchase would change, without saving it: its payment schedule, each affected month's total payments and free cash before and after (free cash = income minus card payments and outflows, from asset entries), and the card's used limit after. Also compares every card for a purchase on that date (first payment date). Use it to answer \"can I afford this?\" or \"which card should I use?\".",
@@ -2440,7 +2457,7 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Funds and stocks (only for accounts in Turkey for now) are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
 - Deleting a card or a person also deletes their purchases (a card also its statement payments, a person also their asset entries and debts); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
-- get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving.
+- get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving; get_month_summary reviews a month (paid, installments that finished, next month, categories).
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.
 - Revolving credit (only in countries where card balances carry interest; see "This account" below): a card may have an APR (add_card / update_card apr). On a card paid by hand (auto_pay false) with an APR, what is left of a statement after its due day carries to the next statement, with interest (APR / 12) charged on the next cutoff day; a statement is overdue only if less than its minimum payment (the greater of 40 or 1% of the balance + interest, plus any past-due minimum) was paid. list_cards / list_debts show carried, interestCharged, minimumDue and payoff (months and interest if only the minimum is paid, monthly payment to clear in 12 months); statements show balance, minimum and interest. These are estimates: the bank's own figures (daily balance, fees) can differ a little. Automatic cards are paid in full each month, so no interest.

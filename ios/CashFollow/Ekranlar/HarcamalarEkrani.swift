@@ -11,6 +11,7 @@ struct HarcamalarEkrani: View {
     @State private var bitenler = false
     @State private var gorunum = "liste"           // liste | kategori
     @State private var silinecek: Harcama?
+    @State private var yine: Harcama?            // "Yine": aynı harcama bugünün tarihiyle, form dolu açılır
     @State private var filtre = false
     @AppStorage("harcama.sirala") private var sirala = "next_payment"
     @AppStorage("harcama.yon") private var yon = "asc"
@@ -81,6 +82,7 @@ struct HarcamalarEkrani: View {
             .sheet(isPresented: $filtre) {
                 HarcamaFiltresi(sirala: $sirala, yon: $yon, kart: $kart, tur: $tur, kategori: $kategori)
             }
+            .sheet(item: $yine) { HarcamaFormu(yine: $0) }
             .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
             .searchable(text: $search, prompt: Text(L("Ara")))
             .yenilenebilir(model)
@@ -106,6 +108,7 @@ struct HarcamalarEkrani: View {
                         NavigationLink(value: p.id) { HarcamaSatiri(p: p) }
                             .buttonStyle(.plain)
                             .contextMenu {
+                                if p.date != nil, p.asset == Bicim.home { Button(L("Yine"), systemImage: "arrow.counterclockwise") { yine = p } }
                                 Button(L("Sil"), systemImage: "trash", role: .destructive) { silinecek = p }
                             }
                     }
@@ -305,15 +308,15 @@ struct KategoriSecimi: Equatable {
     let ad: String
 }
 
-// Web'deki harcama satırı: kişinin baş harfi, ad, kart · tarih, taksit · kategori; sağda aylık tutar ve kalan,
-// taksitliyse ilerleme çubuğu
+// Web'deki harcama satırı: başta kişinin baş harfi (tek kişilik kullanımda kategorinin simgesi), ad, kart · tarih,
+// taksit · kategori; sağda aylık tutar ve kalan, taksitliyse ilerleme çubuğu
 struct HarcamaSatiri: View {
     @EnvironmentObject private var model: Model
     let p: Harcama
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Avatar(ad: p.person, renk: model.kisiRengi(p.personId))
+            if model.tekKisi { KategoriSimgesi(kategori: p.category) } else { Avatar(ad: p.person, renk: model.kisiRengi(p.personId)) }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(p.description).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(1)
@@ -333,7 +336,7 @@ struct HarcamaSatiri: View {
                 if p.installments > 1, p.repeat == nil {
                     let odenen = p.bnpl?.paid ?? p.paidInstallments   // Pay in 4: çekilen ödemeler
                     HStack(spacing: 8) {
-                        Doluluk(used: Double(odenen), limit: Double(p.installments), renk: Tema.metin2)
+                        Doluluk(used: Double(odenen), limit: Double(p.installments), renk: Tema.metin2, erisim: L("{0}/{1} ödendi", odenen, p.installments))
                             .frame(width: 90)
                         Text(L("{0}/{1} ödendi", odenen, p.installments)).font(.caption).foregroundStyle(Tema.metin3)
                     }
@@ -367,6 +370,7 @@ struct HarcamaDetayi: View {
     let id: String
     @State private var confirm = false
     @State private var duzenle: Harcama?
+    @State private var yine: Harcama?
 
     var body: some View {
         Okunan(tool: "get_purchase", args: ["id": id], key: id) { (p: Harcama) in
@@ -434,6 +438,15 @@ struct HarcamaDetayi: View {
                         }
                     }
                 }
+                // Aynı harcamayı bugünün tarihiyle yeniden ekle (market, benzin, kahve): form dolu açılır
+                if p.date != nil, p.asset == Bicim.home {
+                    Button { yine = p } label: {
+                        Label(L("Yine ekle"), systemImage: "arrow.counterclockwise").font(.body.weight(.semibold)).foregroundStyle(Tema.metin)
+                            .frame(maxWidth: .infinity).padding(.vertical, 14)
+                            .background(Tema.yuzey, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
                 Button(role: .destructive) { confirm = true } label: {
                     Text(L("Harcamayı sil")).font(.body.weight(.semibold)).foregroundStyle(Tema.tehlike)
                         .frame(maxWidth: .infinity).padding(.vertical, 14)
@@ -449,6 +462,7 @@ struct HarcamaDetayi: View {
                 }
             }
             .sheet(item: $duzenle) { HarcamaFormu(duzenle: $0) }
+            .sheet(item: $yine) { HarcamaFormu(yine: $0) }
             .confirmationDialog(L("{0} ve bütün taksitleri silinsin mi?", p.description), isPresented: $confirm, titleVisibility: .visible) {
                 Button(L("Sil"), role: .destructive) {
                     try? model.write("delete_purchase", ["id": id])
@@ -463,6 +477,9 @@ struct HarcamaDetayi: View {
 // Yeni harcama (add_purchase) ya da düzenleme (update_purchase). Tutar en üstte; kart ve taksit çiplerle; "her ay"
 // abonelik / kira için. Yeni harcamada "Alabilir miyim?" önizlemesi (simulate_purchase): ilk ödeme, o ayın ödemesi
 // önce → sonra, boşta kalan nakit, kalan limit ve ilk ödemesi en geç gelen kart önerisi.
+// Yazdırmamak için: adın altında işyeri önerileri (önceki harcamalardan; dokununca kartı, taksit sayısı ve kategorisi
+// de dolar), "Yine" (aynı harcama bugünün tarihiyle) ve + düğmesindeki son işyerleri. Kaydedince form sessizce
+// kapanmaz: üstte kısa bir bant ilk ödeme gününü ve o ayın ödemesinin nasıl değiştiğini söyler (Bant).
 struct HarcamaFormu: View {
     @EnvironmentObject private var model: Model
     @EnvironmentObject private var abonelik: Abonelik
@@ -470,6 +487,8 @@ struct HarcamaFormu: View {
     var duzenle: Harcama? = nil
     var ornek: (tutar: String, ad: String, taksit: Int)? = nil   // yalnızca ekran görüntüleri (-galeri 3)
     var eposta: Eposta? = nil   // onay bekleyen banka e-postasından önceden doldurulur
+    var yine: Harcama? = nil    // "Yine": bu harcamanın adı, tutarı, kartı, taksidi ve kategorisiyle; tarih bugün
+    var isyeri: Isyeri? = nil   // + düğmesindeki son işyeri: adı, kartı, taksidi ve kategorisi dolu; tutar yazılır
     @AppStorage("harcama.sonKart") private var sonKart = ""
     @AppStorage("harcama.sonBnpl") private var sonBnpl = "klarna"
     @State private var bnpl = false            // Pay in 4: 4 ödeme, 2 haftada bir (ülkede varsa; para.js features)
@@ -490,6 +509,8 @@ struct HarcamaFormu: View {
     @State private var preview: HarcamaSonucu?
     @State private var sim: Simulasyon?
     @State private var error: String?
+    @State private var oneriler: [Isyeri] = []   // adın altındaki işyeri önerileri
+    @State private var kaynak = "manual"         // ölçüm: manual | suggestion | repeat | email
     @FocusState private var tutarOdak: Bool
 
     private let taksitler = [1, 2, 3, 6, 9, 12]
@@ -508,6 +529,7 @@ struct HarcamaFormu: View {
                         }
                         Ayirici()
                         TextField(L("Ne alındı? (ör. Migros)"), text: $desc).font(.title3)
+                        if !oneriler.isEmpty { oneriSatiri }
                     }
 
                     Kart {
@@ -639,6 +661,7 @@ struct HarcamaFormu: View {
                 ToolbarItem(placement: .confirmationAction) { Button(L("Kaydet"), action: save).fontWeight(.semibold).disabled(!valid) }
             }
             .task { load() }
+            .task(id: desc) { oneriler = duzenle == nil && ornek == nil ? (model.motor?.merchants(desc, limit: 4) ?? []) : [] }
             .task(id: "\(desc)|\(amount)|\(count)|\(taksitli)|\(tekrar)|\(bnpl)|\(bonus)|\(saglayici)|\(Bicim.key(date))|\(card)|\(person)") { dryRun() }
         }
     }
@@ -661,6 +684,65 @@ struct HarcamaFormu: View {
 
     private func etiket(_ s: String) -> some View {
         Text(s).font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
+    }
+
+    // İşyeri önerileri: "Migros" / "Bonus · Peşin · Market"; dokununca ad, kart, taksit ve kategori dolar
+    private var oneriSatiri: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(oneriler) { m in
+                    Button { uygula(m); Analitik.olay("merchant_suggestion_used") } label: {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(m.desc).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(1)
+                            Text(oneriAlti(m)).font(.caption).foregroundStyle(Tema.metin3).lineLimit(1)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func oneriAlti(_ m: Isyeri) -> String {
+        let kart = m.cardId.flatMap { id in cards.first { $0.id == id }?.name } ?? L("Nakit")
+        let kategori = m.category.flatMap { id in model.constants?.categories.first { $0.id == id }?.name }
+        return [kart, m.count > 1 ? L("{0} taksit", m.count) : L("Peşin"), kategori].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    // Önerilen işyeri: adı, son kullanılan kartı (duruyorsa), taksit sayısı ve kategorisi; tutar ve tarih kullanıcının
+    private func uygula(_ m: Isyeri) {
+        desc = m.desc
+        if let c = m.cardId { if cards.contains(where: { $0.id == c }) { card = c } } else { card = "nakit" }
+        count = min(max(m.count, 1), 60)
+        taksitli = count > 1
+        category = m.category ?? ""
+        if people.contains(where: { $0.id == m.personId }) { person = m.personId }
+        kaynak = "suggestion"
+        if amount.isEmpty { tutarOdak = true }
+    }
+
+    // "Yine": harcamanın kendisi, tarih bugün (Pay in 4 ve bonus ödemesi taşınmaz: yeniden seçilir)
+    private func doldur(yine p: Harcama) {
+        desc = p.description
+        amount = p.total.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2)))
+        count = p.bnpl != nil || p.bonus != nil ? 1 : min(max(p.installments, 1), 60)
+        if let c = p.cardId { if cards.contains(where: { $0.id == c }) { card = c } } else { card = "nakit" }
+        person = p.personId
+        category = p.category ?? ""
+        kaynak = "repeat"
+    }
+
+    // Kaydın sonucu (form kapanınca üstteki bantta): "Kaydedildi · ilk ödeme 20 Kasım" ve ödemenin düştüğü ilk ayın
+    // toplamı önce → sonra (simulate_purchase'tan; önizleme kilitli olsa da hesaplanır, kaydedilen harcamanın planıdır)
+    private func kayitSonucu(_ s: HarcamaSonucu) -> Bant.Mesaj {
+        let ilk = s.preview?.firstPayment ?? s.purchase.nextPayment?.date
+        var alt: String?
+        if let m = sim?.months.first, abs(m.paymentsAfter - m.paymentsBefore) > 0.004 {
+            alt = L("{0} ödemen {1} → {2}", AyOzetiEkrani.ayAdi(m.month), Bicim.tl(m.paymentsBefore, fraction: false), Bicim.tl(m.paymentsAfter, fraction: false))
+        }
+        return Bant.Mesaj(baslik: ilk.map { L("Kaydedildi · ilk ödeme {0}", Bicim.day($0)) } ?? L("Kaydedildi"), alt: alt)
     }
 
     private func duzenlemeOnizlemesi(_ p: HarcamaSonucu) -> some View {
@@ -707,7 +789,9 @@ struct HarcamaFormu: View {
             if cards.contains(where: { $0.id == sonKart }) || sonKart == "nakit" { card = sonKart }
             else if let first = cards.first { card = first.id }
             if !saglayicilar.contains(where: { $0.id == saglayici }) { saglayici = saglayicilar.first?.id ?? "other" }
-            if let e = eposta { doldur(e) }
+            if let e = eposta { doldur(e); kaynak = "email" }
+            else if let y = yine { doldur(yine: y) }
+            else if let m = isyeri { uygula(m); tutarOdak = true }
             else if let o = ornek { amount = o.tutar; desc = o.ad; count = o.taksit } else { tutarOdak = true }
             taksitli = count > 1
         }
@@ -763,12 +847,13 @@ struct HarcamaFormu: View {
 
     private func save() {
         do {
-            _ = try model.write(duzenle == nil ? "add_purchase" : "update_purchase", args, as: HarcamaSonucu.self)
-            if duzenle == nil { sonKart = card; Puanlama.olumluAn() }
+            let sonuc = try model.write(duzenle == nil ? "add_purchase" : "update_purchase", args, as: HarcamaSonucu.self)
+            if duzenle == nil { sonKart = card; Puanlama.olumluAn(); Bant.goster(kayitSonucu(sonuc)) }
             if let e = eposta { Task { await model.epostaBitti(e.emailId) } }
             if bnpl { sonBnpl = saglayici }
+            // source: kayıt nereden geldi (elle, işyeri önerisi, "Yine", banka e-postası): otomatik kayıt payı bununla ölçülür
             Analitik.olay(duzenle == nil ? "purchase_added" : "purchase_edited",
-                          ["installments": bonusEtkin > 0 ? bonusEtkin : taksitSayisi, "repeat": tekrar, "bnpl": bnpl, "bonus": bonusEtkin, "cash": card == "nakit", "afford_shown": sim != nil && abonelik.premium])
+                          ["installments": bonusEtkin > 0 ? bonusEtkin : taksitSayisi, "repeat": tekrar, "bnpl": bnpl, "bonus": bonusEtkin, "cash": card == "nakit", "afford_shown": sim != nil && abonelik.premium, "source": kaynak])
             dismiss()
         } catch {
             self.error = error.localizedDescription

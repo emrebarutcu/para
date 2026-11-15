@@ -6,15 +6,15 @@ değiştirme.
 
 ## Name (≤30)
 
-CashFollow: Para Takibi
+CashFollow: Taksit Takibi
 
 ## Subtitle (≤30)
 
-Kart ekstresi, borç ve bütçe
+Kredi kartı, harcama ve borç
 
 ## Keywords (≤100, virgülle)
 
-kredi kartı,ekstre,son ödeme,borç,bütçe,harcama,kart limiti,nakit akışı,altın,döviz,fon,alacak
+gelir,gider,bütçe,ekstre,takip,para,ödeme,nakit,limit,alacak,masraf,altın,döviz,kart,kesim,akışı,fon
 
 ## Promotional text (≤170)
 
@@ -22,18 +22,30 @@ Kartlarınızdaki taksitler, ekstreler ve son ödeme günleri ay ay tek planda. 
 
 ## Description (≤4000)
 
-Hangi ay ne kadar ödeyeceğinizi bilin. CashFollow kredi kartı harcamalarınızı anlaşılır bir ödeme takvimine çevirir.
+Hangi ay ne kadar ödeyeceğinizi bilin. CashFollow kredi kartı harcamalarınızı ve taksitlerinizi anlaşılır bir ödeme takvimine çevirir.
 
 Ne aldığınızı ve kaç taksit yaptığınızı yazın. CashFollow her kartın hesap kesim ve son ödeme gününe göre her taksitin hangi ekstreye düştüğünü hesaplar; ay ay ödeme planınızı ve kalan borcunuzu gösterir.
 
 ■ Bütün taksitler tek planda
-- Taksitler: taksit sayısını seçin; aylık tutarı ve kalan taksitleri görün
+- Taksit takibi: taksit sayısını seçin; aylık tutarı ve kalan taksitleri görün
+- Bu ay ne ödediniz, ne kaldı: ayın ilerlemesi tek bakışta
 - Hesap kesim günü: kesimden önceki harcama bu ekstreye, sonrası sonrakine
-- Son ödeme günleri yaklaşınca hatırlatma
 - Kullanılabilir limit: limitinizden ödenecek taksitler düşülerek
+- Taksitlerinizin bittiği ay ve gelecek ayın bu aydan hafif mi ağır mı olduğu
+
+■ Zamanında hatırlatır
+- Son ödeme günü yaklaşınca bildirim
+- Hesap kesiminden bir gün önce: bugün alınan hangi gün, sonrası hangi gün ödenir
+- Taksit bitince haber: her ay ne kadarın boşaldığını görün
+- Her ayın başında geçen ayın özeti
 
 ■ "Bunu alabilir miyim?"
 Almadan önce fiyatı girin. CashFollow her ayın ödemesinin nasıl değişeceğini, elinizde ne kadar kalacağını ve ilk ödemesi en geç düşen kartı gösterir.
+
+■ Yazması kolay
+- Önceki işyerleri bir dokunuşla: kart, taksit sayısı ve kategori kendiliğinden dolar
+- "Yine" ile aynı harcamayı bugünün tarihiyle yeniden ekleyin
+- Abonelik ve kira gibi her ay tekrarlayan ödemeler bir kez yazılır
 
 ■ Paranızın akışını görün
 - Aya, karta ve tarihe göre ödemeler
@@ -51,7 +63,7 @@ Almadan önce fiyatı girin. CashFollow her ayın ödemesinin nasıl değişece�
 Eşinizin ya da aile üyelerinin kartınızla yaptığı harcamaları aynı uygulamada izleyin; kimin size ne kadar borcu olduğunu görün.
 
 ■ Gizlilik önce
-Banka şifresi hiç istenmez; CashFollow hesaplarınıza bağlanmaz. Verileriniz yalnızca kendi hesabınızda durur, reklam için kullanılmaz, satılmaz.
+Banka şifresi hiç istenmez; CashFollow hesaplarınıza bağlanmaz. Hesap açmadan da kullanabilirsiniz. Verileriniz yalnızca kendi hesabınızda durur, reklam için kullanılmaz, satılmaz.
 
 ■ Yapay zekâ asistanı
 CashFollow'u ChatGPT ya da Claude gibi bir yapay zekâ asistanına bağlayın ve yalnızca sorun: "Televizyonu Bonus kartıma 6 taksitle ekle", "Gelecek ay ne kadar ödeyeceğim?"
@@ -59,7 +71,15 @@ CashFollow'u ChatGPT ya da Claude gibi bir yapay zekâ asistanına bağlayın ve
 ■ iPhone ve web, aynı veri
 Aynı hesapla cashfollow.app'te de kullanın.
 
-CashFollow Premium (abonelik) "Bunu alabilir miyim?", yapay zekâ asistanı bağlantısı ve daha fazlasını açar. Fiyatlar ve koşullar uygulamada gösterilir. Ödeme Apple Kimliğinizden alınır; dönem bitmeden en az 24 saat önce iptal edilmezse abonelik kendiliğinden yenilenir.
+CashFollow Premium (abonelik) "Bunu alabilir miyim?", önümüzdeki ayların ödeme planı, uyarılar, yapay zekâ asistanı bağlantısı ve daha fazlasını açar. Fiyatlar ve koşullar uygulamada gösterilir. Ödeme Apple Kimliğinizden alınır; dönem bitmeden en az 24 saat önce iptal edilmezse abonelik kendiliğinden yenilenir.
 
 Koşullar: https://cashfollow.app/terms
 Gizlilik: https://cashfollow.app/privacy
+
+## What's new (≤4000)
+
+- Özet yenilendi: bu ay ne kadarını ödediniz, ne kaldı; gelecek ay hafifliyor mu, taksitleriniz hangi ay bitiyor.
+- Harcama eklemek kolaylaştı: önceki işyerleri bir dokunuşla gelir; kart, taksit ve kategori kendiliğinden dolar. "Yine" ile aynı harcamayı yeniden ekleyin.
+- Yeni bildirimler: hesap kesiminden bir gün önce, taksit bitince ve her ayın başında ay özeti.
+- Taksit bitince kutlama: her ay ne kadarın boşaldığını görün.
+- Ay özeti: geçen ay ne ödediniz, hangi taksitler bitti, bu ay ne bekliyor.

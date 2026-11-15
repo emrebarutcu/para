@@ -26,6 +26,8 @@ struct Ozet: Decodable {
     }
     struct BorcOdemesi: Decodable, Hashable { let date: String; let description: String; let amount: Double; let asset: String; let late: Bool? }
     struct Borclar: Decodable { let dueThisMonth: Double?; let nextMonth: Double?; let upcoming: [BorcOdemesi]? }
+    // Ayın ilerlemesi (icgoru.js progress): ödenen, kalan ve kalanların ilk günü; yalnızca içinde bulunulan ayda
+    struct Ilerleme: Decodable, Hashable { let paid: Double; let left: Double; let next: String? }
 
     let today: String
     let month: String
@@ -34,11 +36,56 @@ struct Ozet: Decodable {
     let remainingTotal: Double
     let lastPaymentMonth: String?
     let endless: Bool?
+    let lastInstallmentMonth: String?   // taksitlerin bittiği ay; süresiz tekrarlar (kira, abonelik) sayılmaz
+    let progress: Ilerleme?
     let upcomingPayments: [Yaklasan]
     let people: [Kisi]
     let cards: [Kart]
     let debts: Borclar?
 }
+
+// Harcama formunun işyeri önerisi (icgoru.js merchants): önceki harcamanın adı, kartı (nil: nakit), taksit sayısı,
+// kategorisi ve son tutarı
+struct Isyeri: Decodable, Hashable, Identifiable {
+    let desc: String
+    let cardId: String?
+    let count: Int
+    let category: String?
+    let personId: String
+    let total: Double
+    let uses: Int
+    var id: String { desc }
+}
+
+// Son taksidi ödenen harcama (icgoru.js finishing): date son ödeme günü, monthly boşalan aylık tutar, freeFrom boşalan ilk ay
+struct BitenTaksit: Decodable, Hashable, Identifiable {
+    let id: String
+    let desc: String
+    let date: String
+    let monthly: Double
+    let count: Int
+    let freeFrom: String
+}
+
+// Ay kapanışı (icgoru.js monthSummary): ayın ödemeleri, önceki ve sonraki ay, biten taksitler, o ayın harcaması ve kategorileri
+struct AyOzeti: Decodable, Hashable, Identifiable {
+    var id: String { month }
+    struct Sonraki: Decodable, Hashable { let month: String; let total: Double }
+    struct Kategori: Decodable, Hashable { let id: String; let name: String; let value: Double; let average: Double? }
+    let month: String
+    let paid: Double
+    let previous: Double
+    let next: Sonraki
+    let finished: [BitenTaksit]
+    let freed: Double
+    let spent: Double
+    let added: Int
+    let top: Kategori?
+    let rising: Kategori?
+}
+
+// Kartın sıradaki hesap kesimi (kopru.js cutoffs): o güne kadar alınan dueBefore'da, sonrası dueAfter'da ödenir
+struct KesimGunu: Decodable, Hashable { let card: String; let cut: String; let dueBefore: String; let dueAfter: String }
 
 struct KartListesi: Decodable { let cards: [KartGorunumu] }
 

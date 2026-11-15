@@ -394,25 +394,52 @@ bir sonraki gönderimde depodakiyle ezilir; değişiklik `magaza/`'da yapılır.
   sayfası** → Run workflow (dosya `main`'de olmalı) ya da her dalda etiketle: `git tag magaza-gonder-2 && git push origin
   magaza-gonder-2` (`magaza-oku-*`, `magaza-kuru-*`). `claude/magaza*` dalına `magaza/` değişikliği itilince kendiliğinden
   `kuru` çalışır. **İncelemeye göndermez**: o adım elle, App Store Connect → Add for Review.
-- **Metinler:** `magaza/<dil>.md` (ad, alt başlık, anahtar kelimeler, tanıtım metni, açıklama; başlıklar sabit, karakter
-  sınırları denetlenir): `tr.md` Türkçe (uygulamanın ana dili), `en.md` İngilizce (ABD), `ja.md` Japonca. Yeni dil:
-  `magaza/<kod>.md` ve `ayarlar.json → diller`'e App Store Connect'in dil kodu.
-- **`magaza/ayarlar.json`:** adresler, kategori (`FINANCE`), telif, fiyat (ücretsiz; yalnızca hiç ayarlanmamışsa yazılır),
+- **Metinler:** `magaza/<dil>.md` (ad, alt başlık, anahtar kelimeler, tanıtım metni, açıklama, yenilikler; başlıklar
+  sabit, karakter sınırları denetlenir: `python3 ios/scripts/asc_magaza.py denetle`): `tr.md` Türkçe (uygulamanın ana
+  dili), `en.md` İngilizce (ABD), `en-gb.md` İngilizce (Birleşik Krallık), `ja.md` Japonca, `de.md`, `fr.md`, `es.md`
+  (İspanya), `it.md`, `nl.md`, `ar.md` (Körfez). Yalnızca uygulamanın ülke olarak desteklediği pazarların dilleri var
+  (`para.js` → `COUNTRIES`): Kore ve Brezilya ülke listesine girince `ko` ve `pt-BR` eklenir. Yeni dil: `magaza/<kod>.md`
+  ve `ayarlar.json → diller`'e App Store Connect'in dil kodu; aynı yerde o dilin ekran görüntüleri ve abonelik adları.
+- **Aramada bulunma (ASO) kuralları** — metinler bunlara göre yazıldı, değiştirirken korunur:
+  - Ad en ağır alandır: marka ve o pazarın en güçlü terimi ("Taksit Takibi", "BNPL Bill Tracker", "Raten & Zahlungen").
+    Alt başlık sıradaki terimleri taşır ve okunur bir cümle parçasıdır.
+  - Anahtar kelimeler tek tek sözcüktür, virgülden sonra boşluk yoktur; adda ya da alt başlıkta geçen sözcük
+    yinelenmez (App Store alanları birleştirir), başka markaların adı yazılmaz (yönerge 2.3.7), 100 karakter doldurulur.
+  - Açıklama aramada sayılmaz, ikna içindir: ilk iki satır "devamı"ndan önce görünür ve uygulamanın ne yaptığını söyler.
+    Ücretsiz olmayan özellik ücretsizmiş gibi yazılmaz (son paragraf Premium'da olanı söyler).
+  - Ad ve alt başlık yalnızca yeni sürümle değişir; anahtar kelimeler, açıklama ve yenilikler de sürüme bağlıdır.
+    Tanıtım metni her zaman değiştirilebilir (duyuru için).
+  - Arama hacmi ölçülmedi: terimler o dilde bu tür uygulamaların aranma biçimine göre seçildi. Yayından sonra App Store
+    Connect → Analytics → Sources'ta arama gösterimi ve dönüşüm izlenir; tutmayan terim değiştirilir.
+- **Mağaza kimliği:** `6829311425` (`https://apps.apple.com/app/id6829311425`). Web'de `config.js` → `APP_STORE_URL`
+  (Premium kilitlerindeki "App Store'da aç") ve `index.html`'deki `apple-itunes-app` (iPhone'da Safari'nin uygulama bandı).
+- **`magaza/ayarlar.json`:** adresler, kategori (`FINANCE`, ikincil `PRODUCTIVITY`), telif, fiyat (ücretsiz; yalnızca hiç ayarlanmamışsa yazılır),
   yaş sınırı bildirimi (`yas`: hepsi yok), satılan ülkeler (`ulkeler.haric`: Çin, ICP lisansı gerektiği için), her dilin
   ekran görüntüleri (`ekran-goruntuleri` dalındaki dosya adları, sırayla; aynıysa yeniden yüklenmez), abonelik grubu ve
   ürünlerinin dil metinleri (`abonelik`; ad ≤30, açıklama ≤55) ve abonelik ülkeleri. Abonelik fiyatı ve ücretsiz deneme
   App Store Connect'te kalır.
 - **Sürüm:** düzenlenebilir mağaza sürümünün numarası `version.js`'teki sürüme çekilir (yoksa açılır), o sürümün en yeni
   geçerli build'i seçilir. O sürümün build'i yoksa numara değişmez (uyarı yazılır): önce TestFlight, sonra yeniden
-  `gonder`. Sürüm incelemedeyken `gonder` çalıştırılmaz (yeni sürüm açmaya çalışır).
+  `gonder`. Sürüm incelemedeyken `gonder` çalıştırılmaz (yeni sürüm açmaya çalışır). Uygulama yayındayken ad, alt
+  başlık, kategori ve yeni diller yayındaki uygulama bilgisine yazılamaz: `gonder` önce yeni sürümü açar, sonra uygulama
+  bilgisini yazar (App Store Connect yeni sürümle düzenlenebilir bir kopya oluşturur). Bu sıra 1.1.0'la ilk kez
+  denenecek: ilk `gonder`'in çıktısında "Uygulama bilgisi" bölümüne bakılır.
 - **Elle kalanlar** (API'de yok ya da kişisel bilgi; depo herkese açık, günlükte yalnızca "dolu / boş" yazılır): App
   Privacy, inceleme iletişim bilgileri (ad, telefon, e-posta) ve notları, anlaşmalar / vergi / banka. İçerik hakları
   beyanı `ayarlar.json → icerikHaklari`'nda (kur, altın, fon ve hisse fiyatları dışarıdan: `USES_THIRD_PARTY_CONTENT`).
 - **Adresler:** destek `https://cashfollow.app/support`, gizlilik `https://cashfollow.app/privacy` (ikisi de İngilizce;
   `support.html`, `privacy.html`). Destek e-postası `support@cashfollow.app` (Cloudflare yönlendirmesi).
 - **Ekran görüntüleri:** Actions → **Ekran görüntüleri** → Run workflow; `ekran-goruntuleri` dalına iPhone Pro Max'te
-  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir; API'de `APP_IPHONE_67`). `en-*`
-  İngilizce (ABD örnek verisi), ötekiler Türkçe. Japonca sayfa şimdilik İngilizce görüntüleri kullanır.
+  6,9 inç (1320 × 2868) çıkar, App Store'un istediği boyut (küçükleri kendisi üretir; API'de `APP_IPHONE_67`). Mağazaya
+  gidenler **vitrin** görüntüleridir (`-vitrin`, `Ornek.swift` → `Vitrin`): üstte tek cümlelik başlık, altında ekran bir
+  telefonun içinde. İki geçişte çekilir: önce ekranın kendisi, sonra o görüntü başlıklı çerçeveye yerleştirilir (ekran
+  canlı küçültülmez; küçültülen gezinme çubuğu kenar boşluklarını kaybediyor). Her mağaza dilinin kendi takımı vardır, uygulamanın o dildeki hâli ve o ülkenin para birimiyle:
+  `vitrin-*` Türkçe, `en-vitrin-*` ABD, `gb-`, `de-`, `fr-`, `es-`, `it-`, `nl-`, `ar-`, `ja-vitrin-*`. Başlıklar
+  `Ornek.vitrinBasligi`'nda, çevirileri `dil/<kod>.json`'da (başlıktaki `|` satırın bölüneceği yerdir, her dil kendi
+  yerini verir; bir satır 22 harfi geçmezse yazı küçülmez); arama sonucunda yalnızca ilk üç görüntü göründüğü için sıra
+  (`ayarlar.json`) Özet, "Alabilir miyim?" formu, Akış, sonra Kartlar, Harcamalar, Varlıklar. Başlık bir faydayı söyler
+  ("Bu ay ne ödeyeceğini bil"), ekranın adını değil. Başlıksız `sekme*` / `en-*` görüntüleri belgeler ve inceleme içindir.
+  Mağaza metni ya da ekranlar değişince: önce bu iş akışı (dal varsayılan), sonra `magaza` → `kuru`.
 - **App Privacy** (`ios/CashFollow/PrivacyInfo.xcprivacy` ile aynı olmalı; hepsi kullanıcıya bağlı, takip yok):
   - Contact Info → E-posta adresi: App Functionality.
   - Financial Info → Other Financial Info: App Functionality.
@@ -446,6 +473,12 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
   `inbox_card_assigned` (`set_last4`: son 4 hane karta yazıldı mı), `inbox_notifications` (`enabled`).
+- Kayıt, bildirim ve geri dönüş (iPhone; ürün çalışmasının ölçüleri): `purchase_added` olayında `source` kaydın nereden
+  geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email`: onay bekleyen banka e-postası;
+  web'de `web`) — otomatik ve yarı otomatik kaydın payı bununla, kayıt süresi `add_opened` ile `purchase_added` arasından
+  ölçülür. `merchant_suggestion_used` (öneriye dokunuldu), `notification_opened` (`kind`: payment, cutoff,
+  installment_finished, month_summary, inbox), `installment_finished_shown` (kutlama kartı ilk kez göründü; `count`),
+  `month_summary_opened` (`source`: overview, notification), `month_summary_shared`.
 - Karşılama denemesi: PostHog'da çok değişkenli bayrak **`onboarding_flow`**, kollar `control` (eski giriş ekranı) ve
   `eylem` (yeni akış); "Persist flag across authentication" açık. Bayrak yokken herkes yeni akışı görür (`variant: default`);
   1,5 saniyede gelmezse de yeni akış (`fallback`, çözümlemeden çıkarılır). %100 `control` yeni akışı uzaktan kapatır.
@@ -455,7 +488,8 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
 #### Abonelik (CashFollow Premium)
 
 Haftalık, aylık, yıllık otomatik yenilenen abonelik (StoreKit 2, `Uygulama/Abonelik.swift`, ödeme ekranı
-`Ekranlar/PremiumEkrani.swift`: önde yapay zekâ asistanı). Fiyat ve deneme App Store Connect'te; kodda fiyat yok. Asistanı
+`Ekranlar/PremiumEkrani.swift`: önde çekirdek vaat ve kullanıcının kendi 12 ayı, yapay zekâ asistanı özellik listesinde).
+Fiyat ve deneme App Store Connect'te; kodda fiyat yok. Asistanı
 bağlama iPhone'da Ayarlar → CashFollow Premium → Yapay zekâ asistanı (`Ekranlar/AsistanEkrani.swift`; web'deki Yapay zekâ
 penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
 
@@ -504,8 +538,11 @@ alınca Supabase'te `subscriptions` satırı (`environment = Sandbox`) ve asista
 ---
 
 Sync çalışma mantığı (`sync.js`, `tablo.js`): Veri cihazda localStorage'da durur, uygulama çevrimdışı da çalışır.
-Giriş yapmamış kullanıcıya ilk açılışta giriş / kayıt penceresi çıkar; altındaki "Çevrimdışı devam et" seçilirse
-pencere bir daha çıkmaz (`para.offline`), Özet'in üstünde verilerin yalnızca bu cihazda durduğunu söyleyen bir not görünür.
+Giriş yapmamış kullanıcıya ilk açılışta karşılama penceresi çıkar (iPhone'un ilk ekranı gibi: "Kartına bu ay ne
+ödeyeceğini bil", ülke, birincil düğme **Hesap açmadan başla**, altında "Hesabım var, giriş yap" ile giriş / kayıt formu).
+"Hesap açmadan başla" seçilirse pencere bir daha çıkmaz (`para.offline`), Özet'te üç adımlı **Başlarken** paneli karşılar
+(kart, harcama, maaş; bitince ya da "Gizle" ile kaybolur, `para.baslarken.gizli`) ve üstünde verilerin yalnızca bu cihazda
+durduğunu söyleyen bir not görünür.
 Girişsiz kullanımın verisi `cashflow.v1`'de, hesabınki `cashflow.v1.<kullanıcı id>`'de durur. Girişsizken veri girilmiş
 cihazda giriş yapılınca kullanıcı seçer: **Hesabıma taşı** (önce hesaptaki veri çekilir, cihazdakiler eklenir; aynı id'li
 kayıt bir kez, aynı adlı kişi ve aynı son 4 haneli / aynı adlı kart birleşir, kartta erken takip tarihi kalır —
@@ -524,11 +561,14 @@ yazılmadan bu duruma gelinirse o son kayıt geri gelir.
 
 ## 4. Kartlar ve nakit akışı
 
-Uygulama altı sekmeden oluşur: **Özet** (bu ayın ödemesi, içgörüler, dönemlik nakit grafiği, sıradaki ödemeler,
-kişiler, kategoriler, aylık grafik),
-**Akış** (ödemeler ay ay, tarih + kart bazında, borç ve kredi ödemeleri her ayın altında ayrı; "Tablo" görünümü Excel'deki
-ay × kişi özeti), **Harcamalar** (mobilde "Harcama"), **Kartlar**, **Borçlar** ve **Varlıklar**. Yeni harcama
-(Varlıklar'da yeni hareket, Borçlar'da borç ya da alacak) `+` düğmesiyle eklenir; içe/dışa aktarma ve tema ayarlardadır.
+Uygulama beş sekmeden oluşur (1.1.0; iPhone'la aynı): **Özet** yalnızca "bu ay ve yakında" — bu ayın ödemesi (ödenen /
+kalan çubuğu, sonraki ay hafifliyor mu, taksitlerin bittiği ay), sıradaki ödemeler, içgörüler, dönemlik nakit grafiği;
+hiç veri yokken yalnızca Başlarken. **Akış** (üstte ücretsiz 12 aylık grafik ve ayın girdi / çıktıları; ödeme planı ay
+ay, tarih + kart bazında, borç ve kredi ödemeleri her ayın altında ayrı; "Tablo" görünümü Excel'deki ay × kişi özeti),
+**Harcamalar** (mobilde "Harcama"; Liste ya da Kategoriler), **Kartlar** ("Kartlar ve borçlar": toplam borç, kartlar,
+kişiler, borç ve alacaklar; eski Borçlar sekmesi buraya katıldı, `#borclar` adresi bu görünümü borçlar bölümünde açar) ve
+**Varlıklar**. Yeni harcama (Varlıklar'da yeni hareket, Kartlar'da borç ya da alacak) `+` düğmesiyle eklenir; içe/dışa
+aktarma ve tema ayarlardadır.
 Harcamalar listesi **Sırala**'dan sıradaki ödemeye (varsayılan; bitenler son ödemeye göre), en yeniye (alış günü), en
 yüksek toplama (TL karşılığı; taksitlide toplam, tekrarlayanda bir seferlik) ya da ada göre dizilir; seçim cihazda
 kalır (`para.purchaseSort`).
@@ -954,7 +994,7 @@ Claude, ChatGPT, Claude Code gibi MCP destekleyen asistanlar, giriş yapmış ku
 | Varlıklar | `get_assets` (TL / dolar / euro / gram altın bakiyeleri, güncel kurla TL karşılığı; elde tutulan fon ve hisseler `holdings`: adet, fiyat, kâr; alacak, borç, Varlık, Özvarlık), `list_entries`, `add_entry` (fon ve hisse: `asset` `FON:AFT` / `BIST:THYAO`, `price`, `settle`), `update_entry`, `delete_entry`, `search_market` (TEFAS fon arama; fon ve hisse fiyatları) |
 | Borçlar / alacaklar | `list_debts` (Eldeki / Alacak / Borç / Varlık / Özvarlık toplamları, kart borçları ve kişi payları, nakit taksitler, kart payları, borçlar), `get_debt` (ödeme planı), `add_debt` (borç aldım / verdim / kredi; tek tutar ya da taksitli; `auto_pay`: kredide varsayılan true, kişiyle borçta false; `dry_run` ile önizleme), `update_debt` (kapatma dahil; kayıt tarihi ile bugün arasında taksiti olanda `auto_pay` değişmez, hata döner), `delete_debt` (ödemeleriyle), `pay_debt` (ödeme / tahsilat; kart payı için `person`; elle ödenen kartın ekstresi için `card`: `amount` verilmezse ödemesi gelen (yoksa kesilmiş ekstre), kısmi olabilir; `close` kendiliğinden ödenen borcu bugünle kapatır), `delete_debt_payment` (kart ödemesi dahil; kapanmış borcu yeniden açar: `reopened`) |
 | Banka e-postaları | `get_inbox_address` (adres ve `lastEmail`: gelen son e-posta), `renew_inbox_address`, `list_inbox` (`kind`: purchase / verification / test; doğrulamada bağlantı ve Gmail onay kodu; `lastEmail`), `check_inbox` (deneme e-postasını işlendi yapar: `tests`), `add_inbox_purchase`, `dismiss_inbox_email`, `try_bank_email` |
-| İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |
+| İçgörüler | `get_insights` (Özet'teki içgörüler), `spending_by_category` (ay ay kategori dağılımı), `get_month_summary` (ay kapanışı: ödenen, biten taksitler, gelecek ay, öne çıkan kategori), `simulate_purchase` (kaydetmeden: ödeme planı, aylara ve serbest nakde etkisi, kartların karşılaştırması) |
 | Yedek | `export_data` (kişiler, kartlar, harcamalar, varlık hareketleri ve borçlar; Ayarlar → Dışa aktar ile aynı), `import_data` |
 
 Ödeme tarihleri ve borç hesapları uygulamayla aynı kodla (`taksit.js`, `borc.js`, `eposta.js`) hesaplanır; doğrulama

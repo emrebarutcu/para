@@ -45,6 +45,26 @@ Akışın kendisi: `Ekranlar/KarsilamaEkrani.swift`, `Uygulama/Karsilama.swift`;
   - bayrak yüklenmeden maruz kalma yazılmıyor;
   - deneme kolu her olayda (`$feature/onboarding_flow`).
 
+## Ürün çalışmasından yapılanlar (1.1.0)
+
+Kasım 2026'daki ürün çalışması ("daha basit, alımlı, kolay, alışkanlık yapan") ilk açılıştan sonrasına baktı: ikinci
+haftada ve üçüncü ayda uygulama neden açılsın. Karar gerektirmeyenler bu sürümde yapıldı; aşağıdaki yol haritasında
+karşılıkları işaretli.
+
+- **Özet'in tepesi yön gösterir.** "Bu ay ödenecek" ayın ilerlemesiyle (ödenen / kalan, sıradaki gün), gelecek ay bu aya
+  göre hafifliyor mu, taksitlerin bittiği ay. Hesap ortak: `icgoru.js` → `progress`, `lastInstallment`.
+- **Kayıt yazdırmaz.** Harcama formunda işyeri önerileri (kart, taksit ve kategori de dolar), "Yine", + düğmesinde son
+  üç işyeri; kaydın sonucu kısa bantta. `icgoru.js` → `merchants`.
+- **Ödül.** Biten taksidin kutlaması (kart ve bildirim), kayıtta ve ödemede başarı titreşimi. `icgoru.js` → `finishing`.
+- **Geri çağıran nedenler.** Kesim gününden bir gün önce bildirim, ayın ilk günü ay özeti (`monthSummary`); bildirime
+  dokununca ilgili sekme ve `notification_opened`.
+- **Ödeme ekranı** çekirdek vaatle ve kullanıcının kendi 12 ayıyla açılır; yapay zekâ asistanı özellik listesinde.
+- **Web** iPhone'un sadeliğine yaklaştı: değer-önce karşılama, Başlarken, 4 bloklu Özet, 5 sekme.
+
+Karara bırakılanlar (ücretsiz / ücretli sınırı, widget ve Kısayollar, karşılama denemesi, web'den satın alma, "dene,
+sonra karar ver" işleri) ayrı yürüyor. Bu sürüm ilk haftanın davranışını değiştirir: karşılama denemesi açılacaksa
+aşağıdaki kural gereği bu sürümden sonra, yeni tabanla başlatılmalı.
+
 ## Yol haritası
 
 Kural: deneme sürerken ilk haftanın davranışını değiştiren bir şey yayınlanmaz, yoksa ilk hafta geri dönüşü okunamaz.
@@ -53,9 +73,10 @@ Ya denemeden önce ya bitince yayınlanır.
 ### Şimdi (2–4 hafta, küçük PR'lar)
 
 1. **Bildirimler v2** (etki yüksek, çaba orta):
-   - Bildirime dokununca ilgili ekran açılır ve `notification_opened` yazılır.
-   - Kesim gününden bir gün önce: "Yarın Bonus kesimi: bugünkü harcama 20 Ara'da, yarından sonrakiler 20 Oca'da ödenir".
-   - Pazartesi haftalık özet; boş haftada gönderilmez.
+   - ✓ (1.1.0) Bildirime dokununca ilgili sekme açılır ve `notification_opened` yazılır.
+   - ✓ (1.1.0) Kesim gününden bir gün önce: "Yarın Bonus kesimi" — yarına kadarki ve sonraki alışverişin son ödeme günü.
+   - ✓ (1.1.0) Taksit bitince ve ayın ilk günü ay özeti (çalışmadan; haftalık yerine aylık ritim).
+   - Pazartesi haftalık özet; boş haftada gönderilmez. (Açık: ay özeti yeterli mi, ölçüme göre.)
    - Dosyalar: `Hatirlatma.swift`, `CashFollowApp.swift`, Ayarlar → Bildirimler.
 2. **Etkinleşmeyenleri kurtarma** (etki orta-yüksek, çaba küçük):
    - Başlarken bitmediyse 1. ve 3. gün bir yerel bildirim; en fazla iki kez.
@@ -83,12 +104,12 @@ Ya denemeden önce ya bitince yayınlanır.
    (`Motor.cash`).
 8. **App Intents / Kısayollar:** "Bu ay ne ödeyeceğim?" ve "Harcama ekle". Siri, Spotlight, eylem düğmesi ve Cüzdan
    otomasyonu buradan gelir.
-9. **Web eşitliği:**
+9. **Web eşitliği:** ✓ (1.1.0)
    - Başlarken paneli;
    - veri yokken sıfırlı panellerin gizlenmesi;
-   - "Çevrimdışı devam et"in gerçek bir düğme olması;
-   - iPhone'la aynı olay adları.
-10. **Ölçüm boşlukları:**
+   - "Çevrimdışı devam et"in gerçek bir düğme olması ("Hesap açmadan başla", karşılamanın birincil düğmesi);
+   - iPhone'la aynı olay adları (`started_without_account`, `onboarding_step_opened`, `onboarding_hidden`, `purchase_added`).
+10. **Ölçüm boşlukları:** (`notification_opened` ve `purchase_added`'ın `source` alanı 1.1.0'da eklendi)
     - `assistant_tool_called`;
     - hesapsız abonelerin `entitlement_changed` olayı;
     - kişi özellikleri (kart sayısı, gelir var mı, hatırlatma açık mı, Premium).
@@ -97,6 +118,7 @@ Ya denemeden önce ya bitince yayınlanır.
 
 11. **"Bu ay ödenecek" widget'ı** (WidgetKit): ikinci paket kimliği, App Group ve imza işi gerekir.
 12. **Kesim günü mutabakatı ve seri:** "Bankandaki tutar 8.420 ₺ mi?" sorusu ve "4 ekstre üst üste zamanında" rozeti.
+    (Biten taksidin kutlaması 1.1.0'da geldi; mutabakat ve seri açık.)
 13. **Hedefe göre Başlarken** ("Neyi takip etmek istersin?") bir deneme kolu olarak.
 14. **Örnek veriyle gezinme:** yalnızca akışın ilk ekranında kapatma oranı yüksek çıkarsa. Bellekte tutulur, gerçek
     veriye yazılmaz.

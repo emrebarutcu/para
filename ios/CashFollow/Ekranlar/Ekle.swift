@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Her sekmede + düğmesi, bulunduğun ekranın işini doğrudan açar (ara seçici yok):
-//   Özet, Akış, Harcamalar → dokununca Harcama formu; basılı tutunca bütün eklemeler
+//   Özet, Akış, Harcamalar → dokununca Harcama formu; basılı tutunca son üç işyeri (form dolu açılır) ve bütün eklemeler
 //   Varlıklar              → dokununca kısa menü: Gelir, Döviz / altın, Fon / hisse; altında "Diğer"
 //   Borçlar                → dokununca kısa menü: Borç verdim, Borç aldım, Kredi, Kredi kartı; altında "Diğer"
 // Seçilen iş kendi formunda açılır; "Vazgeç" kapatır.
@@ -20,10 +20,12 @@ enum EkleSecim: Hashable, Identifiable {
     case hareket(HareketTuru)
     case borc(String)      // borrowed, lent, loan
     case kart
+    case isyeri(Isyeri)    // son işyerlerinden biri: harcama formu adı, kartı, taksidi ve kategorisi dolu açılır
 
     var id: String {
         switch self {
         case .harcama: return "harcama"
+        case .isyeri: return "harcama.isyeri"
         case .hareket(let t): return "hareket." + t.rawValue
         case .borc(let t): return "borc." + t
         case .kart: return "kart"
@@ -45,6 +47,7 @@ private struct EkleDugmesi: ViewModifier {
     @EnvironmentObject private var model: Model
     let baglam: EkleBaglam
     @State private var secim: EkleSecim?
+    @State private var sonlar: [Isyeri] = []   // son üç işyeri (basılı tutunca)
 
     func body(content: Content) -> some View {
         content
@@ -53,6 +56,7 @@ private struct EkleDugmesi: ViewModifier {
                     .padding(.trailing, 18)
                     .padding(.bottom, 14)
             }
+            .task(id: model.revision) { sonlar = baglam == .harcama ? (model.motor?.merchants("", limit: 3) ?? []) : [] }
             .sheet(item: $secim) { EkleFormu(secim: $0) }
             .onChange(of: secim) { _, s in
                 if let s { Analitik.olay("add_opened", ["item": s.id, "screen": "\(baglam)"]) }
@@ -65,6 +69,13 @@ private struct EkleDugmesi: ViewModifier {
             // Dokun: harcama; basılı tut: diğerleri
             Menu {
                 Section { harcamaDugmesi }
+                if !sonlar.isEmpty {
+                    Section(L("Yine")) {
+                        ForEach(sonlar) { m in
+                            Button { secim = .isyeri(m) } label: { Label(m.desc, systemImage: "arrow.counterclockwise") }
+                        }
+                    }
+                }
                 Section(L("Para")) { paraDugmeleri }
                 Section(L("Borç")) { borcDugmeleri }
             } label: {
@@ -122,6 +133,7 @@ struct EkleFormu: View {
     var body: some View {
         switch secim {
         case .harcama: HarcamaFormu()
+        case .isyeri(let m): HarcamaFormu(isyeri: m)
         case .hareket(let t): HareketFormu(tur: t)
         case .borc(let t): BorcFormu(baslangic: t)
         case .kart: YeniKart()
