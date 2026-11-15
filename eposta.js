@@ -182,6 +182,8 @@
   const SMS_SPEND = /(harcama|alisveris|islem(iniz|i)?\s+(gerceklesti|yapil)|lik islem|provizyon|\bpesin\b|taksit)/;
   const SMS_OTHER = /(ekstre|son odeme|asgari|hesap ozeti|borcunuz|donem borcu|havale|\beft\b|\bfast\b|yatiril|cekil|\bmaas|kampanya|basvuru|(kartiniza|hesabiniza)[^\n]{0,40}odeme)/;
 
+  const SMS_CARD = /(kart|[*x•]{2,}\s*\d{4}|\d{4}\s*ile\s*biten|\bpos\b|isyeri)/;
+
   // Kuralların gördüğü: "otp" (şifre mesajı), "spend" (harcama bildirimi), "other" (harcama değil: tutar yok ya da
   // ekstre, ödeme, havale…), "unsure" (tutar var ama harcama olduğunu söyleyen bir söz yok)
   function smsKind(body) {
@@ -203,8 +205,11 @@
     const rule = smsKind(body);
     const says = hint ? !!hint.purchase : null;
     if (rule === "otp" || (rule === "other" && says !== true) || (rule === "unsure" && says === false)) return { skip: true };
-    const p = parsed || parse({ body });
     const f = fold(plainText(body));
+    // Otomasyon içinde "TL" geçen her mesajı verir (tek otomasyon bütün bankaları yakalasın diye): kişisel mesajlar da
+    // gelir. Model yokken, harcama olduğunu söyleyen bir söz de karttan söz eden bir şey de yoksa mesaj alınmaz.
+    if (rule === "unsure" && says === null && !SMS_CARD.test(f)) return { skip: true };
+    const p = parsed || parse({ body });
     const m = hint && typeof hint.merchant === "string" ? cleanMerchant(hint.merchant) : null;
     const merchant = m && f.includes(fold(m)) ? m : p.merchant;
     let doubt = null;

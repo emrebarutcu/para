@@ -1528,12 +1528,10 @@
  "Banka mesajları (SMS)": "Bankberichten (sms)",
  "Bankanın harcama mesajı gelince iPhone'un Kısayollar uygulaması metni CashFollow'a verir ve harcama kendiliğinden eklenir. Mesaj telefonunda okunur, hiçbir yere gönderilmez. Şifre ve ekstre mesajları eklenmez.": "Als het uitgavenbericht van je bank binnenkomt, geeft de Opdrachten-app van de iPhone de tekst door aan CashFollow en wordt de aankoop automatisch toegevoegd. Het bericht wordt op je telefoon gelezen en nergens naartoe gestuurd. Eenmalige codes en afschriftberichten worden niet toegevoegd.",
  "Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle.": "Open de Opdrachten-app, ga onderaan naar Automatisering en voeg een nieuwe automatisering toe.",
- "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına bankanın harcama mesajlarında hep geçen bir sözü yaz (örneğin kartının adı).": "Kies Bericht. Typ bij 'Bericht bevat' een woord dat altijd in de uitgavenberichten van je bank staat (bijvoorbeeld de naam van je kaart).",
  "\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat.": "Kies 'Voer direct uit' en zet 'Meld bij uitvoering' uit.",
  "Eylem olarak CashFollow'un \"Banka mesajından harcama ekle\" eylemini seç.": "Kies als actie 'Aankoop toevoegen uit bankbericht' van CashFollow.",
  "Eylemdeki Mesaj alanına dokun ve \"Kısayol Girdisi\"ni seç.": "Tik in de actie op het veld Bericht en kies 'Opdrachtinvoer'.",
  "Kısayollar'ı aç": "Open Opdrachten",
- "Bir kez kurulur; birden çok bankan varsa her biri için ayrı otomasyon ekleyebilirsin. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "Dit stel je één keer in; heb je meerdere banken, dan kun je voor elke bank een automatisering toevoegen. Je bank moet bij kaartaankopen een sms sturen: krijg je alleen app-meldingen, zet dan sms aan in de instellingen van je bank.",
  "Okunuyor…": "Lezen…",
  "Bir mesajı dene": "Een bericht proberen",
  "Bankadan gelen harcama mesajının metnini yapıştır; hiçbir şey kaydedilmez.": "Plak de tekst van een uitgavenbericht van je bank; er wordt niets bewaard.",
@@ -1558,5 +1556,7 @@
  "Onay bekliyor: Harcamalar'a bak": "Wacht op goedkeuring: zie Aankopen",
  "Sıraya alındı": "In de wachtrij gezet",
  "Harcama mesajı değil": "Geen uitgavenbericht",
- "Banka mesajları bu hesapta kullanılamıyor": "Bankberichten zijn niet beschikbaar voor dit account"
+ "Banka mesajları bu hesapta kullanılamıyor": "Bankberichten zijn niet beschikbaar voor dit account",
+ "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz.": "Kies Bericht. Typ bij 'Bericht bevat' TL.",
+ "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "Dit stel je één keer in en het werkt voor al je banken: elk bericht met TL erin wordt doorgegeven aan CashFollow; wat geen aankoop is (eenmalige codes, afschriften, persoonlijke berichten) wordt weggegooid en nergens bewaard. Je bank moet bij kaartaankopen een sms sturen: krijg je alleen app-meldingen, zet dan sms aan in de instellingen van je bank."
 }

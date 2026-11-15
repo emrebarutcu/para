@@ -1528,12 +1528,10 @@
  "Banka mesajları (SMS)": "Mensajes del banco (SMS)",
  "Bankanın harcama mesajı gelince iPhone'un Kısayollar uygulaması metni CashFollow'a verir ve harcama kendiliğinden eklenir. Mesaj telefonunda okunur, hiçbir yere gönderilmez. Şifre ve ekstre mesajları eklenmez.": "Cuando llega el mensaje de gasto de tu banco, la app Atajos del iPhone pasa el texto a CashFollow y la compra se añade sola. El mensaje se lee en tu teléfono y no se envía a ningún sitio. Las claves de un solo uso y los mensajes de extracto no se añaden.",
  "Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle.": "Abre la app Atajos, ve a Automatización abajo y añade una automatización nueva.",
- "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına bankanın harcama mesajlarında hep geçen bir sözü yaz (örneğin kartının adı).": "Elige Mensaje. En «El mensaje contiene», escribe una palabra que siempre aparezca en los mensajes de gasto de tu banco (por ejemplo, el nombre de tu tarjeta).",
  "\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat.": "Elige «Ejecutar inmediatamente» y desactiva «Notificar al ejecutar».",
  "Eylem olarak CashFollow'un \"Banka mesajından harcama ekle\" eylemini seç.": "Como acción, elige «Añadir compra desde mensaje del banco» de CashFollow.",
  "Eylemdeki Mesaj alanına dokun ve \"Kısayol Girdisi\"ni seç.": "Toca el campo Mensaje de la acción y elige «Entrada del atajo».",
  "Kısayollar'ı aç": "Abrir Atajos",
- "Bir kez kurulur; birden çok bankan varsa her biri için ayrı otomasyon ekleyebilirsin. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "Se configura una sola vez; si tienes varios bancos, puedes añadir una automatización para cada uno. Tu banco tiene que enviar un SMS con cada compra con tarjeta: si solo recibes notificaciones de la app, activa los SMS en los ajustes de tu banco.",
  "Okunuyor…": "Leyendo…",
  "Bir mesajı dene": "Probar un mensaje",
  "Bankadan gelen harcama mesajının metnini yapıştır; hiçbir şey kaydedilmez.": "Pega el texto de un mensaje de gasto de tu banco; no se guarda nada.",
@@ -1558,5 +1556,7 @@
  "Onay bekliyor: Harcamalar'a bak": "Pendiente de aprobación: mira Compras",
  "Sıraya alındı": "En cola",
  "Harcama mesajı değil": "No es un mensaje de gasto",
- "Banka mesajları bu hesapta kullanılamıyor": "Los mensajes del banco no están disponibles en esta cuenta"
+ "Banka mesajları bu hesapta kullanılamıyor": "Los mensajes del banco no están disponibles en esta cuenta",
+ "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz.": "Elige Mensaje. En «El mensaje contiene», escribe TL.",
+ "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "Se configura una sola vez y funciona con todos tus bancos: cada mensaje que contiene TL se pasa a CashFollow; los que no son compras (claves de un solo uso, extractos, mensajes personales) se descartan y no se guardan en ningún sitio. Tu banco tiene que enviar un SMS con cada compra con tarjeta: si solo recibes notificaciones de la app, activa los SMS en los ajustes de tu banco."
 }

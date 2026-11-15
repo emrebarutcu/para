@@ -75,7 +75,7 @@ enum Ornek {
         // olunamayan. Harcamalar'da "Bankadan gelenler" kartı bunlarla görünür (bankaların yazışına benzetilmiş örnekler).
         Mesajlar.ornek(CommandLine.arguments.contains("-mesaj") ? [
             "5678 ile biten kartinizla \(tarih(-1)) tarihinde MIGROS dan 1.250,00 TL tutarinda harcama yapilmistir.",
-            "X Bank: \(tarih(-2)) STARBUCKS 185,00 TL. Bilgi icin 4440000",
+            "X Bank ***5678: \(tarih(-2)) STARBUCKS 185,00 TL. Bilgi icin 4440000",
         ] : [])
     }
 

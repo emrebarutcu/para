@@ -418,6 +418,12 @@ test("banka mesajları: şifre ve ekstre eklenmez, harcama eklenir, model anlaş
   assert.equal(K.smsSkip(harcama, ""), false);
   assert.equal(K.smsSkip(belirsiz, ""), false);
   assert.equal(K.smsSkip(belirsiz, JSON.stringify({ purchase: false })), true);
+  // Otomasyon içinde "TL" geçen her mesajı verir: kişisel mesaj model yokken alınmaz, model harcama demezse de alınmaz
+  const kisisel = "Dun aksam icin sana 500 TL gonderdim, bakar misin";
+  assert.equal(K.smsSkip(kisisel, ""), true);
+  assert.equal(K.smsSkip(kisisel, JSON.stringify({ purchase: false })), true);
+  assert.equal(K.smsSkip("STARBUCKS 185,00 TL 17.10.2026", ""), true);                                        // karttan söz etmiyor, model yok
+  assert.equal(K.smsSkip("STARBUCKS 185,00 TL 17.10.2026", JSON.stringify({ purchase: true })), false);     // model harcama diyor
 
   const satir = (id, body, hint) => ({ id, body, received_at: "2026-10-17T12:00:00Z", source: "sms", ...(hint && { hint }) });
   const rows = [

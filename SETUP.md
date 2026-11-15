@@ -987,10 +987,14 @@ Adres yenilenirse eskisine gelen e-postalar reddedilir. Sıradaki iyileştirmele
 Bankanın harcama **mesajı** da harcama olarak eklenir; e-postanın tersine sunucudan geçmez, hesap gerektirmez ve mesaj
 telefondan çıkmaz. Yalnızca Türkiye'deki hesaplarda (`bankEmails` özelliği, e-postalarla aynı).
 
-- **Nasıl çalışır:** kullanıcı Kısayollar'da bir kez otomasyon kurar (Mesaj → şu sözü içerirse → Hemen Çalıştır →
+- **Nasıl çalışır:** kullanıcı Kısayollar'da bir kez otomasyon kurar (Mesaj → "TL" içerirse → Hemen Çalıştır →
   CashFollow'un **Banka mesajından harcama ekle** eylemi, giriş: Kısayol Girdisi). Adımlar uygulamada: Ayarlar →
   **Banka mesajları (SMS)**. Eylem `Uygulama/Kisayollar.swift` (App Intents; uygulama öne gelmez), giriş
   `Mesajlar.geldi`.
+- **Kurulum neden elle:** iOS bir uygulamanın otomasyon (tetikleyici) kurmasına izin vermez; paylaşılan kısayol
+  bağlantıları da tetikleyiciyi taşımaz. Bu yüzden kullanıcıdan banka adı ya da kelime istenmez: tek otomasyon, sabit
+  "TL" sözüyle bütün bankaların mesajlarını yakalar. İçinde TL geçen kişisel mesajlar da uygulamaya gelir; telefonda
+  elenir ve hiçbir yere yazılmaz (model yokken: harcama sözü de karttan söz eden bir şey de yoksa alınmaz).
 - **Okuma:** önce kurallar (`eposta.js` → `smsKind`, `sms`): tek kullanımlık şifre mesajı (tutarı ve işyerini de yazar,
   harcamadan önce gelir) ve ekstre, karta ödeme, havale, kampanya gibi harcama olmayan mesajlar **hiçbir yere yazılmaz**.
   Kalanı telefondaki model de okur (`Uygulama/MesajZekasi.swift`: Apple Intelligence, FoundationModels; iOS 26 ve

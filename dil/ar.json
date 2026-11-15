@@ -1528,12 +1528,10 @@
  "Banka mesajları (SMS)": "رسائل البنك (SMS)",
  "Bankanın harcama mesajı gelince iPhone'un Kısayollar uygulaması metni CashFollow'a verir ve harcama kendiliğinden eklenir. Mesaj telefonunda okunur, hiçbir yere gönderilmez. Şifre ve ekstre mesajları eklenmez.": "عند وصول رسالة الإنفاق من بنكك، يسلّم تطبيق الاختصارات في iPhone النص إلى CashFollow وتُضاف عملية الشراء تلقائيًا. تُقرأ الرسالة على هاتفك ولا تُرسل إلى أي مكان. لا تُضاف رسائل كلمات المرور لمرة واحدة ولا رسائل كشف الحساب.",
  "Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle.": "افتح تطبيق الاختصارات، وانتقل إلى الأتمتة في الأسفل وأضف أتمتة جديدة.",
- "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına bankanın harcama mesajlarında hep geçen bir sözü yaz (örneğin kartının adı).": "اختر الرسالة. في «الرسالة تحتوي على» اكتب كلمة ترد دائمًا في رسائل الإنفاق من بنكك (مثل اسم بطاقتك).",
  "\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat.": "اختر «تشغيل فورًا» وأوقف «إشعار عند التشغيل».",
  "Eylem olarak CashFollow'un \"Banka mesajından harcama ekle\" eylemini seç.": "اختر إجراء CashFollow «إضافة عملية شراء من رسالة البنك».",
  "Eylemdeki Mesaj alanına dokun ve \"Kısayol Girdisi\"ni seç.": "اضغط على حقل الرسالة في الإجراء واختر «إدخال الاختصار».",
  "Kısayollar'ı aç": "فتح الاختصارات",
- "Bir kez kurulur; birden çok bankan varsa her biri için ayrı otomasyon ekleyebilirsin. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "يُضبط مرة واحدة؛ وإذا كان لديك أكثر من بنك يمكنك إضافة أتمتة لكل منها. يجب أن يرسل بنكك رسالة SMS عند الشراء بالبطاقة: إذا كانت تصلك إشعارات التطبيق فقط، فعّل رسائل SMS من إعدادات البنك.",
  "Okunuyor…": "جارٍ القراءة…",
  "Bir mesajı dene": "جرّب رسالة",
  "Bankadan gelen harcama mesajının metnini yapıştır; hiçbir şey kaydedilmez.": "الصق نص رسالة إنفاق من بنكك؛ لا يُحفظ أي شيء.",
@@ -1558,5 +1556,7 @@
  "Onay bekliyor: Harcamalar'a bak": "بانتظار الموافقة: راجع المشتريات",
  "Sıraya alındı": "أُضيفت إلى قائمة الانتظار",
  "Harcama mesajı değil": "ليست رسالة إنفاق",
- "Banka mesajları bu hesapta kullanılamıyor": "رسائل البنك غير متاحة لهذا الحساب"
+ "Banka mesajları bu hesapta kullanılamıyor": "رسائل البنك غير متاحة لهذا الحساب",
+ "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz.": "اختر الرسالة. في «الرسالة تحتوي على» اكتب TL.",
+ "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "يُضبط مرة واحدة ويعمل مع كل بنوكك: كل رسالة تحتوي على TL تُسلَّم إلى CashFollow؛ وما ليس عملية شراء (كلمات المرور لمرة واحدة، كشوف الحساب، الرسائل الشخصية) يُستبعد ولا يُحفظ في أي مكان. يجب أن يرسل بنكك رسالة SMS عند الشراء بالبطاقة: إذا كانت تصلك إشعارات التطبيق فقط، فعّل رسائل SMS من إعدادات البنك."
 }

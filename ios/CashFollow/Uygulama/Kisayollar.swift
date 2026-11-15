@@ -1,8 +1,10 @@
 import AppIntents
 
-// Kısayollar eylemi: "Banka mesajından harcama ekle". Kullanıcı Kısayollar'da bir kez otomasyon kurar (Mesaj → şu
-// kelimeyi içerirse → Hemen Çalıştır → bu eylem, giriş: Kısayol Girdisi); banka mesajı gelince metin buraya verilir
-// (Mesajlar.swift). Uygulama öne gelmez. Kurulum adımları: Ayarlar → Banka mesajları (MesajAyarlari).
+// Kısayollar eylemi: "Banka mesajından harcama ekle". Kullanıcı Kısayollar'da bir kez otomasyon kurar (Mesaj → "TL"
+// içerirse → Hemen Çalıştır → bu eylem, giriş: Kısayol Girdisi); içinde TL geçen her mesajın metni buraya verilir
+// (Mesajlar.swift), harcama olmayanlar elenir. Uygulama öne gelmez. Kurulum adımları: Ayarlar → Banka mesajları
+// (MesajAyarlari). iOS bir uygulamanın otomasyonu kendisinin kurmasına izin vermez (tetikleyici paylaşılamaz da): bu
+// yüzden kurulum elle; tek sabit sözle ("TL") bütün bankaları yakalar, kullanıcıdan banka adı istenmez.
 // Eylemin adı, açıklaması ve parametresi sistemin gösterdiği metinlerdir: çevirileri <dil>.lproj/Localizable.strings'te
 // (InfoPlist.strings gibi; uygulamanın kendi sözlüğü dil/<kod>.json buraya ulaşmaz).
 struct BankaMesajiEkle: AppIntent {

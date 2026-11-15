@@ -475,7 +475,8 @@ struct MesajAyarlari: View {
 
             Section {
                 adim(1, L("Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle."))
-                adim(2, L("Mesaj'ı seç. \"Mesaj şunu içerir\" alanına bankanın harcama mesajlarında hep geçen bir sözü yaz (örneğin kartının adı)."))
+                // Tek otomasyon bütün bankaları yakalasın: harcama mesajlarının hepsinde "TL" geçer; gerisini uygulama eler
+                adim(2, L("Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz."))
                 adim(3, L("\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat."))
                 adim(4, L("Eylem olarak CashFollow'un \"Banka mesajından harcama ekle\" eylemini seç."))
                 adim(5, L("Eylemdeki Mesaj alanına dokun ve \"Kısayol Girdisi\"ni seç."))
@@ -484,7 +485,7 @@ struct MesajAyarlari: View {
                     if let u = URL(string: "shortcuts://") { openURL(u) }
                 }
             } header: { Text(L("Kurulum")) } footer: {
-                Text(L("Bir kez kurulur; birden çok bankan varsa her biri için ayrı otomasyon ekleyebilirsin. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç."))
+                Text(L("Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç."))
             }
             .font(.footnote)
 

@@ -1528,12 +1528,10 @@
  "Banka mesajları (SMS)": "銀行のメッセージ（SMS）",
  "Bankanın harcama mesajı gelince iPhone'un Kısayollar uygulaması metni CashFollow'a verir ve harcama kendiliğinden eklenir. Mesaj telefonunda okunur, hiçbir yere gönderilmez. Şifre ve ekstre mesajları eklenmez.": "銀行の利用通知メッセージが届くと、iPhoneのショートカットAppが本文をCashFollowに渡し、購入が自動で追加されます。メッセージはiPhone上で読み取られ、どこにも送信されません。ワンタイムパスワードや明細のメッセージは追加されません。",
  "Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle.": "ショートカットAppを開き、下の「オートメーション」に移動して新しいオートメーションを追加します。",
- "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına bankanın harcama mesajlarında hep geçen bir sözü yaz (örneğin kartının adı).": "「メッセージ」を選びます。「メッセージに次を含む」に、銀行の利用通知に必ず出てくる言葉（カード名など）を入力します。",
  "\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat.": "「すぐに実行」を選び、「実行時に通知」をオフにします。",
  "Eylem olarak CashFollow'un \"Banka mesajından harcama ekle\" eylemini seç.": "アクションとしてCashFollowの「銀行のメッセージから購入を追加」を選びます。",
  "Eylemdeki Mesaj alanına dokun ve \"Kısayol Girdisi\"ni seç.": "アクションの「メッセージ」欄をタップし、「ショートカットの入力」を選びます。",
  "Kısayollar'ı aç": "ショートカットを開く",
- "Bir kez kurulur; birden çok bankan varsa her biri için ayrı otomasyon ekleyebilirsin. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "設定は一度だけです。銀行が複数ある場合は、それぞれにオートメーションを追加できます。カード利用時に銀行がSMSを送る必要があります。Appの通知しか届かない場合は、銀行の設定でSMSをオンにしてください。",
  "Okunuyor…": "読み取り中…",
  "Bir mesajı dene": "メッセージを試す",
  "Bankadan gelen harcama mesajının metnini yapıştır; hiçbir şey kaydedilmez.": "銀行から届いた利用通知の本文を貼り付けます。何も保存されません。",
@@ -1558,5 +1556,7 @@
  "Onay bekliyor: Harcamalar'a bak": "承認待ち：「購入」を確認してください",
  "Sıraya alındı": "待機に追加しました",
  "Harcama mesajı değil": "利用通知ではありません",
- "Banka mesajları bu hesapta kullanılamıyor": "このアカウントでは銀行のメッセージを利用できません"
+ "Banka mesajları bu hesapta kullanılamıyor": "このアカウントでは銀行のメッセージを利用できません",
+ "Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz.": "「メッセージ」を選びます。「メッセージに次を含む」に TL と入力します。",
+ "Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç.": "設定は一度だけで、すべての銀行に使えます。TL を含むメッセージはすべてCashFollowに渡され、購入でないもの（ワンタイムパスワード、明細、個人的なメッセージ）は破棄され、どこにも保存されません。カード利用時に銀行がSMSを送る必要があります。Appの通知しか届かない場合は、銀行の設定でSMSをオンにしてください。"
 }
