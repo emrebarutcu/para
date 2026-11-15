@@ -998,7 +998,7 @@ telefondan çıkmaz. Yalnızca Türkiye'deki hesaplarda (`bankEmails` özelliği
 - **Okuma:** önce kurallar (`eposta.js` → `smsKind`, `sms`): tek kullanımlık şifre mesajı (tutarı ve işyerini de yazar,
   harcamadan önce gelir) ve ekstre, karta ödeme, havale, kampanya gibi harcama olmayan mesajlar **hiçbir yere yazılmaz**.
   Kalanı telefondaki model de okur (`Uygulama/MesajZekasi.swift`: Apple Intelligence, FoundationModels; iOS 26 ve
-  sonrası, destekleyen iPhone'larda ve açıksa; 7 saniyede yanıt gelmezse beklenmez): harcama mı, işyeri, tutar. İşyeri
+  sonrası, destekleyen iPhone'larda ve açıksa; 10 saniyede yanıt gelmezse beklenmez): harcama mı, işyeri, tutar. İşyeri
   yalnızca mesajda gerçekten geçiyorsa kullanılır; modelin tutarı kuralın okuduğuyla uyuşmazsa ya da ikisi harcama olup
   olmadığında anlaşamazsa harcama eklenmez, **onaya düşer**. Model yoksa yalnızca kurallar çalışır; şablon bankaya göre
   değildir (tutar, son 4 hane, taksit her bankada benzer yazılır), tanınmayan biçimde işyeri boş kalabilir.

@@ -100,7 +100,7 @@ jobs:
             # Telefondaki modelin örnek banka mesajlarını okuması (bilgi için; MesajZekasi.swift "-zeka-dene")
             xcrun simctl terminate "$UDID" app.cashfollow.ios 2>/dev/null || true
             xcrun simctl launch "$UDID" app.cashfollow.ios -zeka-dene $TR
-            for t in $(seq 1 60); do grep -q "ZEKA-DENEME BITTI" "$DATA/Documents/zeka-deneme.txt" 2>/dev/null && break; sleep 2; done
+            for t in $(seq 1 200); do grep -q "ZEKA-DENEME BITTI" "$DATA/Documents/zeka-deneme.txt" 2>/dev/null && break; sleep 2; done
             cat "$DATA/Documents/zeka-deneme.txt" || echo "sonuç yazılmadı"
             exit 0
           fi

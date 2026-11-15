@@ -6,7 +6,7 @@ import FoundationModels
 // Banka mesajını telefondaki model de okur (Apple Intelligence, FoundationModels; iOS 26 ve sonrası, destekleyen
 // iPhone'larda ve açıksa). Model mesajın harcama bildirimi olup olmadığını, işyerini ve tutarı söyler; kurallar
 // (eposta.js) sayıları ayrıca okur ve ikisi karşılaştırılır (eposta.js sms): uyuşmazsa harcama eklenmez, onaya düşer.
-// Mesaj telefondan çıkmaz, maliyeti yoktur. Model yoksa, kapalıysa, dili desteklemiyorsa ya da 7 saniyede yanıt
+// Mesaj telefondan çıkmaz, maliyeti yoktur. Model yoksa, kapalıysa, dili desteklemiyorsa ya da 10 saniyede yanıt
 // vermezse nil döner: yalnızca kurallar çalışır.
 @MainActor
 enum MesajZekasi {
@@ -42,15 +42,27 @@ enum MesajZekasi {
                 return Mesajlar.Ipucu(purchase: c.harcama, merchant: isyeri.isEmpty ? nil : isyeri, amount: tutar.isEmpty ? nil : tutar)
             }
             let sure = Task {
-                try? await Task.sleep(nanoseconds: 7_000_000_000)
+                try? await Task.sleep(nanoseconds: UInt64(sureSiniri * 1_000_000_000))
                 okuma.cancel()
             }
             defer { sure.cancel() }
-            return try? await okuma.value
+            do {
+                let i = try await okuma.value
+                sonHata = nil
+                return i
+            } catch {
+                sonHata = String(describing: error)
+                return nil
+            }
         }
         #endif
         return nil
     }
+
+    // Modelin yanıtı için beklenen en uzun süre (saniye): model ilk çağrıda yüklenir, sonrakiler hızlıdır
+    private static var sureSiniri: Double = 10
+    // Son okumanın hatası (yalnızca "-zeka-dene" günlüğü için)
+    private static var sonHata: String?
 
     // "-zeka-dene": modelin örnek banka mesajlarını nasıl okuduğu Documents/zeka-deneme.txt dosyasına yazılır (CI: ios.yml,
     // bilgi için; simülatör Mac'in modelini kullanır). Sonuç sınanmaz: model sürümden sürüme değişir, CI'da olmayabilir.
@@ -70,12 +82,14 @@ enum MesajZekasi {
         let dosya = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("zeka-deneme.txt")
         try? FileManager.default.removeItem(at: dosya)
         Task {
-            var satirlar = ["model: \(durum)"]
+            var satirlar = ["model: \(durum), dil: \(Locale.current.identifier)"]
+            sureSiniri = 40   // deneme: CI makinesi yavaştır, modelin ne dediği görülsün
             for m in ornekler {
                 let bas = Date()
                 let i = await oku(m)
                 let sure = String(format: "%.1f sn", Date().timeIntervalSince(bas))
-                let okunan = i.map { "harcama=\($0.purchase) işyeri=\($0.merchant ?? "-") tutar=\($0.amount ?? "-")" } ?? "yanıt yok"
+                let okunan = i.map { "harcama=\($0.purchase) işyeri=\($0.merchant ?? "-") tutar=\($0.amount ?? "-")" }
+                    ?? "yanıt yok (\(sonHata?.prefix(160) ?? "-"))"
                 satirlar.append("\(okunan) [\(sure)] ← \(m.prefix(70))")
             }
             satirlar.append("ZEKA-DENEME BITTI")

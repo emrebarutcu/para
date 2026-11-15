@@ -67,5 +67,5 @@ jobs:
           xcrun simctl terminate booted app.cashfollow.ios || true
           xcrun simctl launch booted app.cashfollow.ios -zeka-dene
           DATA=$(xcrun simctl get_app_container booted app.cashfollow.ios data)
-          for i in $(seq 1 60); do grep -q "ZEKA-DENEME BITTI" "$DATA/Documents/zeka-deneme.txt" 2>/dev/null && break; sleep 2; done
+          for i in $(seq 1 200); do grep -q "ZEKA-DENEME BITTI" "$DATA/Documents/zeka-deneme.txt" 2>/dev/null && break; sleep 2; done
           cat "$DATA/Documents/zeka-deneme.txt" || echo "sonuç yazılmadı"
