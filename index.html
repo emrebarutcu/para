@@ -416,6 +416,8 @@
 
         <input class="desc-input" name="desc" type="text" placeholder="Ne aldın? örn. IKEA" autocomplete="off" list="descList" enterkeyhint="done" required aria-label="Ne aldın?" />
         <datalist id="descList"></datalist>
+        <!-- Tek satırla kayıt (taksit.js parseLine): yalnızca yeni harcamada, tutar ve ad boşken -->
+        <p class="hint quick-hint" id="quickHint">İpucu: tek satırda yaz, Enter'a bas. Örn. "buzdolabı 36000 6 taksit"</p>
 
         <div class="field" id="countField">
           <span class="field-label">Taksit</span>

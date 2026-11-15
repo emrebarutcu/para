@@ -1533,5 +1533,7 @@
  "Bu ay {0} ödenecek.": "المستحق هذا الشهر {0}.",
  "Sonraki aylar": "الأشهر التالية",
  "App Store sayfasının QR kodu": "رمز QR لصفحة App Store",
- "iPhone'unla okut": "امسحه بهاتف iPhone"
+ "iPhone'unla okut": "امسحه بهاتف iPhone",
+ "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "تلميح: اكتب كل شيء في سطر واحد ثم اضغط Enter. مثال: \"ثلاجة 3600 x6\"",
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "تلميح: اكتب كل شيء في سطر واحد ثم اضغط تم. مثال: \"ثلاجة 3600 x6\""
 }

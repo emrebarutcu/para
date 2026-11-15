@@ -1533,5 +1533,7 @@
  "Bu ay {0} ödenecek.": "Deze maand te betalen: {0}.",
  "Sonraki aylar": "Latere maanden",
  "App Store sayfasının QR kodu": "QR-code van de App Store-pagina",
- "iPhone'unla okut": "Scan met je iPhone"
+ "iPhone'unla okut": "Scan met je iPhone",
+ "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tip: typ alles op één regel en druk op Enter. Bijv. \"koelkast 1800 x6\"",
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tip: typ alles op één regel en druk op Gereed. Bijv. \"koelkast 1800 x6\""
 }

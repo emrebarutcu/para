@@ -1533,5 +1533,7 @@
  "Bu ay {0} ödenecek.": "Questo mese sono dovuti {0}.",
  "Sonraki aylar": "Mesi successivi",
  "App Store sayfasının QR kodu": "Codice QR della pagina dell'App Store",
- "iPhone'unla okut": "Inquadralo con l'iPhone"
+ "iPhone'unla okut": "Inquadralo con l'iPhone",
+ "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Suggerimento: scrivi tutto su una riga e premi Invio. Es. «frigorifero 1800 x6»",
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Suggerimento: scrivi tutto su una riga e premi Fine. Es. «frigorifero 1800 x6»"
 }

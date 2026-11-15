@@ -1533,5 +1533,7 @@
  "Bu ay {0} ödenecek.": "今月の支払いは{0}です。",
  "Sonraki aylar": "その先の月",
  "App Store sayfasının QR kodu": "App StoreページのQRコード",
- "iPhone'unla okut": "iPhoneで読み取る"
+ "iPhone'unla okut": "iPhoneで読み取る",
+ "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "ヒント：1行で入力してEnterを押します。例：「冷蔵庫 180000 x6」",
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "ヒント：1行で入力して完了を押します。例：「冷蔵庫 180000 x6」"
 }

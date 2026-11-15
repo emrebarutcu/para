@@ -1896,6 +1896,8 @@ a.hero-eq { display: block; width: fit-content; }
 .hero-diff { display: flex; align-items: center; gap: 3px; margin-top: 3px; font-size: 12px; font-weight: 600; line-height: 16px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .hero-diff.down { color: var(--ok); }
 .hero-diff .ic { width: 13px; height: 13px; stroke-width: 2.3; }
+/* Harcama formunda tek satırla kayıt ipucu */
+.quick-hint { margin: -4px 2px 0; font-size: 12px; color: var(--text-3); }
 /* İyi haber satırı: dokununca açıklaması açılır */
 .hero-good { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
 .hero-good summary { display: flex; align-items: center; gap: 6px; font-weight: 600; cursor: pointer; list-style: none; }

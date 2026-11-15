@@ -559,6 +559,100 @@
     return { people, dueDay, skipped };
   }
 
+  // ---------- Tek satırla kayıt ----------
+  // Harcama formunda "Ne alındı?" alanına yazılan tek satırdan tutar, taksit, kart ve ad:
+  //   "buzdolabı 36000 bonus 6 taksit" → { desc: "buzdolabı", amount: 36000, count: 6, cardId: <Bonus>, sure: true }
+  // Tutar: satırdaki sayılardan para işareti / birimi olan, yoksa en büyüğü ("iphone 15 64000" → 64000); "36 bin", "36k".
+  // Taksit: "6 taksit", "6 ay", "x6", "6x", "6 installments"; "peşin" / "tek çekim" 1. Kart: kartın adı (ek alabilir:
+  // "bonusla", "Bonus'a") ya da "nakit" / "cash". decimal: ondalık ayracı ("," ise nokta binliktir). Tutar yoksa null.
+  // sure: yanlışlıkla ad içindeki sayıyı tutar sanmamak için ("iPhone 15") — taksit ya da kart da bulunduysa ya da
+  // tutar 100 ve üstüyse true; formlar yalnızca o zaman doldurur.
+  const fold = s => String(s ?? "").toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ı/g, "i");
+  const QUICK_SUFFIX = /^['’]?(l[ae]|yl[ae]|[ae]|y[ae]|[dt][ae]n)?$/;
+  const QUICK_AFTER = new Set(["ile", "kartiyla", "kartina", "karta", "karti", "kart", "kartindan", "card"]);
+  const QUICK_BEFORE = new Set(["with", "on", "by"]);
+  function quickNumber(t, decimal) {
+    const m = /^(\p{Sc}?)(\d[\d.,]*)(k|bin|tl|try|lira|usd|eur)?(\p{Sc}?)$/iu.exec(t);   // "s24" gibi model adları sayı değildir
+    if (!m) return null;
+    let n = m[2].replace(/[.,]+$/, "");
+    const dot = decimal !== ",";
+    const [thousand, dec] = dot ? [",", "."] : [".", ","];
+    if (n.includes(dec) && !new RegExp(`^\\d{1,3}(\\${dec}\\d{3})+$`).test(n) || n.includes(thousand)) {
+      n = n.split(thousand).join("").replace(dec, ".");
+    } else if (n.includes(dec)) {
+      n = n.split(dec).join("");   // "36.000" ondalık ayracı nokta olan yerde de binliktir (üçer hane)
+    }
+    let v = Number(n);
+    if (!Number.isFinite(v)) return null;
+    const unit = (m[3] || "").toLowerCase();
+    if (unit === "k" || unit === "bin") v *= 1000;
+    return { value: v, marked: !!(m[1] || m[4] || (unit && unit !== "k" && unit !== "bin")), mult: unit === "k" || unit === "bin" };
+  }
+  function parseLine(text, { cards = [], decimal = "," } = {}) {
+    let words = String(text ?? "").trim().split(/\s+/).filter(Boolean).map(w => ({ w, f: fold(w), used: false }));
+    if (words.length < 2) return null;
+    let count = null, cardId = null;
+
+    // Taksit
+    for (let i = 0; i < words.length && count == null; i++) {
+      const f = words[i].f, next = words[i + 1];
+      let m;
+      if ((m = /^(\d{1,2})(taksit\w*|ay|aylik|x|t|installments?|months?|mo)$/.exec(f)) || (m = /^x(\d{1,2})$/.exec(f))) {
+        count = Number(m[1]); words[i].used = true;
+      } else if (/^\d{1,2}$/.test(f) && next && /^(taksit\w*|ay|aylik|installments?|months?)$/.test(next.f)) {
+        count = Number(f); words[i].used = next.used = true;
+      } else if (f === "pesin" || (f === "tek" && next && /^cekim/.test(next.f))) {
+        count = 1; words[i].used = true; if (f === "tek") next.used = true;
+      }
+    }
+    if (count != null && !(count >= 1 && count <= 60)) count = null;
+
+    // Kart: en uzun addan başlanır; ad birden çok sözcük olabilir
+    const names = cards.map(c => ({ id: c.id, parts: fold(c.name).split(/\s+/).filter(Boolean) })).filter(c => c.parts.length)
+      .sort((a, b) => b.parts.join(" ").length - a.parts.join(" ").length);
+    const mark = (from, n) => {
+      for (let k = from; k < from + n; k++) words[k].used = true;
+      const after = words[from + n], before = words[from - 1];
+      if (after && !after.used && QUICK_AFTER.has(after.f)) after.used = true;
+      if (before && !before.used && QUICK_BEFORE.has(before.f)) before.used = true;
+    };
+    outer: for (const c of names) {
+      for (let i = 0; i + c.parts.length <= words.length; i++) {
+        const ok = c.parts.every((part, k) => {
+          const x = words[i + k];
+          if (x.used) return false;
+          return k < c.parts.length - 1 ? x.f === part : x.f.startsWith(part) && QUICK_SUFFIX.test(x.f.slice(part.length));
+        });
+        if (ok) { cardId = c.id; mark(i, c.parts.length); break outer; }
+      }
+    }
+    if (cardId == null) {
+      const i = words.findIndex(x => !x.used && /^(nakit|nakitle|cash)$/.test(x.f));
+      if (i >= 0) { cardId = CASH; mark(i, 1); }
+    }
+
+    // Tutar
+    let best = null;
+    words.forEach((x, i) => {
+      if (x.used) return;
+      const n = quickNumber(x.f, decimal);
+      if (!n) return;
+      const next = words[i + 1];
+      const unit = next && !next.used ? next.f : "";
+      const bin = unit === "bin" || unit === "k";
+      const money = /^(tl|try|lira|usd|eur|dolar|euro)$/.test(unit) || /^\p{Sc}$/u.test(next?.w ?? "");
+      const cand = { i, extra: bin || money ? 1 : 0, value: bin ? n.value * 1000 : n.value, marked: n.marked || money };
+      if (!(cand.value > 0)) return;
+      if (!best || (cand.marked && !best.marked) || (cand.marked === best.marked && cand.value > best.value)) best = cand;
+    });
+    if (!best) return null;
+    for (let k = best.i; k <= best.i + best.extra; k++) words[k].used = true;
+
+    const desc = words.filter(x => !x.used).map(x => x.w).join(" ").replace(/^[\s,;:–-]+|[\s,;:–-]+$/g, "");
+    const amount = Math.round(best.value * 100) / 100;
+    return { desc, amount, count, cardId, sure: count != null || cardId != null || amount >= 100 };
+  }
+
   const api = {
     MONTHS, MONTHS_SHORT, CASH, SERIES_COUNT,
     monthIndex, monthKey, monthName, monthShort, yearOf, daysInMonth, dayOf, dateKey, parseDate, toDate, todayKey,
@@ -569,6 +663,7 @@
     buildCashflow,
     defaultState, validDay, validHistory, defaultCard, nextColor, hydrate,
     normalize, titleCase, parseStatement, fromStatement, parseSheetRows, parseWorkbook,
+    parseLine,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Taksit = api;

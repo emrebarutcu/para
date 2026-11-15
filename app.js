@@ -516,7 +516,7 @@ const els = {
   shareSheet: $("shareSheet"), shareHead: $("shareHead"), shareStats: $("shareStats"), shareItems: $("shareItems"),
   sharePaysBox: $("sharePaysBox"), sharePays: $("sharePays"), shareRemind: $("shareRemind"), sharePaid: $("sharePaid"),
   addLabel: $("addLabel"), fab: document.querySelector(".fab"),
-  purchaseSheet: $("purchaseSheet"), purchaseForm: $("purchaseForm"), purchaseTitle: $("purchaseTitle"),
+  purchaseSheet: $("purchaseSheet"), purchaseForm: $("purchaseForm"), purchaseTitle: $("purchaseTitle"), quickHint: $("quickHint"),
   purchaseDelete: $("purchaseDelete"), purchasePreview: $("purchasePreview"),
   countChips: $("countChips"), cardChips: $("cardChips"), personChips: $("personChips"), personField: $("personField"),
   purchaseSum: $("purchaseSum"), purchaseStatus: $("purchaseStatus"), purchaseCopy: $("purchaseCopy"),
@@ -3867,6 +3867,7 @@ function openPurchaseSheet(p, draft) {
   renderPurchaseStatus(p);
   syncChecked(f);
   updatePurchasePreview();
+  els.quickHint.hidden = !!src;   // tek satır ipucu yalnızca yeni ve boş formda
   openSheet(els.purchaseSheet);
   if (!p) f.elements.amount.focus();
   if (src?.desc && !categorySource) suggestCategory();   // düzenlenen ya da e-postadan gelen kategorisiz harcama
@@ -4242,9 +4243,27 @@ function updatePurchasePreview() {
   }
 }
 
+// Tek satırla kayıt: yeni harcamada tutar boşken ada "buzdolabı 36000 bonus 6 taksit" yazıp Enter'a basınca form dolar
+// (taksit.js parseLine; sure: ad içindeki sayı tutar sanılmaz). Kaydı kullanıcı onaylar.
+els.purchaseForm.elements.desc.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.isComposing || editingId || inboxDraftId != null || convertingEntryId) return;
+  const f = els.purchaseForm.elements;
+  if (f.amount.value.trim()) return;
+  const r = T.parseLine(f.desc.value, { cards: state.cards, decimal: DECIMAL });
+  if (!r?.sure) return;
+  e.preventDefault();
+  openPurchaseSheet(null, {
+    desc: r.desc, total: r.amount, count: r.count ?? (Math.round(Number(f.count.value)) || 1),
+    cardId: r.cardId == null ? f.card.value : r.cardId === T.CASH ? "" : r.cardId,
+    personId: f.person.value, date: f.date.value,
+  });
+  window.Analitik?.event("quick_line_used", { installments: r.count != null, card: r.cardId != null });
+});
+
 els.purchaseForm.addEventListener("input", e => {
   e.target.classList?.remove("invalid");
   const f = els.purchaseForm.elements;
+  if (f.amount.value.trim()) els.quickHint.hidden = true;
   // Peşin / Taksitli: Taksitli'ye geçince Peşin seçiliyse 3 taksit
   if (e.target.name === "plan" && e.target.value === "1" && Math.round(Number(f.count.value)) <= 1) {
     f.count.value = 3;

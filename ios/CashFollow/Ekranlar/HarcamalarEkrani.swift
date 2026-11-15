@@ -530,6 +530,13 @@ struct HarcamaFormu: View {
                         }
                         Ayirici()
                         TextField(L("Ne alındı? (ör. Migros)"), text: $desc).font(.title3)
+                            .submitLabel(.done)
+                            .onSubmit(tekSatir)
+                        // Tek satırla kayıt ipucu: yalnızca yeni ve boş formda
+                        if duzenle == nil, desc.isEmpty, amount.isEmpty, eposta == nil {
+                            Text(L("İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\""))
+                                .font(.footnote).foregroundStyle(Tema.metin3)
+                        }
                         if !oneriler.isEmpty { oneriSatiri }
                     }
 
@@ -713,6 +720,19 @@ struct HarcamaFormu: View {
     }
 
     // Önerilen işyeri: adı, son kullanılan kartı (duruyorsa), taksit sayısı ve kategorisi; tutar ve tarih kullanıcının
+    // Tek satırla kayıt: tutar boşken ada "buzdolabı 36000 bonus 6 taksit" yazıp Bitti'ye basınca form dolar
+    // (taksit.js parseLine). Kaydı kullanıcı onaylar.
+    private func tekSatir() {
+        guard duzenle == nil, (Bicim.parse(amount) ?? 0) <= 0,
+              let r = model.motor?.parseLine(desc, decimal: Bicim.locale.decimalSeparator ?? ","), r.sure else { return }
+        amount = r.amount.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2)))
+        desc = r.desc
+        if let n = r.count { count = min(max(n, 1), 60); taksitli = count > 1 }
+        if let k = r.cardId, k == "nakit" || cards.contains(where: { $0.id == k }) { card = k }
+        kaynak = "quick"
+        Analitik.olay("quick_line_used", ["installments": r.count != nil, "card": r.cardId != nil])
+    }
+
     private func uygula(_ m: Isyeri) {
         desc = m.desc
         if let c = m.cardId { if cards.contains(where: { $0.id == c }) { card = c } } else { card = "nakit" }

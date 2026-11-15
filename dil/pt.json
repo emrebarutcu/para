@@ -1533,5 +1533,7 @@
  "Bu ay {0} ödenecek.": "Este mês vencem {0}.",
  "Sonraki aylar": "Próximos meses",
  "App Store sayfasının QR kodu": "Código QR da página na App Store",
- "iPhone'unla okut": "Escaneie com o iPhone"
+ "iPhone'unla okut": "Escaneie com o iPhone",
+ "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Dica: escreva tudo em uma linha e pressione Enter. Ex.: \"geladeira 3600 x6\"",
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Dica: escreva tudo em uma linha e pressione OK. Ex.: \"geladeira 3600 x6\""
 }

@@ -1533,5 +1533,7 @@
  "Bu ay {0} ödenecek.": "이번 달 결제 금액은 {0}이에요.",
  "Sonraki aylar": "이후 달",
  "App Store sayfasının QR kodu": "App Store 페이지 QR 코드",
- "iPhone'unla okut": "iPhone으로 스캔하세요"
+ "iPhone'unla okut": "iPhone으로 스캔하세요",
+ "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "팁: 한 줄로 입력하고 Enter를 누르세요. 예: \"냉장고 1800000 x6\"",
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "팁: 한 줄로 입력하고 완료를 누르세요. 예: \"냉장고 1800000 x6\""
 }
