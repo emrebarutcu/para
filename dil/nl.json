@@ -548,7 +548,7 @@
  "{0} yıl": "{0} jr",
  "Premium": "Premium",
  "Premium'a geç": "Neem Premium",
- "Durum": "Status",
+ "Durum": "Balans",
  "Aboneliği yönet": "Abonnement beheren",
  "{0} · {1} tarihinde biter": "{0} · eindigt {1}",
  "{0} · {1} tarihinde yenilenir": "{0} · verlengt {1}",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "QR-code van de App Store-pagina",
  "iPhone'unla okut": "Scan met je iPhone",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tip: typ alles op één regel en druk op Enter. Bijv. \"koelkast 1800 x6\"",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tip: typ alles op één regel en druk op Gereed. Bijv. \"koelkast 1800 x6\""
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tip: typ alles op één regel en druk op Gereed. Bijv. \"koelkast 1800 x6\"",
+ "Abonelik durumu": "Status",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "Geef de assistent je afschrift als pdf of schermafbeelding en schrijf dit. Hij voegt de termijnen toe en vraagt het je eerst.",
+ "Ekstreden ekle": "Toevoegen vanuit een afschrift",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "Voeg de aankopen op afbetaling uit dit afschrift toe aan CashFollow. Sla over wat al is vastgelegd en laat me de lijst zien voordat je toevoegt.",
+ "Çok harcama mı giriyorsun?": "Voer je veel aankopen in?",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "Geef je afschrift aan de AI-assistent en laat die de termijnen toevoegen.",
+ "Nasıl?": "Hoe?"
 }

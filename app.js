@@ -565,9 +565,17 @@ function render() {
 
   for (const n of document.querySelectorAll(".js-month-label")) n.textContent = monthLong(start);
   for (const s of document.querySelectorAll(".view")) s.hidden = s.dataset.view !== view;
+  // Durum sekmesi iki görünümü taşır (kartlar, varliklar): sekme ikisinde de seçili, bağlantısı en son açılan yüze gider
+  const durum = view === "kartlar" || view === "varliklar";
+  const tab = durum ? "durum" : view;
   for (const a of els.tabs.querySelectorAll("a")) {
-    a.classList.toggle("active", a.dataset.view === view);
-    if (a.dataset.view === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    a.classList.toggle("active", a.dataset.view === tab);
+    if (a.dataset.view === tab) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    if (durum && a.dataset.view === "durum") a.setAttribute("href", `#${view}`);
+  }
+  for (const a of document.querySelectorAll(".durum-seg a")) {
+    a.classList.toggle("active", a.dataset.durum === view);
+    if (a.dataset.durum === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
 
   if (view === "ozet") renderOverview(months, start, last);
@@ -2201,7 +2209,24 @@ function firstPurchaseState() {
 
 // ---------- Harcamalar ----------
 // Liste ya da Kategoriler (ayın harcamaları kategoriye göre; hiç harcama yokken yalnızca liste ve boş durumu)
+// Ekstre ipucu: elle beş ve üstü harcama girmiş kullanıcıya bir kez; "Nasıl?" yapay zekâ penceresini açar, açınca ya da
+// kapatınca bir daha görünmez
+const STATEMENT_TIP_KEY = "para.ipucu.ekstre";
+const statementTipSeen = () => { try { return localStorage.getItem(STATEMENT_TIP_KEY) === "1"; } catch { return true; } };
+function hideStatementTip() {
+  try { localStorage.setItem(STATEMENT_TIP_KEY, "1"); } catch { /* özel pencere */ }
+  $("statementTip").hidden = true;
+}
+$("statementTipClose").addEventListener("click", hideStatementTip);
+$("statementTipOpen").addEventListener("click", () => {
+  hideStatementTip();
+  window.Analitik?.event("statement_tip_opened");
+  openAiSheet();
+  $("statementHelp").scrollIntoView({ block: "center" });
+});
+
 function renderPurchases() {
+  $("statementTip").hidden = state.installments.length < 5 || statementTipSeen();
   const today = T.todayKey();
   if (personFilter !== "all" && !personById(personFilter)) personFilter = "all";
   const any = knownPurchases().length > 0;

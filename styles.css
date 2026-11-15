@@ -329,7 +329,7 @@ a { color: inherit; }
   left: 0; right: 0; bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--surface) 86%, transparent);
   backdrop-filter: saturate(1.6) blur(18px);
@@ -1896,6 +1896,17 @@ a.hero-eq { display: block; width: fit-content; }
 .hero-diff { display: flex; align-items: center; gap: 3px; margin-top: 3px; font-size: 12px; font-weight: 600; line-height: 16px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .hero-diff.down { color: var(--ok); }
 .hero-diff .ic { width: 13px; height: 13px; stroke-width: 2.3; }
+/* Durum sekmesinin iki yüzü arasında geçiş */
+.durum-seg { display: flex; padding: 3px; gap: 2px; margin-bottom: 16px; background: var(--surface-2); border-radius: 11px; }
+.durum-seg a { flex: 1; text-align: center; padding: 7px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--text-2); text-decoration: none; }
+.durum-seg a.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, .08)); }
+/* Bir kez gösterilen ipucu kartı (ekstreyi asistana verme) ve kopyalanan hazır istek */
+.tip-card { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.tip-card > .ic { width: 20px; height: 20px; flex: none; margin-top: 1px; color: var(--text-3); }
+.tip-card .tip-body { flex: 1; min-width: 0; }
+.tip-card strong { display: block; font-size: 14px; font-weight: 600; }
+.tip-card p { margin: 2px 0 4px; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.copy-row .copy-text { flex: 1; min-width: 0; font-size: 13px; line-height: 1.5; color: var(--text); }
 /* Harcama formunda tek satırla kayıt ipucu */
 .quick-hint { margin: -4px 2px 0; font-size: 12px; color: var(--text-3); }
 /* İyi haber satırı: dokununca açıklaması açılır */

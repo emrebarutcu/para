@@ -548,7 +548,7 @@
  "{0} yıl": "{0} año(s)",
  "Premium": "Premium",
  "Premium'a geç": "Hazte Premium",
- "Durum": "Estado",
+ "Durum": "Balance",
  "Aboneliği yönet": "Gestionar suscripción",
  "{0} · {1} tarihinde biter": "{0} · termina el {1}",
  "{0} · {1} tarihinde yenilenir": "{0} · se renueva el {1}",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "Código QR de la página del App Store",
  "iPhone'unla okut": "Escanéalo con tu iPhone",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Consejo: escríbelo todo en una línea y pulsa Intro. Ej.: «nevera 1800 x6»",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Consejo: escríbelo todo en una línea y pulsa Listo. Ej.: «nevera 1800 x6»"
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Consejo: escríbelo todo en una línea y pulsa Listo. Ej.: «nevera 1800 x6»",
+ "Abonelik durumu": "Estado",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "Dale al asistente tu extracto en PDF o captura de pantalla y escribe esto. Él añade las cuotas y te pregunta antes de añadir.",
+ "Ekstreden ekle": "Añadir desde un extracto",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "Añade a CashFollow las compras a plazos de este extracto. Omite las que ya están registradas y muéstrame la lista antes de añadir.",
+ "Çok harcama mı giriyorsun?": "¿Introduces muchas compras?",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "Dale tu extracto al asistente de IA y deja que añada las cuotas.",
+ "Nasıl?": "¿Cómo?"
 }

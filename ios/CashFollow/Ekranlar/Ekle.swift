@@ -48,6 +48,7 @@ private struct EkleDugmesi: ViewModifier {
     let baglam: EkleBaglam
     @State private var secim: EkleSecim?
     @State private var sonlar: [Isyeri] = []   // son üç işyeri (basılı tutunca)
+    @State private var ekstre = false          // "Ekstreden ekle": asistan ekranı, ekstre bölümü üstte
 
     func body(content: Content) -> some View {
         content
@@ -58,6 +59,7 @@ private struct EkleDugmesi: ViewModifier {
             }
             .task(id: model.revision) { sonlar = baglam == .harcama ? (model.motor?.merchants("", limit: 3) ?? []) : [] }
             .sheet(item: $secim) { EkleFormu(secim: $0) }
+            .sheet(isPresented: $ekstre) { AsistanEkrani(ekstre: true) }
             .onChange(of: secim) { _, s in
                 if let s { Analitik.olay("add_opened", ["item": s.id, "screen": "\(baglam)"]) }
             }
@@ -68,7 +70,10 @@ private struct EkleDugmesi: ViewModifier {
         case .harcama:
             // Dokun: harcama; basılı tut: diğerleri
             Menu {
-                Section { harcamaDugmesi }
+                Section {
+                    harcamaDugmesi
+                    Button { ekstre = true } label: { Label(L("Ekstreden ekle"), systemImage: "sparkles") }
+                }
                 if !sonlar.isEmpty {
                     Section(L("Yine")) {
                         ForEach(sonlar) { m in

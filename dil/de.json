@@ -548,7 +548,7 @@
  "{0} yıl": "{0} J.",
  "Premium": "Premium",
  "Premium'a geç": "Premium holen",
- "Durum": "Status",
+ "Durum": "Finanzen",
  "Aboneliği yönet": "Abo verwalten",
  "{0} · {1} tarihinde biter": "{0} · endet am {1}",
  "{0} · {1} tarihinde yenilenir": "{0} · verlängert sich am {1}",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "QR-Code der App-Store-Seite",
  "iPhone'unla okut": "Mit dem iPhone scannen",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tipp: alles in eine Zeile schreiben und Enter drücken. Z. B. „Kühlschrank 1800 x6“",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tipp: alles in eine Zeile schreiben und Fertig drücken. Z. B. „Kühlschrank 1800 x6“"
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tipp: alles in eine Zeile schreiben und Fertig drücken. Z. B. „Kühlschrank 1800 x6“",
+ "Abonelik durumu": "Status",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "Gib dem Assistenten deinen Kontoauszug als PDF oder Screenshot und schreibe Folgendes. Er trägt die Raten ein und fragt dich vorher.",
+ "Ekstreden ekle": "Aus Abrechnung hinzufügen",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "Füge die Ratenkäufe aus dieser Abrechnung zu CashFollow hinzu. Überspringe bereits erfasste und zeige mir die Liste, bevor du sie hinzufügst.",
+ "Çok harcama mı giriyorsun?": "Viele Ausgaben einzutragen?",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "Gib deine Abrechnung dem KI-Assistenten, er trägt die Raten für dich ein.",
+ "Nasıl?": "Wie?"
 }

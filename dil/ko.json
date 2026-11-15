@@ -548,7 +548,7 @@
  "{0} yıl": "{0}년",
  "Premium": "Premium",
  "Premium'a geç": "Premium 시작하기",
- "Durum": "상태",
+ "Durum": "자산·부채",
  "Aboneliği yönet": "구독 관리",
  "{0} · {1} tarihinde biter": "{0} · {1} 종료",
  "{0} · {1} tarihinde yenilenir": "{0} · {1} 갱신",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "App Store 페이지 QR 코드",
  "iPhone'unla okut": "iPhone으로 스캔하세요",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "팁: 한 줄로 입력하고 Enter를 누르세요. 예: \"냉장고 1800000 x6\"",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "팁: 한 줄로 입력하고 완료를 누르세요. 예: \"냉장고 1800000 x6\""
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "팁: 한 줄로 입력하고 완료를 누르세요. 예: \"냉장고 1800000 x6\"",
+ "Abonelik durumu": "상태",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "명세서 PDF나 스크린샷을 어시스턴트에게 주고 이렇게 적으세요. 할부를 추가해 주며, 추가하기 전에 먼저 물어봅니다.",
+ "Ekstreden ekle": "명세서에서 추가",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "이 명세서의 할부 구매를 CashFollow에 추가해 줘. 이미 기록된 것은 건너뛰고, 추가하기 전에 목록을 보여 줘.",
+ "Çok harcama mı giriyorsun?": "지출을 많이 입력하고 있나요?",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "명세서를 AI 어시스턴트에게 주고 할부를 추가하게 하세요.",
+ "Nasıl?": "방법 보기"
 }

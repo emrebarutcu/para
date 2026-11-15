@@ -156,6 +156,11 @@ etkileri önce / sonra kohortlarıyla okunur.
 - **Asistanda özet okuması ücretsiz** (`get_overview`: bu ay ödenecek, sıradaki ödemeler); öbür araçlar ve yazma Premium.
 - **Akış'ın ilk 2 ayı ücretsiz** (bu ay ve sonraki ay; 14 Kasım): sonrası ve iPhone'da 12 aylık grafik Premium. Bayrak
   `free_taste`: `off` kolu kapatır, bayrak yoksa açık.
+- **Denemeler (15 Kasım):** tek satırla kayıt yapıldı (`taksit.js` `parseLine`; 31 örnek cümle testte). Kartlar ve Varlıklar
+  tek "Durum" sekmesinde birleşti (PostHog'daki `tab_viewed` paylarına bakılmadan; `tab_viewed` hâlâ `cards` / `assets`
+  ayrı yazar, etkisi oradan izlenir). Ekstre yükleme yapılmadı: kullanıcı yormadan asistana (MCP) yönlendirilir —
+  + menüsünde "Ekstreden ekle", Harcamalar'da bir kez görünen ipucu, asistan ekranında kopyalanan hazır istek;
+  asistanın yönergesinde ekstre okuma kuralları (`mcp/tools.js`).
 
 ## Karar bekleyenler
 

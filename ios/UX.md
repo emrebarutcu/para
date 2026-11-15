@@ -7,6 +7,9 @@ Puan: 1 (yapılamıyor / çok zor) … 5 (hızlı ve açık). Üç sütun: 7.1.0
 
 ## Sekmeler
 
+Alttaki çubukta dört sekme var: Özet, Akış, Harcamalar, Durum. Durum iki yüz taşır (üstteki seçiciyle): Kartlar ve
+borçlar ile Varlıklar; en son açılan yüz hatırlanır. Aşağıdaki tabloda ikisi ayrı satırdadır.
+
 | Sekme | Yanıtladığı soru | İçerik |
 |-------|------------------|--------|
 | Özet | Bu ay ne ödeyeceğim, sırada ne var, param yetecek mi? | Bu ay ödenecek (ödenen / kalan, gelecek ay hafifliyor mu, son taksit, iyi haber satırı: ay sonunda kalan serbest nakit ya da bugünün kartı), sıradaki 5 ödeme, 2 içgörü (ücretsizde iyi haberler, gerisi kilitli), Nakit; yeri gelince biten taksidin kutlaması ve geçen ayın özeti |
@@ -53,6 +56,8 @@ ilgili satırdaki "Ödendi" / "Ödedi" düğmesindedir.
 | 21 | Ayarlar | 4 | 4 | 5 | Hesap, ülke, nakit (dönem başı, nakit sayılanlar), kişiler (renkleriyle) |
 | 22 | Ödeme günü hatırlatması | – | – | 5 | İlk açılışta "Planın hazır" ekranında, gelecek bildirimin önizlemesiyle; sonra Özet'te sıradaki ödemelerin altında bir kez "Hatırlatayım mı?" ("Şimdi değil" → 3 gün sonra); Ayarlar → Bildirimler: kaç gün önce, saat. Dokununca Özet açılır. Aynı anahtarla üç bildirim daha: kesim gününden bir gün önce ("Yarın Bonus kesimi": yarına kadarki ve sonraki alışveriş hangi gün ödenir), taksit bitince ("Koltuk takımı bitti") ve ayın ilk günü ay özeti; her biri ayrı kapatılır |
 | 23 | Uygulama kilidi | – | – | 5 | Ayarlar → "Face ID ile kilitle"; açılışta ve arka plandan dönünce sorar, uygulama değiştiricide tutar görünmez |
+| 26 | Tek satırla kayıt | – | – | 4 | Harcama formunda ada "buzdolabı 36000 bonus 6 taksit" yazıp Bitti'ye bas: tutar, kart ve taksit dolar; kaydı kullanıcı onaylar. Ad içindeki sayı tutar sanılmaz ("iPhone 15") |
+| 27 | Ekstreden ekleme | – | – | 3 | Ayrı yükleme ekranı yok: + (basılı tut) → "Ekstreden ekle" ya da Harcamalar'da bir kez görünen ipucu asistan ekranını açar; hazır istek kopyalanır, ekstre asistana verilir (yazma Premium) |
 | 24 | Banka e-postalarını bağlama | – | – | 4 | Ayarlar → Banka e-postaları: adres, son e-posta durumu, deneme e-postası; Gmail / Outlook / iCloud'dan yönlendirme rehberi (bankadaki adres değişmeden); Gmail onayı ve banka doğrulaması Harcamalar'da "Onayla" ile; kartın son 4 hanesi ilk e-postada sorulur ("•••• 1234 hangi kartın?"); kapalıyken arka planda bakar, eklenen harcamayı bildirir (sırada: YAPILACAKLAR.md) |
 | 25 | Kısayollar (Siri, Spotlight, eylem düğmesi) | – | – | 4 | "Bu ay ne ödeyeceğim?" uygulamayı açmadan söyler (uygulama kilidi açıksa söylemez); "Harcama ekle" formu açar, tutar / ad / taksit verilirse dolu gelir, kaydı kullanıcı onaylar (sırada: banka SMS'i ve Cüzdan otomasyon rehberi, widget) |
 | 25 | Aynı harcamayı yeniden ekleme | – | – | – | Harcamalar'da satıra basılı tut → "Yine" ya da ayrıntıda "Yine ekle": form adı, tutarı, kartı, taksidi ve kategorisiyle dolu, tarih bugün. + düğmesine basılı tutunca son üç işyeri |

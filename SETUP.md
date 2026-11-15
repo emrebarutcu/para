@@ -481,7 +481,9 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   installment_finished, month_summary, inbox), `installment_finished_shown` (kutlama kartı ilk kez göründü; `count`),
   `month_summary_opened` (`source`: overview, notification), `month_summary_shared`. Kısayollar (App Intents,
   `Uygulama/Kisayollar.swift`): `shortcut_run` (`intent`: add_purchase, due_this_month); tepedeki iyi haber satırı
-  açılınca `insight_headline_opened` (`id`).
+  açılınca `insight_headline_opened` (`id`). Tek satırla kayıt: `quick_line_used` (`installments`, `card`), kayıtta
+  `source: quick`. Ekstreyi asistana yönlendirme: `statement_tip_opened`, `statement_prompt_copied`, `assistant_opened`
+  (`source`: statement, settings).
 - Karşılama: A/B denemesi yok (Kasım 2026 kararı; kol başına ~2.900 kurulum gerekiyordu). Her yeni kurulum yeni akışı
   görür, `onboarding_flow` bayrağı okunmaz; olaylarda `variant: default`. Etki önce / sonra kohortlarıyla ölçülür:
   birincil ölçü ilk hafta geri dönüş (1–7. günde `app_opened`), etkinleşme ikincil (akış kartı ve harcamayı kendisi

@@ -98,22 +98,77 @@ struct AnaEkran: View {
     }
 }
 
-// iPhone'da en fazla 5 sekme: borç ve krediler Kartlar'da, Ayarlar Özet'teki dişlide
+// Dört sekme: Özet, Akış, Harcamalar, Durum. Durum iki yüz taşır: Kartlar ve borçlar (sekme 3) ile Varlıklar (sekme 4);
+// sekme numaraları eskisi gibi kalır (bildirimler, -sekme, tab_viewed), yalnızca alttaki çubukta tek sekme görünür.
+// Ayarlar Özet'teki dişlide.
 struct Sekmeler: View {
     @EnvironmentObject private var model: Model
     @Binding var sekme: Int
+    @AppStorage("durum.son") private var durumSon = 3   // Durum'da en son açılan yüz
 
     var body: some View {
-        TabView(selection: $sekme) {
+        TabView(selection: Binding(get: { sekme == 4 ? 3 : sekme },
+                                   set: { yeni in sekme = yeni == 3 ? (sekme == 3 || sekme == 4 ? sekme : durumSon) : yeni })) {
             OzetEkrani().tabItem { Label(L("Özet"), systemImage: "house") }.tag(0)
             AkisEkrani().tabItem { Label(L("Akış"), systemImage: "calendar") }.tag(1)
             HarcamalarEkrani().tabItem { Label(L("Harcamalar"), systemImage: "list.bullet.rectangle") }.tag(2)
                 .badge(model.epostalar.count)   // onay bekleyen banka e-postaları
-            BorclarEkrani().tabItem { Label(L("Kartlar"), systemImage: "creditcard") }.tag(3)
-            VarliklarEkrani().tabItem { Label(L("Varlıklar"), systemImage: "banknote") }.tag(4)
+            DurumEkrani(sekme: $sekme).tabItem { Label(L("Durum"), systemImage: "chart.pie") }.tag(3)
         }
         .onChange(of: sekme) { _, yeni in
+            if yeni == 3 || yeni == 4 { durumSon = yeni }
             Analitik.olay("tab_viewed", ["tab": ["overview", "cash_flow", "purchases", "cards", "assets"][min(max(yeni, 0), 4)]])
         }
     }
+}
+
+// Durum sekmesi: Kartlar ve borçlar (sekme 3) ya da Varlıklar (sekme 4); ekranlar üstlerindeki seçiciyle yüz değiştirir
+// (durumSecici).
+struct DurumEkrani: View {
+    @Binding var sekme: Int
+
+    var body: some View {
+        Group {
+            if sekme == 4 { VarliklarEkrani() } else { BorclarEkrani() }
+        }
+        .environment(\.durumSekmesi, $sekme)
+    }
+}
+
+private struct DurumSekmesiAnahtari: EnvironmentKey {
+    static let defaultValue: Binding<Int>? = nil
+}
+
+extension EnvironmentValues {
+    // Durum sekmesinin seçili yüzü (3 Kartlar ve borçlar, 4 Varlıklar); Durum'un dışında nil
+    var durumSekmesi: Binding<Int>? {
+        get { self[DurumSekmesiAnahtari.self] }
+        set { self[DurumSekmesiAnahtari.self] = newValue }
+    }
+}
+
+private struct DurumSecici: ViewModifier {
+    @Environment(\.durumSekmesi) private var sekme
+
+    func body(content: Content) -> some View {
+        if let sekme {
+            content.safeAreaInset(edge: .top, spacing: 0) {
+                Picker(L("Durum"), selection: sekme) {
+                    Text(L("Kartlar ve borçlar")).tag(3)
+                    Text(L("Varlıklar")).tag(4)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.bar)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    // Kartlar ve Varlıklar ekranlarının üstünde Durum'un iki yüzü arasında geçiş
+    func durumSecici() -> some View { modifier(DurumSecici()) }
 }

@@ -548,7 +548,7 @@
  "{0} yıl": "{0} anni",
  "Premium": "Premium",
  "Premium'a geç": "Passa a Premium",
- "Durum": "Stato",
+ "Durum": "Bilancio",
  "Aboneliği yönet": "Gestisci abbonamento",
  "{0} · {1} tarihinde biter": "{0} · termina il {1}",
  "{0} · {1} tarihinde yenilenir": "{0} · si rinnova il {1}",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "Codice QR della pagina dell'App Store",
  "iPhone'unla okut": "Inquadralo con l'iPhone",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Suggerimento: scrivi tutto su una riga e premi Invio. Es. «frigorifero 1800 x6»",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Suggerimento: scrivi tutto su una riga e premi Fine. Es. «frigorifero 1800 x6»"
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Suggerimento: scrivi tutto su una riga e premi Fine. Es. «frigorifero 1800 x6»",
+ "Abonelik durumu": "Stato",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "Dai all'assistente il tuo estratto conto in PDF o come screenshot e scrivi questo. Aggiunge lui le rate e ti chiede conferma prima.",
+ "Ekstreden ekle": "Aggiungi da un estratto conto",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "Aggiungi a CashFollow gli acquisti a rate di questo estratto conto. Salta quelli già registrati e mostrami l'elenco prima di aggiungere.",
+ "Çok harcama mı giriyorsun?": "Stai inserendo tanti acquisti?",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "Dai l'estratto conto all'assistente IA e lascia che aggiunga le rate.",
+ "Nasıl?": "Come?"
 }

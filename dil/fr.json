@@ -548,7 +548,7 @@
  "{0} yıl": "{0} an(s)",
  "Premium": "Premium",
  "Premium'a geç": "Passer à Premium",
- "Durum": "Statut",
+ "Durum": "Bilan",
  "Aboneliği yönet": "Gérer l'abonnement",
  "{0} · {1} tarihinde biter": "{0} · se termine le {1}",
  "{0} · {1} tarihinde yenilenir": "{0} · renouvelé le {1}",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "Code QR de la page App Store",
  "iPhone'unla okut": "Scannez avec votre iPhone",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Astuce : écrivez tout sur une ligne et appuyez sur Entrée. Ex. « frigo 1800 x6 »",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Astuce : écrivez tout sur une ligne et appuyez sur OK. Ex. « frigo 1800 x6 »"
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Astuce : écrivez tout sur une ligne et appuyez sur OK. Ex. « frigo 1800 x6 »",
+ "Abonelik durumu": "Statut",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "Donnez votre relevé à l'assistant en PDF ou en capture d'écran et écrivez ceci. Il ajoute les mensualités et vous demande avant d'ajouter.",
+ "Ekstreden ekle": "Ajouter depuis un relevé",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "Ajoute à CashFollow les achats en plusieurs fois de ce relevé. Ignore ceux déjà enregistrés et montre-moi la liste avant d'ajouter.",
+ "Çok harcama mı giriyorsun?": "Beaucoup de dépenses à saisir ?",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "Donnez votre relevé à l'assistant IA et laissez-le ajouter les mensualités.",
+ "Nasıl?": "Comment ?"
 }

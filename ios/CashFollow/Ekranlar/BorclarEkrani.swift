@@ -116,6 +116,7 @@ struct BorclarEkrani: View {
                 }
             }
             .navigationTitle(L("Kartlar ve borçlar"))
+            .durumSecici()
             .sayfaZemini()
             .yenilenebilir(model)
             .ekleDugmesi(.borc)

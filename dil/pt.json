@@ -548,7 +548,7 @@
  "{0} yıl": "{0} anos",
  "Premium": "Premium",
  "Premium'a geç": "Assinar Premium",
- "Durum": "Status",
+ "Durum": "Saldos",
  "Aboneliği yönet": "Gerenciar assinatura",
  "{0} · {1} tarihinde biter": "{0} · termina em {1}",
  "{0} · {1} tarihinde yenilenir": "{0} · renova em {1}",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "Código QR da página na App Store",
  "iPhone'unla okut": "Escaneie com o iPhone",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Dica: escreva tudo em uma linha e pressione Enter. Ex.: \"geladeira 3600 x6\"",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Dica: escreva tudo em uma linha e pressione OK. Ex.: \"geladeira 3600 x6\""
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Dica: escreva tudo em uma linha e pressione OK. Ex.: \"geladeira 3600 x6\"",
+ "Abonelik durumu": "Status",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "Entregue ao assistente sua fatura em PDF ou captura de tela e escreva isto. Ele adiciona as parcelas e pergunta antes de adicionar.",
+ "Ekstreden ekle": "Adicionar a partir da fatura",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "Adicione ao CashFollow as compras parceladas desta fatura. Pule as que já estão registradas e me mostre a lista antes de adicionar.",
+ "Çok harcama mı giriyorsun?": "Lançando muitas compras?",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "Entregue sua fatura ao assistente de IA e deixe que ele adicione as parcelas.",
+ "Nasıl?": "Como?"
 }

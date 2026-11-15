@@ -548,7 +548,7 @@
  "{0} yıl": "{0} سنة",
  "Premium": "Premium",
  "Premium'a geç": "احصل على Premium",
- "Durum": "الحالة",
+ "Durum": "الأرصدة",
  "Aboneliği yönet": "إدارة الاشتراك",
  "{0} · {1} tarihinde biter": "{0} · ينتهي في {1}",
  "{0} · {1} tarihinde yenilenir": "{0} · يتجدد في {1}",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "رمز QR لصفحة App Store",
  "iPhone'unla okut": "امسحه بهاتف iPhone",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "تلميح: اكتب كل شيء في سطر واحد ثم اضغط Enter. مثال: \"ثلاجة 3600 x6\"",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "تلميح: اكتب كل شيء في سطر واحد ثم اضغط تم. مثال: \"ثلاجة 3600 x6\""
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "تلميح: اكتب كل شيء في سطر واحد ثم اضغط تم. مثال: \"ثلاجة 3600 x6\"",
+ "Abonelik durumu": "الحالة",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "أعطِ المساعد كشف حسابك بصيغة PDF أو لقطة شاشة واكتب ما يلي. يضيف هو الأقساط ويسألك قبل الإضافة.",
+ "Ekstreden ekle": "إضافة من كشف الحساب",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "أضف مشتريات الأقساط الموجودة في هذا الكشف إلى CashFollow. تخطَّ ما هو مسجل مسبقًا واعرض عليّ القائمة قبل الإضافة.",
+ "Çok harcama mı giriyorsun?": "هل تُدخل مشتريات كثيرة؟",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "أعطِ كشف حسابك للمساعد الذكي ودعه يضيف الأقساط.",
+ "Nasıl?": "كيف؟"
 }

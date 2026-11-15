@@ -548,7 +548,7 @@
  "{0} yıl": "{0} yr.",
  "Premium": "Premium",
  "Premium'a geç": "Get Premium",
- "Durum": "Status",
+ "Durum": "Balances",
  "Aboneliği yönet": "Manage subscription",
  "{0} · {1} tarihinde biter": "{0} · ends {1}",
  "{0} · {1} tarihinde yenilenir": "{0} · renews {1}",
@@ -1535,5 +1535,12 @@
  "App Store sayfasının QR kodu": "QR code for the App Store page",
  "iPhone'unla okut": "Scan with your iPhone",
  "İpucu: tek satırda yaz, Enter'a bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tip: type it all on one line and press Enter. E.g. \"fridge 1800 6 installments\"",
- "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tip: type it all on one line and press Done. E.g. \"fridge 1800 6 installments\""
+ "İpucu: tek satırda yaz, Bitti'ye bas. Örn. \"buzdolabı 36000 6 taksit\"": "Tip: type it all on one line and press Done. E.g. \"fridge 1800 6 installments\"",
+ "Abonelik durumu": "Status",
+ "Ekstrenin PDF'ini ya da ekran görüntüsünü asistana ver ve şunu yaz. Taksitleri o ekler; eklemeden önce sana sorar.": "Give the assistant your statement as a PDF or screenshot and write this. It adds the installments and asks you before adding.",
+ "Ekstreden ekle": "Add from a statement",
+ "Bu ekstredeki taksitli harcamaları CashFollow'a ekle. Zaten kayıtlı olanları atla, eklemeden önce listeyi bana göster.": "Add the installment purchases in this statement to CashFollow. Skip the ones already recorded and show me the list before adding.",
+ "Çok harcama mı giriyorsun?": "Entering a lot of purchases?",
+ "Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.": "Give your statement to the AI assistant and let it add the installments.",
+ "Nasıl?": "How?"
 }

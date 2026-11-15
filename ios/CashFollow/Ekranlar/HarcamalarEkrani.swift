@@ -4,6 +4,7 @@ import SwiftUI
 // delete_purchase; web'deki Harcamalar sekmesi). Sağ üstteki filtre düğmesi sıralama ve süzgeçleri alttan açar
 // (HarcamaFiltresi).
 struct HarcamalarEkrani: View {
+    @AppStorage("ipucu.ekstre.gizli") private var ekstreIpucuGizli = false
     @EnvironmentObject private var model: Model
     @State private var search = ""
     @State private var kisi = ""                 // "" hepsi, yoksa kişinin kimliği
@@ -34,6 +35,7 @@ struct HarcamalarEkrani: View {
                     }
                 }
                 if search.isEmpty, !model.epostalar.isEmpty { EpostaKarti() }
+                if search.isEmpty, !ekstreIpucuGizli { EkstreIpucu(gizle: { withAnimation { ekstreIpucuGizli = true } }) }
                 if search.isEmpty {
                     Secici(secim: $gorunum, ogeler: [("liste", L("Liste")), ("kategori", L("Kategoriler"))])
                 }
@@ -949,6 +951,38 @@ struct AlabilirMiyim: View {
                     .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// Bir kez gösterilen ipucu: elle beş ve üstü harcama girmiş kullanıcıya ekstreyi asistana verebileceği söylenir.
+// "Nasıl?" asistan ekranını açar; açınca ya da kapatınca bir daha görünmez.
+struct EkstreIpucu: View {
+    let gizle: () -> Void
+    @State private var acik = false
+
+    var body: some View {
+        Okunan(tool: "list_people") { (k: KisiListesi) in
+            if k.people.reduce(0, { $0 + $1.purchaseCount }) >= 5 {
+                Kart(dolgu: 14) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "sparkles").font(.title3).foregroundStyle(Tema.metin2)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(L("Çok harcama mı giriyorsun?")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                            Text(L("Ekstreni yapay zekâ asistanına ver, taksitleri o eklesin.")).font(.footnote).foregroundStyle(Tema.metin2)
+                            Button(L("Nasıl?")) {
+                                acik = true
+                                Analitik.olay("statement_tip_opened")
+                            }
+                            .font(.subheadline.weight(.semibold)).padding(.top, 2)
+                        }
+                        Spacer(minLength: 4)
+                        Button(action: gizle) { Image(systemName: "xmark").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3) }
+                            .accessibilityLabel(L("Kapat"))
+                    }
+                }
+                .sheet(isPresented: $acik, onDismiss: gizle) { AsistanEkrani(ekstre: true) }
             }
         }
     }

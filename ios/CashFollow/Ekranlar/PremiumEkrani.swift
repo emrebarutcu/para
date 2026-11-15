@@ -346,7 +346,7 @@ struct PremiumBolumu: View {
     var body: some View {
         Section {
             if abonelik.premium {
-                Satir(title: L("Durum"), value: durum)
+                Satir(title: L("Abonelik durumu"), value: durum)
                 if abonelik.cihaz != nil { Button(L("Aboneliği yönet")) { yonet = true } }
             } else {
                 Text(L("Ücretsiz sürüm: {0} kart, {1} kişi. Premium'da yapay zekâ asistanı (Claude, ChatGPT), sınırsız kart ve kişi, Akış, Alabilir miyim?, içgörüler ve Varlığın seyri.", Abonelik.ucretsizKart, Abonelik.ucretsizKisi))
