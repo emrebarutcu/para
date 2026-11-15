@@ -52,6 +52,37 @@ enum MesajZekasi {
         return nil
     }
 
+    // "-zeka-dene": modelin örnek banka mesajlarını nasıl okuduğu Documents/zeka-deneme.txt dosyasına yazılır (CI: ios.yml,
+    // bilgi için; simülatör Mac'in modelini kullanır). Sonuç sınanmaz: model sürümden sürüme değişir, CI'da olmayabilir.
+    // Mesajlar bankaların yazış biçimine benzetilmiş örneklerdir.
+    static func denemeIfRequested() {
+        guard CommandLine.arguments.contains("-zeka-dene") else { return }
+        let ornekler = [
+            "1234 ile biten kartinizla 15.11.2026 14:32 tarihinde MIGROS TICARET A.S. isyerinden 450,00 TL tutarinda harcama yapilmistir. Kalan limit: 12.345,67 TL",
+            "Bonus Kartinizla (***1234) 15.11.2026 tarihinde A101 den 125,50 TL lik islem gerceklestirilmistir. Kullanilabilir limitiniz 8.000,00 TL.",
+            "Maximum Kartınızla 15.11.2026 14:32’de TRENDYOL’dan 1.299,90 TL tutarında 3 taksitli alışveriş yapılmıştır.",
+            "X Bank ***1234: 15.11.2026 STARBUCKS 185,00 TL. Bilgi icin 4440000",
+            "MIGROS isyerindeki 450,00 TL tutarindaki isleminiz icin sifreniz: 123456. Sifrenizi kimseyle paylasmayin.",
+            "1234 ile biten kartinizin 10.11.2026 tarihli ekstresi kesilmistir. Donem borcu 12.345,67 TL, son odeme tarihi 20.11.2026.",
+            "Kredi kartiniza 5.000,00 TL odeme yapilmistir.",
+            "Hesabiniza 15.11.2026 tarihinde AHMET YILMAZ tarafindan 2.500,00 TL havale gelmistir.",
+        ]
+        let dosya = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("zeka-deneme.txt")
+        try? FileManager.default.removeItem(at: dosya)
+        Task {
+            var satirlar = ["model: \(durum)"]
+            for m in ornekler {
+                let bas = Date()
+                let i = await oku(m)
+                let sure = String(format: "%.1f sn", Date().timeIntervalSince(bas))
+                let okunan = i.map { "harcama=\($0.purchase) işyeri=\($0.merchant ?? "-") tutar=\($0.amount ?? "-")" } ?? "yanıt yok"
+                satirlar.append("\(okunan) [\(sure)] ← \(m.prefix(70))")
+            }
+            satirlar.append("ZEKA-DENEME BITTI")
+            try? satirlar.joined(separator: "\n").write(to: dosya, atomically: true, encoding: .utf8)
+        }
+    }
+
     private static let yonerge = """
     Türkiye'deki bankaların gönderdiği SMS mesajlarını okuyorsun. Mesajın, kartla yapılmış ve tamamlanmış bir harcamanın \
     bildirimi olup olmadığını söyle. Öyleyse işyerinin adını ve harcamanın tutarını mesajda yazdığı gibi çıkar. Mesajda \
