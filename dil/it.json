@@ -1562,5 +1562,8 @@
  "harcama": "acquisto",
  "harcama değil": "non è un acquisto",
  "Telefondaki model: {0}": "Modello sul dispositivo: {0}",
- "Telefondaki model yanıt vermedi: {0}": "Il modello sul dispositivo non ha risposto: {0}"
+ "Telefondaki model yanıt vermedi: {0}": "Il modello sul dispositivo non ha risposto: {0}",
+ "Kısayolu ekle": "Aggiungi il comando rapido",
+ "\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle.": "Tocca «Aggiungi il comando rapido»; nella pagina che si apre, aggiungi il comando rapido.",
+ "Listeden \"{0}\" kısayolunu seç.": "Scegli il comando rapido «{0}» dall'elenco."
 }

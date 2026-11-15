@@ -474,7 +474,8 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
   `inbox_card_assigned` (`set_last4`: son 4 hane karta yazıldı mı), `inbox_notifications` (`enabled`).
 - Banka mesajları (iPhone, SMS): `sms_received` (`result`: added, pending, queued, skipped, off; `ai`: telefondaki
-  model de okudu mu), `sms_setup_opened` (kurulumdan Kısayollar açıldı), `sms_tried` (bir mesaj denendi; `ai`).
+  model de okudu mu), `sms_setup_opened` (kurulumdan Kısayollar açıldı), `sms_shortcut_added` (hazır kısayolun bağlantısı açıldı),
+  `sms_tried` (bir mesaj denendi; `ai`).
   Mesajın metni, tutarı ya da işyeri gönderilmez. Mesajdan onayla eklenen harcamada `purchase_added` → `source: sms`.
 - Kayıt, bildirim ve geri dönüş (iPhone; ürün çalışmasının ölçüleri): `purchase_added` olayında `source` kaydın nereden
   geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email` / `sms`: onay bekleyen banka e-postası ya da mesajı;
@@ -991,6 +992,13 @@ telefondan çıkmaz. Yalnızca Türkiye'deki hesaplarda (`bankEmails` özelliği
   CashFollow'un **Banka mesajından harcama ekle** eylemi, giriş: Kısayol Girdisi). Adımlar uygulamada: Ayarlar →
   **Banka mesajları (SMS)**. Eylem `Uygulama/Kisayollar.swift` (App Intents; uygulama öne gelmez), giriş
   `Mesajlar.geldi`.
+- **"Kısayolu ekle" düğmesi (hazır kısayol):** `Yapilandirma.mesajKisayolu` doluysa kurulum ekranı önce hazır kısayolu
+  ekletir (iCloud bağlantısı açılır, kullanıcı "Kısayolu Ekle"ye dokunur), otomasyonun son adımında eylem aranmaz,
+  listeden `mesajKisayoluAdi` adlı kısayol seçilir. Bağlantıyı uygulama ya da CI üretemez; bir kez elle oluşturulur:
+  1.2.0 kurulu bir iPhone'da Kısayollar → yeni kısayol → eylem: CashFollow **Banka mesajından harcama ekle**, Mesaj:
+  **Kısayol Girdisi** → adı `CashFollow Banka Mesajı` → Paylaş → **iCloud Bağlantısını Kopyala**. Bağlantı
+  `Yapilandirma.swift`'e yazılır. Kısayol paylaşanın iCloud hesabında durur: silinirse düğme çalışmaz. Düğme yalnızca
+  kısayolu ekler; tetikleyiciyi (otomasyonu) iOS yine kullanıcıya kurdurur.
 - **Kurulum neden elle:** iOS bir uygulamanın otomasyon (tetikleyici) kurmasına izin vermez; paylaşılan kısayol
   bağlantıları da tetikleyiciyi taşımaz. Bu yüzden kullanıcıdan banka adı ya da kelime istenmez: tek otomasyon, sabit
   "TL" sözüyle bütün bankaların mesajlarını yakalar. İçinde TL geçen kişisel mesajlar da uygulamaya gelir; telefonda

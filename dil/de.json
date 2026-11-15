@@ -1562,5 +1562,8 @@
  "harcama": "Ausgabe",
  "harcama değil": "keine Ausgabe",
  "Telefondaki model: {0}": "Modell auf dem Gerät: {0}",
- "Telefondaki model yanıt vermedi: {0}": "Das Modell auf dem Gerät hat nicht geantwortet: {0}"
+ "Telefondaki model yanıt vermedi: {0}": "Das Modell auf dem Gerät hat nicht geantwortet: {0}",
+ "Kısayolu ekle": "Kurzbefehl hinzufügen",
+ "\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle.": "Tippe auf „Kurzbefehl hinzufügen“ und füge den Kurzbefehl auf der Seite hinzu, die sich öffnet.",
+ "Listeden \"{0}\" kısayolunu seç.": "Wähle in der Liste den Kurzbefehl „{0}“."
 }

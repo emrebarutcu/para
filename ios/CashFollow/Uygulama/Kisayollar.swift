@@ -12,7 +12,9 @@ struct BankaMesajiEkle: AppIntent {
     static let description = IntentDescription("Bankanın harcama mesajını okur ve CashFollow'a harcama olarak ekler. Mesaj telefonda okunur.")
     static let openAppWhenRun = false
 
-    @Parameter(title: "Mesaj")
+    // Girdi bir önceki adımın (otomasyonda: gelen mesajın) çıktısına bağlanabilir; Kısayollar bunu kendiliğinden
+    // yapmayabilir, o zaman kullanıcı alanı "Kısayol Girdisi"ne elle bağlar (kurulum adımlarında yazılı)
+    @Parameter(title: "Mesaj", inputConnectionBehavior: .connectToPreviousIntentResult)
     var mesaj: String
 
     @MainActor

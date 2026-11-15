@@ -1562,5 +1562,8 @@
  "harcama": "عملية شراء",
  "harcama değil": "ليست عملية شراء",
  "Telefondaki model: {0}": "النموذج على الجهاز: {0}",
- "Telefondaki model yanıt vermedi: {0}": "لم يُجب النموذج على الجهاز: {0}"
+ "Telefondaki model yanıt vermedi: {0}": "لم يُجب النموذج على الجهاز: {0}",
+ "Kısayolu ekle": "إضافة الاختصار",
+ "\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle.": "اضغط على «إضافة الاختصار»؛ وفي الصفحة التي تفتح أضف الاختصار.",
+ "Listeden \"{0}\" kısayolunu seç.": "اختر الاختصار «{0}» من القائمة."
 }

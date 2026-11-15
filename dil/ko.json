@@ -1562,5 +1562,8 @@
  "harcama": "구매",
  "harcama değil": "구매 아님",
  "Telefondaki model: {0}": "기기 내 모델: {0}",
- "Telefondaki model yanıt vermedi: {0}": "기기 내 모델이 응답하지 않았습니다: {0}"
+ "Telefondaki model yanıt vermedi: {0}": "기기 내 모델이 응답하지 않았습니다: {0}",
+ "Kısayolu ekle": "단축어 추가",
+ "\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle.": "'단축어 추가'를 탭하고, 열린 페이지에서 단축어를 추가하세요.",
+ "Listeden \"{0}\" kısayolunu seç.": "목록에서 '{0}' 단축어를 선택하세요."
 }

@@ -475,12 +475,27 @@ struct MesajAyarlari: View {
             }
 
             Section {
-                adim(1, L("Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle."))
-                // Tek otomasyon bütün bankaları yakalasın: harcama mesajlarının hepsinde "TL" geçer; gerisini uygulama eler
-                adim(2, L("Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz."))
-                adim(3, L("\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat."))
-                adim(4, L("Eylem olarak CashFollow'un \"Banka mesajından harcama ekle\" eylemini seç."))
-                adim(5, L("Eylemdeki Mesaj alanına dokun ve \"Kısayol Girdisi\"ni seç."))
+                // Hazır kısayol paylaşılmışsa (Yapilandirma.mesajKisayolu) önce o eklenir; otomasyonun son adımında eylem
+                // aranıp girdisi bağlanmaz, listeden kısayol seçilir. Tetikleyiciyi (otomasyonu) iOS yine kullanıcıya kurdurur.
+                if let kisayol = Yapilandirma.mesajKisayolu {
+                    adim(1, L("\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle."))
+                    Button(L("Kısayolu ekle")) {
+                        Analitik.olay("sms_shortcut_added")
+                        openURL(kisayol)
+                    }
+                    .fontWeight(.semibold)
+                    adim(2, L("Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle."))
+                    adim(3, L("Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz."))
+                    adim(4, L("\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat."))
+                    adim(5, L("Listeden \"{0}\" kısayolunu seç.", Yapilandirma.mesajKisayoluAdi))
+                } else {
+                    adim(1, L("Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle."))
+                    // Tek otomasyon bütün bankaları yakalasın: harcama mesajlarının hepsinde "TL" geçer; gerisini uygulama eler
+                    adim(2, L("Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz."))
+                    adim(3, L("\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat."))
+                    adim(4, L("Eylem olarak CashFollow'un \"Banka mesajından harcama ekle\" eylemini seç."))
+                    adim(5, L("Eylemdeki Mesaj alanına dokun ve \"Kısayol Girdisi\"ni seç."))
+                }
                 Button(L("Kısayollar'ı aç")) {
                     Analitik.olay("sms_setup_opened")
                     if let u = URL(string: "shortcuts://") { openURL(u) }

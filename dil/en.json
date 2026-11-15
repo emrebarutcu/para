@@ -1562,5 +1562,8 @@
  "harcama": "purchase",
  "harcama değil": "not a purchase",
  "Telefondaki model: {0}": "On-device model: {0}",
- "Telefondaki model yanıt vermedi: {0}": "The on-device model did not answer: {0}"
+ "Telefondaki model yanıt vermedi: {0}": "The on-device model did not answer: {0}",
+ "Kısayolu ekle": "Add the shortcut",
+ "\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle.": "Tap \"Add the shortcut\"; on the page that opens, add the shortcut.",
+ "Listeden \"{0}\" kısayolunu seç.": "Choose the \"{0}\" shortcut from the list."
 }

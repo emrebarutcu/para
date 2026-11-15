@@ -1562,5 +1562,8 @@
  "harcama": "compra",
  "harcama değil": "não é compra",
  "Telefondaki model: {0}": "Modelo no aparelho: {0}",
- "Telefondaki model yanıt vermedi: {0}": "O modelo no aparelho não respondeu: {0}"
+ "Telefondaki model yanıt vermedi: {0}": "O modelo no aparelho não respondeu: {0}",
+ "Kısayolu ekle": "Adicionar o atalho",
+ "\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle.": "Toque em \"Adicionar o atalho\"; na página que abrir, adicione o atalho.",
+ "Listeden \"{0}\" kısayolunu seç.": "Escolha o atalho \"{0}\" na lista."
 }
