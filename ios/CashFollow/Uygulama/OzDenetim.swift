@@ -166,6 +166,24 @@ enum OzDenetim {
                       && kutu.lastEmail?.kind == "test" && Senkron.time(kutu.lastEmail?.receivedAt ?? "") != nil, "banka e-postaları: \(kutu)")
             m.setInbox(rows: "[]")
 
+            // Banka mesajları (SMS; Mesajlar.swift): şifre mesajı alınmaz, harcama kuyruğa girer ve kutuda "sms" olarak
+            // çözülür; telefondaki modelin tutarı uyuşmazsa onaya düşer (eposta.js sms). Model yoksa ipucu nil döner.
+            let sifre = "MIGROS isyerindeki 450,00 TL tutarindaki isleminiz icin sifreniz: 123456. Sifrenizi kimseyle paylasmayin."
+            let harcamaM = "Kartinizla 17.10.2026 tarihinde A101 den 125,50 TL lik islem gerceklestirilmistir."
+            try check(m.smsKind(sifre) == "otp" && m.smsSkip(sifre, ipucu: Mesajlar.Ipucu(purchase: true, merchant: "MIGROS", amount: "450,00")),
+                      "banka mesajı: şifre")
+            try check(m.smsKind(harcamaM) == "spend" && !m.smsSkip(harcamaM, ipucu: nil), "banka mesajı: harcama")
+            let satirlar = [Mesajlar.Satir(id: -2, body: harcamaM, received_at: "2026-10-17T12:00:00Z", source: "sms", hint: nil),
+                            Mesajlar.Satir(id: -3, body: harcamaM, received_at: "2026-10-17T12:00:00Z", source: "sms",
+                                           hint: Mesajlar.Ipucu(purchase: true, merchant: "A101", amount: "12,55"))]
+            let satirVerisi = try JSONEncoder().encode(satirlar)
+            m.setInbox(rows: String(decoding: satirVerisi, as: UTF8.self))
+            let mesajlar = (try m.run("list_inbox") as EpostaListesi).emails
+            try check(mesajlar.map { $0.source ?? "" } == ["sms", "sms"] && mesajlar.first?.parsed.merchant == "A101"
+                      && mesajlar.first?.parsed.amount == 125.5 && mesajlar.last?.needsReview == "Amount could not be confirmed",
+                      "banka mesajları: \(mesajlar)")
+            m.setInbox(rows: "[]")
+
             // CashFollow Premium: hesabın satırı (tablo.js premium, köprüden), ürünler ve ücretsiz sürümün sınırları
             let gun: TimeInterval = 86_400
             let iso = { (d: Date) in ISO8601DateFormatter().string(from: d) }

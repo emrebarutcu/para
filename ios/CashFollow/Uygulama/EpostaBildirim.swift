@@ -44,7 +44,8 @@ enum EpostaBildirim {
         d.set(Array(once.suffix(200)), forKey: bildirilenler)
     }
 
-    static func bildir(eklenen: [Harcama], bekleyen: [Eposta]) async {
+    // mesaj: banka mesajından (SMS; Mesajlar.swift) geldi, başlıklar ona göre
+    static func bildir(eklenen: [Harcama], bekleyen: [Eposta], mesaj: Bool = false) async {
         let c = UNUserNotificationCenter.current()
         let izin = await c.notificationSettings().authorizationStatus
         guard izin == .authorized || izin == .provisional else { return }
@@ -53,7 +54,8 @@ enum EpostaBildirim {
 
         if !eklenen.isEmpty {
             let i = icerik()
-            i.title = eklenen.count == 1 ? L("E-postadan eklendi") : L("E-postadan {0} harcama eklendi", eklenen.count)
+            i.title = mesaj ? L("Banka mesajından eklendi")
+                : eklenen.count == 1 ? L("E-postadan eklendi") : L("E-postadan {0} harcama eklendi", eklenen.count)
             var satirlar = eklenen.prefix(3).map(satir)
             if eklenen.count > 3 { satirlar.append(L("ve {0} harcama daha", eklenen.count - 3)) }
             i.body = satirlar.joined(separator: "\n")
@@ -61,7 +63,8 @@ enum EpostaBildirim {
         }
         if let ilk = yeni.first {
             let i = icerik()
-            i.title = yeni.count == 1 ? L("Bir e-posta onay bekliyor") : L("{0} e-posta onay bekliyor", yeni.count)
+            i.title = mesaj ? L("Bir banka mesajı onay bekliyor")
+                : yeni.count == 1 ? L("Bir e-posta onay bekliyor") : L("{0} e-posta onay bekliyor", yeni.count)
             i.body = bekleyenSatiri(ilk)
             try? await c.add(UNNotificationRequest(identifier: "eposta-bekliyor-\(ilk.emailId)", content: i, trigger: nil))
             goruldu(yeni.map(\.emailId))
@@ -89,7 +92,7 @@ enum EpostaBildirim {
         if e.needsReview?.hasPrefix("No card with last4") == true, let l = e.parsed.cardLast4 {
             return [L("•••• {0} hangi kartın?", l), ne].filter { !$0.isEmpty }.joined(separator: " ")
         }
-        return ne.isEmpty ? (EpostaKarti.neden(e.needsReview, e.parsed) ?? L("Banka e-postası")) : ne
+        return ne.isEmpty ? (EpostaKarti.neden(e.needsReview, e.parsed) ?? (e.source == "sms" ? L("Banka mesajı") : L("Banka e-postası"))) : ne
     }
 }
 

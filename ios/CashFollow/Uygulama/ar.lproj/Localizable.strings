@@ -1,0 +1,4 @@
+/* Kısayollar eyleminin sistemde görünen metinleri (Kisayollar.swift). Anahtar Türkçe metnin kendisidir. */
+"Banka mesajından harcama ekle" = "إضافة عملية شراء من رسالة البنك";
+"Bankanın harcama mesajını okur ve CashFollow'a harcama olarak ekler. Mesaj telefonda okunur." = "يقرأ رسالة الإنفاق من بنكك ويضيفها إلى CashFollow كعملية شراء. تُقرأ الرسالة على هاتفك.";
+"Mesaj" = "الرسالة";

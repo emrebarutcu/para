@@ -99,6 +99,10 @@
   function smsSkip(text, hintJson) {
     return !!root.Eposta.sms(String(text ?? ""), hintJson ? JSON.parse(hintJson) : null).skip;
   }
+  // Kuralların gördüğü tür: "otp" ise model hiç çağrılmaz (eposta.js smsKind)
+  function smsKind(text) {
+    return root.Eposta.smsKind(String(text ?? ""));
+  }
   function inboxReleased() {
     const out = inbox.released;
     inbox.released = [];
@@ -316,7 +320,7 @@
   };
 
   root.Kopru = {
-    loadTools, toScript, setRates, setPrices, setHome, setCountry, setCashDef, setInbox, inboxReleased, smsSkip, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
+    loadTools, toScript, setRates, setPrices, setHome, setCountry, setCashDef, setInbox, inboxReleased, smsSkip, smsKind, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
     merchants, finishing, monthSummary, cutoffs,
     defaultState: () => JSON.stringify(T.defaultState()),
   };
