@@ -132,6 +132,10 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
+- **1.2.0** — **Banka mesajından harcama** (iPhone, Türkiye; Kısayollar otomasyonu, bölüm 6 → Banka mesajları) ve
+  **bildirim seçimi** (Ayarlar → Bildirimler: her tür ayrı). **Yayından önce** `supabase/gecis/1.2.0.sql` çalıştırılır:
+  `app_config` tablosu (herkes okur, yalnızca panelden yazılır; `sms_shortcut_url`). Tablo yoksa uygulama çalışır, yalnızca
+  "Kısayolu ekle" düğmesi görünmez. MCP: `try_bank_email` aracına `sms` ve `hint`.
 - **8.10.0** — **Japonya: bonus ödemesi** (ボーナス払い; yalnızca ülkesi Japonya olan hesapta, `para.js features` `bonus`). Kartlı
   harcama yaz ya da kış bonusu ayında, kartın son ödeme gününde tek seferde (`purchases.bonus`, `count` 1) ya da art arda
   iki bonusa yarı yarıya (`count` 2, ボーナス2回払い) ödenir. Bonus ayları kartta (`cards.bonus_months` [yaz, kış]; boşsa
@@ -1005,13 +1009,17 @@ telefondan çıkmaz. Yalnızca Türkiye'deki hesaplarda (`bankEmails` özelliği
   CashFollow'un **Banka mesajından harcama ekle** eylemi, giriş: Kısayol Girdisi). Adımlar uygulamada: Ayarlar →
   **Banka mesajları (SMS)**. Eylem `Uygulama/Kisayollar.swift` (App Intents; uygulama öne gelmez), giriş
   `Mesajlar.geldi`.
-- **"Kısayolu ekle" düğmesi (hazır kısayol):** `Yapilandirma.mesajKisayolu` doluysa kurulum ekranı önce hazır kısayolu
-  ekletir (iCloud bağlantısı açılır, kullanıcı "Kısayolu Ekle"ye dokunur), otomasyonun son adımında eylem aranmaz,
-  listeden `mesajKisayoluAdi` adlı kısayol seçilir. Bağlantıyı uygulama ya da CI üretemez; bir kez elle oluşturulur:
-  1.2.0 kurulu bir iPhone'da Kısayollar → yeni kısayol → eylem: CashFollow **Banka mesajından harcama ekle**, Mesaj:
-  **Kısayol Girdisi** → adı `CashFollow Banka Mesajı` → Paylaş → **iCloud Bağlantısını Kopyala**. Bağlantı
-  `Yapilandirma.swift`'e yazılır. Kısayol paylaşanın iCloud hesabında durur: silinirse düğme çalışmaz. Düğme yalnızca
-  kısayolu ekler; tetikleyiciyi (otomasyonu) iOS yine kullanıcıya kurdurur.
+- **"Kısayolu ekle" düğmesi (hazır kısayol):** bağlantı Supabase'de, **`app_config`** tablosunda, anahtarı
+  **`sms_shortcut_url`** (Supabase → Table Editor → `app_config` → değeri yaz ya da sil; sürüm gerekmez). Uygulama her
+  açılışta ve kurulum ekranı açılınca okur, telefonda saklar (`Cekirdek/UzakAyar.swift`). Doluysa kurulum ekranı önce
+  hazır kısayolu ekletir (iCloud bağlantısı açılır, kullanıcı "Kısayolu Ekle"ye dokunur), otomasyonun son adımında eylem
+  aranmaz, listeden `mesajKisayoluAdi` adlı kısayol seçilir; boşsa eylem seçilerek kurulur. Yalnızca
+  `https://www.icloud.com/shortcuts/…` kabul edilir: başka bir adres yazılırsa düğme görünmez. Bağlantıyı uygulama ya da
+  CI üretemez (Apple kısayolun bir Apple hesabıyla imzalanmasını ister); bir kez elle oluşturulur: 1.2.0 kurulu bir
+  iPhone'da Kısayollar → yeni kısayol → eylem: CashFollow **Banka mesajından harcama ekle**, Mesaj: **Kısayol Girdisi** →
+  adı `CashFollow Banka Mesajı` → Paylaş → **iCloud Bağlantısını Kopyala**. Kısayol paylaşanın iCloud hesabında durur:
+  silinirse tablodaki değer de silinir. Düğme yalnızca kısayolu ekler; tetikleyiciyi (otomasyonu) iOS yine kullanıcıya
+  kurdurur.
 - **Kurulum neden elle:** iOS bir uygulamanın otomasyon (tetikleyici) kurmasına izin vermez; paylaşılan kısayol
   bağlantıları da tetikleyiciyi taşımaz. Bu yüzden kullanıcıdan banka adı ya da kelime istenmez: tek otomasyon, sabit
   "TL" sözüyle bütün bankaların mesajlarını yakalar. İçinde TL geçen kişisel mesajlar da uygulamaya gelir; telefonda

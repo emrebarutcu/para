@@ -204,6 +204,13 @@ enum OzDenetim {
             try check(Bildirimler.turler(banka: false).count == 4 && Bildirimler.turler(banka: true).count == 6, "bildirim türleri")
             for k in ["bildirim.gecis", "hatirlatma.acik", "hatirlatma.kesim", "eposta.bildirim", "eposta.bildirim.bekleyen"] { u.removeObject(forKey: k) }
 
+            // Uygulama ayarları (app_config): kısayol bağlantısı yalnızca iCloud'daki bir kısayolsa kullanılır
+            try check(UzakAyar.kisayolAdresi(" https://www.icloud.com/shortcuts/0a1b2c3d4e ") != nil
+                      && UzakAyar.kisayolAdresi("https://icloud.com/shortcuts/0a1b2c") != nil, "kısayol bağlantısı: geçerli")
+            try check(["", "http://www.icloud.com/shortcuts/0a1b", "https://ornek.com/shortcuts/0a1b", "https://www.icloud.com/shortcuts/",
+                       "https://www.icloud.com/photos/0a1b", "shortcuts://run-shortcut?name=x"].allSatisfy { UzakAyar.kisayolAdresi($0) == nil },
+                      "kısayol bağlantısı: geçersizler")
+
             // CashFollow Premium: hesabın satırı (tablo.js premium, köprüden), ürünler ve ücretsiz sürümün sınırları
             let gun: TimeInterval = 86_400
             let iso = { (d: Date) in ISO8601DateFormatter().string(from: d) }

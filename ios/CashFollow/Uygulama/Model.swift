@@ -146,9 +146,11 @@ final class Model: ObservableObject {
     // Uygulama açılınca, öne gelince ve aşağı çekince: kurlar, fiyatlar; girişliyse çek ve yaz
     func refresh() async {
         async let market: Void = refreshMarket()
+        async let ayarlar: Void = UzakAyar.yenile()   // app_config (ör. hazır kısayolun bağlantısı)
         await run { try await $0.pull(); try await $0.push() }
         await checkInbox()
         await market
+        await ayarlar
         await sendProfile()
         await abonelik.yenile()
     }

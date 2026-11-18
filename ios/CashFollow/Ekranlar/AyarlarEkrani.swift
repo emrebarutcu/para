@@ -464,6 +464,7 @@ struct MesajAyarlari: View {
     @State private var deneniyor = false
     @State private var hata: String?
     @State private var modelNotu: String?   // denemede telefondaki modelin okuduğu ya da neden yanıt vermediği
+    @State private var kisayol = Yapilandirma.mesajKisayolu   // app_config'ten (UzakAyar); ekran açılınca yeniden okunur
 
     struct Deneme: Decodable {
         let parsed: Eposta.Okunan
@@ -485,7 +486,7 @@ struct MesajAyarlari: View {
             Section {
                 // Hazır kısayol paylaşılmışsa (Yapilandirma.mesajKisayolu) önce o eklenir; otomasyonun son adımında eylem
                 // aranıp girdisi bağlanmaz, listeden kısayol seçilir. Tetikleyiciyi (otomasyonu) iOS yine kullanıcıya kurdurur.
-                if let kisayol = Yapilandirma.mesajKisayolu {
+                if let kisayol {
                     adim(1, L("\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle."))
                     Button(L("Kısayolu ekle")) {
                         Analitik.olay("sms_shortcut_added")
@@ -532,6 +533,10 @@ struct MesajAyarlari: View {
         }
         .navigationTitle(L("Banka mesajları (SMS)"))
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await UzakAyar.yenile()
+            kisayol = Yapilandirma.mesajKisayolu
+        }
     }
 
     private func adim(_ n: Int, _ metin: String) -> some View {
