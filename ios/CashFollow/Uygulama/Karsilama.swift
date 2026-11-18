@@ -4,10 +4,9 @@ import Foundation
 // girer, "bu ay ne ödeyeceğini" ilk dakikada görür; hesap isteğe bağlı ("Hesabım var, giriş yap", Ayarlar).
 //
 // Kim görür: yalnızca yeni kurulum (karsilama.ilkAcilis > 0). Uygulamayı daha önce kullanmış olan (cihaz kimliği,
-// ülke, girişsiz seçimi ya da Anahtar Zinciri'nde oturum var) eski giriş ekranını görür ve denemeye girmez.
-// A/B: PostHog bayrağı "onboarding_flow" — "control" giriş ekranı (GirisEkrani), başka her değer yeni akış. Bayrak
-// en fazla 1,5 saniye beklenir; gelmezse (çevrimdışı, analitik kapalı) yeni akış ("fallback", çözümlemeden çıkarılır).
-// Bayrağı %100 "control" yapmak yeni akışı uzaktan kapatır.
+// ülke, girişsiz seçimi ya da Anahtar Zinciri'nde oturum var) eski giriş ekranını görür.
+// A/B denemesi yok (Kasım 2026 kararı: kol başına ~2.900 kurulum gerekiyordu): her yeni kurulum yeni akışı görür, bayrak
+// beklenmez; etki önce / sonra kohortlarıyla ölçülür (TUTUNDURMA.md → Ölçüm). "onboarding_flow" bayrağı okunmaz.
 //
 // Olaylar (ad İngilizce, tutar / ad içermez; SETUP.md → Analitik → Karşılama hunisi): onboarding_started (deneme
 // girişi, iki kolda bir kez), onboarding_step_viewed / _completed / _skipped, onboarding_aha_viewed, onboarding_closed,
@@ -15,7 +14,6 @@ import Foundation
 @MainActor
 enum Karsilama {
     static let surum = 1
-    static let bayrakAdi = "onboarding_flow"
     private static let d = UserDefaults.standard
 
     // Uygulama açılışında bir kez: yeni kurulumda ilk açılışın zamanı, daha önce kullanılmışsa 0
@@ -30,28 +28,24 @@ enum Karsilama {
     static var yeniKurulum: Bool { ilkAcilis > 0 }
     // İlk açılıştan bu yana 72 saat geçmedi: Özet'teki "Verilerin yalnızca bu telefonda" notu bu sürede gösterilmez
     static var yeni: Bool { yeniKurulum && Date().timeIntervalSince1970 - ilkAcilis < 72 * 3600 }
-    // Denemedeki kol: eylem, control, default (bayrak tanımlı değil), fallback (bayrak gelmedi); denemede değilse nil
+    // Akışa giren yeni kurulum: "default" (deneme yokken hep bu; eski sürümlerden control / fallback kalmış olabilir);
+    // akışa girmediyse nil
     static var varyant: String? { d.string(forKey: "karsilama.varyant") }
     private static var bitti: Bool { d.object(forKey: "karsilama.bitis") != nil }
 
-    // Hangi karşılama: "eylem" yeni akış, "control" giriş ekranı, "returning" daha önce kullanılmış ya da akışı bitirmiş
-    // (deneme dışı; örneğin akıştan giriş yapıp sonra çıkış yapan giriş ekranını görür). Bayrak beklemeden belli
-    // olanlar hemen (kapı boş kare göstermez); belli değilse nil
+    // Hangi karşılama: "eylem" yeni akış, "returning" daha önce kullanılmış ya da akışı bitirmiş (örneğin akıştan giriş
+    // yapıp sonra çıkış yapan giriş ekranını görür). Olay yazmadan belli olanlar; ilk açılışta nil (kolSec başlatır)
     static var hazirKol: String? {
         if CommandLine.arguments.contains("-karsilama") { return "eylem" }   // simülatörde denemek için
         if bitti || !yeniKurulum { return "returning" }
-        if let v = varyant { return v == "control" ? "control" : "eylem" }
-        return nil
+        return varyant == nil ? nil : "eylem"
     }
 
     static func kolSec() async -> String {
         if let k = hazirKol { return k }
-        let bayrak = await Analitik.bayrakBekle(bayrakAdi)
-        let v = bayrak ?? (Analitik.bayraklarYuklendi ? "default" : "fallback")
-        d.set(v, forKey: "karsilama.varyant")
-        if let bayrak { Analitik.kolAyarla(bayrakAdi, bayrak) }
+        d.set("default", forKey: "karsilama.varyant")
         olay("onboarding_started", ["entry": "first_open"])
-        return v == "control" ? "control" : "eylem"
+        return "eylem"
     }
 
     // Akışın olayları: sürüm ve kol her olayda; denemede olmayanınki gönderilmez

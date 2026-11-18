@@ -30,6 +30,7 @@ struct OzetEkrani: View {
                         if !bos {
                             if !bitenler.isEmpty { BitenTaksitKarti(bitenler: bitenler, kapat: kutlamayiKapat) }
                             BuAyKarti(o: o)
+                            IcgoruTepesi()
                             siradakiler(o)
                             if teklif, !o.upcomingPayments.isEmpty { HatirlatmaTeklifi(goster: $teklif) }
                             if let a = aySonu, ozetKapatilan != a.month {
@@ -313,25 +314,63 @@ struct AyKapanisiKarti: View {
     }
 }
 
-// İçgörüler: en önemlileri, "Tümü" ile hepsi (get_insights)
+// İyi haber, Özet'in tepesinde tek satır (get_insights → headline): ay sonunda kalan serbest nakit ya da bugünün kartı.
+// Premium istemez; dokununca açıklaması açılır.
+struct IcgoruTepesi: View {
+    @State private var acik = false
+
+    var body: some View {
+        Okunan(tool: "get_insights") { (i: Icgoruler) in
+            if let t = i.headline {
+                Button {
+                    withAnimation { acik.toggle() }
+                    if acik { Analitik.olay("insight_headline_opened", ["id": t.id]) }
+                } label: {
+                    Kart {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Image(systemName: t.id == "kart" ? "creditcard" : "checkmark.circle.fill").foregroundStyle(Tema.iyi)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(t.title).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                                    .multilineTextAlignment(.leading)
+                                if acik {
+                                    Text(t.text).font(.footnote).foregroundStyle(Tema.metin2).multilineTextAlignment(.leading)
+                                }
+                            }
+                            Spacer(minLength: 4)
+                            Image(systemName: acik ? "chevron.up" : "chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// İçgörüler (get_insights): tepedeki satırın (IcgoruTepesi) dışındakiler; en önemlileri, "Tümü" ile hepsi.
+// Ücretsiz sürümde iyi haberler (free) açık, gerisi için kilit.
 struct IcgoruBolumu: View {
     @EnvironmentObject private var abonelik: Abonelik
     @State private var hepsi = false
 
     var body: some View {
         Okunan(tool: "get_insights") { (i: Icgoruler) in
-            if !i.insights.isEmpty, !abonelik.premium {
-                PremiumKilidi(baslik: L("İçgörüler"), aciklama: L("{0} içgörü hazır: harcama alışkanlıkların, yaklaşan yükler ve öneriler.", i.insights.count), neden: "insights")
-            } else if !i.insights.isEmpty {
+            let kalan = i.insights.filter { $0.id != i.headline?.id }
+            let gorunen = abonelik.premium ? kalan : kalan.filter { $0.free == true }
+            let kilitli = kalan.count - gorunen.count
+            if !gorunen.isEmpty {
                 Kart {
                     KartBasligi(baslik: L("İçgörüler")) {
-                        if i.insights.count > 2 {
-                            Button(hepsi ? L("Daha az") : L("Tümü ({0})", i.insights.count)) { withAnimation { hepsi.toggle() } }
+                        if gorunen.count > 2 {
+                            Button(hepsi ? L("Daha az") : L("Tümü ({0})", gorunen.count)) { withAnimation { hepsi.toggle() } }
                                 .font(.subheadline).foregroundStyle(Tema.metin2)
                         }
                     }
-                    SatirListesi(veri: hepsi ? i.insights : Array(i.insights.prefix(2))) { IcgoruSatiri(i: $0) }
+                    SatirListesi(veri: hepsi ? gorunen : Array(gorunen.prefix(2))) { IcgoruSatiri(i: $0) }
                 }
+            }
+            if kilitli > 0 {
+                PremiumKilidi(baslik: L("İçgörüler"), aciklama: L("{0} içgörü hazır: harcama alışkanlıkların, yaklaşan yükler ve öneriler.", kilitli), neden: "insights")
             }
         }
     }

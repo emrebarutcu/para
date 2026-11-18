@@ -57,6 +57,16 @@ struct Isyeri: Decodable, Hashable, Identifiable {
     var id: String { desc }
 }
 
+// Tek satırla kayıt (taksit.js parseLine): cardId kartın kimliği ya da "nakit", bulunmadıysa nil; sure: ad içindeki sayı
+// tutar sanılmasın diye ("iPhone 15") form yalnızca true iken doldurur
+struct TekSatir: Decodable, Hashable {
+    let desc: String
+    let amount: Double
+    let count: Int?
+    let cardId: String?
+    let sure: Bool
+}
+
 // Son taksidi ödenen harcama (icgoru.js finishing): date son ödeme günü, monthly boşalan aylık tutar, freeFrom boşalan ilk ay
 struct BitenTaksit: Decodable, Hashable, Identifiable {
     let id: String
@@ -372,8 +382,17 @@ struct Icgoruler: Decodable {
         let tone: String?
         let title: String
         let text: String
+        let free: Bool?   // Premium istemez (serbest nakit, son taksit, bugünün kartı; icgoru.js FREE)
+    }
+    // Özet'in tepesindeki tek satır (icgoru.js headline): ay sonunda kalan serbest nakit ya da bugünün kartı
+    struct Tepe: Decodable, Hashable {
+        let id: String
+        let tone: String?
+        let title: String
+        let text: String
     }
     let insights: [Icgoru]
+    let headline: Tepe?
 }
 
 struct KategoriHarcamasi: Decodable {

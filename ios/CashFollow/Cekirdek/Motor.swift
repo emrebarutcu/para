@@ -217,6 +217,11 @@ final class Motor {
         (try? JSONDecoder().decode([Isyeri].self, from: call("merchants", [q, limit]))) ?? []
     }
 
+    // Tek satırla kayıt: "buzdolabı 36000 bonus 6 taksit" (taksit.js parseLine); tek satır değilse nil
+    func parseLine(_ text: String, decimal: String) -> TekSatir? {
+        try? JSONDecoder().decode(TekSatir?.self, from: call("parseLine", [text, decimal]))
+    }
+
     // Son ödemesi from–to (YYYY-MM-DD) arasında olan taksitli harcamalar
     func finishing(from: String, to: String) -> [BitenTaksit] {
         (try? JSONDecoder().decode([BitenTaksit].self, from: call("finishing", [from, to]))) ?? []

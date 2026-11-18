@@ -19,7 +19,7 @@ enum Hatirlatma {
     private static let enFazla = 40
     private static let d = UserDefaults.standard
 
-    // Ek bildirimler. 1.2.0'dan önce yalnızca ödeme hatırlatması açıkken gönderiliyorlardı; gecis() o kullanıcıların
+    // Ek bildirimler. 1.3.0'dan önce yalnızca ödeme hatırlatması açıkken gönderiliyorlardı; gecis() o kullanıcıların
     // durumunu korur (hatırlatması kapalı olanda üçü de kapalı başlar)
     nonisolated static var kesim: Bool {
         get { UserDefaults.standard.object(forKey: "hatirlatma.kesim") as? Bool ?? true }
@@ -42,7 +42,7 @@ enum Hatirlatma {
     // Herhangi bir zamanlanmış bildirim açık mı (kur bunlara bakar)
     static var herhangi: Bool { acik || kesim || bitis || ayOzeti }
 
-    // Bir kez (1.2.0): türler birbirinden bağımsız oldu. Eskiden ödeme hatırlatması kapalıyken kesim, taksit bitişi ve
+    // Bir kez (1.3.0): türler birbirinden bağımsız oldu. Eskiden ödeme hatırlatması kapalıyken kesim, taksit bitişi ve
     // ay özeti de gönderilmiyordu; o kullanıcılarda üçü kapalı başlar, kimseye yeni bildirim kendiliğinden açılmaz.
     // Yeni kurulumda da öyle: ilk açılış akışındaki "Hatırlat" (ac) hepsini birden açar.
     nonisolated static func gecis() {

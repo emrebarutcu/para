@@ -10,7 +10,7 @@ import UserNotifications
 // Kart ve harcama gerçek kayıttır (add_card, add_purchase): pencere kapanınca Özet dolu açılır, Başlarken'de iki adım
 // işaretli. ✕ her adımda Özet'e geçer. Uygulama 1. ekrandan sonra kapanırsa sonraki açılış Özet'le başlar.
 
-// Kapı: yeni kullanıcıya akış; daha önce kullanmış olana ve denemenin control koluna giriş ekranı (GirisEkrani)
+// Kapı: yeni kullanıcıya akış; daha önce kullanmış olana giriş ekranı (GirisEkrani)
 struct KarsilamaKapisi: View {
     @EnvironmentObject private var model: Model
     @State private var kol: String?
@@ -28,7 +28,7 @@ struct KarsilamaKapisi: View {
         }
         .interactiveDismissDisabled()
         .task { if self.kol == nil { self.kol = await Karsilama.kolSec() } }
-        // Pencere kapandı: giriş ekranından (control) ya da akıştan giriş yapılarak; akışın kendi sonu önce yazılır
+        // Pencere kapandı: giriş ekranından ya da akıştan giriş yapılarak; akışın kendi sonu önce yazılır
         .onDisappear { Karsilama.bitir(yol: model.session != nil ? "account" : "offline") }
     }
 }

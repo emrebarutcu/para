@@ -124,10 +124,10 @@ enum Mesajlar {
     static func geldi(_ ham: String) async -> Sonuc {
         let metin = ham.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !metin.isEmpty, metin.count <= 1600, ilkKez(metin) else { return kaydet(.atlandi) }
-        var model = Model.ortak
+        var model = Model.etkin
         for _ in 0..<30 where model == nil {
             try? await Task.sleep(nanoseconds: 100_000_000)
-            model = Model.ortak
+            model = Model.etkin
         }
         guard let model else {
             let kucuk = metin.lowercased(with: Locale(identifier: "tr_TR"))

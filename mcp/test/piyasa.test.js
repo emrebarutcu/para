@@ -20,8 +20,9 @@ const QUOTES = {
   GARAN: { symbol: "GARAN", last: 125.4, dayClose: 126.7, basePrice: 126.7, updateDate: "2026-10-30T12:51:19.000+03" },
 };
 
-// Sahte TEFAS ve İş Yatırım. days: fon türü → fiyatı olan günler (yoksa yalnızca 2026-10-30)
-function fake({ days = {}, down = {} } = {}) {
+// Sahte TEFAS ve İş Yatırım. days: fon türü → fiyatı olan günler (yoksa yalnızca 2026-10-30); anyDay: sorulan her günün
+// fiyatı var (gerçek saatle çalışan işleyici testleri için: bugünden geriye bakınca 30 Ekim'e ulaşılamaz)
+function fake({ days = {}, down = {}, anyDay = false } = {}) {
   const calls = [];
   const fn = async (input, init = {}) => {
     const url = new URL(input);
@@ -30,7 +31,7 @@ function fake({ days = {}, down = {} } = {}) {
       calls.push({ host: "tefas", kind: body.fonTipi, day: body.basTarih });
       if (down.tefas?.includes(body.fonTipi)) return new Response("", { status: 503 });
       const day = `${body.basTarih.slice(0, 4)}-${body.basTarih.slice(4, 6)}-${body.basTarih.slice(6)}`;
-      const ok = (days[body.fonTipi] ?? ["2026-10-30"]).includes(day);
+      const ok = anyDay || (days[body.fonTipi] ?? ["2026-10-30"]).includes(day);
       const list = ok ? FUNDS[body.fonTipi].map(r => ({ ...r, tarih: day })) : [];
       return Response.json(list.length ? { errorCode: null, errorMessage: null, resultList: list }
         : { errorCode: null, errorMessage: "Index 0 out of bounds for length 0", resultList: null });
@@ -137,8 +138,10 @@ test("/api/fiyat kodları doğrular; /api/fonlar listeyi verir", async () => {
   assert.equal(bad.status, 400);
   const none = await handlePrices(new Request("https://cashfollow.app/api/fiyat"));
   assert.equal(none.status, 400);
-  // Ağ yok: global fetch'e gider; burada sahte fetch'le doldurulmuş önbellek kullanılır
-  await getPrices(["FON:AFT", "BIST:THYAO"], { fetch: fake().fetch, now: Date.now });
+  // İşleyici global fetch'e gider; burada sahte fetch'le doldurulmuş önbellek kullanılır. Önbellek gerçek saatle
+  // doldurulur (işleyici de gerçek saate bakar), bu yüzden sahte TEFAS sorulan her gün için fiyat verir: yoksa 30 Ekim'den
+  // birkaç gün sonra önbellek boş kalır ve test canlı fiyata gider.
+  await getPrices(["FON:AFT", "BIST:THYAO"], { fetch: fake({ anyDay: true }).fetch, now: Date.now });
   const res = await handlePrices(new Request("https://cashfollow.app/api/fiyat?kod=bist:thyao,FON:AFT"));
   assert.equal(res.status, 200);
   const body = await res.json();

@@ -14,7 +14,7 @@ enum EpostaBildirim {
 
     // Ayarlar → Bildirimler (BildirimAyarlari), bankadan gelenler (e-posta ve SMS), ayrı ayrı; varsayılan açık, bildirim
     // izni yoksa bir şey gönderilmez. eklenince: harcama kendiliğinden eklendi. bekleyince: onay bekleyen bir harcama geldi
-    // (1.2.0'dan önce ikisi tek ayardı: "eposta.bildirim"; bekleyince ilk okunuşta onun değerini alır)
+    // (1.3.0'dan önce ikisi tek ayardı: "eposta.bildirim"; bekleyince ilk okunuşta onun değerini alır)
     nonisolated static var eklenince: Bool {
         get { UserDefaults.standard.object(forKey: "eposta.bildirim") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "eposta.bildirim") }
@@ -130,4 +130,5 @@ final class Yonlendirici: ObservableObject {
     static let shared = Yonlendirici()
     @Published var sekme: Int?
     @Published var ayOzeti = false
+    @Published var harcama: KisayolHarcamasi?   // "Harcama ekle" kısayolu: form bu taslakla açılır (Kisayollar.swift)
 }

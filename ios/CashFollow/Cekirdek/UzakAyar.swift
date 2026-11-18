@@ -1,6 +1,6 @@
 import Foundation
 
-// Uygulama ayarları (Supabase app_config: anahtar → değer; supabase/gecis/1.2.0.sql). Sürüm çıkarmadan değiştirilebilen,
+// Uygulama ayarları (Supabase app_config: anahtar → değer; supabase/gecis/1.3.0.sql). Sürüm çıkarmadan değiştirilebilen,
 // herkese açık değerler: herkes okur (girişsiz de, publishable anahtarla), yalnızca Supabase panelinden yazılır.
 // Her açılışta okunur (Model.refresh) ve bu telefonda saklanır: çevrimdışıyken son okunan kullanılır.
 //   sms_shortcut_url   Ayarlar → Banka mesajları → "Kısayolu ekle"nin açtığı hazır kısayol (Yapilandirma.mesajKisayolu)

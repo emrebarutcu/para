@@ -447,10 +447,10 @@ $$;
 revoke all on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
 
--- ── Uygulama ayarları (1.2) ──────────────────────────────────────────────────
+-- ── Uygulama ayarları (1.3) ──────────────────────────────────────────────────
 -- Sürüm çıkarmadan değiştirilebilen, herkese açık değerler (anahtar → değer). Herkes okur, yalnızca panelden / service
 -- role ile yazılır. sms_shortcut_url: iPhone'da "Kısayolu ekle"nin açtığı hazır kısayolun iCloud bağlantısı (boşken düğme
--- görünmez). supabase/gecis/1.2.0.sql ile aynı.
+-- görünmez). supabase/gecis/1.3.0.sql ile aynı.
 create table if not exists app_config (
   key        text primary key,
   value      text,

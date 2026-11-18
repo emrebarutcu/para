@@ -10,7 +10,11 @@ import StoreKit
 final class Abonelik: ObservableObject {
     static let kimlikler = ["yearly", "monthly", "weekly"].map { "app.cashfollow.ios.premium.\($0)" }
     static let ucretsizKart = 2
-    static let ucretsizKisi = 1
+    static let ucretsizKisi = 2   // sen ve bir kişi daha (eşin gibi)
+    // Ücretsiz tat: Akış'ta bu ay ve sonraki ay Premium'suz açık (web: TASTE_MONTHS). PostHog'da free_taste bayrağının
+    // "off" kolu kapatır; bayrak yoksa ya da henüz gelmediyse açıktır.
+    static let tatAy = 2
+    static var ucretsizTat: Bool { Analitik.bayrak("free_taste") != "off" }
 
     // Hesabın sunucudaki satırı (yalnızca okunur; RLS)
     struct HesapSatiri: Decodable, Equatable {

@@ -1,4 +1,4 @@
--- 1.2.0 geçişi: uygulama ayarları (app_config). Sürüm çıkarmadan değiştirilebilen, herkese açık değerler: anahtar →
+-- 1.3.0 geçişi: uygulama ayarları (app_config). Sürüm çıkarmadan değiştirilebilen, herkese açık değerler: anahtar →
 -- değer. Herkes okur (girişsiz de: publishable anahtar), yalnızca Supabase panelinden / service role ile yazılır.
 -- İlk anahtar sms_shortcut_url: iPhone'da Ayarlar → Banka mesajları → "Kısayolu ekle"nin açtığı hazır kısayolun iCloud
 -- bağlantısı (https://www.icloud.com/shortcuts/…; boşken düğme görünmez). Uygulama her açılışta okur.

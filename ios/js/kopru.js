@@ -228,6 +228,10 @@
   function merchants(q, limit) {
     return JSON.stringify(I.merchants(loadState(), q || "", Number(limit) || 6));
   }
+  // Tek satırla kayıt (taksit.js parseLine): "buzdolabı 36000 bonus 6 taksit" → { desc, amount, count, cardId, sure }; değilse null
+  function parseLine(text, decimal) {
+    return JSON.stringify(T.parseLine(text, { cards: loadState().cards || [], decimal: decimal || "," }));
+  }
   // Son ödemesi from–to arasında olan taksitli harcamalar (Özet'teki kutlama kartı, bildirim)
   function finishing(from, to) {
     return JSON.stringify(I.finishing(loadState(), from, to));
@@ -321,7 +325,7 @@
 
   root.Kopru = {
     loadTools, toScript, setRates, setPrices, setHome, setCountry, setCashDef, setInbox, inboxReleased, smsSkip, smsKind, run, marketCodes, constants, colors, sync, cash, assetPlan, asset,
-    merchants, finishing, monthSummary, cutoffs,
+    merchants, finishing, monthSummary, cutoffs, parseLine,
     defaultState: () => JSON.stringify(T.defaultState()),
   };
 })(this);

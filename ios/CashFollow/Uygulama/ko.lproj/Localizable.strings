@@ -1,4 +1,13 @@
-/* Kısayollar eyleminin sistemde görünen metinleri (Kisayollar.swift). Anahtar Türkçe metnin kendisidir. */
+/* Kısayolların başlık ve parametre adları (Uygulama/Kisayollar.swift); anahtar Türkçe metin */
+"Harcama ekle" = "지출 추가";
+"Bu ay ne ödeyeceğim?" = "이번 달에 얼마를 내나요?";
+"Tutar" = "금액";
+"Ne alındı?" = "무엇을 샀나요?";
+"Taksit sayısı" = "할부 개월 수";
+"Harcama formunu açar. Tutar, ne alındığı ve taksit sayısı verilirse form dolu gelir." = "지출 입력 화면을 엽니다. 금액, 구입한 것, 할부 개월 수를 주면 입력된 상태로 열립니다.";
+"Bu ay ödenecek tutarı, ödeneni ve kalanı söyler." = "이번 달 결제 금액과 이미 낸 금액, 남은 금액을 알려 줍니다.";
+
+/* Banka mesajından harcama eylemi (Kisayollar.swift → BankaMesajiEkle) */
 "Banka mesajından harcama ekle" = "은행 메시지에서 구매 추가";
 "Bankanın harcama mesajını okur ve CashFollow'a harcama olarak ekler. Mesaj telefonda okunur." = "은행의 결제 메시지를 읽어 CashFollow에 구매로 추가합니다. 메시지는 휴대폰에서 읽습니다.";
 "Mesaj" = "메시지";
