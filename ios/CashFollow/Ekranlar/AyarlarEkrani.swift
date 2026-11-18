@@ -80,7 +80,11 @@ struct AyarlarEkrani: View {
                     Text(L("Özet'teki Nakit grafiği bu günden başlayan bir ayı gösterir (ör. maaş günün) ve yalnızca nakit sayılanları toplar."))
                 }
 
-                HatirlatmaBolumu()
+                Section {
+                    BildirimSatiri()
+                } footer: {
+                    Text(L("Hangi bildirimlerin geleceğini seç: ödeme günü, hesap kesimi, taksit bitişi, ay özeti ve bankadan gelenler."))
+                }
                 KilitBolumu()
 
                 Section {
@@ -316,7 +320,11 @@ struct EpostaAyarlari: View {
                 } header: { Text(L("Kurulum")) }
                 .font(.footnote)
 
-                EpostaBildirimBolumu()
+                Section {
+                    BildirimSatiri()
+                } footer: {
+                    Text(L("Harcama eklenince ve onay bekleyen olunca gelen bildirimler."))
+                }
 
                 Section {
                     Button(kontrolEdiliyor ? L("Kontrol ediliyor…") : L("Şimdi kontrol et")) {
@@ -506,6 +514,12 @@ struct MesajAyarlari: View {
             .font(.footnote)
 
             Section {
+                BildirimSatiri()
+            } footer: {
+                Text(L("Harcama eklenince ve onay bekleyen olunca gelen bildirimler."))
+            }
+
+            Section {
                 TextEditor(text: $deneme).frame(minHeight: 110).font(.footnote)
                 Button(deneniyor ? L("Okunuyor…") : L("Dene")) { dene() }
                     .disabled(deneniyor || deneme.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -605,102 +619,6 @@ struct MesajAyarlari: View {
                     .font(.footnote).foregroundStyle(s.wouldAutoAdd ? Tema.iyi : Tema.uyari)
             }
             .font(.subheadline)
-        }
-    }
-}
-
-// Banka e-postaları → bildirim: uygulama kapalıyken eklenen harcama ve onay bekleyen e-posta (EpostaBildirim)
-struct EpostaBildirimBolumu: View {
-    @EnvironmentObject private var model: Model
-    @Environment(\.openURL) private var openURL
-    @State private var acik = EpostaBildirim.acik
-    @State private var reddedildi = false
-
-    var body: some View {
-        Section {
-            Toggle(L("Harcama eklenince bildir"), isOn: Binding(get: { acik }, set: { yeni in
-                acik = yeni
-                EpostaBildirim.acik = yeni
-                EpostaBildirim.planla(model)
-                Analitik.olay("inbox_notifications", ["enabled": yeni])
-                guard yeni else { reddedildi = false; return }
-                Task {
-                    let c = UNUserNotificationCenter.current()
-                    switch await c.notificationSettings().authorizationStatus {
-                    case .notDetermined: reddedildi = !((try? await c.requestAuthorization(options: [.alert, .sound, .badge])) ?? false)
-                    case .denied: reddedildi = true
-                    default: reddedildi = false
-                    }
-                }
-            }))
-            if reddedildi {
-                Button(L("Bildirim izni kapalı: iPhone Ayarları'nda aç")) {
-                    if let u = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(u) }
-                }
-                .font(.footnote)
-            }
-        } footer: {
-            Text(L("Uygulama kapalıyken iPhone ara sıra yeni e-postalara bakar (ne zaman olacağına iOS karar verir); eklenen harcamayı ve onay bekleyen e-postayı bildirir. Dokununca Harcamalar açılır."))
-        }
-        .task {
-            if acik, await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .denied { reddedildi = true }
-        }
-    }
-}
-
-// Ödeme hatırlatmaları: aç / kapat, kaç gün önce, saat (Hatirlatma)
-struct HatirlatmaBolumu: View {
-    @EnvironmentObject private var model: Model
-    @Environment(\.openURL) private var openURL
-    @State private var acik = Hatirlatma.acik
-    @State private var gun = Hatirlatma.gunOnce
-    @State private var saat = Calendar.current.date(bySettingHour: Hatirlatma.dakika / 60, minute: Hatirlatma.dakika % 60, second: 0, of: Date()) ?? Date()
-    @State private var reddedildi = false
-    @State private var kesim = Hatirlatma.kesim
-    @State private var bitis = Hatirlatma.bitis
-    @State private var ayOzeti = Hatirlatma.ayOzeti
-
-    var body: some View {
-        Section {
-            Toggle(L("Ödeme hatırlatmaları"), isOn: Binding(get: { acik }, set: { yeni in
-                acik = yeni
-                Task {
-                    if yeni { acik = await Hatirlatma.ac(model, kaynak: "settings"); reddedildi = !acik }
-                    else { await Hatirlatma.kapat(); reddedildi = false }
-                }
-            }))
-            if acik {
-                Picker(L("Ne zaman"), selection: $gun) {
-                    Text(L("Ödeme günü")).tag(0)
-                    Text(L("1 gün kala")).tag(1)
-                    ForEach([2, 3, 7], id: \.self) { Text(L("{0} gün kala", $0)).tag($0) }
-                }
-                DatePicker(L("Saat"), selection: $saat, displayedComponents: .hourAndMinute)
-                Toggle(L("Kesim gününden bir gün önce"), isOn: $kesim)
-                Toggle(L("Taksit bitince"), isOn: $bitis)
-                Toggle(L("Ay özeti"), isOn: $ayOzeti)
-            }
-            if reddedildi {
-                Button(L("Bildirim izni kapalı: iPhone Ayarları'nda aç")) {
-                    if let u = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(u) }
-                }
-                .font(.footnote)
-            }
-        } header: { Text(L("Bildirimler")) } footer: {
-            Text(L("Kart ekstresi, kredi ve borç taksitlerinin ödeme gününü hatırlatır. Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez."))
-        }
-        .onChange(of: gun) { _, v in Hatirlatma.gunOnce = v; Task { await Hatirlatma.kur(model) } }
-        .onChange(of: kesim) { _, v in Hatirlatma.kesim = v; Task { await Hatirlatma.kur(model) } }
-        .onChange(of: bitis) { _, v in Hatirlatma.bitis = v; Task { await Hatirlatma.kur(model) } }
-        .onChange(of: ayOzeti) { _, v in Hatirlatma.ayOzeti = v; Task { await Hatirlatma.kur(model) } }
-        .onChange(of: saat) { _, v in
-            let c = Calendar.current.dateComponents([.hour, .minute], from: v)
-            Hatirlatma.dakika = (c.hour ?? 10) * 60 + (c.minute ?? 0)
-            Task { await Hatirlatma.kur(model) }
-        }
-        .task {
-            // İzin iPhone Ayarları'ndan kaldırıldıysa anahtar kapalı görünür
-            if acik, await Hatirlatma.izinDurumu() == .denied { reddedildi = true }
         }
     }
 }

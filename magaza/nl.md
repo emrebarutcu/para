@@ -73,6 +73,7 @@ Privacy: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
+- Kies je meldingen: betaaldag, afsluitdatum, einde van een betaalplan en maandoverzicht, elk apart aan of uit.
 - Nieuw overzicht: hoeveel van deze maand al betaald is en wat er nog openstaat, of volgende maand lichter wordt en in welke maand je termijnen aflopen.
 - Sneller invullen: eerdere winkels met één tik, met hun kaart, termijnen en categorie. 'Opnieuw' voegt een aankoop nog eens toe.
 - Nieuwe meldingen: de dag vóór de afschriftdatum, als een termijnaankoop is afbetaald, en een maandoverzicht.

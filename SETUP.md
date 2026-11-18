@@ -344,6 +344,15 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
   seyri web'le aynı modülden hesaplanır (`nakit.js`, geçmiş fiyatlar `/api/gecmis`). Kart günlerinin değişmesi
   (`transition`), içe aktarma ve banka e-postaları web'de. Araçların doğrulama hataları asistanlar için İngilizcedir; formlar
   çoğunu önceden engeller.
+- **Bildirimler** (yerel; sunucu yok): Ayarlar → **Bildirimler** (`Ekranlar/BildirimAyarlari.swift`,
+  `Uygulama/Bildirimler.swift`). Kullanıcı her türü ayrı açıp kapatır: ödeme günü (ne zaman: aynı gün, 1, 2, 3, 7 gün
+  kala), hesap kesiminden bir gün önce, taksit bitince, ay özeti — dördü seçilen saatte (`Uygulama/Hatirlatma.swift`) —
+  ve Türkiye'de bankadan gelenler: harcama eklenince, onay bekleyen olunca (`Uygulama/EpostaBildirim.swift`; e-posta ve
+  SMS). Bir tür ilk açılınca iOS izin sorar; izin kaldırıldıysa ekranın üstünde iPhone Ayarları'na düğme çıkar.
+  İlk açılış akışındaki ve Özet'teki "Hatırlat" dört zamanlanmış türü birlikte açar. 1.2.0'dan önce kesim, taksit bitişi
+  ve ay özeti ödeme hatırlatmasına bağlıydı; `Hatirlatma.gecis()` bir kez çalışıp hatırlatması kapalı olanlarda üçünü
+  kapalı başlatır (kimseye yeni bildirim kendiliğinden açılmaz). Banka bildirimleri tek ayardı (`eposta.bildirim`);
+  "onay bekleyen olunca" ilk okunuşta onun değerini alır.
 - **Sürüm:** mağaza sürümü web sürümüdür; `scripts/surum.sh` `MARKETING_VERSION`'ı da yazar, Sürüm denetimi ikisinin aynı
   olduğuna bakar. `CURRENT_PROJECT_VERSION` (build numarası) her TestFlight yüklemesinde elle artırılır.
 - **Denetim** (`.github/workflows/ios.yml`, iOS): `node --test ios/test/*.test.mjs` köprüyü JavaScriptCore'a benzer ortamda
@@ -483,6 +492,9 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   ölçülür. `merchant_suggestion_used` (öneriye dokunuldu), `notification_opened` (`kind`: payment, cutoff,
   installment_finished, month_summary, inbox), `installment_finished_shown` (kutlama kartı ilk kez göründü; `count`),
   `month_summary_opened` (`source`: overview, notification), `month_summary_shared`.
+  `notification_setting_changed` (Ayarlar → Bildirimler; `kind`: payment, cutoff, installment_finished, month_summary,
+  bank_added, bank_pending; `enabled`; `granted`: bildirim izni var mı). Ödeme günü anahtarı ayrıca eski adlarla
+  `reminders_enabled` (`source: settings`) / `reminders_disabled` yazar.
 - Karşılama denemesi: PostHog'da çok değişkenli bayrak **`onboarding_flow`**, kollar `control` (eski giriş ekranı) ve
   `eylem` (yeni akış); "Persist flag across authentication" açık. Bayrak yokken herkes yeni akışı görür (`variant: default`);
   1,5 saniyede gelmezse de yeni akış (`fallback`, çözümlemeden çıkarılır). %100 `control` yeni akışı uzaktan kapatır.
@@ -973,8 +985,9 @@ harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
 5. iPhone uygulama kapalıyken de bakar: arka plan yenilemesi (`Uygulama/EpostaBildirim.swift`, `BGAppRefreshTask`
    `app.cashfollow.ios.eposta`, `ios/CashFollow-Info.plist`) iOS'un verdiği zamanda (en erken 15 dakikada bir, ne zaman
    olacağına iOS karar verir) eşitler, e-postaları işler ve eklenen harcamayı / onay bekleyen yeni e-postayı yerel
-   bildirimle söyler; dokununca Harcamalar açılır. Ayarlar → Banka e-postaları → "Harcama eklenince bildir" (varsayılan
-   açık, bildirim izni gerekir). Uygulamada görülen bekleyenler için sonradan bildirim gitmez.
+   bildirimle söyler; dokununca Harcamalar açılır. Ayarlar → Bildirimler → Bankadan gelenler: "Harcama eklenince" ve
+   "Onay bekleyen olunca", ayrı ayrı (varsayılan açık, bildirim izni gerekir; ikisi de kapalıysa arka planda bakılmaz).
+   Uygulamada görülen bekleyenler için sonradan bildirim gitmez.
 
 Worker yalnızca 12 onaltılık haneli adresleri kabul eder; kayıtlı olmayan adrese ve 2 MB'tan büyük e-postalara
 ret döner. Aynı e-posta iki kez gelirse ikincisi yok sayılır (`Message-ID`).

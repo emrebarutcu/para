@@ -12,11 +12,19 @@ enum EpostaBildirim {
     private static let d = UserDefaults.standard
     private static let bildirilenler = "eposta.bildirilen"   // bildirimi gönderilmiş ya da uygulamada görülmüş e-postalar
 
-    // Ayarlar → Banka e-postaları → "Harcama eklenince bildir" (varsayılan açık; bildirim izni yoksa bir şey gönderilmez)
-    nonisolated static var acik: Bool {
+    // Ayarlar → Bildirimler (BildirimAyarlari), bankadan gelenler (e-posta ve SMS), ayrı ayrı; varsayılan açık, bildirim
+    // izni yoksa bir şey gönderilmez. eklenince: harcama kendiliğinden eklendi. bekleyince: onay bekleyen bir harcama geldi
+    // (1.2.0'dan önce ikisi tek ayardı: "eposta.bildirim"; bekleyince ilk okunuşta onun değerini alır)
+    nonisolated static var eklenince: Bool {
         get { UserDefaults.standard.object(forKey: "eposta.bildirim") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "eposta.bildirim") }
     }
+    nonisolated static var bekleyince: Bool {
+        get { UserDefaults.standard.object(forKey: "eposta.bildirim.bekleyen") as? Bool ?? eklenince }
+        set { UserDefaults.standard.set(newValue, forKey: "eposta.bildirim.bekleyen") }
+    }
+    // Biri açıksa arka planda bakılır
+    nonisolated static var acik: Bool { eklenince || bekleyince }
 
     // Arka plan yenilemesi istenir (uygulama arka plana geçerken ve her çalışmada); koşul yoksa bekleyen istek silinir
     static func planla(_ model: Model) {
@@ -52,7 +60,7 @@ enum EpostaBildirim {
         let once = Set(d.array(forKey: bildirilenler) as? [Int] ?? [])
         let yeni = bekleyen.filter { !once.contains($0.emailId) }
 
-        if !eklenen.isEmpty {
+        if !eklenen.isEmpty, eklenince {
             let i = icerik()
             i.title = mesaj ? L("Banka mesajından eklendi")
                 : eklenen.count == 1 ? L("E-postadan eklendi") : L("E-postadan {0} harcama eklendi", eklenen.count)
@@ -61,7 +69,9 @@ enum EpostaBildirim {
             i.body = satirlar.joined(separator: "\n")
             try? await c.add(UNNotificationRequest(identifier: "eposta-eklendi-\(eklenen[0].id)", content: i, trigger: nil))
         }
-        if let ilk = yeni.first {
+        // Kapalıyken gelenler de görüldü sayılır: sonradan açılınca eskiler için bildirim gitmez
+        if !bekleyince { goruldu(yeni.map(\.emailId)) }
+        if bekleyince, let ilk = yeni.first {
             let i = icerik()
             i.title = mesaj ? L("Bir banka mesajı onay bekliyor")
                 : yeni.count == 1 ? L("Bir e-posta onay bekliyor") : L("{0} e-posta onay bekliyor", yeni.count)

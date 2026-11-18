@@ -238,6 +238,8 @@ struct GrafikGalerisi: View {
             yeriGelince
         } else if sayfa == 10 {
             NavigationStack { MesajAyarlari() }
+        } else if sayfa == 11 {
+            NavigationStack { BildirimAyarlari() }
         } else {
             galeri
         }

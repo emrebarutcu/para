@@ -6,7 +6,8 @@ import UserNotifications
 //   yakın ödemeler Özet'in hesabından (get_overview: elle ödenen kartın ödenmiş ekstresi düşer), sonrası Akış'tan
 //   (get_cashflow, 3 ay); borç / kredi taksitleri get_overview → debts.upcoming.
 // Aynı günün ödemeleri tek bildirimde. iOS en fazla 64 bekleyen bildirim tutar; en yakın 40 gün kurulur.
-// Aynı anahtarla (hatırlatmalar açıksa) üç bildirim daha, hepsi seçilen saatte ve Ayarlar'dan ayrı ayrı kapatılabilir:
+// Üç bildirim daha, hepsi seçilen saatte; her biri ödeme hatırlatmasından bağımsız açılıp kapanır (Ayarlar →
+// Bildirimler, BildirimAyarlari):
 //   kesim günü   hesap kesiminden bir gün önce: bugün alınan hangi gün, kesimden sonra alınan hangi gün ödenir
 //   taksit bitişi  son taksidin ödendiği günün ertesi günü: "Koltuk takımı bitti", boşalan aylık tutar
 //   ay özeti     ayın ilk günü: geçen ayın özeti hazır (AyOzetiEkrani)
@@ -18,7 +19,8 @@ enum Hatirlatma {
     private static let enFazla = 40
     private static let d = UserDefaults.standard
 
-    // Ek bildirimler (varsayılan açık; hatırlatmalar kapalıysa hiçbiri gönderilmez)
+    // Ek bildirimler. 1.2.0'dan önce yalnızca ödeme hatırlatması açıkken gönderiliyorlardı; gecis() o kullanıcıların
+    // durumunu korur (hatırlatması kapalı olanda üçü de kapalı başlar)
     nonisolated static var kesim: Bool {
         get { UserDefaults.standard.object(forKey: "hatirlatma.kesim") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "hatirlatma.kesim") }
@@ -32,9 +34,24 @@ enum Hatirlatma {
         set { UserDefaults.standard.set(newValue, forKey: "hatirlatma.ayozeti") }
     }
 
+    // Ödeme günü hatırlatması
     static var acik: Bool {
         get { d.bool(forKey: "hatirlatma.acik") }
         set { d.set(newValue, forKey: "hatirlatma.acik") }
+    }
+    // Herhangi bir zamanlanmış bildirim açık mı (kur bunlara bakar)
+    static var herhangi: Bool { acik || kesim || bitis || ayOzeti }
+
+    // Bir kez (1.2.0): türler birbirinden bağımsız oldu. Eskiden ödeme hatırlatması kapalıyken kesim, taksit bitişi ve
+    // ay özeti de gönderilmiyordu; o kullanıcılarda üçü kapalı başlar, kimseye yeni bildirim kendiliğinden açılmaz.
+    // Yeni kurulumda da öyle: ilk açılış akışındaki "Hatırlat" (ac) hepsini birden açar.
+    nonisolated static func gecis() {
+        let u = UserDefaults.standard
+        guard !u.bool(forKey: "bildirim.gecis") else { return }
+        if !u.bool(forKey: "hatirlatma.acik") {
+            for k in ["hatirlatma.kesim", "hatirlatma.bitis", "hatirlatma.ayozeti"] { u.set(false, forKey: k) }
+        }
+        u.set(true, forKey: "bildirim.gecis")
     }
     // Ödemeden kaç gün önce: 0 (aynı gün), 1, 2, 3, 7
     nonisolated static var gunOnce: Int {
@@ -63,21 +80,17 @@ enum Hatirlatma {
         Analitik.olay("reminders_offer_dismissed", ["source": kaynak])
     }
 
-    // Açmak için: izin istenir (ilk seferde iOS sorar; reddedildiyse false → Ayarlar'a yönlendirilir).
-    // kaynak: onboarding (ilk açılış), overview_offer (Özet'teki teklif), settings
+    // "Hatırlat" (ilk açılış akışı, Özet'teki teklif): izin istenir (ilk seferde iOS sorar; reddedildiyse false) ve izin
+    // verildiyse ödeme günü, kesim, taksit bitişi ve ay özeti birlikte açılır; sonra Ayarlar → Bildirimler'den tek tek
+    // kapatılır. kaynak: onboarding (ilk açılış), overview_offer (Özet'teki teklif)
     static func ac(_ model: Model, kaynak: String = "overview_offer") async -> Bool {
         teklifBitti = true
-        let izin = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        let izin = await Bildirimler.izinIste()
         acik = izin
+        if izin { kesim = true; bitis = true; ayOzeti = true }
         Analitik.olay("reminders_enabled", ["granted": izin, "days_before": gunOnce, "source": kaynak])
         await kur(model)
         return izin
-    }
-
-    static func kapat() async {
-        acik = false
-        Analitik.olay("reminders_disabled")
-        await temizle()
     }
 
     private static func temizle() async {
@@ -111,14 +124,14 @@ enum Hatirlatma {
         return list.sorted { $0.tarih < $1.tarih }
     }
 
-    // Bekleyen hatırlatmaları sıfırdan kurar (kapalıysa ya da izin yoksa yalnızca temizler)
+    // Bekleyen bildirimleri sıfırdan kurar (hepsi kapalıysa ya da izin yoksa yalnızca temizler); her tür kendi ayarına bakar
     static func kur(_ model: Model) async {
         await temizle()
-        guard acik, Ornek.tur == nil, Ornek.galeri == nil else { return }
+        guard herhangi, Ornek.tur == nil, Ornek.galeri == nil else { return }
         let durum = await izinDurumu()
         guard durum == .authorized || durum == .provisional else { return }
         let c = UNUserNotificationCenter.current()
-        let gunler = Dictionary(grouping: odemeler(model.motor), by: \.tarih).sorted { $0.key < $1.key }
+        let gunler = acik ? Dictionary(grouping: odemeler(model.motor), by: \.tarih).sorted { $0.key < $1.key } : []
         var kurulan = 0
         for (tarih, kalemler) in gunler {
             guard kurulan < enFazla, let (zaman, kalan) = zamani(tarih) else { continue }

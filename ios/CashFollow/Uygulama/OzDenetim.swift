@@ -184,6 +184,26 @@ enum OzDenetim {
                       "banka mesajları: \(mesajlar)")
             m.setInbox(rows: "[]")
 
+            // Bildirim türleri bağımsız (1.2.0, Hatirlatma.gecis): ödeme hatırlatması kapalı olan eski kullanıcıda kesim,
+            // taksit bitişi ve ay özeti kapalı başlar; açık olanda dokunulmaz. Bankadan gelenlerde "onay bekleyince"
+            // ayarı yokken "eklenince"nin değerini alır.
+            let u = UserDefaults.standard
+            for k in ["bildirim.gecis", "hatirlatma.kesim", "hatirlatma.bitis", "hatirlatma.ayozeti", "eposta.bildirim.bekleyen"] { u.removeObject(forKey: k) }
+            u.set(false, forKey: "hatirlatma.acik")
+            Hatirlatma.gecis()
+            try check(!Hatirlatma.kesim && !Hatirlatma.bitis && !Hatirlatma.ayOzeti && !Hatirlatma.herhangi, "bildirim geçişi: hatırlatma kapalıydı")
+            u.set(false, forKey: "bildirim.gecis")
+            u.set(true, forKey: "hatirlatma.acik")
+            Hatirlatma.kesim = true
+            Hatirlatma.gecis()
+            try check(Hatirlatma.kesim && Hatirlatma.herhangi, "bildirim geçişi: hatırlatma açıktı")
+            u.set(false, forKey: "eposta.bildirim")
+            try check(!EpostaBildirim.bekleyince && !EpostaBildirim.acik, "banka bildirimi: eski ayar kapalıydı")
+            EpostaBildirim.bekleyince = true
+            try check(EpostaBildirim.acik && !EpostaBildirim.eklenince, "banka bildirimi: ayrı ayarlar")
+            try check(Bildirimler.turler(banka: false).count == 4 && Bildirimler.turler(banka: true).count == 6, "bildirim türleri")
+            for k in ["bildirim.gecis", "hatirlatma.acik", "hatirlatma.kesim", "eposta.bildirim", "eposta.bildirim.bekleyen"] { u.removeObject(forKey: k) }
+
             // CashFollow Premium: hesabın satırı (tablo.js premium, köprüden), ürünler ve ücretsiz sürümün sınırları
             let gun: TimeInterval = 86_400
             let iso = { (d: Date) in ISO8601DateFormatter().string(from: d) }
