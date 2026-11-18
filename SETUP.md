@@ -133,8 +133,8 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 ### Yükseltme notları
 
 - **1.2.0** — **Banka mesajından harcama** (iPhone, Türkiye; Kısayollar otomasyonu, bölüm 6 → Banka mesajları) ve
-  **bildirim seçimi** (Ayarlar → Bildirimler: her tür ayrı). **Yayından önce** `supabase/gecis/1.2.0.sql` çalıştırılır:
-  `app_config` tablosu (herkes okur, yalnızca panelden yazılır; `sms_shortcut_url`). Tablo yoksa uygulama çalışır, yalnızca
+  **bildirim seçimi** (Ayarlar → Bildirimler: her tür ayrı). **Yayından önce** `supabase/gecis/1.2.0.sql` çalıştırılır (18 Kasım 2026'da
+  çalıştırıldı): `app_config` tablosu (herkes okur, yalnızca panelden yazılır; `sms_shortcut_url`). Tablo yoksa uygulama çalışır, yalnızca
   "Kısayolu ekle" düğmesi görünmez. MCP: `try_bank_email` aracına `sms` ve `hint`.
 - **8.10.0** — **Japonya: bonus ödemesi** (ボーナス払い; yalnızca ülkesi Japonya olan hesapta, `para.js features` `bonus`). Kartlı
   harcama yaz ya da kış bonusu ayında, kartın son ödeme gününde tek seferde (`purchases.bonus`, `count` 1) ya da art arda
