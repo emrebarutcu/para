@@ -73,6 +73,7 @@ Privacidad: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
+- Elige tus notificaciones: día de pago, cierre del extracto, fin de un plazo y resumen del mes, cada una por separado.
 - Nuevo resumen: cuánto de este mes ya está pagado y cuánto queda, si el mes que viene es más ligero y en qué mes terminan tus plazos.
 - Más rápido de apuntar: los comercios anteriores con un toque, con su tarjeta, sus cuotas y su categoría. «Otra vez» vuelve a añadir una compra.
 - Nuevas notificaciones: el día antes del cierre del extracto, cuando terminas de pagar una compra a plazos y el resumen del mes.

@@ -10,6 +10,8 @@ struct CashFollowApp: App {
 
     init() {
         OzDenetim.runIfRequested()
+        Hatirlatma.gecis()   // bildirim türleri birbirinden bağımsız (1.3.0)
+        MesajZekasi.denemeIfRequested()
         Karsilama.baslat()   // yeni kurulum mu (ilk açılış akışı yalnızca yenilere)
         Ornek.hazirlaIfRequested()
         Cokme.baslat()

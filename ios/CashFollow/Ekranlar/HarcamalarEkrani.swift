@@ -165,7 +165,8 @@ struct EpostaKarti: View {
 
     var body: some View {
         Kart(dolgu: 14) {
-            KartBasligi(baslik: L("E-postadan gelenler"), alt: L("{0} onay bekliyor", model.epostalar.count)) { EmptyView() }
+            // Banka e-postaları ve telefona gelen banka mesajları (SMS) aynı listede
+            KartBasligi(baslik: L("Bankadan gelenler"), alt: L("{0} onay bekliyor", model.epostalar.count)) { EmptyView() }
             HataMetni(text: hata)
             SatirListesi(veri: model.epostalar) { e in satir(e) }
         }
@@ -192,7 +193,8 @@ struct EpostaKarti: View {
     }
 
     @ViewBuilder private func harcama(_ e: Eposta) -> some View {
-        Text(e.parsed.merchant ?? e.subject ?? L("Banka e-postası")).font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(2)
+        Text(e.parsed.merchant ?? e.subject ?? (e.source == "sms" ? L("Banka mesajı") : L("Banka e-postası")))
+            .font(.body.weight(.semibold)).foregroundStyle(Tema.metin).lineLimit(2)
         let bilgi = [tutar(e.parsed), e.parsed.date.map { Bicim.day($0) }, (e.parsed.installments ?? 1) > 1 ? L("{0} taksit", e.parsed.installments ?? 1) : nil]
             .compactMap { $0 }
         if !bilgi.isEmpty { Text(bilgi.joined(separator: " · ")).font(.footnote).monospacedDigit().foregroundStyle(Tema.metin2) }
@@ -287,6 +289,10 @@ struct EpostaKarti: View {
         case "Gmail forwarding confirmation": return L("Gmail yönlendirme onayı")
         case "Address verification": return L("Adres doğrulama")
         case "Test e-mail": return L("Deneme e-postası")
+        // Banka mesajı (eposta.js sms, tools.js smsItem)
+        case "Not sure this is a purchase": return L("Harcama olduğundan emin olunamadı")
+        case "Amount could not be confirmed": return L("Tutar doğrulanamadı")
+        case "Looks like a purchase already added": return L("Bu harcama eklenmiş görünüyor")
         default: return r
         }
     }
@@ -812,7 +818,7 @@ struct HarcamaFormu: View {
             if cards.contains(where: { $0.id == sonKart }) || sonKart == "nakit" { card = sonKart }
             else if let first = cards.first { card = first.id }
             if !saglayicilar.contains(where: { $0.id == saglayici }) { saglayici = saglayicilar.first?.id ?? "other" }
-            if let e = eposta { doldur(e); kaynak = "email" }
+            if let e = eposta { doldur(e); kaynak = e.source == "sms" ? "sms" : "email" }
             else if let y = yine { doldur(yine: y) }
             else if let m = isyeri { uygula(m); tutarOdak = true }
             else if let o = ornek { amount = o.tutar; desc = o.ad; count = o.taksit }

@@ -152,6 +152,15 @@ final class Motor {
         let g = String(decoding: (try? JSONSerialization.data(withJSONObject: granted)) ?? Data("[]".utf8), as: UTF8.self)
         kopru.invokeMethod("setInbox", withArguments: [rows, g, latest])
     }
+    // Banka mesajı (SMS; Mesajlar.swift): kuralların gördüğü tür ("otp", "spend", "other", "unsure") ve mesajın
+    // kuyruğa alınıp alınmayacağı (ipucu: telefondaki modelin okuduğu; eposta.js sms)
+    func smsKind(_ metin: String) -> String {
+        kopru.invokeMethod("smsKind", withArguments: [metin])?.toString() ?? "other"
+    }
+    func smsSkip(_ metin: String, ipucu: Mesajlar.Ipucu?) -> Bool {
+        let h = ipucu.flatMap { try? JSONEncoder().encode($0) }.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        return kopru.invokeMethod("smsSkip", withArguments: [metin, h])?.toBool() ?? true
+    }
     func inboxReleased() -> [Int] {
         guard let json = kopru.invokeMethod("inboxReleased", withArguments: [])?.toString(),
               let ids = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [Int] else { return [] }

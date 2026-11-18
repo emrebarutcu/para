@@ -73,6 +73,7 @@ Datenschutz: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
+- Wähle deine Mitteilungen: Zahltag, Abrechnungsschluss, Ende einer Ratenzahlung und Monatsübersicht, jede einzeln an oder aus.
 - Neue Übersicht: wie viel von diesem Monat schon bezahlt ist und was noch offen ist, ob der nächste Monat leichter wird und in welchem Monat deine Raten enden.
 - Schneller eintragen: frühere Händler mit einem Tipp, samt Karte, Raten und Kategorie. „Nochmal“ trägt einen Kauf erneut ein.
 - Neue Mitteilungen: am Tag vor der Abrechnung, wenn ein Ratenkauf abbezahlt ist, und ein Monatsrückblick.

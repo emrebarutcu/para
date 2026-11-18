@@ -74,6 +74,7 @@ Privacy: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
+- Choose your notifications: payment day, statement cutoff, finished payment plans and the monthly summary, each on or off.
 - New Overview: how much of this month is already paid and what's left, whether next month is lighter, and the month your instalments end.
 - Faster to add: past merchants come up in one tap with their card, number of payments and category. "Again" re-adds a purchase.
 - New notifications: the day before a statement closes, when a payment plan is paid off, and a monthly recap.

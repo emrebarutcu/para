@@ -6,3 +6,8 @@
 "Taksit sayısı" = "分割回数";
 "Harcama formunu açar. Tutar, ne alındığı ve taksit sayısı verilirse form dolu gelir." = "支出フォームを開きます。金額、買ったもの、分割回数を指定すると、入力済みの状態で開きます。";
 "Bu ay ödenecek tutarı, ödeneni ve kalanı söyler." = "今月の支払い額、支払い済みの額、残りの額をお知らせします。";
+
+/* Banka mesajından harcama eylemi (Kisayollar.swift → BankaMesajiEkle) */
+"Banka mesajından harcama ekle" = "銀行のメッセージから購入を追加";
+"Bankanın harcama mesajını okur ve CashFollow'a harcama olarak ekler. Mesaj telefonda okunur." = "銀行の利用通知メッセージを読み取り、CashFollowに購入として追加します。メッセージはiPhone上で読み取られます。";
+"Mesaj" = "メッセージ";

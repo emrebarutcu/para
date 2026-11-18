@@ -59,3 +59,13 @@ jobs:
           for i in $(seq 1 90); do [ -f "$DATA/Documents/oz-denetim.txt" ] && break; sleep 2; done
           cat "$DATA/Documents/oz-denetim.txt"
           grep -q "OZ-DENETIM TAMAM" "$DATA/Documents/oz-denetim.txt"
+      # Banka mesajlarını telefondaki model (Apple Intelligence) nasıl okuyor: örnek mesajlarla, bilgi için (MesajZekasi.swift
+      # "-zeka-dene"). Simülatör Mac'in modelini kullanır; makinede model yoksa "yanıt yok" yazar. Derlemeyi kırmaz.
+      - name: Telefondaki modelin okuması (bilgi için)
+        continue-on-error: true
+        run: |
+          xcrun simctl terminate booted app.cashfollow.ios || true
+          xcrun simctl launch booted app.cashfollow.ios -zeka-dene
+          DATA=$(xcrun simctl get_app_container booted app.cashfollow.ios data)
+          for i in $(seq 1 200); do grep -q "ZEKA-DENEME BITTI" "$DATA/Documents/zeka-deneme.txt" 2>/dev/null && break; sleep 2; done
+          cat "$DATA/Documents/zeka-deneme.txt" || echo "sonuç yazılmadı"

@@ -533,9 +533,10 @@ struct Eposta: Decodable, Identifiable, Hashable {
         let merchant: String?
         let cardLast4: String?
     }
-    let emailId: Int
+    let emailId: Int           // telefona gelen banka mesajında (SMS) eksi (Mesajlar.swift)
     let sender: String?
     let subject: String?
+    let source: String?        // "sms": banka mesajı; yoksa e-posta
     let parsed: Okunan
     // Gmail yönlendirme onayı ya da bankanın adres doğrulaması (kind verification): bağlantıyla onaylanır, harcama değildir
     struct Dogrulama: Decodable, Hashable {

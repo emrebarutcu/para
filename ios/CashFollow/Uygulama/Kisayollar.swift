@@ -5,6 +5,7 @@ import SwiftUI
 // tetiklenen otomasyonlar da bunları çağırır (TUTUNDURMA.md → Verilen kararlar).
 //   Harcama ekle           → uygulamayı açar, harcama formu verilen tutar / ad / taksitle dolu gelir; kaydı kullanıcı onaylar
 //   Bu ay ne ödeyeceğim?   → uygulamayı açmadan söyler: bu ay ödenecek, ödenen ve kalan (get_overview; Özet'in tepesiyle aynı)
+//   Banka mesajından harcama ekle → banka SMS'i otomasyonu metni verir, uygulamayı açmadan okunur ve eklenir (aşağıda)
 // Başlık ve parametre adları Türkçe yazılır; çevirileri <dil>.lproj/Localizable.strings, Siri cümleleri AppShortcuts.strings
 // (uygulamanın kendi sözlüğü burada kullanılamaz: sistem bu metinleri derleme zamanında okur). Söylenen cevap ise
 // uygulamanın sözlüğünden çevrilir (dil/<kod>.json).
@@ -70,5 +71,29 @@ struct CashFollowKisayollari: AppShortcutsProvider {
         AppShortcut(intent: HarcamaEkleKisayolu(),
                     phrases: ["\(.applicationName) ile harcama ekle", "\(.applicationName) harcama ekle"],
                     shortTitle: "Harcama ekle", systemImageName: "plus.circle")
+    }
+}
+
+// Kısayollar eylemi: "Banka mesajından harcama ekle". Kullanıcı Kısayollar'da bir kez otomasyon kurar (Mesaj → "TL"
+// içerirse → Hemen Çalıştır → bu eylem, giriş: Kısayol Girdisi); içinde TL geçen her mesajın metni buraya verilir
+// (Mesajlar.swift), harcama olmayanlar elenir. Uygulama öne gelmez. Kurulum adımları: Ayarlar → Banka mesajları
+// (MesajAyarlari). iOS bir uygulamanın otomasyonu kendisinin kurmasına izin vermez (tetikleyici paylaşılamaz da): bu
+// yüzden kurulum elle; tek sabit sözle ("TL") bütün bankaları yakalar, kullanıcıdan banka adı istenmez.
+// Eylemin adı, açıklaması ve parametresi sistemin gösterdiği metinlerdir: çevirileri <dil>.lproj/Localizable.strings'te
+// (InfoPlist.strings gibi; uygulamanın kendi sözlüğü dil/<kod>.json buraya ulaşmaz).
+struct BankaMesajiEkle: AppIntent {
+    static let title: LocalizedStringResource = "Banka mesajından harcama ekle"
+    static let description = IntentDescription("Bankanın harcama mesajını okur ve CashFollow'a harcama olarak ekler. Mesaj telefonda okunur.")
+    static let openAppWhenRun = false
+
+    // Girdi bir önceki adımın (otomasyonda: gelen mesajın) çıktısına bağlanabilir; Kısayollar bunu kendiliğinden
+    // yapmayabilir, o zaman kullanıcı alanı "Kısayol Girdisi"ne elle bağlar (kurulum adımlarında yazılı)
+    @Parameter(title: "Mesaj", inputConnectionBehavior: .connectToPreviousIntentResult)
+    var mesaj: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ReturnsValue<String> {
+        let sonuc = await Mesajlar.geldi(mesaj)
+        return .result(value: sonuc.metin)
     }
 }

@@ -393,3 +393,63 @@ test("Özet'in tepesi, işyeri önerileri, biten taksit, ay kapanışı ve kesim
   assert.match(c[0].cut, /^\d{4}-\d{2}-10$/);
   assert.ok(c[0].dueBefore < c[0].dueAfter && c[0].dueBefore > c[0].cut);
 });
+
+// Banka mesajları (SMS): Kısayollar otomasyonunun verdiği metin aynı listeye eksi kimlikle girer (Mesajlar.swift).
+// Metinler bankaların yazış biçimine benzetilmiş örneklerdir, gerçek mesajların kopyası değildir.
+test("banka mesajları: şifre ve ekstre eklenmez, harcama eklenir, model anlaşamazsa onaya düşer", async () => {
+  const e = engine();
+  await e.call("add_card", { name: "Bonus", limit: 50000, cutoff_day: 10, due_day: 20, last4: "1234" });
+  const K = e.sandbox.Kopru, E = e.sandbox.Eposta;
+  const sifre = "MIGROS isyerindeki 450,00 TL tutarindaki isleminiz icin sifreniz: 123456. Sifrenizi kimseyle paylasmayin.";
+  const ekstre = "1234 ile biten kartinizin 10.10.2026 tarihli ekstresi kesilmistir. Donem borcu 12.345,67 TL, son odeme tarihi 20.10.2026.";
+  const odeme = "Kredi kartiniza 5.000,00 TL odeme yapilmistir.";
+  const harcama = "Bonus Kartinizla (***1234) 17.10.2026 tarihinde A101 den 125,50 TL lik islem gerceklestirilmistir. Kullanilabilir limitiniz 8.000,00 TL.";
+  const taksitli = "1234 ile biten kartinizla 17.10.2026 14:32'de TRENDYOL'dan 1.299,90 TL tutarinda 3 taksitli alisveris yapilmistir.";
+  const belirsiz = "X Bank ***1234: 17.10.2026 STARBUCKS 185,00 TL. Bilgi icin 4440000";
+  assert.equal(E.smsKind(sifre), "otp");
+  assert.equal(E.smsKind(ekstre), "other");
+  assert.equal(E.smsKind(odeme), "other");
+  assert.equal(E.smsKind(harcama), "spend");
+  assert.equal(E.smsKind(belirsiz), "unsure");
+  // Şifre mesajını model harcama sansa da alınmaz; harcama olmayanı model harcama derse onaya düşer
+  assert.equal(K.smsSkip(sifre, JSON.stringify({ purchase: true, merchant: "MIGROS", amount: "450,00" })), true);
+  assert.equal(K.smsSkip(ekstre, ""), true);
+  assert.equal(K.smsSkip(odeme, JSON.stringify({ purchase: false })), true);
+  assert.equal(K.smsSkip(harcama, ""), false);
+  assert.equal(K.smsSkip(belirsiz, ""), false);
+  assert.equal(K.smsSkip(belirsiz, JSON.stringify({ purchase: false })), true);
+  // Otomasyon içinde "TL" geçen her mesajı verir: kişisel mesaj model yokken alınmaz, model harcama demezse de alınmaz
+  const kisisel = "Dun aksam icin sana 500 TL gonderdim, bakar misin";
+  assert.equal(K.smsSkip(kisisel, ""), true);
+  assert.equal(K.smsSkip(kisisel, JSON.stringify({ purchase: false })), true);
+  assert.equal(K.smsSkip("STARBUCKS 185,00 TL 17.10.2026", ""), true);                                        // karttan söz etmiyor, model yok
+  assert.equal(K.smsSkip("STARBUCKS 185,00 TL 17.10.2026", JSON.stringify({ purchase: true })), false);     // model harcama diyor
+
+  const satir = (id, body, hint) => ({ id, body, received_at: "2026-10-17T12:00:00Z", source: "sms", ...(hint && { hint }) });
+  const rows = [
+    satir(-1, harcama),                                                                   // kural yeter: eklenir
+    satir(-2, taksitli, { purchase: true, merchant: "TRENDYOL", amount: "433,30" }),      // model taksit tutarını okumuş: uyuşur
+    satir(-3, belirsiz),                                                                  // model yok, kural emin değil: onay
+    satir(-4, belirsiz.replace("185,00", "95,00"), { purchase: true, merchant: "STARBUCKS", amount: "95,00" }),   // model tamamlar: eklenir
+    satir(-5, harcama.replace("125,50", "300,00"), { purchase: true, merchant: "A101", amount: "30,00" }),        // tutar uyuşmuyor: onay
+    satir(-6, harcama.replace("A101", "BIM").replace("125,50", "80,00"), { purchase: true, merchant: "UYDURMA MARKET", amount: "80,00" }),   // mesajda geçmeyen ad kullanılmaz
+  ];
+  K.setInbox(JSON.stringify(rows), "[]");
+  const list = (await e.call("list_inbox")).ok.emails;
+  assert.deepEqual(list.map(x => x.source), Array(6).fill("sms"));
+  assert.deepEqual(list.filter(x => !x.needsReview).map(x => x.emailId), [-1, -2, -4, -6]);
+  assert.equal(list[2].needsReview, "Not sure this is a purchase");
+  assert.equal(list[4].needsReview, "Amount could not be confirmed");
+  assert.equal(list[1].parsed.installments, 3);
+  assert.equal(list[5].parsed.merchant, "BIM");
+
+  K.setInbox(JSON.stringify(rows), "[-1,-2,-4,-6]");
+  const out = (await e.call("check_inbox")).ok;
+  assert.deepEqual(out.added.map(p => [p.description, p.total, p.installments]), [["A101", 125.5, 1], ["TRENDYOL", 1299.9, 3], ["STARBUCKS", 95, 1], ["BIM", 80, 1]]);
+  assert.deepEqual(out.needsReview.map(x => x.emailId), [-3, -5]);
+
+  // Aynı harcamanın mesajı yeniden gelirse (ya da e-postası da geldiyse) ikinci kez eklenmez, sorulur
+  K.setInbox(JSON.stringify([satir(-7, harcama)]), "[]");
+  assert.equal((await e.call("list_inbox")).ok.emails[0].needsReview, "Looks like a purchase already added");
+});
+

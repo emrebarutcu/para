@@ -73,6 +73,7 @@ Confidentialité : https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
+- Choisissez vos notifications : jour de paiement, arrêté du relevé, fin d'un échéancier et résumé du mois, chacune activable à part.
 - Nouvel aperçu : ce qui est déjà payé ce mois-ci et ce qu'il reste, si le mois prochain est plus léger, et le mois où vos mensualités se terminent.
 - Saisie plus rapide : les commerçants déjà utilisés en un geste, avec leur carte, leurs mensualités et leur catégorie. « Encore » ajoute à nouveau un achat.
 - Nouvelles notifications : la veille de l'arrêté du relevé, quand un achat en plusieurs fois est remboursé, et le bilan du mois.

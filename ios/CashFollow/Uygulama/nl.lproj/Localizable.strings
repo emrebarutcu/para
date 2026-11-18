@@ -6,3 +6,8 @@
 "Taksit sayısı" = "Aantal termijnen";
 "Harcama formunu açar. Tutar, ne alındığı ve taksit sayısı verilirse form dolu gelir." = "Opent het aankoopformulier. Geef je het bedrag, wat je kocht en het aantal termijnen op, dan is het formulier al ingevuld.";
 "Bu ay ödenecek tutarı, ödeneni ve kalanı söyler." = "Vertelt wat je deze maand moet betalen, wat betaald is en wat nog openstaat.";
+
+/* Banka mesajından harcama eylemi (Kisayollar.swift → BankaMesajiEkle) */
+"Banka mesajından harcama ekle" = "Aankoop toevoegen uit bankbericht";
+"Bankanın harcama mesajını okur ve CashFollow'a harcama olarak ekler. Mesaj telefonda okunur." = "Leest het uitgavenbericht van je bank en voegt het als aankoop toe aan CashFollow. Het bericht wordt op je telefoon gelezen.";
+"Mesaj" = "Bericht";

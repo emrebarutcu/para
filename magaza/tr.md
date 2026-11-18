@@ -78,6 +78,8 @@ Gizlilik: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
+- Bildirimlerinizi seçin: ödeme günü, hesap kesimi, taksit bitişi, ay özeti ve bankadan gelenler ayrı ayrı açılıp kapanır.
+- Banka mesajından harcama: bankanızın harcama SMS'i kendiliğinden harcama olarak eklenir. Kısayollar ile bir kez kurulur; mesaj telefonunuzda okunur, hiçbir yere gönderilmez.
 - Özet yenilendi: bu ay ne kadarını ödediniz, ne kaldı; gelecek ay hafifliyor mu, taksitleriniz hangi ay bitiyor.
 - Harcama eklemek kolaylaştı: önceki işyerleri bir dokunuşla gelir; kart, taksit ve kategori kendiliğinden dolar. "Yine" ile aynı harcamayı yeniden ekleyin.
 - Yeni bildirimler: hesap kesiminden bir gün önce, taksit bitince ve her ayın başında ay özeti.

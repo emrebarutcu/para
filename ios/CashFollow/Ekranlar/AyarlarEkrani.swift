@@ -80,7 +80,11 @@ struct AyarlarEkrani: View {
                     Text(L("Özet'teki Nakit grafiği bu günden başlayan bir ayı gösterir (ör. maaş günün) ve yalnızca nakit sayılanları toplar."))
                 }
 
-                HatirlatmaBolumu()
+                Section {
+                    BildirimSatiri()
+                } footer: {
+                    Text(L("Hangi bildirimlerin geleceğini seç: ödeme günü, hesap kesimi, taksit bitişi, ay özeti ve bankadan gelenler."))
+                }
                 KilitBolumu()
 
                 Section {
@@ -111,9 +115,10 @@ struct AyarlarEkrani: View {
                     Text(L("Adını değiştirmek için dokun, silmek için sola kaydır. İlk kişi sensin; diğerlerinin senin kartlarındaki harcamaları sana borç sayılır."))
                 }
 
-                // Banka e-postaları yalnızca Türkiye'de
+                // Banka mesajları (SMS) ve e-postaları yalnızca Türkiye'de
                 if model.bankEmailsAllowed {
                     Section {
+                        NavigationLink { MesajAyarlari() } label: { Text(L("Banka mesajları (SMS)")) }
                         NavigationLink { EpostaAyarlari() } label: { Text(L("Banka e-postaları")) }
                     } footer: {
                         Text(L("Bankanın harcama bildirimleri kendiliğinden harcama olarak eklenir."))
@@ -315,7 +320,11 @@ struct EpostaAyarlari: View {
                 } header: { Text(L("Kurulum")) }
                 .font(.footnote)
 
-                EpostaBildirimBolumu()
+                Section {
+                    BildirimSatiri()
+                } footer: {
+                    Text(L("Harcama eklenince ve onay bekleyen olunca gelen bildirimler."))
+                }
 
                 Section {
                     Button(kontrolEdiliyor ? L("Kontrol ediliyor…") : L("Şimdi kontrol et")) {
@@ -378,7 +387,7 @@ struct EpostaAyarlari: View {
     }
 
     // "2 saat önce"
-    private static func once(_ d: Date) -> String {
+    static func once(_ d: Date) -> String {
         let f = RelativeDateTimeFormatter()
         f.locale = Bicim.locale
         f.unitsStyle = .full
@@ -444,98 +453,177 @@ struct EpostaAyarlari: View {
     }
 }
 
-// Banka e-postaları → bildirim: uygulama kapalıyken eklenen harcama ve onay bekleyen e-posta (EpostaBildirim)
-struct EpostaBildirimBolumu: View {
+// Ayarlar → Banka mesajları (SMS): bankanın harcama mesajını Kısayollar otomasyonu uygulamaya verir (Mesajlar.swift,
+// Kisayollar.swift). Kurulum adımları, telefondaki modelin (Apple Intelligence) durumu, gelen son mesajın sonucu ve bir
+// mesajı deneme (try_bank_email sms: hiçbir şey kaydedilmez). Hesap gerekmez; mesajlar telefondan çıkmaz.
+struct MesajAyarlari: View {
     @EnvironmentObject private var model: Model
     @Environment(\.openURL) private var openURL
-    @State private var acik = EpostaBildirim.acik
-    @State private var reddedildi = false
+    @State private var deneme = ""
+    @State private var sonuc: Deneme?
+    @State private var deneniyor = false
+    @State private var hata: String?
+    @State private var modelNotu: String?   // denemede telefondaki modelin okuduğu ya da neden yanıt vermediği
+    @State private var kisayol = Yapilandirma.mesajKisayolu   // app_config'ten (UzakAyar); ekran açılınca yeniden okunur
+
+    struct Deneme: Decodable {
+        let parsed: Eposta.Okunan
+        let matchedCard: String?
+        let needsReview: String?
+        let wouldAutoAdd: Bool
+        let skipped: Bool?   // harcama mesajı değil (şifre, ekstre…): eklenmez
+    }
 
     var body: some View {
-        Section {
-            Toggle(L("Harcama eklenince bildir"), isOn: Binding(get: { acik }, set: { yeni in
-                acik = yeni
-                EpostaBildirim.acik = yeni
-                EpostaBildirim.planla(model)
-                Analitik.olay("inbox_notifications", ["enabled": yeni])
-                guard yeni else { reddedildi = false; return }
-                Task {
-                    let c = UNUserNotificationCenter.current()
-                    switch await c.notificationSettings().authorizationStatus {
-                    case .notDetermined: reddedildi = !((try? await c.requestAuthorization(options: [.alert, .sound, .badge])) ?? false)
-                    case .denied: reddedildi = true
-                    default: reddedildi = false
-                    }
-                }
-            }))
-            if reddedildi {
-                Button(L("Bildirim izni kapalı: iPhone Ayarları'nda aç")) {
-                    if let u = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(u) }
-                }
-                .font(.footnote)
+        List {
+            Section {
+                Text(L("Bankanın harcama mesajı gelince iPhone'un Kısayollar uygulaması metni CashFollow'a verir ve harcama kendiliğinden eklenir. Mesaj telefonunda okunur, hiçbir yere gönderilmez. Şifre ve ekstre mesajları eklenmez."))
+                    .font(.footnote).foregroundStyle(Tema.metin2)
+                zeka
+                durum
             }
-        } footer: {
-            Text(L("Uygulama kapalıyken iPhone ara sıra yeni e-postalara bakar (ne zaman olacağına iOS karar verir); eklenen harcamayı ve onay bekleyen e-postayı bildirir. Dokununca Harcamalar açılır."))
+
+            Section {
+                // Hazır kısayol paylaşılmışsa (Yapilandirma.mesajKisayolu) önce o eklenir; otomasyonun son adımında eylem
+                // aranıp girdisi bağlanmaz, listeden kısayol seçilir. Tetikleyiciyi (otomasyonu) iOS yine kullanıcıya kurdurur.
+                if let kisayol {
+                    adim(1, L("\"Kısayolu ekle\"ye dokun; açılan sayfada kısayolu ekle."))
+                    Button(L("Kısayolu ekle")) {
+                        Analitik.olay("sms_shortcut_added")
+                        openURL(kisayol)
+                    }
+                    .fontWeight(.semibold)
+                    adim(2, L("Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle."))
+                    adim(3, L("Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz."))
+                    adim(4, L("\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat."))
+                    adim(5, L("Listeden \"{0}\" kısayolunu seç.", Yapilandirma.mesajKisayoluAdi))
+                } else {
+                    adim(1, L("Kısayollar uygulamasını aç, alttan Otomasyon'a geç ve yeni otomasyon ekle."))
+                    // Tek otomasyon bütün bankaları yakalasın: harcama mesajlarının hepsinde "TL" geçer; gerisini uygulama eler
+                    adim(2, L("Mesaj'ı seç. \"Mesaj şunu içerir\" alanına TL yaz."))
+                    adim(3, L("\"Hemen Çalıştır\"ı seç, \"Çalıştığında Bildir\"i kapat."))
+                    adim(4, L("Eylem olarak CashFollow'un \"Banka mesajından harcama ekle\" eylemini seç."))
+                    adim(5, L("Eylemdeki Mesaj alanına dokun ve \"Kısayol Girdisi\"ni seç."))
+                }
+                Button(L("Kısayollar'ı aç")) {
+                    Analitik.olay("sms_setup_opened")
+                    if let u = URL(string: "shortcuts://") { openURL(u) }
+                }
+            } header: { Text(L("Kurulum")) } footer: {
+                Text(L("Bir kez kurulur ve bütün bankaların için çalışır: içinde TL geçen her mesaj CashFollow'a verilir; harcama olmayanlar (şifre, ekstre, kişisel mesajlar) elenir ve hiçbir yere yazılmaz. Bankanın kart harcamasında SMS göndermesi gerekir: yalnızca uygulama bildirimi geliyorsa bankanın ayarlarından SMS'i aç."))
+            }
+            .font(.footnote)
+
+            Section {
+                BildirimSatiri()
+            } footer: {
+                Text(L("Harcama eklenince ve onay bekleyen olunca gelen bildirimler."))
+            }
+
+            Section {
+                TextEditor(text: $deneme).frame(minHeight: 110).font(.footnote)
+                Button(deneniyor ? L("Okunuyor…") : L("Dene")) { dene() }
+                    .disabled(deneniyor || deneme.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                HataMetni(text: hata)
+                if let s = sonuc { denemeSonucu(s) }
+                if let modelNotu { Text(modelNotu).font(.caption).foregroundStyle(Tema.metin3) }
+            } header: { Text(L("Bir mesajı dene")) } footer: {
+                Text(L("Bankadan gelen harcama mesajının metnini yapıştır; hiçbir şey kaydedilmez."))
+            }
         }
+        .navigationTitle(L("Banka mesajları (SMS)"))
+        .navigationBarTitleDisplayMode(.inline)
         .task {
-            if acik, await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .denied { reddedildi = true }
+            await UzakAyar.yenile()
+            kisayol = Yapilandirma.mesajKisayolu
         }
     }
-}
 
-// Ödeme hatırlatmaları: aç / kapat, kaç gün önce, saat (Hatirlatma)
-struct HatirlatmaBolumu: View {
-    @EnvironmentObject private var model: Model
-    @Environment(\.openURL) private var openURL
-    @State private var acik = Hatirlatma.acik
-    @State private var gun = Hatirlatma.gunOnce
-    @State private var saat = Calendar.current.date(bySettingHour: Hatirlatma.dakika / 60, minute: Hatirlatma.dakika % 60, second: 0, of: Date()) ?? Date()
-    @State private var reddedildi = false
-    @State private var kesim = Hatirlatma.kesim
-    @State private var bitis = Hatirlatma.bitis
-    @State private var ayOzeti = Hatirlatma.ayOzeti
+    private func adim(_ n: Int, _ metin: String) -> some View {
+        Text("\(n). \(metin)").foregroundStyle(Tema.metin2)
+    }
 
-    var body: some View {
-        Section {
-            Toggle(L("Ödeme hatırlatmaları"), isOn: Binding(get: { acik }, set: { yeni in
-                acik = yeni
-                Task {
-                    if yeni { acik = await Hatirlatma.ac(model, kaynak: "settings"); reddedildi = !acik }
-                    else { await Hatirlatma.kapat(); reddedildi = false }
-                }
-            }))
-            if acik {
-                Picker(L("Ne zaman"), selection: $gun) {
-                    Text(L("Ödeme günü")).tag(0)
-                    Text(L("1 gün kala")).tag(1)
-                    ForEach([2, 3, 7], id: \.self) { Text(L("{0} gün kala", $0)).tag($0) }
-                }
-                DatePicker(L("Saat"), selection: $saat, displayedComponents: .hourAndMinute)
-                Toggle(L("Kesim gününden bir gün önce"), isOn: $kesim)
-                Toggle(L("Taksit bitince"), isOn: $bitis)
-                Toggle(L("Ay özeti"), isOn: $ayOzeti)
-            }
-            if reddedildi {
-                Button(L("Bildirim izni kapalı: iPhone Ayarları'nda aç")) {
-                    if let u = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(u) }
-                }
-                .font(.footnote)
-            }
-        } header: { Text(L("Bildirimler")) } footer: {
-            Text(L("Kart ekstresi, kredi ve borç taksitlerinin ödeme gününü hatırlatır. Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez."))
+    // Telefondaki model (MesajZekasi): varsa mesajları o da okur
+    @ViewBuilder private var zeka: some View {
+        switch MesajZekasi.durum {
+        case .hazir:
+            Label { Text(L("Apple Intelligence açık: mesajları telefonundaki model de okur.")).font(.footnote) }
+                icon: { Image(systemName: "sparkles").foregroundStyle(Tema.iyi) }
+        case .kapali:
+            Label { Text(L("Apple Intelligence kapalı. Açarsan tanımadığımız bankaların mesajları daha iyi okunur (iPhone Ayarları → Apple Intelligence ve Siri).")).font(.footnote) }
+                icon: { Image(systemName: "sparkles").foregroundStyle(Tema.metin3) }
+                .foregroundStyle(Tema.metin2)
+        case .yok:
+            Label { Text(L("Bu iPhone'da Apple Intelligence yok: mesajlar kurallarla okunur, emin olunamayan onaya düşer.")).font(.footnote) }
+                icon: { Image(systemName: "sparkles").foregroundStyle(Tema.metin3) }
+                .foregroundStyle(Tema.metin2)
         }
-        .onChange(of: gun) { _, v in Hatirlatma.gunOnce = v; Task { await Hatirlatma.kur(model) } }
-        .onChange(of: kesim) { _, v in Hatirlatma.kesim = v; Task { await Hatirlatma.kur(model) } }
-        .onChange(of: bitis) { _, v in Hatirlatma.bitis = v; Task { await Hatirlatma.kur(model) } }
-        .onChange(of: ayOzeti) { _, v in Hatirlatma.ayOzeti = v; Task { await Hatirlatma.kur(model) } }
-        .onChange(of: saat) { _, v in
-            let c = Calendar.current.dateComponents([.hour, .minute], from: v)
-            Hatirlatma.dakika = (c.hour ?? 10) * 60 + (c.minute ?? 0)
-            Task { await Hatirlatma.kur(model) }
+    }
+
+    // Kurulum çalışıyor mu: gelen son mesajın zamanı ve sonucu (metni saklanmaz)
+    @ViewBuilder private var durum: some View {
+        if let s = Mesajlar.son {
+            let ne = ["added": L("harcama eklendi"), "pending": L("onay bekliyor"), "queued": L("sıraya alındı"),
+                      "skipped": L("harcama mesajı değil")][s.kod] ?? s.kod
+            Label { Text(L("Son mesaj {0}: {1}", EpostaAyarlari.once(s.zaman), ne)).font(.footnote) }
+                icon: { Image(systemName: "checkmark.circle.fill").foregroundStyle(Tema.iyi) }
+        } else {
+            Label { Text(L("Henüz mesaj gelmedi. Otomasyonu kurduktan sonra bankandan ilk harcama mesajı gelince burada görünür.")).font(.footnote) }
+                icon: { Image(systemName: "clock").foregroundStyle(Tema.metin3) }
+                .foregroundStyle(Tema.metin2)
         }
-        .task {
-            // İzin iPhone Ayarları'ndan kaldırıldıysa anahtar kapalı görünür
-            if acik, await Hatirlatma.izinDurumu() == .denied { reddedildi = true }
+    }
+
+    private func dene() {
+        let metin = deneme.trimmingCharacters(in: .whitespacesAndNewlines)
+        deneniyor = true
+        Task {
+            // Gerçek akıştaki gibi: şifre mesajında model çağrılmaz
+            let sifre = model.motor?.smsKind(metin) == "otp"
+            let ipucu = sifre ? nil : await MesajZekasi.oku(metin)
+            // Modelin ne okuduğu (ya da neden yanıt vermediği) görünsün: telefonda denerken kurulumun parçası
+            if let i = ipucu {
+                let okunan = [i.purchase ? L("harcama") : L("harcama değil"), i.merchant, i.amount].compactMap { $0 }.joined(separator: " · ")
+                modelNotu = L("Telefondaki model: {0}", okunan)
+            } else if !sifre, MesajZekasi.durum == .hazir {
+                modelNotu = L("Telefondaki model yanıt vermedi: {0}", MesajZekasi.sonHata.map { String($0.prefix(120)) } ?? "—")
+            } else {
+                modelNotu = nil
+            }
+            var a: [String: Any] = ["text": metin, "sms": true]
+            if let i = ipucu {
+                var h: [String: Any] = ["purchase": i.purchase]
+                if let m = i.merchant { h["merchant"] = m }
+                if let t = i.amount { h["amount"] = t }
+                a["hint"] = h
+            }
+            do {
+                sonuc = try model.read("try_bank_email", a) as Deneme
+                hata = nil
+            } catch {
+                sonuc = nil
+                hata = error.localizedDescription
+            }
+            deneniyor = false
+            Analitik.olay("sms_tried", ["ai": ipucu != nil])
+        }
+    }
+
+    @ViewBuilder private func denemeSonucu(_ s: Deneme) -> some View {
+        if s.skipped == true {
+            Text(L("Harcama mesajı değil: eklenmez.")).font(.footnote).foregroundStyle(Tema.metin2)
+        } else {
+            let o = s.parsed
+            VStack(alignment: .leading, spacing: 6) {
+                Satir(title: L("Tutar"), value: o.amount.map { o.currency == nil || o.currency == Bicim.home ? Bicim.tl($0) : "\($0) \(o.currency ?? "")" } ?? "—")
+                Satir(title: L("Tarih"), value: o.date.map { Bicim.day($0) } ?? "—")
+                Satir(title: L("Taksit"), value: (o.installments ?? 1) > 1 ? L("{0} taksit", o.installments ?? 1) : L("Peşin"))
+                Satir(title: L("İşyeri"), value: o.merchant ?? "—")
+                Satir(title: L("Kart"), value: s.matchedCard ?? o.cardLast4.map { "•••• \($0)" } ?? "—")
+                Text(s.wouldAutoAdd ? L("Kendiliğinden eklenir.") : L("Onaya düşer: {0}", EpostaKarti.neden(s.needsReview, o) ?? ""))
+                    .font(.footnote).foregroundStyle(s.wouldAutoAdd ? Tema.iyi : Tema.uyari)
+            }
+            .font(.subheadline)
         }
     }
 }

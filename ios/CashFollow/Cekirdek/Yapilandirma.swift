@@ -14,6 +14,18 @@ enum Yapilandirma {
     // Ürün analitiği ve A/B (PostHog, ABD bölgesi). Proje anahtarı herkese açıktır (phc_…); boşken analitik kapalı
     static let posthogKey = "phc_sEWqvuL259ZcLYGHQXWpnusXvLPMRPF8L4SvAsWHWfPY"
     static let posthogHost = URL(string: "https://us.i.posthog.com")!
+    // Banka mesajları için hazır kısayol (Ayarlar → Banka mesajları → "Kısayolu ekle"): içinde yalnızca CashFollow'un
+    // "Banka mesajından harcama ekle" eylemi vardır, girişi Kısayol Girdisi'dir. Bağlantı Supabase'deki app_config
+    // tablosunda (sms_shortcut_url; UzakAyar): sürüm çıkarmadan değiştirilir. iCloud bağlantısı Kısayollar'dan alınır
+    // (Paylaş → iCloud Bağlantısını Kopyala); uygulama kısayolu kendisi oluşturamaz. Boşken düğme görünmez ve kurulum
+    // eylem seçilerek anlatılır. Ad, kısayola Kısayollar'da verilen addır (otomasyonun son adımında listeden bu adla
+    // seçilir). "-kisayol <adres>": ekran görüntüsünde düğmeli hâli göstermek için.
+    static let mesajKisayoluAdi = "CashFollow Banka Mesajı"
+    static var mesajKisayolu: URL? {
+        let a = CommandLine.arguments
+        if let i = a.firstIndex(of: "-kisayol"), i + 1 < a.count { return UzakAyar.kisayolAdresi(a[i + 1]) }
+        return UzakAyar.kisayolAdresi(UzakAyar.deger("sms_shortcut_url"))
+    }
     // Günler cihazın saat diliminde (ABD'de akşam "bugün" yarına kaymasın); hesaba da yazılır (Model.refresh)
     static var timeZone: TimeZone { .current }
 }

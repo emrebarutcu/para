@@ -446,3 +446,22 @@ $$;
 
 revoke all on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
+
+-- ── Uygulama ayarları (1.3) ──────────────────────────────────────────────────
+-- Sürüm çıkarmadan değiştirilebilen, herkese açık değerler (anahtar → değer). Herkes okur, yalnızca panelden / service
+-- role ile yazılır. sms_shortcut_url: iPhone'da "Kısayolu ekle"nin açtığı hazır kısayolun iCloud bağlantısı (boşken düğme
+-- görünmez). supabase/gecis/1.3.0.sql ile aynı.
+create table if not exists app_config (
+  key        text primary key,
+  value      text,
+  note       text,
+  updated_at timestamptz not null default now()
+);
+alter table app_config enable row level security;
+drop policy if exists "app config read" on app_config;
+create policy "app config read" on app_config for select to anon, authenticated using (true);
+grant select on app_config to anon, authenticated;
+insert into app_config (key, value, note) values
+  ('sms_shortcut_url', null, 'iPhone → Ayarlar → Banka mesajları → "Kısayolu ekle": hazır kısayolun iCloud bağlantısı (https://www.icloud.com/shortcuts/…). Boşken düğme görünmez; uygulama her açılışta okur.')
+on conflict (key) do nothing;
+

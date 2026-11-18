@@ -73,6 +73,7 @@ Privacy: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
+- Scegli le tue notifiche: giorno di pagamento, chiusura dell'estratto conto, fine delle rate e riepilogo del mese, ognuna a parte.
 - Nuovo riepilogo: quanto di questo mese è già pagato e quanto resta, se il mese prossimo è più leggero e in che mese finiscono le tue rate.
 - Più veloce da inserire: i negozi già usati con un tocco, con carta, rate e categoria. «Di nuovo» aggiunge ancora un acquisto.
 - Nuove notifiche: il giorno prima della chiusura dell'estratto conto, quando finisci di pagare un acquisto a rate e il riepilogo del mese.

@@ -5,7 +5,8 @@
 # Görüntüler ekran-goruntuleri dalına yazılır (her çalışmada yeniden). claude/grafik* ve claude/abd* dallarına itilince ya da elle çalışır.
 # App Store sayfası görüntüleri ekran-goruntuleri dalından yükler (magaza.yml): bir özelliği denemek için elle
 # çalıştırırken "dal"a başka bir ad verilir (ör. ekran-karsilama), mağazanınkiler değişmez. "karsilama" yalnızca ilk
-# açılış akışını çeker (Türkçe ve İngilizce; koyu seçiliyse koyu tema da).
+# açılış akışını çeker (Türkçe ve İngilizce; koyu seçiliyse koyu tema da). "adimlar" yalnızca verilen adımları çeker
+# (Türkiye örnek verisiyle, Türkçe ve İngilizce): yeni bir ekranı bütün turları beklemeden görmek için.
 name: Ekran görüntüleri
 
 on:
@@ -23,6 +24,14 @@ on:
         description: "Yalnızca ilk açılış akışı (ara adımlar ve sonrasında Kartlar, Özet)"
         type: boolean
         default: false
+      adimlar:
+        description: "Yalnızca şu adımlar (virgülle, ör. galeri10,sekme2); Türkçe ve İngilizce, açık tema"
+        type: string
+        default: ""
+      ek:
+        description: "\"adimlar\" turuna verilecek ek uygulama argümanları (ör. -mesaj)"
+        type: string
+        default: ""
   push:
     branches: ["claude/grafik*", "claude/abd*"]
     paths: ["ios/**", "*.js", "dil/**", ".github/workflows/ekran.yml"]
@@ -46,6 +55,10 @@ jobs:
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO build -quiet
       - name: Ekran görüntüleri
+        env:
+          # Elle girilen metinler betiğe doğrudan yazılmaz, ortam değişkeninden okunur
+          OZEL: ${{ inputs.adimlar }}
+          EK: ${{ inputs.ek }}
         run: |
           APP=build/Build/Products/Debug-iphonesimulator/CashFollow.app
           UDID=$(xcrun simctl list devices available -j | python3 -c '
@@ -79,6 +92,18 @@ jobs:
           EN='-AppleLanguages (en) -AppleLocale en_US'
           HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,galeri9,sekme0,sekme1,sekme2,sekme3,sekme4
           TANITIM=tanitim0,tanitim1,tanitim2,tanitim3,tanitim4
+          # Yalnızca istenen adımlar (bir ekranı hızlıca görmek için; Actions → Run workflow → adimlar)
+          if [ -n "$OZEL" ]; then
+            tur "" light "$OZEL" $EK $TR
+            tur en- light "$OZEL" $EK -AppleLanguages "(en)" -AppleLocale en_TR
+            ls out
+            # Telefondaki modelin örnek banka mesajlarını okuması (bilgi için; MesajZekasi.swift "-zeka-dene")
+            xcrun simctl terminate "$UDID" app.cashfollow.ios 2>/dev/null || true
+            xcrun simctl launch "$UDID" app.cashfollow.ios -zeka-dene $TR
+            for t in $(seq 1 200); do grep -q "ZEKA-DENEME BITTI" "$DATA/Documents/zeka-deneme.txt" 2>/dev/null && break; sleep 2; done
+            cat "$DATA/Documents/zeka-deneme.txt" || echo "sonuç yazılmadı"
+            exit 0
+          fi
           if [ "${{ inputs.karsilama }}" = "true" ]; then
             # Ara adımlar (boş kart adı, seçilmemiş kesim günü) ve akıştan sonra Kartlar ile Özet
             AYRINTI=tanitim0,tanitim1bos,tanitim1,tanitim2bos,tanitim2,tanitim3,tanitim4,sekme3,sekme0

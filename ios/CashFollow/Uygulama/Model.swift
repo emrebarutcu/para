@@ -146,9 +146,11 @@ final class Model: ObservableObject {
     // Uygulama açılınca, öne gelince ve aşağı çekince: kurlar, fiyatlar; girişliyse çek ve yaz
     func refresh() async {
         async let market: Void = refreshMarket()
+        async let ayarlar: Void = UzakAyar.yenile()   // app_config (ör. hazır kısayolun bağlantısı)
         await run { try await $0.pull(); try await $0.push() }
         await checkInbox()
         await market
+        await ayarlar
         await sendProfile()
         await abonelik.yenile()
     }
@@ -165,31 +167,51 @@ final class Model: ObservableObject {
         }
     }
 
-    // ── Banka e-postaları (yalnızca Türkiye; web'deki checkInbox) ──────────────
+    // ── Banka e-postaları ve mesajları (yalnızca Türkiye; web'deki checkInbox) ──
 
     // Okunabilen ve kartı bulunan e-postalar harcama olarak eklenir (ilk kişiye); kalanlar Harcamalar'da onaya bekler.
     // Deneme e-postası (Banka e-postaları → Deneme e-postası gönder) yalnızca işlendi yapılır.
     // Önce sunucuda işlendi yapılır: başka cihaz aynı anda okuduysa harcama iki kez eklenmez.
-    // Eklenen harcamalar ve gelen deneme sayısı; denenemediyse (giriş yok, ağ, başka kontrol sürüyor) nil
+    // Telefona gelen banka mesajları (SMS; Mesajlar.swift) aynı listeye eksi kimlikle girer: yalnızca telefonda durur,
+    // giriş yapılmamışsa da işlenir; sunucuya sorulmaz.
+    // Eklenen harcamalar ve gelen deneme sayısı; denenemediyse (ağ, başka kontrol sürüyor) nil
     struct EpostaKontrolu { let eklenen: [Harcama]; let deneme: Int }
     private var inboxBusy = false
     @discardableResult
     private func checkInbox() async -> EpostaKontrolu? {
         guard bankEmailsAllowed else { epostalar = []; sonEposta = nil; return nil }   // ülke Türkiye değilse onay bekleyenler de gizlenir
-        guard let motor, let s = senkron, s.pulled, !inboxBusy else { return nil }
+        let s = senkron
+        guard let motor, s?.pulled ?? true, !inboxBusy else { return nil }
         inboxBusy = true
         defer { inboxBusy = false }
         var eklenen: [Harcama] = [], deneme = 0
         do {
-            let rows = try await s.inboxPending()
-            let latest = (try? await s.inboxLatest()) ?? ""   // durum için; alınamazsa e-postalar yine işlenir
-            guard senkron === s else { return nil }
+            var sunucu = "[]", latest = "", sunucuVar = s != nil
+            if let s {
+                do {
+                    sunucu = try await s.inboxPending()
+                    latest = (try? await s.inboxLatest()) ?? ""   // durum için; alınamazsa e-postalar yine işlenir
+                } catch {
+                    // Tablo kurulmamış ya da ağ yok: e-postalar sonraki yenilemeye kalır; telefondaki mesajlar yine işlenir
+                    guard !Mesajlar.hepsi().isEmpty else { return nil }
+                    sunucuVar = false
+                }
+                guard senkron === s else { return nil }
+            }
+            let rows = Mesajlar.birlestir(sunucu)
             motor.setInbox(rows: rows, latest: latest)
-            let ready = (try motor.run("list_inbox") as EpostaListesi).emails.filter { $0.needsReview == nil || $0.kind == "test" }.map(\.emailId)
+            let ilk = (try motor.run("list_inbox") as EpostaListesi).emails
+            // Harcama olmayan mesaj sıraya alınmışsa (uygulama kapalıyken gelen) silinir
+            let diger = ilk.filter { $0.emailId < 0 && $0.kind == "other" }.map(\.emailId)
+            let ready = ilk.filter { $0.needsReview == nil || $0.kind == "test" }.map(\.emailId)
+            let yerel = ready.filter { $0 < 0 }, uzak = ready.filter { $0 > 0 }
             if !ready.isEmpty {
-                let granted = try await s.inboxClaim(ready)
-                guard senkron === s else { try? await s.inboxRelease(granted); return nil }
-                motor.setInbox(rows: rows, granted: granted, latest: latest)
+                var granted: [Int] = []
+                if let s, !uzak.isEmpty {
+                    granted = try await s.inboxClaim(uzak)
+                    guard senkron === s else { try? await s.inboxRelease(granted); return nil }
+                }
+                motor.setInbox(rows: rows, granted: granted + yerel, latest: latest)
                 if let out = try? motor.run("check_inbox") as EpostaSonucu {
                     eklenen = out.added
                     deneme = out.tests ?? 0
@@ -197,18 +219,50 @@ final class Model: ObservableObject {
                     if deneme > 0 { Analitik.olay("inbox_test_received") }
                 }
                 let released = motor.inboxReleased()
-                if !released.isEmpty { try? await s.inboxRelease(released) }
+                if let s, released.contains(where: { $0 > 0 }) { try? await s.inboxRelease(released.filter { $0 > 0 }) }
+                Mesajlar.sil(yerel.filter { !released.contains($0) })
             }
+            Mesajlar.sil(diger)
             let liste = try motor.run("list_inbox", ["include_body": true]) as EpostaListesi
-            epostalar = liste.emails
-            sonEposta = liste.lastEmail
+            let yeni = liste.emails.filter { !diger.contains($0.emailId) }
+            if sunucuVar || s == nil {
+                epostalar = yeni
+                sonEposta = liste.lastEmail
+            } else {
+                epostalar = epostalar.filter { $0.emailId > 0 } + yeni.filter { $0.emailId < 0 }   // e-postalar alınamadı: eskileri kalır
+            }
             // Uygulama açıkken görülenler için arka planda bildirim gönderilmez
             if UIApplication.shared.applicationState == .active { EpostaBildirim.goruldu(epostalar.map(\.emailId)) }
             return EpostaKontrolu(eklenen: eklenen, deneme: deneme)
         } catch {
-            // Tablo kurulmamış ya da ağ yok: sonraki yenilemede yeniden denenir
+            // Sonraki yenilemede yeniden denenir
             return nil
         }
+    }
+
+    // Banka mesajı (SMS) geldi (Kısayollar eylemi → Mesajlar.geldi). Şifre mesajında model hiç çağrılmaz; harcama olmayan
+    // mesaj hiçbir yere yazılmaz. Gerisi e-postalarla aynı: eklenir ya da Harcamalar'da onaya düşer. İkinci değer: mesajı
+    // telefondaki model de okudu mu (kullanım verisi için).
+    func mesajGeldi(_ metin: String) async -> (Mesajlar.Sonuc, Bool) {
+        guard bankEmailsAllowed, let motor else { return (.kapali, false) }
+        if motor.smsKind(metin) == "otp" { return (.atlandi, false) }
+        let ipucu = await MesajZekasi.oku(metin)
+        if motor.smsSkip(metin, ipucu: ipucu) { return (.atlandi, ipucu != nil) }
+        let id = Mesajlar.ekle(metin, ipucu: ipucu)
+        if senkron != nil { await run { try await $0.pull() } }
+        let k = await checkInbox()
+        if let k, !k.eklenen.isEmpty, senkron != nil { await run { try await $0.push() } }
+        let bekleyen = epostalar.first { $0.emailId == id }
+        let sonuc: Mesajlar.Sonuc
+        if bekleyen != nil { sonuc = .bekliyor }
+        else if Mesajlar.hepsi().contains(where: { $0.id == id }) { sonuc = .sirada }   // işlenemedi: sonraki yenilemede
+        else if let h = k?.eklenen.last { sonuc = .eklendi(h) }
+        else { sonuc = .atlandi }
+        if EpostaBildirim.acik, UIApplication.shared.applicationState != .active {
+            if case .eklendi(let h) = sonuc { await EpostaBildirim.bildir(eklenen: [h], bekleyen: [], mesaj: true) }
+            else if let bekleyen { await EpostaBildirim.bildir(eklenen: [], bekleyen: [bekleyen], mesaj: true) }
+        }
+        return (sonuc, ipucu != nil)
     }
 
     // Ayarlar → Banka e-postaları: "Şimdi kontrol et"; önce eşitlenir (kartların son 4 hanesi güncel olsun)
@@ -250,9 +304,10 @@ final class Model: ObservableObject {
         return "\(try await s.inboxAddress(renew: yenile))@\(Yapilandirma.inboxDomain)"
     }
 
-    // Onay bekleyen e-posta eklendi ya da yok sayıldı: sunucuda işlendi yapılır
+    // Onay bekleyen e-posta eklendi ya da yok sayıldı: sunucuda işlendi yapılır (banka mesajı telefondaki kuyruktan silinir)
     func epostaBitti(_ id: Int) async {
         epostalar.removeAll { $0.emailId == id }
+        if id < 0 { Mesajlar.sil([id]); return }
         _ = try? await senkron?.inboxClaim([id])
     }
 

@@ -71,6 +71,20 @@ enum Ornek {
         if let data = try? JSONSerialization.data(withJSONObject: CommandLine.arguments.contains("-bos") ? bos : ulke != "TR" ? veriUS() : veri()) {
             Depo.write(Depo.stateFile(nil), String(decoding: data, as: UTF8.self))
         }
+        // "-mesaj": telefona gelmiş banka mesajları (SMS; Mesajlar.swift) kuyrukta: biri kartı sorulacak, biri emin
+        // olunamayan. Harcamalar'da "Bankadan gelenler" kartı bunlarla görünür (bankaların yazışına benzetilmiş örnekler).
+        Mesajlar.ornek(CommandLine.arguments.contains("-mesaj") ? [
+            "5678 ile biten kartinizla \(tarih(-1)) tarihinde MIGROS dan 1.250,00 TL tutarinda harcama yapilmistir.",
+            "X Bank ***5678: \(tarih(-2)) STARBUCKS 185,00 TL. Bilgi icin 4440000",
+        ] : [])
+    }
+
+    // "17.10.2026": bugünden n gün sonrası (örnek banka mesajlarının tarihi)
+    private static func tarih(_ n: Int) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "dd.MM.yyyy"
+        return f.string(from: Calendar.current.date(byAdding: .day, value: n, to: Date()) ?? Date())
     }
 
     // Bugünden n gün önce / sonra
@@ -222,6 +236,10 @@ struct GrafikGalerisi: View {
             AsistanEkrani()
         } else if sayfa == 9 {
             yeriGelince
+        } else if sayfa == 10 {
+            NavigationStack { MesajAyarlari() }
+        } else if sayfa == 11 {
+            NavigationStack { BildirimAyarlari() }
         } else {
             galeri
         }

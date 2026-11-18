@@ -6,3 +6,8 @@
 "Taksit sayısı" = "Numero di rate";
 "Harcama formunu açar. Tutar, ne alındığı ve taksit sayısı verilirse form dolu gelir." = "Apre il modulo dell'acquisto. Se indichi importo, cosa hai comprato e numero di rate, il modulo si apre già compilato.";
 "Bu ay ödenecek tutarı, ödeneni ve kalanı söyler." = "Dice quanto è dovuto questo mese, quanto è stato pagato e quanto resta.";
+
+/* Banka mesajından harcama eylemi (Kisayollar.swift → BankaMesajiEkle) */
+"Banka mesajından harcama ekle" = "Aggiungi acquisto da messaggio della banca";
+"Bankanın harcama mesajını okur ve CashFollow'a harcama olarak ekler. Mesaj telefonda okunur." = "Legge il messaggio di spesa della tua banca e lo aggiunge a CashFollow come acquisto. Il messaggio viene letto sul tuo telefono.";
+"Mesaj" = "Messaggio";

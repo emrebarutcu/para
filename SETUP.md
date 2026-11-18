@@ -132,6 +132,10 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
+- **1.3.0** — **Banka mesajından harcama** (iPhone, Türkiye; Kısayollar otomasyonu, bölüm 6 → Banka mesajları) ve
+  **bildirim seçimi** (Ayarlar → Bildirimler: her tür ayrı). **Yayından önce** `supabase/gecis/1.3.0.sql` çalıştırılır (18 Kasım 2026'da
+  çalıştırıldı): `app_config` tablosu (herkes okur, yalnızca panelden yazılır; `sms_shortcut_url`). Tablo yoksa uygulama çalışır, yalnızca
+  "Kısayolu ekle" düğmesi görünmez. MCP: `try_bank_email` aracına `sms` ve `hint`.
 - **8.10.0** — **Japonya: bonus ödemesi** (ボーナス払い; yalnızca ülkesi Japonya olan hesapta, `para.js features` `bonus`). Kartlı
   harcama yaz ya da kış bonusu ayında, kartın son ödeme gününde tek seferde (`purchases.bonus`, `count` 1) ya da art arda
   iki bonusa yarı yarıya (`count` 2, ボーナス2回払い) ödenir. Bonus ayları kartta (`cards.bonus_months` [yaz, kış]; boşsa
@@ -344,6 +348,15 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
   seyri web'le aynı modülden hesaplanır (`nakit.js`, geçmiş fiyatlar `/api/gecmis`). Kart günlerinin değişmesi
   (`transition`), içe aktarma ve banka e-postaları web'de. Araçların doğrulama hataları asistanlar için İngilizcedir; formlar
   çoğunu önceden engeller.
+- **Bildirimler** (yerel; sunucu yok): Ayarlar → **Bildirimler** (`Ekranlar/BildirimAyarlari.swift`,
+  `Uygulama/Bildirimler.swift`). Kullanıcı her türü ayrı açıp kapatır: ödeme günü (ne zaman: aynı gün, 1, 2, 3, 7 gün
+  kala), hesap kesiminden bir gün önce, taksit bitince, ay özeti — dördü seçilen saatte (`Uygulama/Hatirlatma.swift`) —
+  ve Türkiye'de bankadan gelenler: harcama eklenince, onay bekleyen olunca (`Uygulama/EpostaBildirim.swift`; e-posta ve
+  SMS). Bir tür ilk açılınca iOS izin sorar; izin kaldırıldıysa ekranın üstünde iPhone Ayarları'na düğme çıkar.
+  İlk açılış akışındaki ve Özet'teki "Hatırlat" dört zamanlanmış türü birlikte açar. 1.3.0'dan önce kesim, taksit bitişi
+  ve ay özeti ödeme hatırlatmasına bağlıydı; `Hatirlatma.gecis()` bir kez çalışıp hatırlatması kapalı olanlarda üçünü
+  kapalı başlatır (kimseye yeni bildirim kendiliğinden açılmaz). Banka bildirimleri tek ayardı (`eposta.bildirim`);
+  "onay bekleyen olunca" ilk okunuşta onun değerini alır.
 - **Sürüm:** mağaza sürümü web sürümüdür; `scripts/surum.sh` `MARKETING_VERSION`'ı da yazar, Sürüm denetimi ikisinin aynı
   olduğuna bakar. `CURRENT_PROJECT_VERSION` (build numarası) her TestFlight yüklemesinde elle artırılır.
 - **Denetim** (`.github/workflows/ios.yml`, iOS): `node --test ios/test/*.test.mjs` köprüyü JavaScriptCore'a benzer ortamda
@@ -473,9 +486,13 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
   `inbox_card_assigned` (`set_last4`: son 4 hane karta yazıldı mı), `inbox_notifications` (`enabled`).
+- Banka mesajları (iPhone, SMS): `sms_received` (`result`: added, pending, queued, skipped, off; `ai`: telefondaki
+  model de okudu mu), `sms_setup_opened` (kurulumdan Kısayollar açıldı), `sms_shortcut_added` (hazır kısayolun bağlantısı açıldı),
+  `sms_tried` (bir mesaj denendi; `ai`).
+  Mesajın metni, tutarı ya da işyeri gönderilmez. Mesajdan onayla eklenen harcamada `purchase_added` → `source: sms`.
 - Kayıt, bildirim ve geri dönüş (iPhone; ürün çalışmasının ölçüleri): `purchase_added` olayında `source` kaydın nereden
-  geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email`: onay bekleyen banka e-postası,
-  `shortcut`: "Harcama ekle" kısayolu;
+  geldiğini söyler (`manual`, `suggestion`: işyeri önerisi, `repeat`: "Yine", `email` / `sms`: onay bekleyen banka e-postası ya da
+  mesajı, `shortcut`: "Harcama ekle" kısayolu;
   web'de `web`) — otomatik ve yarı otomatik kaydın payı bununla, kayıt süresi `add_opened` ile `purchase_added` arasından
   ölçülür. `merchant_suggestion_used` (öneriye dokunuldu), `notification_opened` (`kind`: payment, cutoff,
   installment_finished, month_summary, inbox), `installment_finished_shown` (kutlama kartı ilk kez göründü; `count`),
@@ -483,7 +500,9 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   `Uygulama/Kisayollar.swift`): `shortcut_run` (`intent`: add_purchase, due_this_month); tepedeki iyi haber satırı
   açılınca `insight_headline_opened` (`id`). Tek satırla kayıt: `quick_line_used` (`installments`, `card`), kayıtta
   `source: quick`. Ekstreyi asistana yönlendirme: `statement_tip_opened`, `statement_prompt_copied`, `assistant_opened`
-  (`source`: statement, settings).
+  (`source`: statement, settings). `notification_setting_changed` (Ayarlar → Bildirimler; `kind`: payment, cutoff,
+  installment_finished, month_summary, bank_added, bank_pending; `enabled`; `granted`: bildirim izni var mı). Ödeme günü
+  anahtarı ayrıca eski adlarla `reminders_enabled` (`source: settings`) / `reminders_disabled` yazar.
 - Karşılama: A/B denemesi yok (Kasım 2026 kararı; kol başına ~2.900 kurulum gerekiyordu). Her yeni kurulum yeni akışı
   görür, `onboarding_flow` bayrağı okunmaz; olaylarda `variant: default`. Etki önce / sonra kohortlarıyla ölçülür:
   birincil ölçü ilk hafta geri dönüş (1–7. günde `app_opened`), etkinleşme ikincil (akış kartı ve harcamayı kendisi
@@ -978,8 +997,9 @@ harcama son 4 hanesi eşleşen karta, ilk kişi adına eklenir.
 5. iPhone uygulama kapalıyken de bakar: arka plan yenilemesi (`Uygulama/EpostaBildirim.swift`, `BGAppRefreshTask`
    `app.cashfollow.ios.eposta`, `ios/CashFollow-Info.plist`) iOS'un verdiği zamanda (en erken 15 dakikada bir, ne zaman
    olacağına iOS karar verir) eşitler, e-postaları işler ve eklenen harcamayı / onay bekleyen yeni e-postayı yerel
-   bildirimle söyler; dokununca Harcamalar açılır. Ayarlar → Banka e-postaları → "Harcama eklenince bildir" (varsayılan
-   açık, bildirim izni gerekir). Uygulamada görülen bekleyenler için sonradan bildirim gitmez.
+   bildirimle söyler; dokununca Harcamalar açılır. Ayarlar → Bildirimler → Bankadan gelenler: "Harcama eklenince" ve
+   "Onay bekleyen olunca", ayrı ayrı (varsayılan açık, bildirim izni gerekir; ikisi de kapalıysa arka planda bakılmaz).
+   Uygulamada görülen bekleyenler için sonradan bildirim gitmez.
 
 Worker yalnızca 12 onaltılık haneli adresleri kabul eder; kayıtlı olmayan adrese ve 2 MB'tan büyük e-postalara
 ret döner. Aynı e-posta iki kez gelirse ikincisi yok sayılır (`Message-ID`).
@@ -987,6 +1007,50 @@ Tutarı, tarihi ya da kartı okunamayan, yabancı para birimli ve iade/iptal e-p
 **Harcamalar** sekmesinde *Ekle* (form doldurulmuş açılır), *Göster* ya da *Yok say* ile beklerler.
 Ayarlar'daki "Bir e-postayı dene" alanına bir bildirim yapıştırıp neyin okunduğunu görebilirsin.
 Adres yenilenirse eskisine gelen e-postalar reddedilir. Sıradaki iyileştirmeler: `YAPILACAKLAR.md`.
+
+### Banka mesajları (SMS) — iPhone
+
+Bankanın harcama **mesajı** da harcama olarak eklenir; e-postanın tersine sunucudan geçmez, hesap gerektirmez ve mesaj
+telefondan çıkmaz. Yalnızca Türkiye'deki hesaplarda (`bankEmails` özelliği, e-postalarla aynı).
+
+- **Nasıl çalışır:** kullanıcı Kısayollar'da bir kez otomasyon kurar (Mesaj → "TL" içerirse → Hemen Çalıştır →
+  CashFollow'un **Banka mesajından harcama ekle** eylemi, giriş: Kısayol Girdisi). Adımlar uygulamada: Ayarlar →
+  **Banka mesajları (SMS)**. Eylem `Uygulama/Kisayollar.swift` (App Intents; uygulama öne gelmez), giriş
+  `Mesajlar.geldi`.
+- **"Kısayolu ekle" düğmesi (hazır kısayol):** bağlantı Supabase'de, **`app_config`** tablosunda, anahtarı
+  **`sms_shortcut_url`** (Supabase → Table Editor → `app_config` → değeri yaz ya da sil; sürüm gerekmez). Uygulama her
+  açılışta ve kurulum ekranı açılınca okur, telefonda saklar (`Cekirdek/UzakAyar.swift`). Doluysa kurulum ekranı önce
+  hazır kısayolu ekletir (iCloud bağlantısı açılır, kullanıcı "Kısayolu Ekle"ye dokunur), otomasyonun son adımında eylem
+  aranmaz, listeden `mesajKisayoluAdi` adlı kısayol seçilir; boşsa eylem seçilerek kurulur. Yalnızca
+  `https://www.icloud.com/shortcuts/…` kabul edilir: başka bir adres yazılırsa düğme görünmez. Bağlantıyı uygulama ya da
+  CI üretemez (Apple kısayolun bir Apple hesabıyla imzalanmasını ister); bir kez elle oluşturulur: 1.3.0 kurulu bir
+  iPhone'da Kısayollar → yeni kısayol → eylem: CashFollow **Banka mesajından harcama ekle**, Mesaj: **Kısayol Girdisi** →
+  adı `CashFollow Banka Mesajı` → Paylaş → **iCloud Bağlantısını Kopyala**. Kısayol paylaşanın iCloud hesabında durur:
+  silinirse tablodaki değer de silinir. Düğme yalnızca kısayolu ekler; tetikleyiciyi (otomasyonu) iOS yine kullanıcıya
+  kurdurur.
+- **Kurulum neden elle:** iOS bir uygulamanın otomasyon (tetikleyici) kurmasına izin vermez; paylaşılan kısayol
+  bağlantıları da tetikleyiciyi taşımaz. Bu yüzden kullanıcıdan banka adı ya da kelime istenmez: tek otomasyon, sabit
+  "TL" sözüyle bütün bankaların mesajlarını yakalar. İçinde TL geçen kişisel mesajlar da uygulamaya gelir; telefonda
+  elenir ve hiçbir yere yazılmaz (model yokken: harcama sözü de karttan söz eden bir şey de yoksa alınmaz).
+- **Okuma:** önce kurallar (`eposta.js` → `smsKind`, `sms`): tek kullanımlık şifre mesajı (tutarı ve işyerini de yazar,
+  harcamadan önce gelir) ve ekstre, karta ödeme, havale, kampanya gibi harcama olmayan mesajlar **hiçbir yere yazılmaz**.
+  Kalanı telefondaki model de okur (`Uygulama/MesajZekasi.swift`: Apple Intelligence, FoundationModels; iOS 26 ve
+  sonrası, destekleyen iPhone'larda ve açıksa; 10 saniyede yanıt gelmezse beklenmez): harcama mı, işyeri, tutar. İşyeri
+  yalnızca mesajda gerçekten geçiyorsa kullanılır; modelin tutarı kuralın okuduğuyla uyuşmazsa ya da ikisi harcama olup
+  olmadığında anlaşamazsa harcama eklenmez, **onaya düşer**. Model yoksa yalnızca kurallar çalışır; şablon bankaya göre
+  değildir (tutar, son 4 hane, taksit her bankada benzer yazılır), tanınmayan biçimde işyeri boş kalabilir.
+- **İşleme:** mesaj telefondaki kuyruğa girer (`Uygulama/Mesajlar.swift`, `mesajlar.json`; eksi kimlik, `source: "sms"`)
+  ve banka e-postalarıyla aynı yoldan işlenir (`Model.checkInbox`, `tools.js` → `smsItem`): okunan ve kartı bulunan
+  harcama ilk kişiye eklenir, kalan Harcamalar → **Bankadan gelenler**'de bekler (kart sorusu, Ekle, Yok say aynı). Aynı
+  kartta aynı gün aynı tutarda harcama varsa (e-postası da gelmiş olabilir) sorulur; aynı mesaj ikinci kez gelirse
+  (iki otomasyon) işlenmez (metnin özeti saklanır, kendisi değil). Uygulama kapalıyken gelen mesaj için uygulama arka
+  planda açılır; model kurulamazsa mesaj sıraya alınır ve uygulama açılınca işlenir.
+- **Deneme:** Ayarlar → Banka mesajları → "Bir mesajı dene" (`try_bank_email` aracına `sms: true`; hiçbir şey kaydedilmez).
+- **Sistemin gösterdiği metinler** (eylemin adı, açıklaması, parametresi) uygulamanın sözlüğüne (`dil/<kod>.json`)
+  ulaşmaz: `Uygulama/<dil>.lproj/Localizable.strings`'tedir, anahtar Türkçe metnin kendisidir (geliştirme dili Türkçe).
+- **Sınanmayanlar:** simülatörde Apple Intelligence yoktur; modelin Türkçe banka mesajlarındaki doğruluğu ve Kısayollar
+  otomasyonunun davranışı gerçek telefonda denenir. Testlerdeki mesajlar bankaların yazış biçimine benzetilmiş
+  örneklerdir (`ios/test/kopru.test.mjs`); gerçek mesaj örnekleri geldikçe eklenir.
 
 ## 7. Yapay zekâ asistanları (MCP)
 

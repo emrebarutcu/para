@@ -652,6 +652,7 @@ function withRemembered(state, p) {
 function emailItem(state, row) {
   const mail = { body: row.body, subject: row.subject, sender: row.sender, receivedAt: row.received_at };
   const parsed = E.parse(mail);
+  if (row.source === "sms") return smsItem(state, row, parsed);
   if (E.isTest(mail)) return { row, parsed, card: null, reason: "Test e-mail", kind: "test" };
   const verify = E.verification(mail);
   if (verify) return { row, parsed, card: null, reason: verify.gmail ? "Gmail forwarding confirmation" : "Address verification", kind: "verification", verify };
@@ -661,6 +662,24 @@ function emailItem(state, row) {
   return { row, parsed, card, reason, kind: "purchase" };
 }
 
+// Banka mesajı (SMS; iPhone'da Kısayollar otomasyonu verir, yalnızca telefonda durur: Mesajlar.swift). row.hint telefondaki
+// modelin okuduğudur (eposta.js sms). Harcama olmayan mesaj (şifre, ekstre…) kuyruğa alınmaz; alındıysa kind "other" olur
+// ve işlendi sayılır. Kuralla model anlaşamazsa, ya da aynı kartta aynı gün aynı tutarda bir harcama zaten varsa
+// (e-postası da gelmiş olabilir) kendiliğinden eklenmez, onaya düşer.
+function smsItem(state, row, parsed) {
+  const s = E.sms(row.body, row.hint || null, parsed);
+  if (s.skip) return { row, parsed, card: null, reason: "Not a purchase", kind: "other" };
+  const p = { ...parsed, merchant: s.merchant };
+  const card = emailCard(state, p);
+  const same = card && state.installments.some(x => x.cardId === card.id && x.date === p.date && Math.abs(x.total - p.amount) < 0.005);
+  // Önce okumanın kendisi: tutarından ya da harcama olduğundan emin olunmayan mesajda kart sorulmaz
+  const reason = p.reason
+    || s.doubt
+    || (card ? null : p.last4 ? `No card with last4 ${p.last4}` : "Card could not be read")
+    || (same ? "Looks like a purchase already added" : null);
+  return { row, parsed: p, card, reason, kind: "purchase" };
+}
+
 function emailView(x, { body = false } = {}) {
   const { row, parsed, card, reason, kind, verify } = x;
   const v = {
@@ -668,6 +687,7 @@ function emailView(x, { body = false } = {}) {
     receivedAt: row.received_at,
     sender: row.sender ?? null,
     subject: row.subject ?? null,
+    ...(row.source === "sms" && { source: "sms" }),
     kind,
     parsed: {
       amount: parsed.amount, currency: parsed.currency, date: parsed.date, installments: parsed.count,
@@ -2295,14 +2315,28 @@ export const TOOLS = [
     name: "try_bank_email",
     title: "Test a bank e-mail",
     description: "Read a pasted bank spending notification without saving anything: shows the amount, date, installments, merchant and card that would be used.",
-    inputSchema: obj({ text: S.str("The e-mail text.") }, ["text"]),
+    inputSchema: obj({
+      text: S.str("The e-mail text (or the text message, with sms)."),
+      sms: S.bool("Read it as a bank text message (SMS) instead of an e-mail, like the iPhone app's Shortcuts action: one-time passwords, statements and other messages that are not purchases are skipped (skipped: true)."),
+      hint: {
+        type: "object", additionalProperties: false,
+        description: "Used by the iPhone app with sms: what its on-device model read from the message. A purchase is not added automatically when this disagrees with what the rules read.",
+        properties: { purchase: S.bool("The message reports a completed card purchase."), merchant: S.str("Merchant as written in the message."), amount: S.str('Amount as written in the message, e.g. "1.250,00".') },
+      },
+    }, ["text"]),
     annotations: READ,
     async run(args, ctx) {
       checkInboxAllowed(ctx);
       const state = await ctx.load();
-      const x = emailItem(state, { id: null, body: text(args.text, "text"), received_at: new Date().toISOString() });
+      const x = emailItem(state, {
+        id: null, body: text(args.text, "text"), received_at: new Date().toISOString(),
+        ...(args.sms && { source: "sms", hint: args.hint ?? null }),
+      });
       const v = emailView(x);
-      return { kind: v.kind, parsed: v.parsed, ...(v.verification && { verification: v.verification }), matchedCard: v.matchedCard, needsReview: v.needsReview, wouldAutoAdd: !x.reason };
+      return {
+        kind: v.kind, parsed: v.parsed, ...(v.verification && { verification: v.verification }), matchedCard: v.matchedCard, needsReview: v.needsReview,
+        wouldAutoAdd: !x.reason, ...(x.kind === "other" && { skipped: true }),
+      };
     },
   },
 
