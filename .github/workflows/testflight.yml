@@ -3,7 +3,8 @@
 # yüklemeden sonra silinmez (iptal edilirse incelemeye gönderilen build ITMS-90035 ile reddedilir); eskileri sonraki
 # çalışmanın başında ayıklanır (ios/scripts/asc_imza.py; Xcode'un imzası neden kullanılmıyor da orada). Kurulum: SETUP.md → TestFlight.
 # Elle (Actions → TestFlight → Run workflow; dosya main'de olmalı) ya da testflight-* etiketiyle (her dalda) çalışır.
-# macOS 26 makinesinde en yeni Xcode ile. Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
+# GitHub'ın Xcode 27 makinesinde (xcode-27: macOS 27, Apple Silicon) en yeni Xcode ile. Nisan 2027'den sonra App Store
+# Connect iOS 27 SDK'sından eski SDK ile yapılmış build'i kabul etmez (ITMS-90725); macos-26 makinesinde Xcode 27 yok. Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
 name: TestFlight
 
 on:
@@ -17,7 +18,7 @@ concurrency:
 
 jobs:
   yukle:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -30,13 +31,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Xcode
-        # App Store Connect yalnızca güncel SDK ile yapılmış build'i kabul eder (Ekim 2026: iOS 26 SDK, Xcode 26): kurulu en yeni Xcode
+        # App Store Connect yalnızca güncel SDK ile yapılmış build'i kabul eder (Nisan 2027'den: iOS 27 SDK, Xcode 27): kurulu en yeni
+        # Xcode. Beta Xcode ile yapılan build reddedilir; makinede adı beta geçmeyen bir kısayol beta'yı gösterebilir, bu yüzden
+        # derleme numarası da denetlenir (beta'ların sonunda küçük harf olur, ör. 27A5218g)
         run: |
           ls -d /Applications/Xcode*.app
           XCODE=$(ls -d /Applications/Xcode_*.app | grep -viE "beta|rc" | sort -V | tail -1)   # beta Xcode ile yüklenen build reddedilir
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
           xcodebuild -showsdks | grep -i iphoneos
+          if xcodebuild -version | tail -1 | grep -qE '[0-9][a-z]$'; then
+            echo "::error::Seçilen Xcode beta ($XCODE): App Store Connect beta Xcode ile yapılmış build'i kabul etmez"
+            exit 1
+          fi
 
       - name: Anahtarlar
         run: |
