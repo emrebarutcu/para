@@ -162,7 +162,9 @@ private struct DurumSecici: ViewModifier {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(.bar)
+                // Zemin yalnızca seçicinin altında: ShapeStyle arka planı varsayılan olarak ekranın tepesine kadar uzanır
+                // ve büyük başlığı ("Kartlar ve borçlar", "Varlıklar") örtüyordu
+                .background(Tema.zemin, ignoresSafeAreaEdges: [])
             }
         } else {
             content

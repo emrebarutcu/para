@@ -112,13 +112,19 @@ enum EpostaBildirim {
 final class BildirimTemsilcisi: NSObject, UNUserNotificationCenterDelegate {
     static let shared = BildirimTemsilcisi()
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    // Tamamlama işleyicili biçim. async biçimi ana iş parçacığında çağrılmıyor ve uygulama bildirime dokununca "Call must
+    // be made on main thread" ile çöküyordu (1.3.0); iş ana kuyrukta yapılır, işleyici de orada çağrılır.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         let tur = info["tur"] as? String ?? "other", sekme = info["sekme"] as? Int, ozet = info["ozet"] as? Bool == true
-        await MainActor.run {
-            Analitik.olay("notification_opened", ["kind": tur])
-            if let sekme { Yonlendirici.shared.sekme = sekme }
-            if ozet { Yonlendirici.shared.ayOzeti = true }
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                Analitik.olay("notification_opened", ["kind": tur])
+                if let sekme { Yonlendirici.shared.sekme = sekme }
+                if ozet { Yonlendirici.shared.ayOzeti = true }
+            }
+            completionHandler()
         }
     }
 }
