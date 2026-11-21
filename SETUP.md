@@ -334,7 +334,7 @@ araçları (`mcp/tools.js`) JavaScriptCore'da çalışır (`ios/js/kopru.js`); e
 gelir; bir kural değişince iOS bir sonraki derlemede onu kullanır (Xcode'un "Web modülleri" adımı, `ios/scripts/js-kopyala.sh`,
 dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iOS aynı PR'da değişir.
 
-- **Açmak:** Xcode 26+ ile (App Store Connect eski SDK ile yapılmış build'i kabul etmez) `ios/CashFollow.xcodeproj` → hedef CashFollow → Signing & Capabilities'te kendi ekibini seç
+- **Açmak:** Xcode 27+ ile (App Store Connect eski SDK ile yapılmış build'i kabul etmez; Nisan 2027'den iOS 27 SDK şart) `ios/CashFollow.xcodeproj` → hedef CashFollow → Signing & Capabilities'te kendi ekibini seç
   (bundle id `app.cashfollow.ios`) → çalıştır. iOS 17+, yalnızca iPhone.
 - **Veri:** Girişsiz kullanımın verisi `veri.json`'da, hesabınki `veri.<kullanıcı id>.json`'da (Application Support), biçim
   web'deki localStorage ile aynıdır. Oturum Anahtar Zinciri'ndedir. Eşitleme `sync.js`'in Swift karşılığıdır
@@ -366,7 +366,8 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
 
 #### TestFlight (Mac gerekmez)
 
-`.github/workflows/testflight.yml` uygulamayı GitHub'ın macOS 26 makinesinde, kurulu en yeni (beta olmayan) Xcode ile arşivler ve
+`.github/workflows/testflight.yml` uygulamayı GitHub'ın Xcode 27 makinesinde (`xcode-27`: macOS 27, Apple Silicon; `macos-26`
+makinesinde Xcode 27 yok), kurulu en yeni (beta olmayan) Xcode ile arşivler ve
 App Store Connect'e yükler. İmza için her çalışmada API ile bir dağıtım sertifikası ve App Store profili oluşturulur, arşiv
 imzasız alınıp `codesign` ile elle imzalanır (`ios/scripts/asc_imza.py`). Dağıtım sertifikasının adı hesap sahibinin adıdır;
 Xcode'un imzasında addaki "ç" imzayı geçersiz kılıyordu (ITMS-90035), elle imzada imza gereksinimi takım kimliğinden kurulur.

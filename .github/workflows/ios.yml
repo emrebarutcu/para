@@ -24,7 +24,7 @@ jobs:
         run: node scripts/dil.mjs
 
   simulator:
-    runs-on: macos-26
+    runs-on: xcode-27   # TestFlight'la aynı makine (Xcode 27, macOS 27, Apple Silicon)
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

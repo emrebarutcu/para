@@ -41,7 +41,7 @@ permissions:
 
 jobs:
   ekran:
-    runs-on: macos-26
+    runs-on: xcode-27   # TestFlight'la aynı makine
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
