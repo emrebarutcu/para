@@ -83,10 +83,13 @@ final class Abonelik: ObservableObject {
                 }
                 await t.finish()
                 await cihaziYenile()
-                // Fiyat bilgi içindir (gelir değil): deneme başlangıcında ücret alınmaz; gerçek tahsilatı sunucu gönderir
+                // Fiyat bilgi içindir (gelir değil): deneme başlangıcında ücret alınmaz; gerçek tahsilatı sunucu gönderir.
+                // environment: Production (App Store) / Sandbox (TestFlight, App Review) / Xcode; sunucunun
+                // subscription_* olaylarındakiyle aynı değerler, panoda test alımlarını ayırmak için
                 Analitik.olay("purchase_completed", ["product": urun.id, "trial": Self.deneme(t),
                                                      "price": NSDecimalNumber(decimal: urun.price).doubleValue,
-                                                     "currency": urun.priceFormatStyle.currencyCode])
+                                                     "currency": urun.priceFormatStyle.currencyCode,
+                                                     "environment": t.environment.rawValue])
                 await hesabaBagla()
             case .pending:
                 hata = L("Satın alma onay bekliyor (ör. Aile Paylaşımı'nda ebeveyn onayı). Onaylanınca Premium kendiliğinden açılır.")
@@ -112,7 +115,9 @@ final class Abonelik: ObservableObject {
             return
         }
         await yenile()
-        Analitik.olay("restore", ["found": premium])
+        var ozellik: [String: Any] = ["found": premium]
+        if let t = cihaz { ozellik["environment"] = t.environment.rawValue }
+        Analitik.olay("restore", ozellik)
         if !premium { hata = L("Bu Apple hesabında CashFollow Premium aboneliği bulunamadı.") }
     }
 
