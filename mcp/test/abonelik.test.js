@@ -201,6 +201,13 @@ test("/api/appstore: abonelik olayları PostHog'a; gelir yalnızca production'da
   // İade
   e = await send("REFUND", tx("7003", { price: 39990, currency: "USD", revocationDate: NOW }));
   assert.deepEqual([e.event, e.properties.refund_amount, e.properties.status], ["subscription_refund", 39.99, "revoked"]);
+  assert.deepEqual([e.properties.original_transaction_id, e.properties.linked], ["1000", true]);
+  // Hesaba bağlı olmayan abonelik (uygulama hesapsız): satır yazılmaz, olay işlemin kimliğiyle gider
+  const rows = w.db.length;
+  e = await send("SUBSCRIBED", tx("7100", { originalTransactionId: "1900", price: 0, currency: "EUR", offerDiscountType: "FREE_TRIAL" }));
+  assert.equal(w.db.length, rows);
+  assert.deepEqual([e.event, e.properties.distinct_id, e.properties.linked, e.properties.original_transaction_id, e.properties.trial],
+    ["subscription_subscribed", "appstore-1900", false, "1900", true]);
   // Anahtar yoksa gönderilmez
   const before = w.events.length;
   apple.Production["7004"] = { status: 1, tx: tx("7004") };

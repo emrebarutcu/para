@@ -86,6 +86,14 @@ enum Analitik {
         Task { await bayraklariYukle() }
     }
 
+    // App Store aboneliği: sunucu hesaba bağlı olmayan aboneliğin olaylarını appstore-<originalTransactionId> kimliğiyle
+    // gönderir (mcp/abonelik.js); bu kimlik bu kişiyle birleştirilir, yenileme ve iptaller aynı kişide görünür
+    static func takmaAd(_ ad: String) {
+        guard etkin, ad != kim else { return }
+        kuyruk.append(["event": "$create_alias", "properties": ["distinct_id": kim, "alias": ad], "timestamp": ISO8601DateFormatter().string(from: Date())])
+        gonder()
+    }
+
     static func cikisYapti() {
         hesap = nil
         Task { await bayraklariYukle() }

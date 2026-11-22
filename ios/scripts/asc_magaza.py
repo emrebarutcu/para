@@ -5,8 +5,9 @@
   asc_magaza.py kuru  [--ekran DIR]  → neyin değişeceğini yazar, değiştirmez
   asc_magaza.py gonder [--ekran DIR] → değiştirir: metinler, adresler, kategori, telif, yaş sınırı, ülkeler, fiyat,
                                         build, ekran görüntüleri (DIR: ekran-goruntuleri dalının içeriği)
+  asc_magaza.py incele [--ekran DIR] → gonder, ardından sürümü incelemeye gönderir (kullanıcının onayıyla çalıştırılır)
 
-İncelemeye göndermez: o adım elle (App Store Connect → Add for Review), kullanıcının onayıyla.
+gonder incelemeye göndermez; incele, version.js sürümünün geçerli build'i seçiliyse sürümü App Review'a yollar.
 Depo herkese açık, Actions günlükleri de: inceleme iletişim bilgileri ve demo hesap yalnızca "dolu / boş" diye yazılır.
 Ortam: KEY_ID, ISSUER_ID, KEY_PATH (.p8). Gerekli paketler: pyjwt, cryptography.
 """
@@ -615,7 +616,7 @@ def gonder_abonelik(app, ay):
                 "relationships": {"subscription": {"data": {"type": "subscriptions", "id": s["id"]}},
                                   "availableTerritories": {"data": [{"type": "territories", "id": t} for t in ulkeler]}}}},
                 f"{pid}: {len(ulkeler)} ülkede satışa açılıyor")
-    print("  (fiyat ve ücretsiz deneme App Store Connect'te; incelemeye gönderme elle)")
+    print("  (fiyat ve ücretsiz deneme App Store Connect'te)")
 
 
 def gonder(ay, klasor):
@@ -639,6 +640,74 @@ def gonder(ay, klasor):
     bolum("Abonelikler (dil metinleri, ülkeler)", gonder_abonelik, app, ay)
 
 
+INCELEME_ALANLARI = ("contactFirstName", "contactLastName", "contactPhone", "contactEmail", "demoAccountName",
+                     "demoAccountPassword", "demoAccountRequired", "notes")
+
+
+def inceleme_bilgisi(app, v):
+    """Sürümün App Review iletişim / demo hesap bilgisi: yoksa en son sürümünkünden kopyalanır (değerler yazdırılmaz)."""
+    d = yoksa_none(f"/appStoreVersions/{v['id']}/appStoreReviewDetail")
+    if d and d.get("data"):
+        print("  inceleme bilgisi var")
+        return
+    for eski in surumler(app):
+        if eski["id"] == v["id"]:
+            continue
+        e = yoksa_none(f"/appStoreVersions/{eski['id']}/appStoreReviewDetail")
+        if e and e.get("data"):
+            a = {k: e["data"]["attributes"].get(k) for k in INCELEME_ALANLARI if e["data"]["attributes"].get(k) is not None}
+            yaz("POST", "/appStoreReviewDetails", {"data": {"type": "appStoreReviewDetails", "attributes": a,
+                "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}},
+                f"inceleme bilgisi {eski['attributes']['versionString']} sürümünden kopyalanıyor ({', '.join(sorted(a))})")
+            return
+    raise HataAPI(0, "inceleme bilgisi yok ve kopyalanacak eski sürüm bulunamadı: App Store Connect'te bir kez elle girilmeli")
+
+
+def incelemeye_gonder(app, v):
+    """Sürümü App Review'a gönderir (reviewSubmissions): build seçili olmalı; açık bir gönderim varsa o kullanılır."""
+    s = v["attributes"]["versionString"]
+    if durum(v) in ("WAITING_FOR_REVIEW", "IN_REVIEW"):
+        print(f"  {s} zaten incelemede ({durum(v)})")
+        return
+    if s != web_surumu():
+        raise HataAPI(0, f"düzenlenen sürüm {s}, version.js {web_surumu()}: önce bu sürümün TestFlight build'i (VALID) gerekli")
+    b = yoksa_none(f"/appStoreVersions/{v['id']}/build")
+    if not (b and b.get("data")):
+        raise HataAPI(0, f"{s} sürümüne build seçilmedi: TestFlight build'i işlenmeden incelemeye gönderilemez")
+    acik = [r for r in get(f"/reviewSubmissions?filter[app]={app['id']}&filter[platform]=IOS&limit=20")["data"]
+            if r["attributes"].get("state") in ("READY_FOR_REVIEW", "UNRESOLVED_ISSUES")]
+    if acik:
+        rs = acik[0]
+        print(f"  açık inceleme gönderimi kullanılıyor ({rs['attributes']['state']})")
+    else:
+        r = yaz("POST", "/reviewSubmissions", {"data": {"type": "reviewSubmissions", "attributes": {"platform": "IOS"},
+                "relationships": {"app": {"data": {"type": "apps", "id": app["id"]}}}}}, "inceleme gönderimi açılıyor")
+        rs = r["data"]
+    ogeler = hepsi(f"/reviewSubmissions/{rs['id']}/items?include=appStoreVersion&limit=50")[0]
+    surum_id = lambda o: (((o.get("relationships") or {}).get("appStoreVersion") or {}).get("data") or {}).get("id")
+    if not any(surum_id(o) == v["id"] for o in ogeler):
+        yaz("POST", "/reviewSubmissionItems", {"data": {"type": "reviewSubmissionItems",
+            "relationships": {"reviewSubmission": {"data": {"type": "reviewSubmissions", "id": rs["id"]}},
+                              "appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}},
+            f"sürüm {s} gönderime ekleniyor")
+    yaz("PATCH", f"/reviewSubmissions/{rs['id']}", {"data": {"type": "reviewSubmissions", "id": rs["id"],
+        "attributes": {"submitted": True}}}, f"sürüm {s} incelemeye gönderiliyor")
+    print(f"  {s} incelemeye gönderildi: durum App Store Connect'te WAITING_FOR_REVIEW olur")
+
+
+def incele(ay, klasor):
+    gonder(ay, klasor)
+    if HATALAR:
+        sys.exit("\nİncelemeye gönderilmedi, önce şu hatalar:\n" + "\n".join(HATALAR))
+    app = uygulama(ay)
+    v = duzenlenen_surum(app)
+    if v is None:
+        sys.exit("Düzenlenen sürüm yok: incelemeye gönderilecek bir şey bulunamadı")
+    bolum("İnceleme bilgisi", inceleme_bilgisi, app, v)
+    if not HATALAR:
+        bolum("İncelemeye gönder", incelemeye_gonder, app, v)
+
+
 if __name__ == "__main__":
     islem = sys.argv[1] if len(sys.argv) > 1 else ""
     klasor = sys.argv[sys.argv.index("--ekran") + 1] if "--ekran" in sys.argv else None
@@ -650,6 +719,9 @@ if __name__ == "__main__":
     elif islem in ("kuru", "gonder"):
         KURU = islem == "kuru"
         gonder(ayarlar(), klasor)
+    elif islem == "incele":
+        KURU = False
+        incele(ayarlar(), klasor)
     else:
         sys.exit(__doc__)
     if HATALAR:
