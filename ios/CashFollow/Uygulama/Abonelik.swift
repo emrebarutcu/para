@@ -89,7 +89,9 @@ final class Abonelik: ObservableObject {
                 Analitik.olay("purchase_completed", ["product": urun.id, "trial": Self.deneme(t),
                                                      "price": NSDecimalNumber(decimal: urun.price).doubleValue,
                                                      "currency": urun.priceFormatStyle.currencyCode,
-                                                     "environment": t.environment.rawValue])
+                                                     "environment": t.environment.rawValue,
+                                                     "original_transaction_id": String(t.originalID)])
+                Analitik.takmaAd("appstore-\(t.originalID)")
                 await hesabaBagla()
             case .pending:
                 hata = L("Satın alma onay bekliyor (ör. Aile Paylaşımı'nda ebeveyn onayı). Onaylanınca Premium kendiliğinden açılır.")

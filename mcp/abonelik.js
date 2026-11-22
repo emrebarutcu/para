@@ -6,7 +6,7 @@
 // Satırı service role yazar (SUPABASE_SERVICE_KEY, eposta Worker'ındakiyle aynı); Apple'a In-App Purchase anahtarıyla
 // gidilir (APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_KEY_P8). Biri eksikse 503: uygulama cihazdaki aboneliğe güvenir.
 // Bildirimler ürün analitiğine de gider (PostHog, anahtar varsa): subscription_did_renew, subscription_refund… ve
-// production'daki ücretli işlemde gelir (revenue).
+// production'daki ücretli işlemde gelir (revenue); hesaba bağlı olmayan aboneliklerinki de.
 import Tablo from "../tablo.js";
 import { config, userFor } from "./server.js";
 
@@ -117,10 +117,11 @@ export async function save(userId, row, env, f = fetch) {
   return { row: next };
 }
 
-// Abonelik olayı PostHog'a (Analitik.swift ile aynı kişi: hesabın kimliği). Gelir yalnızca production'da tahsil edilen
+// Abonelik olayı PostHog'a (Analitik.swift ile aynı kişi: hesabın kimliği; hesap yoksa appstore-<originalTransactionId>,
+// linked false). Aynı abonelik original_transaction_id'den izlenir (sonradan hesaba bağlansa da). Gelir yalnızca production'da tahsil edilen
 // işlemde (ücretsiz deneme 0, sandbox sayılmaz); iadede tutar refund_amount. Gönderilemezse bildirim yine işlenmiş sayılır.
 const CHARGES = ["SUBSCRIBED", "DID_RENEW", "OFFER_REDEEMED"];
-async function analitik(userId, hint, st, cfg, f, now) {
+async function analitik(userId, hint, st, cfg, f, now, hesapli = true) {
   if (!cfg.posthogKey || !hint.type) return;
   const t = st.tx || {};
   const amount = Number(t.price) > 0 ? Number(t.price) / 1000 : 0;   // App Store: binde bir para birimi
@@ -128,6 +129,7 @@ async function analitik(userId, hint, st, cfg, f, now) {
     distinct_id: userId, $lib: "cashfollow-server", platform: "ios", $geoip_disable: true,
     subtype: hint.subtype ?? null, product: st.row.product_id, environment: st.environment, status: st.row.status,
     auto_renew: st.row.auto_renew, trial: t.offerDiscountType === "FREE_TRIAL", price: amount, currency: t.currency ?? null,
+    original_transaction_id: st.row.original_transaction_id || null, linked: hesapli,
   };
   if (st.environment === "Production" && amount > 0 && CHARGES.includes(hint.type)) props.revenue = amount;
   if (hint.type === "REFUND") props.refund_amount = amount;
@@ -185,10 +187,11 @@ export async function handleNotification(request, env = {}, { fetch: f = fetch, 
     const st = await appleStatus(String(hint.tx.transactionId), env, { fetch: f, prefer: hint.environment, now });
     if (!st) return json({ ok: true });
     const userId = st.token ?? (await rowWhere("original_transaction_id", st.row.original_transaction_id, env, f))?.user_id;
-    if (userId) {
-      await save(userId, st.row, env, f);
-      await analitik(userId, hint, st, config(env), f, now);
-    }
+    if (userId) await save(userId, st.row, env, f);
+    // Hesaba bağlı olmayan abonelik (uygulama hesapsız kullanılıyor) de analitiğe gider; kişi işlemin kimliğidir
+    // (appstore-<originalTransactionId>), uygulama satın alınca cihazın kimliğini bununla birleştirir (Analitik.takmaAd)
+    const kisi = userId ?? (st.row.original_transaction_id && `appstore-${st.row.original_transaction_id}`);
+    if (kisi) await analitik(kisi, hint, st, config(env), f, now, Boolean(userId));
     return json({ ok: true });
   } catch (err) {
     console.error("appstore:", err);
