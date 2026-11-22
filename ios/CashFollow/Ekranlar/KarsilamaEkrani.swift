@@ -2,8 +2,9 @@ import SwiftUI
 import UserNotifications
 
 // İlk açılış akışı (Uygulama/Karsilama.swift; ios/UX.md → akış 1). Beş ekran, her biri tek soru:
-//   1 giris    ne işe yaradığı + ülke → "Hesap açmadan başla" (ya da "Hesabım var, giriş yap")
-//   2 kart     kartın adı (hazır marka listesi yok; kullanıcı yazar) — "Kredi kartım yok" ile geçilir
+//   1 giris    ne işe yaradığı + ülke (bulunduysa küçük bir satır) → "Başla" (hesapsız; ya da "Hesabım var, giriş yap")
+//   2 kart     kartın adı: ülkenin sık kartları çip (dokununca geçilir) ya da yazılır — "Kredi kartım yok" ile geçilir;
+//              "Önce örnekle göz at" örnek veriyle Özet'i açar (bellekte; Model.ornegiGoster, OrnekBandi)
 //   3 kesim    ekstre ayın kaçında kesiliyor (son ödeme günü tahmin edilir, değiştirilebilir)
 //   4 harcama  bir taksitli harcama: tutar, taksit, ne zaman; ödeme planı yazarken görünür
 //   5 sonuc    "Planın hazır": bu ay ödenecek (ya da ilk ödeme) + ödeme günü hatırlatması
@@ -44,6 +45,7 @@ struct KarsilamaEkrani: View {
     var baslangic = 0       // ekran görüntüleri: açılacak adım (Ornek.swift TurEkrani, "tanitimN")
     var ornek = false       // ekran görüntüsü: cevaplar dolu; analitik, bildirim izni ve pencerenin kapanması yok
     var ornekBos = false    // ekran görüntüsü: açılan adımın cevabı boş (kart adı yazılmamış, kesim günü seçilmemiş)
+    var kartAkisi = false   // akış bittikten sonra kart adımından (örnekten çıkınca, geri çağıran bildirimden; Model.kartAkisi)
 
     @State private var adim: Adim = .giris
     @State private var hazir = false
@@ -101,7 +103,7 @@ struct KarsilamaEkrani: View {
         .onChange(of: adim) { _, a in adimGosterildi(a) }
         .onChange(of: scenePhase) { _, faz in
             if faz == .background, !ornek {
-                Karsilama.olay("onboarding_backgrounded", ["step": adim.ad])
+                olay("onboarding_backgrounded", ["step": adim.ad])
                 Analitik.gonder()   // uygulama arka planda kapatılırsa kaybolmasın
             }
         }
@@ -113,14 +115,22 @@ struct KarsilamaEkrani: View {
     private var giris: some View {
         VStack(alignment: .leading, spacing: 16) {
             KartYigini()
-            baslik(L("Kartına bu ay ne ödeyeceğini bil"), L("Kartını ve bir harcamanı gir; ödeme gününü ve tutarını hemen gör."))
-            Label(L("Banka şifresi gerekmez"), systemImage: "lock.fill")
+            baslik(L("Kartına bu ay ne ödeyeceğini bil"), L("Kartını ve bir harcamanı gir, ödeme gününü hemen gör."))
+            Label(L("Hesap ve banka şifresi gerekmez"), systemImage: "lock.fill")
                 .font(.footnote).foregroundStyle(Tema.metin3)
-            Kart(dolgu: 14) {
-                HStack {
-                    Text(L("Ülke")).lineLimit(1)
-                    Spacer(minLength: 8)
-                    UlkeSecici(secim: $ulke, secimYok: !ulkeKesin).fixedSize()   // "United States · USD" tek satır
+            // Ülke telefonun bölgesinden bulunduysa küçük bir satır (değiştirilebilir); bulunamadıysa seçilmesi gereken kart
+            if ulkeKesin {
+                HStack(spacing: 4) {
+                    Image(systemName: "globe").font(.footnote).foregroundStyle(Tema.metin3)
+                    UlkeSecici(secim: $ulke).fixedSize().font(.footnote).tint(Tema.metin2)
+                }
+            } else {
+                Kart(dolgu: 14) {
+                    HStack {
+                        Text(L("Ülke")).lineLimit(1)
+                        Spacer(minLength: 8)
+                        UlkeSecici(secim: $ulke, secimYok: true).fixedSize()   // "United States · USD" tek satır
+                    }
                 }
             }
         }
@@ -128,17 +138,38 @@ struct KarsilamaEkrani: View {
 
     private var kart: some View {
         VStack(alignment: .leading, spacing: 16) {
-            baslik(L("Hangi kartı kullanıyorsun?"), L("En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin."))
+            baslik(L("Hangi kartı kullanıyorsun?"), L("En çok kullandığın kartı seç ya da adını yaz; diğerlerini sonra eklersin."))
             Kart(dolgu: 14) {
-                TextField(L("Kartın adı (ör. Bonus, Axess)"), text: $kartAdi)
+                TextField(L("Kartın adı"), text: $kartAdi)
                     .font(.title3)
                     .submitLabel(.next)
                     .focused($kartOdak)
                     .onSubmit { if !kartAdiBos { ilerle(.kesim, yontem: "typed") } }
             }
+            // Ülkenin sık kartları: dokununca ad yazılır ve kesim gününe geçilir (klavye açılmadan)
+            if !kartOnerileri.isEmpty {
+                Akan(aralik: 8, satirAraligi: 8) {
+                    ForEach(kartOnerileri, id: \.self) { ad in
+                        Cip(ad: ad, secili: kartAdiTemiz == ad) {
+                            kartAdi = ad
+                            kartOdak = false
+                            ilerle(.kesim, yontem: "chip")
+                        }
+                    }
+                }
+            }
+            if ornekGosterilir {
+                Button(action: ornegeBak) {
+                    Label(L("Önce örnek bir planla göz at"), systemImage: "eye")
+                        .font(.subheadline.weight(.medium)).foregroundStyle(Tema.metin2)
+                        .padding(.vertical, 6).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
         .task {
-            guard !ornek || ornekBos, kartAdi.isEmpty else { return }
+            // Çip varken klavye kendiliğinden açılmaz (çipleri örterdi); yoksa ad alanı odaklanır
+            guard !ornek || ornekBos, kartAdi.isEmpty, kartOnerileri.isEmpty else { return }
             try? await Task.sleep(nanoseconds: 350_000_000)   // geçiş bitsin
             kartOdak = true
         }
@@ -357,7 +388,7 @@ struct KarsilamaEkrani: View {
         VStack(spacing: 4) {
             switch adim {
             case .giris:
-                AltKaydet(eksik: ulke.isEmpty ? L("Ülkeni seç") : nil, baslik: L("Hesap açmadan başla")) { girissizBasla() }
+                AltKaydet(eksik: ulke.isEmpty ? L("Ülkeni seç") : nil, baslik: L("Başla")) { girissizBasla() }
                 ikincil(L("Hesabım var, giriş yap")) { girisAc() }
             case .kart:
                 AltKaydet(eksik: kartAdiBos ? L("Kartın adını yaz") : nil, baslik: L("Devam")) { ilerle(.kesim, yontem: "typed") }
@@ -403,6 +434,9 @@ struct KarsilamaEkrani: View {
 
     private var kartAdiTemiz: String { kartAdi.trimmingCharacters(in: .whitespaces) }
     private var kartAdiBos: Bool { kartAdiTemiz.isEmpty }
+    private var kartOnerileri: [String] { Karsilama.kartOnerileri(ulke: model.country) }
+    // "Önce örnekle göz at": akışın ilk turunda, henüz bir şey kaydedilmemişken, hesapsız kullanımda
+    private var ornekGosterilir: Bool { !kartAkisi && !ornek && kartId == nil && eklenen == 0 && model.session == nil }
     private var taksitSayisi: Int { kartId == nil ? 1 : taksit }
 
     // Geri: kart kaydedildikten sonra kesime dönülebilir (günler düzeltilir); harcama kaydedildikten sonra dönülmez
@@ -424,7 +458,8 @@ struct KarsilamaEkrani: View {
     private var hatirlatilacak: Ozet.Yaklasan? {
         guard let o = ozet, let p = o.upcomingPayments.first(where: { $0.card != "Nakit" && $0.late != true }) else { return nil }
         if ornek { return p }
-        return !Hatirlatma.acik && izin == .notDetermined ? p : nil
+        // Sessiz izin (.provisional; geri çağıran bildirim için alınmış olabilir) asıl izin değil: yine sorulur
+        return !Hatirlatma.acik && (izin == .notDetermined || izin == .provisional) ? p : nil
     }
 
     private var kisi: String { ((try? model.read("list_people") as KisiListesi)?.people.first?.id) ?? "ben" }
@@ -459,7 +494,14 @@ struct KarsilamaEkrani: View {
     private func adimGosterildi(_ a: Adim) {
         adimBasi = Date()
         guard !ornek else { return }
-        Karsilama.olay("onboarding_step_viewed", ["step": a.ad, "step_index": a.rawValue])
+        olay("onboarding_step_viewed", ["step": a.ad, "step_index": a.rawValue])
+    }
+
+    // Akışın olayları; akış bittikten sonra kart adımından yeniden girildiyse (kartAkisi) "reentry" ile ayrılır
+    private func olay(_ ad: String, _ p: [String: Any] = [:]) {
+        var p = p
+        if kartAkisi { p["reentry"] = true }
+        Karsilama.olay(ad, p)
     }
 
     private func saniye(_ d: Date, _ ust: Int) -> Int { min(max(Int(Date().timeIntervalSince(d)), 0), ust) }
@@ -467,7 +509,7 @@ struct KarsilamaEkrani: View {
     // Adım tamam: olayı yazar, sonrakine geçer
     private func ilerle(_ hedef: Adim, yontem: String) {
         if !ornek {
-            Karsilama.olay("onboarding_step_completed", ["step": adim.ad, "step_index": adim.rawValue,
+            olay("onboarding_step_completed", ["step": adim.ad, "step_index": adim.rawValue,
                                                          "seconds": saniye(adimBasi, 600), "method": yontem])
         }
         git(hedef)
@@ -475,7 +517,7 @@ struct KarsilamaEkrani: View {
 
     private func atla(_ hedef: Adim?, neden: String) {
         atlanan += 1
-        if !ornek { Karsilama.olay("onboarding_step_skipped", ["step": adim.ad, "reason": neden]) }
+        if !ornek { olay("onboarding_step_skipped", ["step": adim.ad, "reason": neden]) }
         if let hedef { git(hedef) } else { bitir() }
     }
 
@@ -493,9 +535,15 @@ struct KarsilamaEkrani: View {
         ilerle(.kart, yontem: "button")
     }
 
+    private func ornegeBak() {
+        olay("onboarding_sample_opened", ["step": adim.ad, "seconds_since_start": saniye(akisBasi, 1800)])
+        model.ornegiGoster()
+        bitir(yol: "sample")
+    }
+
     private func girisAc() {
         guard !ornek else { return }
-        Karsilama.olay("onboarding_account_choice", ["choice": "login"])
+        olay("onboarding_account_choice", ["choice": "login"])
         girisAcik = true
     }
 
@@ -564,14 +612,14 @@ struct KarsilamaEkrani: View {
             Karsilama.etkinlesmeyiDenetle(model, akista: true)
             guard !ahaYazildi else { return }
             ahaYazildi = true
-            Karsilama.olay("onboarding_aha_viewed", ["has_due_this_month": o.dueThisMonth > 0.004,
+            olay("onboarding_aha_viewed", ["has_due_this_month": o.dueThisMonth > 0.004,
                                                      "upcoming_count": min(o.upcomingPayments.count, 10),
                                                      "installments": taksitSayisi, "seconds_since_start": saniye(akisBasi, 1800)])
         }
     }
 
     private func dahaEkle() {
-        if !ornek { Karsilama.olay("onboarding_add_another", ["count": eklenen]) }
+        if !ornek { olay("onboarding_add_another", ["count": eklenen]) }
         tutar = ""
         ayOnce = 0
         onizleme = nil
@@ -590,7 +638,7 @@ struct KarsilamaEkrani: View {
 
     private func kapat() {
         guard !ornek else { return }
-        Karsilama.olay("onboarding_closed", ["step": adim.ad])
+        olay("onboarding_closed", ["step": adim.ad])
         bitir(yol: "closed")
     }
 
@@ -599,6 +647,7 @@ struct KarsilamaEkrani: View {
         Karsilama.bitir(yol: yol, ["seconds_total": saniye(akisBasi, 1800), "card": kartId != nil, "purchase": eklenen > 0,
                                    "reminders": hatirlatma, "steps_skipped": atlanan])
         model.showWelcome = false
+        model.kartAkisi = false
     }
 
     // Ekran görüntüleri: örnek kart (yoksa eklenir)
@@ -640,6 +689,34 @@ private struct OdemePlani: View {
             }
             .font(.subheadline)
         }
+    }
+}
+
+// Örnek veriyle gezinirken sekmelerin üstünde: verinin örnek olduğu ve kendi kartına geçiş (Model.ornegiGoster)
+struct OrnekBandi: View {
+    @EnvironmentObject private var model: Model
+    @State private var basladi = Date()
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "eye").font(.subheadline.weight(.semibold)).foregroundStyle(Tema.ustMetin.opacity(0.8))
+            Text(L("Örnek veri")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.ustMetin)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button {
+                Karsilama.olay("onboarding_sample_exit", ["seconds": min(max(Int(Date().timeIntervalSince(basladi)), 0), 3600)])
+                model.ornektenCik(kartEkle: true)
+            } label: {
+                Text(L("Kendi kartımı ekle")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .padding(.horizontal, 14).padding(.vertical, 7)
+                    .background(Tema.zemin, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Tema.metin)
     }
 }
 

@@ -71,7 +71,8 @@ struct OzetEkrani: View {
                 baslarken = BaslarkenDurumu.oku(model)
                 kutlamalariOku()
                 Karsilama.etkinlesmeyiDenetle(model)
-                if !Hatirlatma.acik, !Hatirlatma.teklifBitti, !Hatirlatma.ertelendi, Ornek.tur == nil {
+                if model.ornekGezinti { teklif = false }   // örnek veriyle gezinti: hatırlatma sorulmaz
+                else if !Hatirlatma.acik, !Hatirlatma.teklifBitti, !Hatirlatma.ertelendi, Ornek.tur == nil {
                     teklif = await Hatirlatma.izinDurumu() != .denied
                 }
             }

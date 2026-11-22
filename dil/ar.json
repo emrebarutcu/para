@@ -1423,7 +1423,6 @@
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "المشتريات حتى {0} تُدفع في {1}.",
  "Taksitli alışveriş": "شراء بالتقسيط",
  "Adım {0} / {1}": "الخطوة {0} من {1}",
- "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "اكتب اسم البطاقة التي تستخدمها أكثر؛ وأضف الباقي لاحقًا.",
  "Bankanın harcama e-postaları sana özel adrese gelince harcama olarak eklenir. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur.": "تُضاف رسائل الإنفاق من بنكك كمشتريات عندما تصل إلى عنوانك الشخصي. تصل الرسائل حتى وهاتفك مغلق؛ وعند فتح CashFollow تكون المشتريات قد أُضيفت إلى البطاقة ذات آخر 4 أرقام المطابقة.",
  "Deneme e-postası gönder": "إرسال رسالة تجريبية",
  "Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ya da kendi e-posta kutuna ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir.": "يمكن لأي شخص يعرف هذا العنوان إرسال مشتريات إليك؛ فلا تعطه إلا لبنكك أو لبريدك الخاص. إذا ظننت أنه تسرّب، فجدّده وحدّثه لدى بنكك.",
@@ -1590,5 +1589,17 @@
  "Onay bekleyen olunca": "عندما ينتظر شيء موافقتك",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "المشتريات المضافة من بريد البنك أو رسالته، وتلك التي تنتظر موافقتك. لا يصل إشعار والتطبيق مفتوح؛ وعندما يكون مغلقًا يقرر iOS متى يتحقق.",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "تُضبط الإشعارات على هذا الهاتف؛ ولا تُرسل بياناتك إلى أي مكان.",
- "{0} açık": "{0} مفعّلة"
+ "{0} açık": "{0} مفعّلة",
+ "Kartını ve bir harcamanı gir, ödeme gününü hemen gör.": "أضف بطاقتك وعملية شراء واحدة لترى موعد الدفع فورًا.",
+ "Hesap ve banka şifresi gerekmez": "لا حاجة إلى حساب أو كلمة مرور البنك",
+ "En çok kullandığın kartı seç ya da adını yaz; diğerlerini sonra eklersin.": "اختر البطاقة التي تستخدمها أكثر أو اكتب اسمها، وأضف البقية لاحقًا.",
+ "Kartın adı": "اسم البطاقة",
+ "Önce örnek bir planla göz at": "ألقِ نظرة على خطة نموذجية أولًا",
+ "Başla": "ابدأ",
+ "Örnek veri": "بيانات نموذجية",
+ "Kendi kartımı ekle": "أضف بطاقتي",
+ "Kartını ekle; ilk ödeme gününü hatırlatayım": "أضف بطاقتك وسأذكّرك بأول دفعة",
+ "Kartın ve bir taksitin yeter: bu ay ne ödeyeceğini bir dakikada gör.": "تكفي بطاقتك وعملية شراء واحدة: اعرف خلال دقيقة كم ستدفع هذا الشهر.",
+ "Bu ay kartına ne kadar ödeyeceksin?": "كم ستدفع لبطاقتك هذا الشهر؟",
+ "Kartının adını ve kesim gününü gir; ödeme günlerini CashFollow hesaplasın.": "أدخل اسم بطاقتك ويوم كشف الحساب، وسيحسب CashFollow مواعيد الدفع."
 }

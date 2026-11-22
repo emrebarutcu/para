@@ -1423,7 +1423,6 @@
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "Käufe bis einschließlich {0} werden am {1} bezahlt.",
  "Taksitli alışveriş": "Ratenkauf",
  "Adım {0} / {1}": "Schritt {0} von {1}",
- "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "Gib den Namen der Karte ein, die du am meisten nutzt; die anderen fügst du später hinzu.",
  "Bankanın harcama e-postaları sana özel adrese gelince harcama olarak eklenir. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur.": "Ausgabe-E-Mails deiner Bank werden als Käufe erfasst, sobald sie an deine persönliche Adresse gehen. E-Mails kommen auch an, wenn dein Handy aus ist; wenn du CashFollow öffnest, sind die Käufe bereits anhand der letzten 4 Ziffern der richtigen Karte zugeordnet.",
  "Deneme e-postası gönder": "Test-E-Mail senden",
  "Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ya da kendi e-posta kutuna ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir.": "Wer diese Adresse kennt, kann dir Käufe senden; nutze sie nur bei deiner Bank oder in deinem eigenen E-Mail-Postfach. Wenn du glaubst, dass sie bekannt geworden ist, erneuere sie und ändere sie bei deiner Bank.",
@@ -1590,5 +1589,17 @@
  "Onay bekleyen olunca": "Wenn etwas auf Bestätigung wartet",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "Ausgaben aus Bank-E-Mails oder -Nachrichten und solche, die auf deine Bestätigung warten. Bei geöffneter App kommt keine Mitteilung; ist sie geschlossen, entscheidet iOS, wann nachgesehen wird.",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "Mitteilungen werden auf diesem iPhone eingerichtet; deine Daten werden nirgendwohin gesendet.",
- "{0} açık": "{0} an"
+ "{0} açık": "{0} an",
+ "Kartını ve bir harcamanı gir, ödeme gününü hemen gör.": "Gib deine Karte und einen Einkauf ein und sieh sofort, wann du zahlst.",
+ "Hesap ve banka şifresi gerekmez": "Kein Konto und kein Bankpasswort nötig",
+ "En çok kullandığın kartı seç ya da adını yaz; diğerlerini sonra eklersin.": "Wähle die Karte, die du am meisten nutzt, oder gib ihren Namen ein; die anderen fügst du später hinzu.",
+ "Kartın adı": "Name der Karte",
+ "Önce örnek bir planla göz at": "Erst einen Beispielplan ansehen",
+ "Başla": "Los geht's",
+ "Örnek veri": "Beispieldaten",
+ "Kendi kartımı ekle": "Meine eigene Karte hinzufügen",
+ "Kartını ekle; ilk ödeme gününü hatırlatayım": "Füge deine Karte hinzu, ich erinnere dich an die erste Zahlung",
+ "Kartın ve bir taksitin yeter: bu ay ne ödeyeceğini bir dakikada gör.": "Deine Karte und ein Einkauf reichen: Sieh in einer Minute, was du diesen Monat zahlst.",
+ "Bu ay kartına ne kadar ödeyeceksin?": "Wie viel zahlst du diesen Monat für deine Karte?",
+ "Kartının adını ve kesim gününü gir; ödeme günlerini CashFollow hesaplasın.": "Gib den Namen deiner Karte und den Abrechnungstag ein; CashFollow berechnet deine Zahlungstermine."
 }

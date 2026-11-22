@@ -1423,7 +1423,6 @@
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "Aankopen tot en met {0} worden betaald op {1}.",
  "Taksitli alışveriş": "Aankoop in termijnen",
  "Adım {0} / {1}": "Stap {0} van {1}",
- "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "Vul de naam in van de kaart die je het meest gebruikt; de rest voeg je later toe.",
  "Bankanın harcama e-postaları sana özel adrese gelince harcama olarak eklenir. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur.": "De uitgavenmails van je bank worden als aankopen toegevoegd zodra ze op je persoonlijke adres binnenkomen. E-mails komen ook binnen als je telefoon uit staat; als je CashFollow opent, staan de aankopen al op de juiste kaart, herkend aan de laatste 4 cijfers.",
  "Deneme e-postası gönder": "Testmail sturen",
  "Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ya da kendi e-posta kutuna ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir.": "Iedereen die dit adres kent, kan je aankopen sturen; gebruik het alleen bij je bank of in je eigen mailbox. Denk je dat het is uitgelekt, vernieuw het dan en pas het aan bij je bank.",
@@ -1590,5 +1589,17 @@
  "Onay bekleyen olunca": "Als er iets op goedkeuring wacht",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "Aankopen uit een e-mail of bericht van de bank en aankopen die op je goedkeuring wachten. Als de app open is, komt er geen melding; als hij dicht is, bepaalt iOS wanneer er gekeken wordt.",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "Meldingen worden op deze telefoon ingesteld; je gegevens worden nergens naartoe gestuurd.",
- "{0} açık": "{0} aan"
+ "{0} açık": "{0} aan",
+ "Kartını ve bir harcamanı gir, ödeme gününü hemen gör.": "Voeg je kaart en één aankoop toe en zie meteen wanneer je betaalt.",
+ "Hesap ve banka şifresi gerekmez": "Geen account of bankwachtwoord nodig",
+ "En çok kullandığın kartı seç ya da adını yaz; diğerlerini sonra eklersin.": "Kies de kaart die je het meest gebruikt of typ de naam; de rest voeg je later toe.",
+ "Kartın adı": "Naam van de kaart",
+ "Önce örnek bir planla göz at": "Eerst een voorbeeldplan bekijken",
+ "Başla": "Beginnen",
+ "Örnek veri": "Voorbeeldgegevens",
+ "Kendi kartımı ekle": "Mijn eigen kaart toevoegen",
+ "Kartını ekle; ilk ödeme gününü hatırlatayım": "Voeg je kaart toe, dan herinner ik je aan je eerste betaling",
+ "Kartın ve bir taksitin yeter: bu ay ne ödeyeceğini bir dakikada gör.": "Je kaart en één aankoop zijn genoeg: zie in een minuut wat je deze maand betaalt.",
+ "Bu ay kartına ne kadar ödeyeceksin?": "Hoeveel betaal je deze maand op je kaart?",
+ "Kartının adını ve kesim gününü gir; ödeme günlerini CashFollow hesaplasın.": "Vul de naam van je kaart en de afsluitdag in; CashFollow berekent je betaaldata."
 }

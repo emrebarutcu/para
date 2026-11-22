@@ -37,11 +37,13 @@ struct CashFollowApp: App {
                 Task { await model.refresh() }
                 Analitik.olay("app_opened", ["signed_in": model.session != nil])
                 Task { await Analitik.bayraklariYukle() }
+                Task { await Karsilama.kurtarmayiKur(model) }   // ödeme planını görmeyene 1. ve 3. gün (bir kez kurulur)
             }
             if phase == .background {
                 kilit.arkaPlan()
                 Analitik.gonder()
                 EpostaBildirim.planla(model)
+                Task { await Karsilama.kurtarmayiKur(model) }
             }
         }
         // Banka e-postaları: uygulama kapalıyken iOS'un verdiği arka plan zamanında (EpostaBildirim)
@@ -66,6 +68,10 @@ struct AnaEkran: View {
                 GrafikGalerisi(sayfa: g)
             } else {
                 Sekmeler(sekme: $sekme)
+                    // Karşılamada "Önce örnekle göz at": üstte örnek verinin bandı, "Kendi kartımı ekle" ile çıkılır
+                    .safeAreaInset(edge: .top, spacing: 0) { if model.ornekGezinti { OrnekBandi() } }
+                    // Karşılamanın kart adımı yeniden: örnekten çıkınca ya da geri çağıran bildirime dokununca
+                    .fullScreenCover(isPresented: $model.kartAkisi) { KarsilamaEkrani(baslangic: 1, kartAkisi: true) }
             }
         }
         // Bir işin sonucu (harcama kaydedildi…) üstte kısa bir bantla
@@ -86,6 +92,13 @@ struct AnaEkran: View {
             if !model.showWelcome { kisayol = taslak }
         }
         .sheet(item: $kisayol) { HarcamaFormu(kisayol: $0) }
+        // Geri çağıran bildirim (Karsilama.kurtarmayiKur): karşılama açık değilse ve kart yoksa kart adımı
+        .onReceive(Yonlendirici.shared.$kartEkle.filter { $0 }) { _ in
+            Yonlendirici.shared.kartEkle = false
+            guard !model.showWelcome, !model.kartAkisi else { return }
+            if model.ornekGezinti { model.ornektenCik(kartEkle: true); return }
+            if (try? model.read("list_cards") as KartListesi)?.cards.isEmpty != false { model.kartAkisi = true }
+        }
         // İlk açılış: yeni kullanıcıya karşılama akışı (KarsilamaEkrani), daha önce kullanmış olana giriş ekranı
         .fullScreenCover(isPresented: $model.showWelcome) {
             KarsilamaKapisi()

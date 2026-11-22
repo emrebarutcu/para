@@ -122,6 +122,7 @@ final class BildirimTemsilcisi: NSObject, UNUserNotificationCenterDelegate {
             MainActor.assumeIsolated {
                 Analitik.olay("notification_opened", ["kind": tur])
                 if let sekme { Yonlendirici.shared.sekme = sekme }
+                if info["kart"] as? Bool == true { Yonlendirici.shared.kartEkle = true }   // geri çağıran bildirim
                 if ozet { Yonlendirici.shared.ayOzeti = true }
             }
             completionHandler()
@@ -136,5 +137,6 @@ final class Yonlendirici: ObservableObject {
     static let shared = Yonlendirici()
     @Published var sekme: Int?
     @Published var ayOzeti = false
+    @Published var kartEkle = false   // etkinleşmeyeni geri çağıran bildirim (Karsilama.kurtarmayiKur): kart adımı açılır
     @Published var harcama: KisayolHarcamasi?   // "Harcama ekle" kısayolu: form bu taslakla açılır (Kisayollar.swift)
 }

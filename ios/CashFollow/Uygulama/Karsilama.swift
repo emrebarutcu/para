@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 // İlk açılış akışı (Ekranlar/KarsilamaEkrani.swift): yeni kullanıcı hesap açmadan başlar, kartını ve bir harcamasını
 // girer, "bu ay ne ödeyeceğini" ilk dakikada görür; hesap isteğe bağlı ("Hesabım var, giriş yap", Ayarlar).
@@ -71,15 +72,90 @@ enum Karsilama {
     // verinin akıştan, formdan, web'den ya da asistandan gelmesi fark etmez. Akış açıkken Özet denetlemez: akış
     // "Planın hazır" ekranında kendisi denetler (akista: true)
     static func etkinlesmeyiDenetle(_ model: Model, akista: Bool = false) {
-        guard yeniKurulum, varyant != nil, !d.bool(forKey: "analitik.etkinlesti"), Ornek.tur == nil,
+        guard yeniKurulum, varyant != nil, !etkinlesti, Ornek.tur == nil, !model.ornekGezinti,
               akista || !model.showWelcome,
               let o = try? model.read("get_overview") as Ozet,
               o.remainingTotal > 0.004 || !o.upcomingPayments.isEmpty else { return }
         d.set(true, forKey: "analitik.etkinlesti")
+        kurtarmayiSil()
         let dakika = Int((Date().timeIntervalSince1970 - ilkAcilis) / 60)
         let kart = (try? model.read("list_cards") as KartListesi)?.cards.isEmpty == false
         olay("activation_reached", ["definition": "plan_visible", "minutes_since_first_open": min(max(dakika, 0), 10080),
                                     "via_flow": akista, "has_card": kart])
+    }
+
+    static var etkinlesti: Bool { d.bool(forKey: "analitik.etkinlesti") }
+
+    // ── Etkinleşmeyeni geri çağırma (TUTUNDURMA.md → yol haritası 2) ───────────────────────────────────────────────
+    // Ödeme planını görmeden çıkan yeni kurulum: ilk açılıştan 1 ve 3 gün sonra akşam birer yerel bildirim (en fazla iki;
+    // zamanları ilk açılışa bağlı, yeniden kurulunca çoğalmaz). İzin sorulmadıysa sessiz (.provisional) izin alınır:
+    // iOS bir şey sormaz, bildirim Bildirim Merkezi'ne sessizce düşer; "Hatırlat" sonra asıl izni yine sorar
+    // (Bildirimler.izinIste). Plan görünür olunca (etkinlesmeyiDenetle) ikisi de silinir. Açılışta ve arka plana
+    // geçerken kurulur (CashFollowApp). Dokununca kartı yoksa kart adımı açılır (BildirimTemsilcisi → kartEkle).
+    private static let kurtarmaEki = "kurtarma-"
+    static let kurtarmaGunleri = [1, 3]
+
+    static func kurtarmayiKur(_ model: Model) async {
+        guard yeniKurulum, varyant != nil, !etkinlesti, Ornek.tur == nil, Ornek.galeri == nil,
+              !CommandLine.arguments.contains("-ornek") else { return }
+        let c = UNUserNotificationCenter.current()
+        var durum = await c.notificationSettings().authorizationStatus
+        if durum == .notDetermined {
+            _ = try? await c.requestAuthorization(options: [.alert, .sound, .badge, .provisional])
+            durum = await c.notificationSettings().authorizationStatus
+            if durum == .provisional { olay("onboarding_nudge_permission", ["status": "provisional"]) }
+        }
+        guard durum == .authorized || durum == .provisional || durum == .ephemeral else { return }
+        let simdi = Date()
+        for gun in kurtarmaGunleri {
+            guard let zaman = kurtarmaZamani(ilkAcilis: ilkAcilis, gun: gun), zaman > simdi else { continue }
+            let i = UNMutableNotificationContent()
+            if gun == kurtarmaGunleri.first {
+                i.title = L("Kartını ekle; ilk ödeme gününü hatırlatayım")
+                i.body = L("Kartın ve bir taksitin yeter: bu ay ne ödeyeceğini bir dakikada gör.")
+            } else {
+                i.title = L("Bu ay kartına ne kadar ödeyeceksin?")
+                i.body = L("Kartının adını ve kesim gününü gir; ödeme günlerini CashFollow hesaplasın.")
+            }
+            i.sound = .default
+            i.threadIdentifier = "kurtarma"
+            i.userInfo = ["sekme": 0, "tur": "onboarding_nudge", "gun": gun, "kart": true]
+            try? await c.add(UNNotificationRequest(identifier: "\(kurtarmaEki)\(gun)", content: i,
+                                                   trigger: UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: zaman), repeats: false)))
+        }
+    }
+
+    static func kurtarmayiSil() {
+        let c = UNUserNotificationCenter.current()
+        c.removePendingNotificationRequests(withIdentifiers: kurtarmaGunleri.map { "\(kurtarmaEki)\($0)" })
+    }
+
+    // İlk açılış gününden n gün sonra, 19.30 (yerel saat)
+    nonisolated static func kurtarmaZamani(ilkAcilis: Double, gun: Int, takvim: Calendar = .current) -> Date? {
+        guard ilkAcilis > 0 else { return nil }
+        let ilk = takvim.startOfDay(for: Date(timeIntervalSince1970: ilkAcilis))
+        guard let g = takvim.date(byAdding: .day, value: gun, to: ilk) else { return nil }
+        return takvim.date(bySettingHour: 19, minute: 30, second: 0, of: g)
+    }
+
+    // Kart adı adımındaki hazır adlar: ülkede en çok kullanılan kartlar / bankalar (marka adları çevrilmez). Listede
+    // olmayan ülkede yok; kullanıcı yazar
+    nonisolated static func kartOnerileri(ulke: String) -> [String] {
+        switch ulke {
+        case "TR": return ["Bonus", "World", "Axess", "Maximum", "Paraf", "CardFinans", "Bankkart", "Advantage"]
+        case "US": return ["Chase", "Amex", "Capital One", "Citi", "Discover", "Apple Card", "Bank of America", "Wells Fargo"]
+        case "GB": return ["Amex", "Barclaycard", "HSBC", "Lloyds", "NatWest", "Santander", "Capital One", "Monzo"]
+        case "DE", "AT": return ["Sparkasse", "Amex", "Barclays", "DKB", "ING", "Commerzbank", "Deutsche Bank", "Advanzia"]
+        case "FR": return ["BNP Paribas", "Crédit Agricole", "Société Générale", "Boursorama", "LCL", "Caisse d'Epargne", "Amex"]
+        case "ES": return ["Santander", "BBVA", "CaixaBank", "Sabadell", "ING", "Bankinter", "Amex"]
+        case "IT": return ["Intesa Sanpaolo", "UniCredit", "Nexi", "Fineco", "BPER", "Amex"]
+        case "NL": return ["ING", "ABN AMRO", "Rabobank", "ICS", "bunq", "Amex"]
+        case "BE": return ["KBC", "BNP Paribas Fortis", "Belfius", "ING", "Argenta", "Amex"]
+        case "CA": return ["RBC", "TD", "Scotiabank", "BMO", "CIBC", "Amex"]
+        case "AU": return ["CommBank", "Westpac", "ANZ", "NAB", "Amex"]
+        case "JP": return ["楽天カード", "三井住友カード", "JCB", "イオンカード", "dカード", "PayPayカード", "Amex"]
+        default: return []
+        }
     }
 
     // Varsayılan ülke: kayıtlı, yoksa telefonun bölgesi (listedeyse), yoksa aynı para birimli ilk ülke; hiçbiri değilse

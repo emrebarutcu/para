@@ -60,6 +60,12 @@ enum Ornek {
         return a[i + 1]
     }
 
+    // Karşılamadaki "Önce örnekle göz at" (Model.ornegiGoster): ekran görüntülerinin örnek verisi, JSON metni olarak
+    static func gezintiVerisi(ulke: String) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: ulke == "TR" ? veri() : veriUS()) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     static func hazirlaIfRequested() {
         guard CommandLine.arguments.contains("-ornek") else { return }
         Auth.store(nil)

@@ -68,11 +68,12 @@ enum Bildirimler {
         await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
-    // İzin sorulmadıysa sorar (iOS bir kez sorar); verilmişse true
+    // İzin sorulmadıysa sorar (iOS bir kez sorar); verilmişse true. Sessiz izin (.provisional; etkinleşmeyeni geri
+    // çağırma, Karsilama.kurtarmayiKur) asıl izin sayılmaz: kullanıcı bir bildirimi açınca iOS asıl izni sorar
     static func izinIste() async -> Bool {
         switch await izinDurumu() {
-        case .authorized, .provisional, .ephemeral: return true
-        case .notDetermined:
+        case .authorized, .ephemeral: return true
+        case .notDetermined, .provisional:
             return (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
         default: return false
         }

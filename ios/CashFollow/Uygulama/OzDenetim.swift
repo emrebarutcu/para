@@ -66,6 +66,14 @@ enum OzDenetim {
                       && Karsilama.varsayilanUlke(kayitli: nil, bolge: "BR", paraBirimi: "BRL", ulkeler: ulkeler) == ""
                       && Karsilama.varsayilanUlke(kayitli: "US", bolge: "DE", paraBirimi: "EUR", ulkeler: ulkeler) == "US"
                       && !Karsilama.varsayilanUlke(kayitli: nil, bolge: nil, paraBirimi: "EUR", ulkeler: ulkeler).isEmpty, "varsayılan ülke")
+            // Geri çağıran bildirim: ilk açılış gününden 1 ve 3 gün sonra 19.30; kart önerileri ülkeye göre
+            var tk = Calendar(identifier: .gregorian)
+            tk.timeZone = TimeZone(identifier: "Europe/Istanbul") ?? .current
+            let ilk = tk.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 23, minute: 50))?.timeIntervalSince1970 ?? 0
+            let k1 = Karsilama.kurtarmaZamani(ilkAcilis: ilk, gun: 1, takvim: tk).map { tk.dateComponents([.day, .hour, .minute], from: $0) }
+            try check(k1?.day == 21 && k1?.hour == 19 && k1?.minute == 30 && Karsilama.kurtarmaZamani(ilkAcilis: 0, gun: 1) == nil,
+                      "geri çağıran bildirimin zamanı")
+            try check(Karsilama.kartOnerileri(ulke: "TR").contains("Bonus") && Karsilama.kartOnerileri(ulke: "BR").isEmpty, "kart önerileri")
             // Özet'in tepesi ve kolaylıklar (icgoru.js; kopru.js): ilerleme, son taksit ayı, işyeri önerileri, biten taksit,
             // ay kapanışı, kesim günleri
             let tepe: Ozet = try m.run("get_overview")

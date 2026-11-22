@@ -483,7 +483,11 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   kurulum. `onboarding_started` (deneme girişi, bir kez; `variant`), `onboarding_step_viewed` / `onboarding_step_completed`
   (`step`: intro, card, cutoff, purchase, aha; `seconds`, `method`) / `onboarding_step_skipped` (`reason`),
   `onboarding_aha_viewed`, `onboarding_add_another`, `onboarding_closed`, `onboarding_backgrounded`, `onboarding_completed`
-  (`path`: offline, account, closed), `activation_reached` (ödeme planı ilk kez göründü; `via_flow`). Akıştan gelen
+  (`path`: offline, account, closed, sample), `activation_reached` (ödeme planı ilk kez göründü; `via_flow`). Kart adımında
+  `method`: typed ya da chip (hazır kart adı). Örnek veriyle gezinti: `onboarding_sample_opened`, `onboarding_sample_exit`
+  (`seconds`); sonrasında kart adımı yeniden açılınca akışın olaylarında `reentry: true`. Geri çağıran bildirim
+  (ödeme planını görmeyene 1. ve 3. gün): `onboarding_nudge_permission` (sessiz izin alındı), dokununca
+  `notification_opened` (`kind: onboarding_nudge`). Akıştan gelen
   `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
   `inbox_card_assigned` (`set_last4`: son 4 hane karta yazıldı mı), `inbox_notifications` (`enabled`).

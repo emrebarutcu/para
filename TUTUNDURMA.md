@@ -65,6 +65,23 @@ Karara bırakılanlar (ücretsiz / ücretli sınırı, widget ve Kısayollar, ka
 sonra karar ver" işleri) ayrı yürüyor. Bu sürüm ilk haftanın davranışını değiştirir: karşılama denemesi açılacaksa
 aşağıdaki kural gereği bu sürümden sonra, yeni tabanla başlatılmalı.
 
+## Karşılama optimizasyonu (Kasım 2026)
+
+PostHog, son 30 gün (30 yeni kurulum, küçük örneklem): ilk ekranı geçen 19 (8 kişi hiçbir şey yapmadan çıktı, ekranda
+ortalama 67 sn), kart adımında 19'dan 8'i kartı yazdı, 6'sı ✕ ile kapattı, 5'i "Kredi kartım yok" dedi; kesim günü
+adımı 8/8; ödeme planını gören 9, ertesi gün dönen ~4. En büyük iki kayıp ilk ekran ve kart adı. Yapılanlar:
+
+- **İlk ekran sade:** ülke bulunduysa küçük bir satır, düğme "Başla", "Hesap ve banka şifresi gerekmez".
+- **Kart adına hazır çipler:** ülkenin sık kartları (`Karsilama.kartOnerileri`); dokununca kesim gününe geçer
+  (`method: chip`). Çip varken klavye kendiliğinden açılmaz.
+- **"Önce örnek bir planla göz at":** kart adımında; örnek veri yalnızca bellekte (`Model.ornegiGoster`), dosyaya,
+  buluta, bildirime ve etkinleşmeye girmez. Üstteki bant "Kendi kartımı ekle" ile kart adımını açar (`kartAkisi`).
+- **Geri çağıran bildirim:** yol haritası 2 (aşağıda).
+
+Ölçüm: önce / sonra kohortları. Bakılacaklar: `onboarding_step_completed` kartta `method` (chip / typed),
+`onboarding_sample_opened` → `onboarding_sample_exit` → `activation_reached`, `notification_opened` `kind:
+onboarding_nudge`, ilk ekranı geçme oranı.
+
 ## Yol haritası
 
 Karşılama denemesi yapılmadığı için (aşağıda "Verilen kararlar") ilk haftayı değiştiren işler beklemeden yayınlanır;
@@ -78,10 +95,10 @@ etkileri önce / sonra kohortlarıyla okunur.
    - ✓ (1.1.0) Taksit bitince ve ayın ilk günü ay özeti (çalışmadan; haftalık yerine aylık ritim).
    - Pazartesi haftalık özet; boş haftada gönderilmez. (Açık: ay özeti yeterli mi, ölçüme göre.)
    - Dosyalar: `Hatirlatma.swift`, `CashFollowApp.swift`, Ayarlar → Bildirimler.
-2. **Etkinleşmeyenleri kurtarma** (etki orta-yüksek, çaba küçük):
-   - Başlarken bitmediyse 1. ve 3. gün bir yerel bildirim; en fazla iki kez.
-   - Akışı atlayanlara `.provisional` (sessiz) izin.
-   - Metin değer anlatır, suçlamaz: "Kartını ekle; ilk ödeme gününü hatırlatayım".
+2. ✓ (Kasım 2026, karşılama optimizasyonu) **Etkinleşmeyenleri kurtarma:**
+   - Ödeme planını görmeyene ilk açılıştan 1. ve 3. gün 19.30'da yerel bildirim; en fazla iki kez, plan görünce silinir.
+   - İzin sorulmadıysa `.provisional` (sessiz) izin; "Hatırlat" asıl izni yine sorar.
+   - Metin değer anlatır: "Kartını ekle; ilk ödeme gününü hatırlatayım". Dokununca kart yoksa kart adımı açılır.
 3. **Temel vaadin ücretsiz tadı** (etki yüksek, bayrak `free_taste`):
    - Akış'ın ilk 2–3 ayı ücretsiz.
    - "Gelirini ekle" gibi kurulum içgörüleri ve ilk içgörü açık.

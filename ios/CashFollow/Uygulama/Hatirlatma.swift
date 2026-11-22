@@ -126,6 +126,7 @@ enum Hatirlatma {
 
     // Bekleyen bildirimleri sıfırdan kurar (hepsi kapalıysa ya da izin yoksa yalnızca temizler); her tür kendi ayarına bakar
     static func kur(_ model: Model) async {
+        guard !model.ornekGezinti else { return }   // örnek veriyle gezinti: bildirimlere dokunulmaz
         await temizle()
         guard herhangi, Ornek.tur == nil, Ornek.galeri == nil else { return }
         let durum = await izinDurumu()

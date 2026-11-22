@@ -1423,7 +1423,6 @@
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "Compras até {0}, inclusive, são pagas em {1}.",
  "Taksitli alışveriş": "Compra parcelada",
  "Adım {0} / {1}": "Etapa {0} de {1}",
- "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "Digite o nome do cartão que você mais usa; os outros você adiciona depois.",
  "Bankanın harcama e-postaları sana özel adrese gelince harcama olarak eklenir. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur.": "Os e-mails de gastos do seu banco são adicionados como compras quando chegam ao seu endereço pessoal. Os e-mails chegam mesmo com o celular desligado; quando você abre o CashFollow, as compras já estão no cartão certo, identificado pelos 4 últimos dígitos.",
  "Deneme e-postası gönder": "Enviar e-mail de teste",
  "Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ya da kendi e-posta kutuna ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir.": "Quem souber este endereço pode enviar compras para você; use só com o seu banco ou com o seu próprio e-mail. Se achar que vazou, renove e atualize no banco.",
@@ -1590,5 +1589,17 @@
  "Onay bekleyen olunca": "Quando algo aguarda sua aprovação",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "Compras adicionadas a partir de e-mail ou mensagem do banco e as que aguardam sua aprovação. Com o app aberto não há notificação; com ele fechado, o iOS decide quando verificar.",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "As notificações são configuradas neste telefone; seus dados não são enviados a lugar nenhum.",
- "{0} açık": "{0} ativadas"
+ "{0} açık": "{0} ativadas",
+ "Kartını ve bir harcamanı gir, ödeme gününü hemen gör.": "Adicione seu cartão e uma compra para ver na hora a data de pagamento.",
+ "Hesap ve banka şifresi gerekmez": "Sem conta e sem senha do banco",
+ "En çok kullandığın kartı seç ya da adını yaz; diğerlerini sonra eklersin.": "Escolha o cartão que você mais usa ou digite o nome; adicione os outros depois.",
+ "Kartın adı": "Nome do cartão",
+ "Önce örnek bir planla göz at": "Ver antes um plano de exemplo",
+ "Başla": "Começar",
+ "Örnek veri": "Dados de exemplo",
+ "Kendi kartımı ekle": "Adicionar meu cartão",
+ "Kartını ekle; ilk ödeme gününü hatırlatayım": "Adicione seu cartão e eu lembro você do primeiro pagamento",
+ "Kartın ve bir taksitin yeter: bu ay ne ödeyeceğini bir dakikada gör.": "Seu cartão e uma compra bastam: veja em um minuto quanto vai pagar este mês.",
+ "Bu ay kartına ne kadar ödeyeceksin?": "Quanto você vai pagar no cartão este mês?",
+ "Kartının adını ve kesim gününü gir; ödeme günlerini CashFollow hesaplasın.": "Informe o nome do cartão e o dia de fechamento; o CashFollow calcula as datas de pagamento."
 }

@@ -1423,7 +1423,6 @@
  "{0} dahil yapılan harcamalar {1} günü ödenir.": "{0}までの購入は{1}に支払われます。",
  "Taksitli alışveriş": "分割払いの買い物",
  "Adım {0} / {1}": "ステップ {0}/{1}",
- "En çok kullandığın kartın adını yaz; diğerlerini sonra eklersin.": "いちばんよく使うカードの名前を入力してください。ほかのカードはあとで追加できます。",
  "Bankanın harcama e-postaları sana özel adrese gelince harcama olarak eklenir. E-postalar telefonun kapalıyken de alınır; CashFollow'u açtığında harcamalar, kartın son 4 hanesine göre ilgili karta eklenmiş olur.": "銀行の利用通知メールがあなた専用のアドレスに届くと、購入として追加されます。メールはスマートフォンの電源が切れていても受信され、CashFollowを開くと、下4桁が一致するカードに購入が追加されています。",
  "Deneme e-postası gönder": "テストメールを送信",
  "Bu adresi bilen herkes sana harcama gönderebilir; yalnızca bankana ya da kendi e-posta kutuna ver. Ele geçtiğini düşünürsen yenile ve bankadaki adresi değiştir.": "このアドレスを知っている人は誰でも購入を送信できます。銀行またはご自身のメールアカウントにのみ登録してください。漏れたと思ったら更新し、銀行の登録も変更してください。",
@@ -1590,5 +1589,17 @@
  "Onay bekleyen olunca": "承認待ちがあるとき",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "銀行のメールやメッセージから追加された購入と、承認待ちの購入です。Appを開いている間は通知しません。閉じているときにいつ確認するかはiOSが決めます。",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "通知はこのiPhoneで設定されます。データはどこにも送信されません。",
- "{0} açık": "{0}件オン"
+ "{0} açık": "{0}件オン",
+ "Kartını ve bir harcamanı gir, ödeme gününü hemen gör.": "カードと買い物を1つ入力すると、支払日がすぐにわかります。",
+ "Hesap ve banka şifresi gerekmez": "アカウントも銀行のパスワードも不要",
+ "En çok kullandığın kartı seç ya da adını yaz; diğerlerini sonra eklersin.": "よく使うカードを選ぶか名前を入力してください。ほかのカードはあとで追加できます。",
+ "Kartın adı": "カード名",
+ "Önce örnek bir planla göz at": "まずサンプルの計画を見る",
+ "Başla": "はじめる",
+ "Örnek veri": "サンプルデータ",
+ "Kendi kartımı ekle": "自分のカードを追加",
+ "Kartını ekle; ilk ödeme gününü hatırlatayım": "カードを追加すると、最初の支払いをお知らせします",
+ "Kartın ve bir taksitin yeter: bu ay ne ödeyeceğini bir dakikada gör.": "カードと買い物1つで十分。今月いくら払うか1分でわかります。",
+ "Bu ay kartına ne kadar ödeyeceksin?": "今月のカードの支払いはいくら？",
+ "Kartının adını ve kesim gününü gir; ödeme günlerini CashFollow hesaplasın.": "カード名と締め日を入力すると、CashFollowが支払日を計算します。"
 }

@@ -33,7 +33,7 @@ ilgili satırdaki "Ödendi" / "Ödedi" düğmesindedir.
 
 | # | Akış | 7.1 | 1. tur | Şimdi | Nasıl |
 |---|------|:---:|:------:|:-----:|-------|
-| 1 | İlk açılış | 3 | 3 | 5 | Yeni kullanıcıya karşılama: ülke → "Hesap açmadan başla" → kart → kesim günü → bir taksit → "Planın hazır" (bu ay ödenecek + hatırlatma izni); hesap isteğe bağlı ("Hesabım var, giriş yap") |
+| 1 | İlk açılış | 3 | 3 | 5 | Yeni kullanıcıya karşılama: ülke (bulunduysa küçük satır) → "Başla" (hesapsız) → kart (ülkenin sık kartları çip; "Önce örnek bir planla göz at" örnek veriyle Özet, üstte "Kendi kartımı ekle") → kesim günü → bir taksit → "Planın hazır" (bu ay ödenecek + hatırlatma izni); hesap isteğe bağlı ("Hesabım var, giriş yap") |
 | 2 | Yeni kullanıcının ilk adımları | 1 | 1 | 5 | Özet'te "Başlarken": kart ekle, harcama ekle, maaşını ekle (yapılanlar işaretlenir; karşılamada girilenler işaretli gelir, maaş her ay tekrarlar) |
 | 3 | Taksitli harcama ekleme | 3 | 5 | 5 | + → tutar, ne alındı, kart, taksit → altta Kaydet (eksik ne ise yazar). Adın altında önceki işyerleri: dokununca kartı, taksidi ve kategorisi de dolar. Kaydedince üstte kısa bant: "Kaydedildi · ilk ödeme 20 Kasım" ve o ayın ödemesi önce → sonra |
 | 4 | Alabilir miyim, hangi kartla? | 1 | 4 | 5 | Formda tutar yazınca: ilk ödeme, o ayın ödemesi önce → sonra, gelir yetiyor mu, kalan limit, daha geç ödenen kart önerisi |

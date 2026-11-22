@@ -11,6 +11,8 @@ final class Model: ObservableObject {
     @Published var syncError: String?
     @Published private(set) var lastSync: Date?
     @Published var showWelcome = false
+    @Published private(set) var ornekGezinti = false   // karşılamadan "Önce örnekle göz at": ekranda örnek veri (bellekte)
+    @Published var kartAkisi = false        // karşılamanın kart adımı yeniden (örnekten çıkınca, geri çağıran bildirimden)
     @Published var askMove = false          // girişsiz kullanımın verisi hesaba taşınsın mı (sync.js "Hesabıma taşı")
     @Published private(set) var country = "TR"   // hesabın ülkesi; ana para birimi ondan (para.js)
     @Published private(set) var epostalar: [Eposta] = []   // banka e-postalarından onay bekleyenler (Harcamalar)
@@ -50,6 +52,7 @@ final class Model: ObservableObject {
     // Ekrandaki veri: kullanıcının (ya da girişsiz kullanımın) dosyası
     private func open(_ userId: String?) {
         guard let motor else { return }
+        ornekGezinti = false
         let file = Depo.stateFile(userId)
         epostalar = []
         sonEposta = nil
@@ -67,6 +70,24 @@ final class Model: ObservableObject {
             })
         }
         revision += 1
+    }
+
+    // Karşılamada "Önce örnekle göz at": ekranlar örnek veriyle açılır. Veri yalnızca bellekte durur: dosyaya ve buluta
+    // yazılmaz, bildirim kurulmaz (Hatirlatma.kur), etkinleşme sayılmaz. Uygulama kapanınca kendi (boş) verisi açılır.
+    func ornegiGoster() {
+        guard let motor, session == nil, let json = Ornek.gezintiVerisi(ulke: country) else { return }
+        motor.box.json = json
+        motor.box.onSave = { [weak self] _ in self?.revision += 1 }
+        senkron = nil
+        ornekGezinti = true
+        revision += 1
+    }
+
+    // Örnekten kendi verisine dön; kartEkle: karşılamanın kart adımı açılır
+    func ornektenCik(kartEkle: Bool) {
+        guard ornekGezinti else { return }
+        open(session?.userId)
+        if kartEkle { kartAkisi = true }
     }
 
     private func changed() {
