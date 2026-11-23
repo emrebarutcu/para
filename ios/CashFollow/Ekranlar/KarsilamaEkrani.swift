@@ -172,7 +172,14 @@ struct KarsilamaEkrani: View {
 
     private var harcama: some View {
         VStack(alignment: .leading, spacing: 16) {
-            baslik(kartId != nil && model.installmentsPrimary ? L("Taksitle aldığın bir şey var mı?") : L("Son harcaman ne kadardı?"), nil)
+            // Taksidin öne çıktığı ülkede evet / hayır sorusu ("Taksitle aldığın bir şey var mı?") "Şimdilik atla"ya
+            // götürüyordu (Kasım 2026: Türkiye'de kartı giren 5 kişiden hiçbiri bu adımı bitirmedi); yapılacak iş ve
+            // "yaklaşık yeter" güvencesi. Başka ülkede soru kalır (orada bitiriliyordu)
+            if kartId != nil && model.installmentsPrimary {
+                baslik(L("Taksitli bir alışverişini yaz"), L("Yaklaşık tutar yeter; sonra düzeltebilirsin."))
+            } else {
+                baslik(L("Son harcaman ne kadardı?"), nil)
+            }
             Kart {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(Bicim.homeSymbol).font(.system(size: 28, weight: .semibold)).foregroundStyle(Tema.metin3)
@@ -211,13 +218,15 @@ struct KarsilamaEkrani: View {
                 } else {
                     Kart { Text(L("Ödenecek taksit yok")).font(.subheadline).foregroundStyle(Tema.metin2) }
                 }
+                // Hatırlatma teklifi tutarın hemen altında: altındaki düğmeler ondan sorar. Önceden "Bir harcama daha
+                // ekle"nin altındaydı; Kasım 2026'da teklifi gören 4 kişinin 4'ü "Şimdi değil" dedi
+                if let p = hatirlatilacak { hatirlatmaKarti(p) }
                 if let aciklama {
                     Label(aciklama, systemImage: "info.circle")
                         .font(.footnote).foregroundStyle(Tema.metin2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 KucukDugme(ad: L("Bir harcama daha ekle"), simge: "plus") { dahaEkle() }
-                if let p = hatirlatilacak { hatirlatmaKarti(p) }
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 120)
             }
@@ -421,8 +430,10 @@ struct KarsilamaEkrani: View {
     }
 
     // Hatırlatma sorulacak ödeme: kartın sıradaki ödemesi; bildirim izni daha önce sorulmadıysa
-    private var hatirlatilacak: Ozet.Yaklasan? {
-        guard let o = ozet, let p = o.upcomingPayments.first(where: { $0.card != "Nakit" && $0.late != true }) else { return nil }
+    private var hatirlatilacak: Ozet.Yaklasan? { hatirlatilacak(ozet) }
+
+    private func hatirlatilacak(_ o: Ozet?) -> Ozet.Yaklasan? {
+        guard let o, let p = o.upcomingPayments.first(where: { $0.card != "Nakit" && $0.late != true }) else { return nil }
         if ornek { return p }
         return !Hatirlatma.acik && izin == .notDetermined ? p : nil
     }
@@ -475,7 +486,9 @@ struct KarsilamaEkrani: View {
 
     private func atla(_ hedef: Adim?, neden: String) {
         atlanan += 1
-        if !ornek { Karsilama.olay("onboarding_step_skipped", ["step": adim.ad, "reason": neden]) }
+        if !ornek {
+            Karsilama.olay("onboarding_step_skipped", ["step": adim.ad, "reason": neden, "seconds": saniye(adimBasi, 600)])
+        }
         if let hedef { git(hedef) } else { bitir() }
     }
 
@@ -566,7 +579,8 @@ struct KarsilamaEkrani: View {
             ahaYazildi = true
             Karsilama.olay("onboarding_aha_viewed", ["has_due_this_month": o.dueThisMonth > 0.004,
                                                      "upcoming_count": min(o.upcomingPayments.count, 10),
-                                                     "installments": taksitSayisi, "seconds_since_start": saniye(akisBasi, 1800)])
+                                                     "installments": taksitSayisi, "seconds_since_start": saniye(akisBasi, 1800),
+                                                     "reminder_offered": hatirlatilacak(o) != nil])
         }
     }
 
@@ -590,7 +604,7 @@ struct KarsilamaEkrani: View {
 
     private func kapat() {
         guard !ornek else { return }
-        Karsilama.olay("onboarding_closed", ["step": adim.ad])
+        Karsilama.olay("onboarding_closed", ["step": adim.ad, "seconds": saniye(adimBasi, 600)])
         bitir(yol: "closed")
     }
 

@@ -65,6 +65,59 @@ Karara bırakılanlar (ücretsiz / ücretli sınırı, widget ve Kısayollar, ka
 sonra karar ver" işleri) ayrı yürüyor. Bu sürüm ilk haftanın davranışını değiştirir: karşılama denemesi açılacaksa
 aşağıdaki kural gereği bu sürümden sonra, yeni tabanla başlatılmalı.
 
+## Karşılama denetimi (23 Kasım 2026, 1.3.5)
+
+PostHog'daki karşılama hunisi (`onboarding_*`, `activation_reached`; 9–23 Kasım, `variant: default`). Örneklem çok küçük:
+sayılar yön gösterir, karar vermez.
+
+- **Ham huninin üçte biri gerçek değildi.** 36 "yeni kurulum"un 13'ü CI simülatörüydü (`-oz-denetim`, `-zeka-dene`:
+  yayınlanmamış 1.3.x, iOS 26.5 / 27.2, kişi başına üç olay). Biri de geliştiricinin cihazı. Ham veride ilk ekranı yalnızca
+  %50 geçiyor görünüyordu; gerçekte %82. Düzeltildi: simülatör olay göndermez (SETUP.md → Analitik).
+- **Gerçek huni (22 kişi):**
+
+  | Adım | Gören | Geçen | Not |
+  |------|------:|------:|-----|
+  | Giriş (ülke, "Hesap açmadan başla") | 22 | 18 | 2'si "Hesabım var"a dokundu, 2'si çıktı |
+  | Kart | 18 | 11 | 4 "Kredi kartım yok", **6 ✕ ile kapattı (5'i Türkiye dışı)** |
+  | Kesim günü | 11 | 10 | 1 "Bilmiyorum" |
+  | Harcama | 15 | 7 | 6 "Şimdilik atla", 2 çıktı. **Türkiye'de kartı giren 5 kişinin hiçbiri bitirmedi**, Türkiye dışında 4/4 |
+  | "Planın hazır" | 7 | – | hatırlatma teklifini gören 4 kişinin **4'ü "Şimdi değil"** |
+
+  - Etkinleşme (`activation_reached`): 10 / 22 (%45). 3'ü akıştan sonra, uygulamanın içinde.
+  - Akıştan hatırlatma izni veren hiç yok. İlk hafta ölçüsü için kohort henüz çok genç.
+- **Ekran ekran:**
+  - Giriş: gerekli (ülke para birimini belirler); tek karar; ülke çoğunlukla doğru önceden seçili (`started_without_account`
+    → `country` dille uyuşuyor).
+  - Kart: değer katıyor ama Türkiye dışında en büyük kayıp. Neden bilinmiyor: ✕'te adımda geçen süre yazılmıyordu.
+  - Kesim: gerekli, iyi geçiliyor.
+  - Harcama: aha'nın tek kapısı. Türkiye'de başlık evet / hayır sorusuydu ("Taksitle aldığın bir şey var mı?"), cevap
+    "hayır" olunca "Şimdilik atla" doğal seçenekti. Hatırlamak da yük (tutar, taksit, ne zaman).
+  - "Planın hazır": hatırlatma teklifi "Bir harcama daha ekle"nin altındaydı. Altta yalnızca "Hatırlat / Şimdi değil"
+    vardı, teklif ise ekranın aşağısında kalıyordu.
+  - İzinler: yalnızca bildirim, bağlam içinde, önizlemeyle (doğru yer). ATT yok. Paywall akışta yok, kilitte açılır (doğru).
+- **Yapılanlar (1.3.5):**
+  - Simülatör ve CI analitiği kapalı (`Analitik.otomasyon`, denemek için `-analitik`).
+  - Türkiye'de harcama başlığı iş söyler: "Taksitli bir alışverişini yaz", altında "Yaklaşık tutar yeter; sonra
+    düzeltebilirsin." Taksit ikincil olan ülkelerde soru kaldı (orada bitiriliyordu).
+  - Hatırlatma teklifi "Planın hazır"da tutarın hemen altında.
+  - Ölçüm: `onboarding_closed` ve `onboarding_step_skipped`'a `seconds`, `onboarding_aha_viewed`'e `reminder_offered`.
+- **Nasıl okunur (A/B yok, önce / sonra):** kohort sınırı 1.3.5'in App Store'a çıktığı gün (`$app_version`).
+  - Birincil: ilk hafta geri dönüş (1–7. günde `app_opened`).
+  - Adım ölçüleri: Türkiye'de harcama adımı bitirme (`onboarding_step_completed` purchase / `onboarding_step_viewed`
+    purchase; ülke `started_without_account` → `country`'den); hatırlatma kabulü (`reminders_enabled` source onboarding /
+    `onboarding_aha_viewed` reminder_offered = true).
+  - Eşik: her kohortta en az 30 kişi bu adıma gelmeden yorum yapılmaz. Bugünkü hızla (günde 1–2 gerçek kurulum) 3–4 hafta.
+  - Koruma: 24 saatte harcama düzeltme (yaklaşık tutar yanlış kaydı artırır mı), `onboarding_closed` purchase.
+- **Karara bırakılanlar (uygulanmadı):**
+  1. *Kart adımında Türkiye dışı ✕*: kart / kesim yerine önce harcamayla başlayan yol (BNPL ve banka kartı kullananlar).
+     Önce yeni `seconds` verisi beklenmeli (anında mı kapatıyorlar, uğraşınca mı?).
+  2. *Harcamayı atlayan kartlı kullanıcı*: akış bitiyor, "Planın hazır" ve hatırlatma hiç görünmüyor. Kesim günü bilindiği
+     için "kesimden sonraki alışverişin şu gün ödenir" ekranı ve hatırlatma teklifi gösterilebilir (yeni ekran: karar).
+  3. *Sign in with Apple* ve "Hesabım var" yolu: girişte 2 / 22 hesap yoluna gitti; asıl kayıp burada değil, öncelik düşük.
+  4. *Ücretsiz / ücretli sınırı*: akışta paywall yok; ilk gün kilitlere çarpma (`paywall_shown` → `reason`) ayrı incelenmeli.
+  5. *PostHog ayarları* (kullanıcı değiştirir): "Discard client IP data" proje ayarında kapalı görünüyor (`anonymize_ips:
+     false`), SETUP.md açık olmasını istiyor. Test hesabı süzgecine (cohort 688252) eski CI kişileri eklenebilir.
+
 ## Yol haritası
 
 Karşılama denemesi yapılmadığı için (aşağıda "Verilen kararlar") ilk haftayı değiştiren işler beklemeden yayınlanır;

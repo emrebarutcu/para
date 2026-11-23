@@ -483,8 +483,9 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   `revenue` ve `currency` (PostHog → Revenue analytics'te bu özellik seçilir); sandbox gelir sayılmaz.
 - Karşılama hunisi (iPhone ilk açılış akışı, `Uygulama/Karsilama.swift`, `Ekranlar/KarsilamaEkrani.swift`): yalnızca yeni
   kurulum. `onboarding_started` (deneme girişi, bir kez; `variant`), `onboarding_step_viewed` / `onboarding_step_completed`
-  (`step`: intro, card, cutoff, purchase, aha; `seconds`, `method`) / `onboarding_step_skipped` (`reason`),
-  `onboarding_aha_viewed`, `onboarding_add_another`, `onboarding_closed`, `onboarding_backgrounded`, `onboarding_completed`
+  (`step`: intro, card, cutoff, purchase, aha; `seconds`, `method`) / `onboarding_step_skipped` (`reason`, `seconds`),
+  `onboarding_aha_viewed` (`reminder_offered`: hatırlatma teklifi göründü mü), `onboarding_add_another`,
+  `onboarding_closed` (`step`, `seconds`: o adımda geçen süre), `onboarding_backgrounded`, `onboarding_completed`
   (`path`: offline, account, closed), `activation_reached` (ödeme planı ilk kez göründü; `via_flow`). Akıştan gelen
   `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),
@@ -510,6 +511,11 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   görür, `onboarding_flow` bayrağı okunmaz; olaylarda `variant: default`. Etki önce / sonra kohortlarıyla ölçülür:
   birincil ölçü ilk hafta geri dönüş (1–7. günde `app_opened`), etkinleşme ikincil (akış kartı ve harcamayı kendisi
   yazdığı için tek başına karar vermez). Simülatörde yeni kurulumda `-karsilama` akışı açar.
+- Simülatör ve otomatik çalıştırmalar olay göndermez (`Analitik.otomasyon`): CI'daki `-oz-denetim` / `-zeka-dene` her koşuda
+  yeni kurulum gibi `onboarding_started` yazıyordu (1.3.5'e kadar; `$app_version` 1.3.0–1.3.4, `$os_version` 26.5 / 27.2,
+  kişi başına üç olay: `app_opened`, `onboarding_started`, `onboarding_step_viewed` intro). Eski veride bu kişiler elle
+  ayıklanır. Simülatörde göndermeyi denemek için `-analitik`. Not: `country` ortak özelliği ülke seçilmeden önce `TR`
+  yazar (varsayılan); ilk ekranın olaylarında ülkeye göre bölme yapılmaz, `started_without_account` → `country` kullanılır.
 
 #### Abonelik (CashFollow Premium)
 
