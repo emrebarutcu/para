@@ -27,12 +27,12 @@ You optimize the first-run experience to maximize activation — the moment a ne
 
 ## Initial Assessment
 
-1. Check for `app-marketing-context.md`
-2. Ask: **What is your activation event?**
-3. Ask: **What % of new users reach it within 24 hours?** (baseline)
+1. Check for `app-marketing-context.md`, `TUTUNDURMA.md` (earlier findings) and `SETUP.md` → Analitik → Karşılama
+2. Activation event is already decided: `activation_reached` (payment plan shown for the first time). Don't re-ask.
+3. Pull the baseline from PostHog (share of new installs reaching `activation_reached` within 24 h)
 4. Ask: **Where do users drop off?** (which step, if known)
 5. Ask: **How long does your current onboarding take?** (steps, screens)
-6. Ask: **Do you have Firebase/Mixpanel funnels set up?**
+6. Funnels are in PostHog (`onboarding_*` events); query them, don't ask for screenshots
 
 ## Onboarding Audit Framework
 
@@ -67,7 +67,7 @@ Permissions are the #1 drop-off point. Rules:
 | Location | When the feature needs it | During sign-up |
 | Camera/microphone | Contextually, when used | Before any value |
 | Contacts | When the social feature is used | In onboarding |
-| Tracking (ATT) | After user is invested | On first open |
+| Tracking (ATT) | **Don't ask at all** — CashFollow declares "no tracking"; an ATT prompt would contradict App Privacy | — |
 
 **The pre-permission screen:** Always show a native-looking explanation screen before the system prompt. Users who understand the "why" grant at 2–3× the rate.
 
@@ -76,7 +76,7 @@ Permissions are the #1 drop-off point. Rules:
 | Pattern | Impact | Recommendation |
 |---------|--------|---------------|
 | Required sign-up before value | High drop-off | Defer to post-activation |
-| Only email+password | Medium drop-off | Add Sign in with Apple + Google |
+| Only email+password | Medium drop-off | CashFollow has email+password only (no Sign in with Apple yet); email confirmation was the main sign-up blocker. Lead with "Hesap açmadan başla" (guest) and keep sign-up for later |
 | Long profile setup | High drop-off | Ask 1 question max, defer rest |
 | Email verification required | Kills momentum | Defer or make optional |
 
@@ -192,3 +192,13 @@ e.g., "We'll only send you reminders you set — no spam."
 - `ab-test-store-listing` — Test onboarding variants
 - `app-analytics` — Set up activation funnel tracking
 - `rating-prompt-strategy` — When to ask for a rating post-activation
+
+## CashFollow'a uyarlama
+
+- **Akış zaten yeniden tasarlandı (8.13.0, `TUTUNDURMA.md`):** ülke → "Hesap açmadan başla" → kartın adı → kesim günü → bir taksitli harcama → "Planın hazır" (+ hatırlatma izni, bildirim önizlemesiyle). Kod: `ios/CashFollow/Ekranlar/KarsilamaEkrani.swift`, `Uygulama/Karsilama.swift`; UX.md → akış 1. Önerileri bu akışa göre ver, sıfırdan kurma. Yeni kurulum yoksa bu akışa dokunan öneri ölçülemez.
+- **Desen:** Value-First'ün "önce eylem" biçimi (hakem kararı). Aha anı = ödeme planı yazılırken görünür.
+- **A/B yok:** Kasım 2026 kararı; kol başına ~2.900 kurulum gerekiyor. `onboarding_flow` bayrağı okunmaz, olaylarda `variant: default`. Etki **önce/sonra kohortlarıyla** ölçülür: birincil ölçü ilk hafta geri dönüş (1–7. günde `app_opened`), etkinleşme ikincil. "A/B test edelim" önerme; kohort karşılaştırması öner.
+- **İzinler:** bildirim izni bağlam içinde, ilk hatırlatılacak şey oluşunca ("Planın hazır" ekranı); "Şimdi değil" 3 gün erteler. Konum, kişiler, kamera yok. ATT yok.
+- **Paywall:** karşılama akışında ödeme ekranı sonradan, bir kilide çarpınca açılır (`paywall_shown` → `reason`). Ücretsiz sürüm: 2 kart, 2 kişi; bkz. `SETUP.md` → Abonelik. Fiyat App Store Connect'te, kodda yok.
+- **Çok dil:** karşılama metni tüm dillerde olmalı (`L("…")`, `node scripts/dil.mjs`); ülke seçimi para birimini ve örnekleri belirler. Benchmark'lar genel; finans uygulamalarında D1 kaynağa göre ~%12–34.
+- **Ölçüm:** olay adları ve gizlilik kuralları için `app-analytics` skill'i.

@@ -163,3 +163,12 @@ Estimated Impact: [X]% improvement = [Y] additional monthly users
 - `monetization-strategy` — Retention's impact on revenue
 - `review-management` — Retention issues surface in reviews
 - `app-launch` — First-time user experience
+
+## CashFollow'a uyarlama
+
+- Ölçü: PostHog. Birincil geri dönüş ölçüsü ilk hafta (1–7. günde `app_opened`); App Store Connect'te D1/D7/D28.
+- Geri çağıran mekanizmalar zaten var: ödeme günü, kesim günü (bir gün önce), taksit bitti kutlaması, ayın ilk günü ay özeti, banka e-postası / SMS ile otomatik kayıt. Yeni bildirim önermeden önce `notification_setting_changed` / `notification_opened` verisine bak; her bildirim türü Ayarlar'dan kapatılabilir.
+- Push kampanyası / uygulama içi mesaj aracı yok (PostHog yalnızca analitik ve bayrak). Önerilen şey kodda yazılmalı ve `SETUP.md`'ye girmeli.
+- Premium: haftalık / aylık / yıllık. Churn = `subscription_expired`, `subscription_did_change_renewal_status`; gelir yalnızca production'dan.
+- Gizlilik: davranış ölçümü yalnızca sayı ve enum; tutar, işyeri, kart bilgisi hiçbir olayda yok (`app-analytics` → Privacy rules).
+- Önceki bulgular: `TUTUNDURMA.md` (yol haritası işaretli). Aynı öneriyi tekrarlama.

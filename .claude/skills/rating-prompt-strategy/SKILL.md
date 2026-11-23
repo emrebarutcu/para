@@ -180,5 +180,13 @@ Recovery plan (if rating < 4.0):
 
 - `review-management` — Respond to reviews to recover rating
 - `onboarding-optimization` — Fix activation issues that drive 1-star reviews
-- `android-aso` — Play In-App Review API context
 - `retention-optimization` — Engaged users give better ratings
+
+## CashFollow'a uyarlama
+
+- **Yalnızca iOS** (Android uygulaması yok; Play bölümleri geçerli değil). Mevcut uygulama: `ios/CashFollow/Uygulama/Puanlama.swift`.
+- **Koşullar (kodda):** en az 5 ayrı günde açıldı, en az 3 olumlu an (harcama eklendi, ödeme kaydedildi), bu sürümde sorulmadı, son sorudan 120 gün geçti. Pencereyi `SKStoreReviewController` açar; iOS yılda en fazla 3 kez gösterir ve göstermeyebilir. Olay: `review_prompted`.
+- Özel bir "beğendin mi?" ön ekranı yok. Eklenirse Apple'ın kuralına uy: puan penceresi düğmeye bağlanmaz, olumsuz yanıtta destek bağlantısı (`https://cashfollow.app/support`) gösterilir.
+- Eşikleri değiştirmeden önce `review_prompted` ve App Store Connect'te puan sayısını karşılaştır; ilk hafta içinde (`onboarding_*` akışı sırasında) asla sorulmaz.
+- Yeni sürümde mağaza puanı sürüme göre sıfırlanabilir (App Store Connect ayarı); varsayılanı değiştirme.
+- Puan isteyen metinler `L("…")` ile çevrilir (`dil/<kod>.json`).

@@ -1,6 +1,6 @@
 ---
 name: app-analytics
-description: When the user wants to set up, interpret, or improve their app analytics and tracking. Also use when the user mentions "analytics", "tracking", "metrics", "KPIs", "App Store Connect analytics", "install tracking", "funnel", "attribution", or "how is my app performing". For A/B testing, see ab-test-store-listing. For retention metrics, see retention-optimization.
+description: When the user wants to set up, interpret, or improve their app analytics and tracking. Also use when the user mentions "analytics", "tracking", "metrics", "KPIs", "App Store Connect analytics", "install tracking", "funnel", "attribution", or "how is my app performing", "PostHog", "event", "olay". For A/B testing, see ab-test-store-listing. For retention metrics, see retention-optimization.
 metadata:
   version: 1.0.0
 ---
@@ -12,23 +12,32 @@ You are an expert in mobile app analytics and measurement strategy. Your goal is
 ## Initial Assessment
 
 1. Check for `app-marketing-context.md` — read it for context
-2. Ask: **What analytics tools do you currently use?**
+2. Read `SETUP.md` → Analitik: CashFollow already uses **PostHog + App Store Connect** (don't propose other tools)
 3. Ask: **What are your top 3 questions about your app's performance?**
 4. Ask: **What decisions do you need data to make?**
-5. Ask: **Do you run paid acquisition?** (attribution matters)
+5. Ask: **Do you run paid acquisition?** (attribution matters — see the privacy rules below before adding any SDK)
 
 ## Analytics Stack
 
-### Essential Tools
+### Essential Tools (CashFollow)
 
-| Tool | Purpose | Cost | Priority |
-|------|---------|------|----------|
-| **App Store Connect** | Store metrics, downloads, conversion | Free | Must have |
-| **Firebase Analytics** | In-app events, funnels, audiences | Free | Must have |
-| **Mixpanel / Amplitude** | Product analytics, cohorts, funnels | Free tier | Recommended |
-| **RevenueCat** | Subscription analytics, paywall testing | Free tier | If subscriptions |
-| **Adjust / AppsFlyer** | Attribution, UA measurement | Paid | If running ads |
-| **Crashlytics** | Crash reporting, stability | Free | Must have |
+| Tool | Purpose | Status |
+|------|---------|--------|
+| **App Store Connect** | Store metrics: impressions, page views, downloads, conversion, source; Sales and Trends → Subscriptions (trial, renewal, cancel, revenue) | Used, no setup |
+| **PostHog** (US region) | In-app events, funnels, retention, cohorts, feature flags, Revenue analytics | Used. Key in `config.js` `POSTHOG_KEY`, `Yapilandirma.swift` `posthogKey`, `mcp/server.js` `DEFAULTS.POSTHOG_KEY`; empty key = nothing is sent |
+| **MetricKit** (`Cokme.swift`) | Crashes and hangs → `app_crashed` event in PostHog | Used. **No Crashlytics / Firebase** |
+| Mixpanel, Amplitude, Firebase, RevenueCat, Adjust, AppsFlyer | — | **Not used. Don't add.** PostHog + StoreKit 2 + server notifications cover it; extra SDKs break the "no tracking" App Privacy answer |
+
+The PostHog MCP is connected in this project: query it (`insight`, `query`, `execute-sql`, `feature-flag`, `experiment`, `dashboard`) instead of asking the user to paste numbers. Load the PostHog skills first if available.
+
+### Privacy rules (non-negotiable)
+
+- Events carry **numbers and enums only** — never merchant names, amounts, descriptions, card digits, or message text (`sms_received` sends only `result`/`ai`).
+- `$geoip_disable: true` on every event; "Discard client IP data" on in PostHog.
+- User can switch it off: Settings → "Kullanım verisi gönder" (web: `para.analitik.kapali`). New events must go through `Analitik.olay` (iOS) / `Analitik.event` (web, `analitik.js`) so the opt-out applies. Never call the PostHog API directly from client code.
+- Identity: anonymous id until sign-in, then the account id (`$identify`), so web and iPhone merge into one person.
+- App Privacy answers are "no tracking" and must match `ios/CashFollow/PrivacyInfo.xcprivacy` (SETUP.md → App Privacy). Adding an attribution SDK / IDFA / ATT prompt breaks that — don't.
+- A new event name or property: add it to `SETUP.md` → Analitik in the same change.
 
 ### App Store Connect Analytics
 
@@ -78,10 +87,11 @@ You are an expert in mobile app analytics and measurement strategy. Your goal is
 
 | Metric | Formula | Benchmark |
 |--------|---------|-----------|
-| **Day 1** | Users Day 1 / Installs | 25-40% |
+| **Day 1** | Users Day 1 / Installs | 25-40% generic; finance apps ~12–34% by source (`TUTUNDURMA.md`) — measure our own baseline |
 | **Day 7** | Users Day 7 / Installs | 10-20% |
 | **Day 30** | Users Day 30 / Installs | 5-10% |
 | **Churn Rate** | Lost Users / Start Users | < 5% monthly (subscriptions) |
+| **Week-1 return** | Users with `app_opened` on days 1–7 / new installs | **Primary retention measure** (`SETUP.md` → Karşılama) |
 
 ### Revenue Metrics
 
@@ -96,48 +106,61 @@ You are an expert in mobile app analytics and measurement strategy. Your goal is
 
 ## Event Tracking Plan
 
-### Core Events (track these minimum)
+### Existing events (source of truth: `SETUP.md` → Analitik; check it before proposing anything new)
 
 ```
-# Onboarding
-onboarding_started
-onboarding_step_completed (step_name, step_number)
-onboarding_completed
-onboarding_skipped
+# Lifecycle (iOS + web)
+app_opened, tab_viewed (tab), signed_in, signed_out, account_created, account_deleted,
+started_without_account
 
-# Core Actions
-[primary_action]_started
-[primary_action]_completed
-[primary_action]_failed (error_type)
+# Onboarding funnel (iPhone, new installs only; variant: default)
+onboarding_started → onboarding_step_viewed / onboarding_step_completed / onboarding_step_skipped
+  (step: intro, card, cutoff, purchase, aha; seconds, method, reason)
+onboarding_aha_viewed, onboarding_add_another, onboarding_closed, onboarding_backgrounded,
+onboarding_completed (path: offline, account, closed)
+onboarding_step_opened / onboarding_hidden (surface: checklist — the Özet getting-started checklist, iPhone + web)
+activation_reached (payment plan shown for the first time; via_flow)   ← ACTIVATION EVENT
 
-# Monetization
-paywall_viewed (source, variant)
-trial_started (plan, source)
-purchase_completed (plan, price, source)
-purchase_failed (error_type)
-subscription_renewed
-subscription_cancelled (reason)
+# Core actions
+card_added, purchase_added (source: manual, suggestion, repeat, email, sms, shortcut, quick, web, onboarding),
+add_opened, merchant_suggestion_used, quick_line_used, debt_added, payment_recorded
+inbox_added, inbox_test_received, inbox_card_assigned, inbox_notifications
+sms_received (result, ai), sms_setup_opened, sms_shortcut_added, sms_tried
+shortcut_run (intent), statement_tip_opened, statement_prompt_copied, assistant_opened (source), assistant_add, afford_card_suggestion_used
 
-# Engagement
-session_started (source)
-feature_used (feature_name)
-content_viewed (content_type, content_id)
-share_tapped (content_type)
-notification_received (type)
-notification_tapped (type)
+# Habit / return loop
+reminders_enabled, reminders_disabled, reminders_offer_dismissed,
+notification_setting_changed (kind, enabled, granted), notification_opened (kind),
+installment_finished_shown, month_summary_opened / month_summary_shared, insight_headline_opened
 
-# Settings
-settings_changed (setting_name, old_value, new_value)
-notification_permission (granted: boolean)
+# Monetization (iPhone; server events from mcp/abonelik.js)
+paywall_shown / paywall_closed (reason, plan), purchase_started, purchase_completed (trial, price, currency),
+purchase_cancelled, purchase_pending, purchase_failed, restore (found)
+subscription_subscribed, subscription_did_renew, subscription_did_change_renewal_status,
+subscription_expired, subscription_refund  (production only carries revenue + currency)
+app_store_opened (web lock → App Store)
+
+# Quality / ratings
+app_crashed (MetricKit), review_prompted
+$feature_flag_called (free_taste flag; onboarding_flow is NOT read — no A/B)
 ```
+
+Funnels to build in PostHog:
+1. Onboarding: `onboarding_started → onboarding_step_completed(step=card) → (step=purchase) → activation_reached → app_opened (days 1–7)`
+2. Paywall: `paywall_shown → purchase_started → purchase_completed` (split by `reason`)
+3. Auto-capture: `inbox_added → inbox_test_received → purchase_added(source=email)` and the SMS equivalent
+
+### Gaps to remember (not yet tracked — propose, don't assume)
+
+Anything not in the list above (e.g. share of Premium users hitting the free limits, export usage) does not exist yet. Adding one means: iOS `Analitik.olay`, web `Analitik.event`, `SETUP.md` entry, and the privacy rules above.
 
 ### Event Naming Conventions
 
 - Use `snake_case`
-- Format: `[object]_[action]` (e.g., `photo_saved`, `workout_completed`)
+- Format: `[object]_[action]` (e.g., `purchase_added`, `card_added`); English names, even though the UI is Turkish
 - Be specific but not too granular
 - Include relevant properties (but not PII)
-- Consistent across platforms
+- Same name on iPhone and web (`platform` property says which); `source`/`kind`/`reason`/`step` are enum strings, not free text
 
 ## Dashboard Setup
 
@@ -148,7 +171,7 @@ notification_permission (granted: boolean)
 │  Weekly Summary                              │
 ├──────────────┬──────────────┬───────────────┤
 │  Downloads   │  Revenue     │  DAU          │
-│  [N] (+X%)   │  $[N] (+X%)  │  [N] (+X%)    │
+│  [N] (+X%)   │  [N] (+X%)   │  [N] (+X%)    │
 ├──────────────┼──────────────┼───────────────┤
 │  Conversion  │  D1 Retention│  Rating       │
 │  [X]% (+X%)  │  [X]% (+X%)  │  [X.X] ★      │
@@ -158,7 +181,7 @@ notification_permission (granted: boolean)
 ### Funnel Dashboard (check daily)
 
 ```
-Impressions → Page Views → Downloads → Activation → Purchase
+Impressions → Page Views → Downloads → activation_reached → purchase_completed
    [N]          [N]          [N]          [N]          [N]
         [X]%         [X]%         [X]%          [X]%
 ```
@@ -169,7 +192,8 @@ Retention curves by:
 - Install date cohort
 - Acquisition source
 - Country
-- Subscription plan
+- Subscription plan (weekly / monthly / yearly)
+- Platform (iPhone / web) and app language
 
 ## Output Format
 
@@ -193,7 +217,7 @@ Provide a complete event tracking plan with:
 - Event name
 - When it fires
 - Properties to include
-- Which tool tracks it
+- Which tool tracks it (PostHog client / PostHog server / App Store Connect)
 
 ### Metric Interpretation
 
@@ -207,4 +231,4 @@ When the user shares data, provide:
 - `ab-test-store-listing` — Measure test results
 - `retention-optimization` — Interpret retention data
 - `monetization-strategy` — Revenue metric optimization
-- `ua-campaign` — Attribution and UA metrics
+- `ua-campaign` — UA metrics (App Store Connect source types only; no attribution SDK)

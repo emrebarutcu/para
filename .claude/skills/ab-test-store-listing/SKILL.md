@@ -218,3 +218,11 @@ Provide a 3-month testing calendar:
 - `metadata-optimization` — Optimize non-testable elements
 - `app-analytics` — Track conversion metrics
 - `aso-audit` — Identify what to test first
+
+## CashFollow'a uyarlama
+
+- **Ürün sayfası testleri** (Product Page Optimization, Custom Product Pages) App Store Connect'te yapılır; yalnızca iOS. Google Play Experiments yok (Android uygulaması yok).
+- Mağaza metni ve ekranlar `magaza/` altında (`<dil>.md`, `ayarlar.json`) ve `magaza.yml` iş akışıyla gönderilir; ekran görüntüleri `ekran.yml` ile üretilir. Önce `kuru` (dry run), sonra `gonder`.
+- 10 mağaza dili (tr, en-US, en-GB, de, fr, es, it, nl, ja, ar): test dil başına yapılır; küçük dillerde örneklem yetmez, en çok gösterimi alan dilde (tr, en-US) başla.
+- **Uygulama içi A/B** (PostHog bayrağı) yalnızca yeterli kurulum varsa anlamlı: karşılama için kol başına ~2.900 kurulum gerekiyordu, bu yüzden yapılmadı (`SETUP.md` → Karşılama). Gösterim ve dönüşüm sayıları App Store Connect → Analytics'ten.
+- Ekran başlığı bir faydayı söyler ("Bu ay ne ödeyeceğini bil"), ekranın adını değil; arama sonucunda yalnızca ilk üç görüntü görünür (sıra `ayarlar.json`).

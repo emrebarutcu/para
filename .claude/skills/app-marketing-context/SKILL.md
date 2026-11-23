@@ -127,3 +127,8 @@ All other skills reference this context. Start here before using:
 - `aso-audit` — Full ASO health check
 - `keyword-research` — Keyword discovery
 - `competitor-analysis` — Deep competitive analysis
+
+## CashFollow'a uyarlama
+
+- Bu proje için bağlam dosyası **kök dizinde**: `app-marketing-context.md` (var; güncelle, baştan yazma). "Platform" iOS (+ web); Google Play kimliği yok, o satırı boş bırak.
+- Soru sormadan önce `SETUP.md`, `magaza/*.md`, `TUTUNDURMA.md`'den doldurulabilecekleri çıkar; yalnızca kodda ve belgede olmayanı kullanıcıya sor (rakipler, bütçe, hedefler).
