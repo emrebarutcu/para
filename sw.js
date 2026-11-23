@@ -1,7 +1,7 @@
-// Sürüm 1.3.4 — scripts/surum.sh yazar: dosyanın kendisi her sürümde değişir, tarayıcılar (Safari dahil) yeni service
-// worker'ı yalnızca içe aktarılan version.js'e bakmadan da hemen fark eder
+// Sürüm 1.3.4 (yapı 1) — scripts/surum.sh yazar: dosyanın kendisi her PR'da değişir, tarayıcılar (Safari dahil) yeni
+// service worker'ı yalnızca içe aktarılan version.js'e bakmadan da hemen fark eder
 importScripts('/version.js', '/dil.js');
-const CACHE = 'cashfollow-' + self.APP_VERSION;
+const CACHE = 'cashfollow-' + self.APP_VERSION + '-' + self.APP_BUILD;
 // /index.html önbelleğe alınmaz: Cloudflare onu /'a yönlendirir (307), sayfa / adresinden gelir
 const ASSETS = ['/', '/version.js', '/styles.css', '/app.js', '/dil.js', '/dil-sayfa.js', '/dil/en.json', '/analitik.js', '/para.js', '/tekrar.js', '/taksit.js', '/eposta.js', '/tablo.js', '/varlik.js', '/borc.js', '/sync.js', '/kategori.js', '/icgoru.js', '/nakit.js', '/yz.js', '/yz-worker.js', '/config.js', '/manifest.json', '/icon.svg', '/appstore-qr.svg'];
 // Sözlük: İngilizce (yedek) ve cihazın dili (dil.js → choose); diğer diller ilk açılışta önbelleğe girer
