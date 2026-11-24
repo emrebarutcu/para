@@ -1,4 +1,5 @@
-# Supabase'de SQL çalıştırır (supabase/sql.sh, Management API; anahtar Actions secret'ı SUPABASE_ACCESS_TOKEN).
+# Supabase'de SQL çalıştırır (supabase/sql.sh, Management API; anahtar Actions secret'ı SUPABASE_ACCESS_TOKEN). Elle
+# verilen dosya .sh ise (supabase/apple.sh: Apple ile giriş) o betik çalışır.
 # supabase/gecis/ altına yeni bir geçiş dosyası eklenip itilince o dosya kendiliğinden çalışır; elle de (Run workflow)
 # istenen dosya çalıştırılabilir. Geçiş dosyaları yeniden çalıştırılabilir yazılır.
 name: Supabase SQL
@@ -32,4 +33,5 @@ jobs:
           fi
           if [ "$EVENT" = "workflow_dispatch" ]; then files="$DOSYA"; else files=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'supabase/gecis/*.sql'); fi
           [ -n "$files" ] || { echo "Çalıştırılacak dosya yok"; exit 0; }
-          for f in $files; do echo "== $f"; sh supabase/sql.sh "$f"; done
+          # .sh dosyası (ör. supabase/apple.sh: Auth ayarı) kendisi çalışır, .sql dosyası sql.sh ile
+          for f in $files; do echo "== $f"; case "$f" in *.sh) sh "$f" ;; *) sh supabase/sql.sh "$f" ;; esac; done

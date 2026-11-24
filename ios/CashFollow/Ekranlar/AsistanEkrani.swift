@@ -45,7 +45,8 @@ struct AsistanEkrani: View {
                     Text(L("CashFollow'u bir yapay zekâ asistanına bağla; \"Telefonu 6 taksitle karta ekle\", \"Bu ay ne kadar ödeyeceğim?\" gibi isteklerle harcama, kart ve ödemelerini yönetsin."))
                         .font(.subheadline)
                     if model.session == nil {
-                        Text(L("Asistan bulut hesabıyla çalışır: önce Ayarlar → Hesap'tan giriş yap.")).font(.footnote).foregroundStyle(Tema.uyari)
+                        Text(L("Asistan bulut hesabıyla çalışır: önce giriş yap.")).font(.footnote).foregroundStyle(Tema.uyari)
+                        AppleIleGiris(ulke: model.country, kaynak: "assistant")
                     }
                     if !abonelik.premium {
                         Text(L("Premium olmadan asistan yalnızca özetini okur: bu ay ödenecek ve sıradaki ödemeler. Kayıt eklemesi ve gerisi için CashFollow Premium gerekir.")).font(.footnote).foregroundStyle(Tema.uyari)

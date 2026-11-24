@@ -140,6 +140,27 @@ Kullanıcı kararı (24 Kasım 2026): karşılamada Premium'a, özellikle yapay 
 - **Açık soru:** asistan hesap istiyor, karşılama ise hesapsız başlıyor. Premium alıp asistanı bağlamak isteyen
   kullanıcı Ayarlar → Hesap'a gitmeli. Sign in with Apple bu adımı kısaltır (karar bekliyor).
 
+## Karşılama ve ödeme ekranı, ikinci tur (1.5.0)
+
+Kullanıcı kararıyla (24 Kasım 2026) yapılanlar:
+
+- **Harcamayı atlayan kartlı kullanıcı da "Planın hazır"ı görür.** Önceden akış biterdi; harcama adımını gören 15
+  kişiden 6'sı atlamıştı ve aha anını, hatırlatma sorusunu, asistan ekranını kaçırıyordu. Şimdi bugünkü alışverişin
+  ödeme günü (kesim ve son ödemeden) ve kesim günü hatırlatması (önizlemeli) çıkar. Etkinleşme sayılmaz (plan yok).
+  `onboarding_aha_viewed` → `card_only`.
+- **Pay in 4 yolu (Türkiye dışı).** Kart adımında ✕ ile kapatan 6 kişinin 5'i Türkiye dışındandı. Taksidin ikincil ve
+  Pay in 4'ün sunulduğu ülkede kart adımında "Pay in 4 ile ödüyorum": sağlayıcı, tutar, dört ödemenin tarihleri.
+  `onboarding_step_completed` card `method: bnpl`, `purchase_added` `bnpl: true`.
+- **Ödeme ekranında kilide göre başlık** (Akış, "Alabilir miyim?", asistan, kart / kişi sınırı, Varlığın seyri,
+  İçgörüler, borç planı).
+- **Satın alma olaylarında `reason`:** kilit başına dönüşüm artık ölçülür.
+- **Apple ile giriş:** giriş ekranında ve asistan ekranında; e-posta doğrulaması yok. Kurulum ve App Store'dan önce
+  kalan iş (belirteç iptali): SETUP.md → Apple ile giriş.
+- **Akış'ın ücretsiz tadı 3 ay** (2 aydı). En çok çarpılan kilit Akış'tı (6 kişi).
+- **Ölçüm (önce / sonra):** kart adımında ✕ oranı Türkiye dışında; harcamayı atlayanların ilk hafta geri dönüşü;
+  `account_created` `method: apple` payı; `paywall_shown` cash_flow sayısı (3 ay tadıyla düşmeli) ve ödeme ekranı başına
+  satın alma.
+
 ## Yol haritası
 
 Karşılama denemesi yapılmadığı için (aşağıda "Verilen kararlar") ilk haftayı değiştiren işler beklemeden yayınlanır;
@@ -229,7 +250,7 @@ etkileri önce / sonra kohortlarıyla okunur.
   ölçülür. "Deneme sürerken ilk haftayı değiştiren şey yayınlanmaz" kuralı kalktı.
 - **Web'den satın alma şimdi yok:** web kilitlerinde App Store bağlantısı ve (geniş ekranda) QR var.
 - **Asistanda özet okuması ücretsiz** (`get_overview`: bu ay ödenecek, sıradaki ödemeler); öbür araçlar ve yazma Premium.
-- **Akış'ın ilk 2 ayı ücretsiz** (bu ay ve sonraki ay; 14 Kasım): sonrası ve iPhone'da 12 aylık grafik Premium. Bayrak
+- **Akış'ın ilk 3 ayı ücretsiz** (24 Kasım'da 2 aydan 3'e; en çok çarpılan kilit Akış; 14 Kasım: 2 ay): sonrası ve iPhone'da 12 aylık grafik Premium. Bayrak
   `free_taste`: `off` kolu kapatır, bayrak yoksa açık.
 - **Denemeler (15 Kasım):** tek satırla kayıt yapıldı (`taksit.js` `parseLine`; 31 örnek cümle testte). Kartlar ve Varlıklar
   tek "Durum" sekmesinde birleşti (PostHog'daki `tab_viewed` paylarına bakılmadan; `tab_viewed` hâlâ `cards` / `assets`

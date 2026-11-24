@@ -56,6 +56,38 @@ def call(method, path, body=None, yoksa=False):
         sys.exit(f"App Store Connect {method} {path}: {e.code} {text}")
 
 
+def dene(method, path, body=None):
+    """call gibi, ama hata olursa durmaz: (başarılı mı, cevap ya da hata metni)"""
+    req = urllib.request.Request(API + path, method=method, data=json.dumps(body).encode() if body else None,
+                                 headers={"Authorization": f"Bearer {token()}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res:
+            text = res.read().decode()
+            return True, (json.loads(text) if text else None)
+    except urllib.error.HTTPError as e:
+        return False, f"{e.code} {e.read().decode()[:400]}"
+
+
+def apple_ile_giris(bundle_id):
+    """Sign in with Apple (APPLE_ID_AUTH) App ID'de açık mı; değilse açar. Profil bu yetenekle üretilir, uygulama
+    com.apple.developer.applesignin yetkisiyle imzalanır (GITHUB_ENV SIWA=1). Açılamazsa (API anahtarının yetkisi yoksa)
+    uyarı yazar, uygulama bu yetki olmadan imzalanır (SIWA=0): yükleme yine olur, "Apple ile devam et" çalışmaz."""
+    ok, caps = dene("GET", f"/bundleIds/{bundle_id}/bundleIdCapabilities?limit=50")
+    if ok and any(c["attributes"].get("capabilityType") == "APPLE_ID_AUTH" for c in (caps or {}).get("data", [])):
+        print("Sign in with Apple App ID'de açık")
+        return True
+    ok, cevap = dene("POST", "/bundleIdCapabilities", {"data": {"type": "bundleIdCapabilities",
+        "attributes": {"capabilityType": "APPLE_ID_AUTH",
+                       "settings": [{"key": "APPLE_ID_AUTH_APP_CONSENT", "options": [{"key": "PRIMARY_APP_CONSENT"}]}]},
+        "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}}}}})
+    if ok:
+        print("Sign in with Apple App ID'de açıldı")
+        return True
+    print(f"::warning::Sign in with Apple App ID'de açılamadı ({cevap}). developer.apple.com → Identifiers → "
+          "app.cashfollow.ios → Sign In with Apple'ı elle aç; bu build'de \"Apple ile devam et\" çalışmaz.")
+    return False
+
+
 def env(name, value):
     with open(os.environ["GITHUB_ENV"], "a") as f:
         f.write(f"{name}={value}\n")
@@ -103,6 +135,7 @@ def olustur(out):
     if not ids:
         sys.exit(f"{bundle} App ID'si yok: developer.apple.com → Identifiers'ta kaydet (SETUP.md → TestFlight)")
     ayikla(bundle)
+    env("SIWA", "1" if apple_ile_giris(ids[0]["id"]) else "0")   # profil yetenekten sonra üretilmeli
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     csr = (x509.CertificateSigningRequestBuilder()

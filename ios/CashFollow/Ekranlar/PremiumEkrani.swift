@@ -37,6 +37,31 @@ struct PremiumEkrani: View {
     }
     private static let zemin = Color(red: 0.035, green: 0.04, blue: 0.055)
 
+    // Başlık ve alt başlık: hangi kilitten gelindiyse onun vaadi (Kasım 2026: herkese aynı başlık çıkıyordu; en çok Akış
+    // kilidinden geliniyor). Bilinmeyen nedende çekirdek vaat
+    private var baslik: (String, String) {
+        switch neden {
+        case "cash_flow":
+            return (L("Önümüzdeki 12 ayın tek ekranda"), L("Her ayın ödeme günleri, içindeki taksitler ve paranın yetip yetmeyeceği."))
+        case "afford":
+            return (L("Almadan önce sor"), L("Taksitin hangi aya düşeceği, paranın yetip yetmeyeceği ve ilk ödemesi en geç gelen kart."))
+        case "assistant", "onboarding_ai":
+            return (L("Kartlarını yapay zekâya sor"), L("Claude, ChatGPT ya da Gemini harcamanı eklesin, ekstreni okusun, sorularını yanıtlasın."))
+        case "card_limit":
+            return (L("Bütün kartların tek planda"), L("Ücretsiz sürümde {0} kart var; Premium'da kart ve kişi sınırı yok.", Abonelik.ucretsizKart))
+        case "person_limit":
+            return (L("Evdekilerin harcamaları da burada"), L("Ücretsiz sürümde {0} kişi var; Premium'da kişi ve kart sınırı yok.", Abonelik.ucretsizKisi))
+        case "net_worth":
+            return (L("Varlığının seyrini gör"), L("Paranın, dövizinin ve altınının aylar içinde nasıl değiştiği."))
+        case "insights":
+            return (L("Sıkışacağın ayı önceden gör"), L("Açık verecek ay, yükselen harcama ve fırsatlar için uyarılar."))
+        case "payoff":
+            return (L("Kart borcunu planla"), L("Hangi ay ne kadar ödersen borcun ne zaman biter."))
+        default:
+            return (L("Önümüzdeki 12 ayı gör, almadan önce sor"), L("Her ayın ödemesi, paranın yetip yetmeyeceği, ilk ödemesi en geç gelen kart."))
+        }
+    }
+
     var body: some View {
         // Büyük ekranda artan boşluk bölümler arasına eşit dağılır; planlar düğmenin hemen üstünde
         GeometryReader { alan in
@@ -44,9 +69,9 @@ struct PremiumEkrani: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(L("CashFollow Premium"), systemImage: "sparkles").font(.footnote.weight(.semibold)).foregroundStyle(Tema.marka)
-                    Text(L("Önümüzdeki 12 ayı gör, almadan önce sor")).font(.system(size: 30, weight: .bold)).foregroundStyle(.white)
+                    Text(baslik.0).font(.system(size: 30, weight: .bold)).foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(L("Her ayın ödemesi, paranın yetip yetmeyeceği, ilk ödemesi en geç gelen kart."))
+                    Text(baslik.1)
                         .font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.55))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -119,11 +144,11 @@ struct PremiumEkrani: View {
                 ForEach(Array(aylar.enumerated()), id: \.offset) { i, a in
                     VStack(spacing: 6) {
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(i < 2 ? Color.white : Tema.marka)
+                            .fill(i < Abonelik.tatAy ? Color.white : Tema.marka)
                             .frame(height: max(4, CGFloat(92 * a.total / enBuyuk)))
-                            .blur(radius: i < 2 ? 0 : 5)
+                            .blur(radius: i < Abonelik.tatAy ? 0 : 5)
                         Text(Bicim.date(a.month + "-01").map { $0.formatted(Bicim.tarih.month(.narrow)) } ?? "")
-                            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(i < 2 ? 0.75 : 0.4)).lineLimit(1).fixedSize()
+                            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(i < Abonelik.tatAy ? 0.75 : 0.4)).lineLimit(1).fixedSize()
                     }
                     .frame(maxWidth: .infinity, alignment: .bottom)
                 }
@@ -187,7 +212,7 @@ struct PremiumEkrani: View {
     private var altCubuk: some View {
         let p = secim
         return VStack(spacing: 10) {
-            Button { if let u = p?.urun { Task { await abonelik.satinAl(u) } } } label: {
+            Button { if let u = p?.urun { Task { await abonelik.satinAl(u, neden: neden) } } } label: {
                 ZStack {
                     Text(p?.deneme.map { L("{0} ücretsiz dene", $0) } ?? L("Abone ol")).opacity(abonelik.calisiyor ? 0 : 1)
                     if abonelik.calisiyor { ProgressView().tint(.white) }

@@ -184,9 +184,9 @@ window.onAuthLogout = function () {
 // Abonelik): 2 kart, 2 kişi, iyi haber içgörüleri; Akış, öbür içgörüler, Varlığın seyri ve asistan Premium. Sınırı aşan eski
 // kart ve kişiler kalır, yalnızca yenisi eklenemez. Girişsiz web ücretsizdir. Durum bilinmezken (oturum henüz okunmadı ya da
 // bağlantı yok ve önceki okuma yok) kilit gösterilmez; son okunan değer saklanır, telefonda alınca sekme öne gelince açılır.
-// Ücretsiz tat: Akış'ın ödeme planında bu ay ve sonraki ay Premium'suz açık (iPhone: Abonelik.tatAy). PostHog'da
+// Ücretsiz tat: Akış'ın ödeme planında ilk 3 ay (bu ay ve sonraki iki ay) Premium'suz açık (iPhone: Abonelik.tatAy). PostHog'da
 // free_taste bayrağının "off" kolu kapatır; bayrak yoksa açıktır.
-const TASTE_MONTHS = 2;
+const TASTE_MONTHS = 3;
 const freeTaste = () => window.Analitik?.flag("free_taste") !== "off";
 const FREE_CARDS = 2, FREE_PEOPLE = 2;   // ücretsiz sürüm: 2 kart, 2 kişi (sen ve eşin gibi biri)
 const PREMIUM_TTL = 60_000;        // öne gelince en sık bu aralıkla yeniden sorulur

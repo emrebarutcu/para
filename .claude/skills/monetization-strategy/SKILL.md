@@ -177,7 +177,7 @@ Expected Metrics:
 ## CashFollow'a uyarlama
 
 - **Mevcut model:** ücretsiz sürüm + CashFollow Premium (haftalık, aylık, yıllık otomatik yenilenen; StoreKit 2; `Uygulama/Abonelik.swift`, `Ekranlar/PremiumEkrani.swift`). Fiyat ve deneme App Store Connect'te; **kodda fiyat yok**, önerileri oradan yap. Satın alma yalnızca iPhone'da; web aynı sınırları uygular, Premium hesaba bağlanınca web'de de açılır. Android sürümü yok.
-- **Ücretsiz sınır:** 2 kart, 2 kişi, Özet, harcamalar, taksitler, borçlar, iyi haber içgörüleri, asistanda yalnızca `get_overview`, Akış'ta bu ay + sonraki ay ("ücretsiz tat", PostHog `free_taste` bayrağı). Premium: sınırsız kart / kişi, Akış, "Alabilir miyim?", öbür içgörüler, Varlığın seyri, borç planı, asistanın yazma araçları. Ayrıntı: `SETUP.md` → Abonelik.
+- **Ücretsiz sınır:** 2 kart, 2 kişi, Özet, harcamalar, taksitler, borçlar, iyi haber içgörüleri, asistanda yalnızca `get_overview`, Akış'ta ilk 3 ay ("ücretsiz tat", PostHog `free_taste` bayrağı). Premium: sınırsız kart / kişi, Akış, "Alabilir miyim?", öbür içgörüler, Varlığın seyri, borç planı, asistanın yazma araçları. Ayrıntı: `SETUP.md` → Abonelik.
 - **8.2.0 öncesi hesaplar ömür boyu Premium** (`source = grandfathered`); hedef kitle / gelir hesaplarında hariç tut.
 - **Ödeme ekranı hunisi:** `paywall_shown` → `purchase_started` → `purchase_completed` (`reason`, `plan`, `trial`, `price`, `currency`). Sunucu olayları: `subscription_*`. Sandbox gelir sayılmaz.
 - **Para birimi / bölge:** hesap ülkesi ana para birimini belirler (45 ülke); fiyat mağaza bölgesine göre App Store Connect'te. Örneklerdeki "$" yalnızca örnektir.
