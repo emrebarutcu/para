@@ -1591,5 +1591,15 @@
  "Onay bekleyen olunca": "승인 대기 항목이 있으면",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "은행 이메일이나 메시지로 추가된 구매와 승인을 기다리는 구매입니다. 앱을 열어 두면 알림이 오지 않으며, 닫혀 있을 때 언제 확인할지는 iOS가 정합니다.",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "알림은 이 휴대폰에서 설정되며 데이터는 어디로도 전송되지 않습니다.",
- "{0} açık": "{0}개 켜짐"
+ "{0} açık": "{0}개 켜짐",
+ "Kartlarını yapay zekâya sor": "카드에 대해 AI에게 물어보세요",
+ "CashFollow'u Claude, ChatGPT ya da Gemini'ye bağla; yazarak sor, o hesaplasın ve eklesin.": "CashFollow를 Claude, ChatGPT, Gemini에 연결하세요. 입력만 하면 계산하고 추가해 줘요.",
+ "Kartıma sıradaki ödemem ne zaman?": "다음 카드 결제는 언제야?",
+ "Ekstreni ver, taksitleri o eklesin": "명세서를 주면 할부를 추가해 줘요",
+ "“Telefonu 6 taksitle karta ekle” demen yeter": "“휴대폰을 6개월 할부로 카드에 추가해” 라고만 하면 돼요",
+ "Almadan önce sor: hangi ay ne ödersin?": "사기 전에 물어보세요: 매달 얼마를 내나요?",
+ "Yapay zekâ asistanı CashFollow Premium'da. Bağlamak için ücretsiz bir hesap açarsın.": "AI 어시스턴트는 CashFollow Premium 기능이에요. 연결하려면 무료 계정을 만들어요.",
+ "Kartını ve harcamalarını ekledikçe her ayın ödemesini söylerim.": "카드와 구매를 추가하면 매달 결제할 금액을 알려 드릴게요.",
+ "{0} günü {1} için {2} ödeyeceksin.": "{0}에 {1}(으)로 {2}을(를) 결제해요.",
+ "Premium'u gör": "Premium 보기"
 }

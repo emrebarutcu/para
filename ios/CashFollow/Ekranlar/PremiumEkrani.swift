@@ -29,8 +29,12 @@ struct PremiumEkrani: View {
         var urun: Product?
     }
 
-    private static let ozellikler = [L("Akış"), L("Alabilir miyim?"), L("İçgörüler"), L("Varlığın seyri"), L("Borç planı"), L("Sınırsız kart"),
-                                     L("Sınırsız kişi"), L("Yapay zekâ asistanı")]
+    // Karşılamanın yapay zekâ ekranından açılınca asistan ilk sırada
+    private var ozellikler: [String] {
+        let liste = [L("Akış"), L("Alabilir miyim?"), L("İçgörüler"), L("Varlığın seyri"), L("Borç planı"), L("Sınırsız kart"),
+                     L("Sınırsız kişi")]
+        return neden == "onboarding_ai" ? [L("Yapay zekâ asistanı")] + liste : liste + [L("Yapay zekâ asistanı")]
+    }
     private static let zemin = Color(red: 0.035, green: 0.04, blue: 0.055)
 
     var body: some View {
@@ -50,7 +54,7 @@ struct PremiumEkrani: View {
                 if aylar.contains(where: { $0.total > 0.004 }) { onizleme }
                 Spacer(minLength: 0)
                 LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 10) {
-                    ForEach(Self.ozellikler, id: \.self) { ad in
+                    ForEach(ozellikler, id: \.self) { ad in
                         Label { Text(ad).lineLimit(1).minimumScaleFactor(0.85) } icon: {
                             Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Tema.marka)
                         }

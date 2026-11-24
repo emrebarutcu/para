@@ -118,6 +118,28 @@ sayılar yön gösterir, karar vermez.
   5. *PostHog ayarları* (kullanıcı değiştirir): "Discard client IP data" proje ayarında kapalı görünüyor (`anonymize_ips:
      false`), SETUP.md açık olmasını istiyor. Test hesabı süzgecine (cohort 688252) eski CI kişileri eklenebilir.
 
+## Karşılamada Premium: yapay zekâ asistanı (1.4.0)
+
+Kullanıcı kararı (24 Kasım 2026): karşılamada Premium'a, özellikle yapay zekâ asistanına yönlendirme.
+
+- **Yer:** "Planın hazır"dan sonra ayrı bir ekran. Yalnızca Premium'u olmayan ve "Planın hazır"ı gören kullanıcıya
+  çıkar (etkinleşmeden sonra). Hatırlatma sorusu aynı ekranda kalır, onunla yarışmaz. "Önce değer, sonra ödeme ekranı"
+  kuralına uyar. Harcamayı atlayan kullanıcı bu ekranı görmez.
+- **İçerik:** "Kartlarını yapay zekâya sor", kullanıcının kendi sıradaki ödemesiyle örnek soru ve cevap. Altında üç
+  madde: ekstreden taksit ekleme, cümleyle kayıt, almadan önce sorma. Not: asistan Premium'da ve hesap ister.
+  "Premium'u gör" ödeme ekranını açar; orada asistan özelliklerde ilk sırada. "Şimdi değil" ve ✕ akışı bitirir.
+- **Not:** ödeme ekranındaki yapay zekâ başlığı ve örnek sohbet daha önce çekirdek vaat için kaldırılmıştı (UX.md →
+  Kaldırılanlar). Bu ekran ödeme ekranının yerine geçmez, ondan önce gelir.
+- **Ölçüm (önce / sonra, A/B yok):**
+  - `onboarding_step_viewed` assistant → `onboarding_step_completed` assistant `method: paywall`;
+  - `paywall_shown` `reason: onboarding_ai` → `purchase_completed`, deneme başlangıcı;
+  - ilk hafta geri dönüş (birincil) 1.3.5 kohortuyla karşılaştırılır. Fazladan bir ekran ve erken ödeme ekranı geri
+    dönüşü düşürebilir;
+  - koruma ölçüleri: `onboarding_closed` assistant, hatırlatma kabulü (bu ekrandan önce sorulur, etkilenmemeli),
+    7 günde silme / geri gelmeme.
+- **Açık soru:** asistan hesap istiyor, karşılama ise hesapsız başlıyor. Premium alıp asistanı bağlamak isteyen
+  kullanıcı Ayarlar → Hesap'a gitmeli. Sign in with Apple bu adımı kısaltır (karar bekliyor).
+
 ## Yol haritası
 
 Karşılama denemesi yapılmadığı için (aşağıda "Verilen kararlar") ilk haftayı değiştiren işler beklemeden yayınlanır;

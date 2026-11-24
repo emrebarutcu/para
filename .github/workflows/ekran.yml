@@ -91,7 +91,7 @@ jobs:
           TR='-AppleLanguages (tr) -AppleLocale tr_TR'
           EN='-AppleLanguages (en) -AppleLocale en_US'
           HEPSI=galeri1,galeri2,galeri3,galeri4,galeri5,galeri6,galeri9,sekme0,sekme1,sekme2,sekme3,sekme4
-          TANITIM=tanitim0,tanitim1,tanitim2,tanitim3,tanitim4
+          TANITIM=tanitim0,tanitim1,tanitim2,tanitim3,tanitim4,tanitim5
           # Yalnızca istenen adımlar (bir ekranı hızlıca görmek için; Actions → Run workflow → adimlar)
           if [ -n "$OZEL" ]; then
             tur "" light "$OZEL" $EK $TR
@@ -106,7 +106,7 @@ jobs:
           fi
           if [ "${{ inputs.karsilama }}" = "true" ]; then
             # Ara adımlar (boş kart adı, seçilmemiş kesim günü) ve akıştan sonra Kartlar ile Özet
-            AYRINTI=tanitim0,tanitim1bos,tanitim1,tanitim2bos,tanitim2,tanitim3,tanitim4,sekme3,sekme0
+            AYRINTI=tanitim0,tanitim1bos,tanitim1,tanitim2bos,tanitim2,tanitim3,tanitim4,tanitim5,sekme3,sekme0
             tur "" light "$AYRINTI" -bos $TR
             tur en- light "$AYRINTI" -bos -ulke US $EN
             if [ "${{ inputs.koyu }}" = "true" ]; then
@@ -120,7 +120,7 @@ jobs:
           tur bos- light sekme0 -bos $TR                 # verisi olmayan yeni kullanıcı (Başlarken)
           tur en- light sekme0,sekme1,sekme2,sekme3,sekme4,galeri3 -ulke US $EN
           tur en-bos- light sekme0 -bos -ulke US $EN
-          # İlk açılış akışı (KarsilamaEkrani): beş ekran, cevaplar dolu
+          # İlk açılış akışı (KarsilamaEkrani): altı ekran (sonuncusu Premium'un yapay zekâ asistanı), cevaplar dolu
           tur "" light "$TANITIM" -bos $TR
           tur en- light "$TANITIM" -bos -ulke US $EN
           # CashFollow Premium ödeme ekranı ve kilitler (ücretsiz sürüm); en-ucretsiz-galeri7 App Store incelemesinin

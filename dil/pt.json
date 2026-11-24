@@ -1591,5 +1591,15 @@
  "Onay bekleyen olunca": "Quando algo aguarda sua aprovação",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "Compras adicionadas a partir de e-mail ou mensagem do banco e as que aguardam sua aprovação. Com o app aberto não há notificação; com ele fechado, o iOS decide quando verificar.",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "As notificações são configuradas neste telefone; seus dados não são enviados a lugar nenhum.",
- "{0} açık": "{0} ativadas"
+ "{0} açık": "{0} ativadas",
+ "Kartlarını yapay zekâya sor": "Pergunte à IA sobre seus cartões",
+ "CashFollow'u Claude, ChatGPT ya da Gemini'ye bağla; yazarak sor, o hesaplasın ve eklesin.": "Conecte o CashFollow ao Claude, ChatGPT ou Gemini; é só escrever que ele calcula e adiciona por você.",
+ "Kartıma sıradaki ödemem ne zaman?": "Quando é o próximo pagamento do cartão?",
+ "Ekstreni ver, taksitleri o eklesin": "Entregue a fatura e ele adiciona as parcelas",
+ "“Telefonu 6 taksitle karta ekle” demen yeter": "É só dizer “Adicione o celular no cartão em 6 parcelas”",
+ "Almadan önce sor: hangi ay ne ödersin?": "Pergunte antes de comprar: quanto você paga em cada mês?",
+ "Yapay zekâ asistanı CashFollow Premium'da. Bağlamak için ücretsiz bir hesap açarsın.": "O assistente de IA faz parte do CashFollow Premium. Para conectá-lo, você cria uma conta gratuita.",
+ "Kartını ve harcamalarını ekledikçe her ayın ödemesini söylerim.": "Conforme você adiciona cartões e compras, eu digo quanto paga em cada mês.",
+ "{0} günü {1} için {2} ödeyeceksin.": "Em {0} você paga {2} no {1}.",
+ "Premium'u gör": "Ver Premium"
 }
