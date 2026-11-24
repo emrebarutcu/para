@@ -1600,6 +1600,6 @@
  "Almadan önce sor: hangi ay ne ödersin?": "Pregunta antes de comprar: ¿cuánto pagarás cada mes?",
  "Yapay zekâ asistanı CashFollow Premium'da. Bağlamak için ücretsiz bir hesap açarsın.": "El asistente de IA forma parte de CashFollow Premium. Para conectarlo crearás una cuenta gratuita.",
  "Kartını ve harcamalarını ekledikçe her ayın ödemesini söylerim.": "A medida que añadas tarjetas y compras, te diré cuánto pagas cada mes.",
- "{0} günü {1} kartına {2} ödeyeceksin.": "El {0} pagarás {2} con tu tarjeta {1}.",
+ "{0} günü {1} için {2} ödeyeceksin.": "El {0} pagarás {2} por {1}.",
  "Premium'u gör": "Ver Premium"
 }

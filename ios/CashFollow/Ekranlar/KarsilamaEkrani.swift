@@ -265,7 +265,7 @@ struct KarsilamaEkrani: View {
 
     private func madde(_ simge: String, _ metin: String) -> some View {
         Label { Text(metin).fixedSize(horizontal: false, vertical: true) } icon: {
-            Image(systemName: simge).foregroundStyle(Tema.marka)
+            Image(systemName: simge).foregroundStyle(Tema.marka).frame(width: 22)
         }
         .font(.subheadline)
     }
@@ -275,7 +275,7 @@ struct KarsilamaEkrani: View {
         guard let p = ozet?.upcomingPayments.first(where: { $0.card != "Nakit" }) ?? ozet?.upcomingPayments.first else {
             return L("Kartını ve harcamalarını ekledikçe her ayın ödemesini söylerim.")
         }
-        return L("{0} günü {1} kartına {2} ödeyeceksin.", Bicim.day(p.date), Bicim.kartAdi(p.card), Bicim.tl(p.total))
+        return L("{0} günü {1} için {2} ödeyeceksin.", Bicim.day(p.date), Bicim.kartAdi(p.card), Bicim.tl(p.total))
     }
 
     // ── Parçalar ────────────────────────────────────────────────────────────────
