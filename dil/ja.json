@@ -1591,5 +1591,15 @@
  "Onay bekleyen olunca": "承認待ちがあるとき",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "銀行のメールやメッセージから追加された購入と、承認待ちの購入です。Appを開いている間は通知しません。閉じているときにいつ確認するかはiOSが決めます。",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "通知はこのiPhoneで設定されます。データはどこにも送信されません。",
- "{0} açık": "{0}件オン"
+ "{0} açık": "{0}件オン",
+ "Kartlarını yapay zekâya sor": "カードのことをAIに聞く",
+ "CashFollow'u Claude, ChatGPT ya da Gemini'ye bağla; yazarak sor, o hesaplasın ve eklesin.": "CashFollowをClaude、ChatGPT、Geminiにつなげましょう。書くだけで計算も登録もしてくれます。",
+ "Kartıma sıradaki ödemem ne zaman?": "次のカードの支払いはいつ？",
+ "Ekstreni ver, taksitleri o eklesin": "明細を渡せば分割払いを登録します",
+ "“Telefonu 6 taksitle karta ekle” demen yeter": "「スマホを6回払いでカードに追加」と言うだけ",
+ "Almadan önce sor: hangi ay ne ödersin?": "買う前に聞く：毎月いくら払う？",
+ "Yapay zekâ asistanı CashFollow Premium'da. Bağlamak için ücretsiz bir hesap açarsın.": "AIアシスタントはCashFollow Premiumの機能です。接続には無料のアカウントを作成します。",
+ "Kartını ve harcamalarını ekledikçe her ayın ödemesini söylerim.": "カードや買い物を追加すると、毎月の支払いをお知らせします。",
+ "{0} günü {1} kartına {2} ödeyeceksin.": "{0}に{1}で{2}を支払います。",
+ "Premium'u gör": "Premiumを見る"
 }

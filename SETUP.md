@@ -483,9 +483,12 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   `revenue` ve `currency` (PostHog → Revenue analytics'te bu özellik seçilir); sandbox gelir sayılmaz.
 - Karşılama hunisi (iPhone ilk açılış akışı, `Uygulama/Karsilama.swift`, `Ekranlar/KarsilamaEkrani.swift`): yalnızca yeni
   kurulum. `onboarding_started` (deneme girişi, bir kez; `variant`), `onboarding_step_viewed` / `onboarding_step_completed`
-  (`step`: intro, card, cutoff, purchase, aha; `seconds`, `method`) / `onboarding_step_skipped` (`reason`, `seconds`),
+  (`step`: intro, card, cutoff, purchase, aha, assistant; `seconds`, `method`) / `onboarding_step_skipped` (`reason`, `seconds`),
   `onboarding_aha_viewed` (`reminder_offered`: hatırlatma teklifi göründü mü), `onboarding_add_another`,
   `onboarding_closed` (`step`, `seconds`: o adımda geçen süre), `onboarding_backgrounded`, `onboarding_completed`
+  (`assistant` adımı: Premium'u olmayana "Planın hazır"dan sonra yapay zekâ asistanı ekranı; "Premium'u gör" →
+  `onboarding_step_completed` `method: paywall` ve `paywall_shown` `reason: onboarding_ai`, "Şimdi değil" ya da ✕ →
+  `onboarding_step_skipped` `reason: not_now`; ekran kapanınca akış biter)
   (`path`: offline, account, closed), `activation_reached` (ödeme planı ilk kez göründü; `via_flow`). Akıştan gelen
   `card_added`, `purchase_added`, `reminders_enabled`, `started_without_account` olaylarında `source: onboarding`.
 - Banka e-postaları (iPhone): `inbox_added` (`count`), `inbox_test_received` (deneme e-postası geldi),

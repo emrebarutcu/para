@@ -7,7 +7,7 @@ import UIKit
 // 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: kredi formu, 5: döviz formu, 6: Ayarlar,
 // 7: CashFollow Premium ödeme ekranı, 8: yapay zekâ asistanı, 9: Özet'te yeri gelince görünen kartlar — biten taksit,
 // ay kapanışı; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
-// (kilitler) görünür. Turda "tanitimN" (0…4) ilk açılış akışının N. ekranı (KarsilamaEkrani, cevaplar dolu; "-bos" ile);
+// (kilitler) görünür. Turda "tanitimN" (0…5) ilk açılış akışının N. ekranı (KarsilamaEkrani, cevaplar dolu; "-bos" ile);
 // "tanitimNbos" o adımın cevabı boş (kart adı yazılmamış, kesim günü seçilmemiş).
 // Gerçek kullanımda hiçbiri yoktur. Gerçek ilk açılış akışını simülatörde denemek: yeni kurulumda "-karsilama".
 enum Ornek {

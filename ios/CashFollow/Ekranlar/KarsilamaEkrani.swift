@@ -1,12 +1,16 @@
 import SwiftUI
 import UserNotifications
 
-// İlk açılış akışı (Uygulama/Karsilama.swift; ios/UX.md → akış 1). Beş ekran, her biri tek soru:
+// İlk açılış akışı (Uygulama/Karsilama.swift; ios/UX.md → akış 1). Beş ekran, her biri tek soru; ücretsiz kullanıcıya bir de
+// Premium ekranı:
 //   1 giris    ne işe yaradığı + ülke → "Hesap açmadan başla" (ya da "Hesabım var, giriş yap")
 //   2 kart     kartın adı (hazır marka listesi yok; kullanıcı yazar) — "Kredi kartım yok" ile geçilir
 //   3 kesim    ekstre ayın kaçında kesiliyor (son ödeme günü tahmin edilir, değiştirilebilir)
 //   4 harcama  bir taksitli harcama: tutar, taksit, ne zaman; ödeme planı yazarken görünür
 //   5 sonuc    "Planın hazır": bu ay ödenecek (ya da ilk ödeme) + ödeme günü hatırlatması
+//   6 asistan  "Kartlarını yapay zekâya sor": Premium'un yapay zekâ asistanı, kullanıcının kendi ödemesiyle örnek bir soru
+//              ve cevap; "Premium'u gör" ödeme ekranını açar (paywall_shown reason onboarding_ai). Yalnızca Premium'u
+//              olmayana ve "Planın hazır"ı görene (etkinleşmeden sonra, hatırlatma sorusunun ardından)
 // Kart ve harcama gerçek kayıttır (add_card, add_purchase): pencere kapanınca Özet dolu açılır, Başlarken'de iki adım
 // işaretli. ✕ her adımda Özet'e geçer. Uygulama 1. ekrandan sonra kapanırsa sonraki açılış Özet'le başlar.
 
@@ -35,11 +39,12 @@ struct KarsilamaKapisi: View {
 
 struct KarsilamaEkrani: View {
     enum Adim: Int {
-        case giris, kart, kesim, harcama, sonuc
-        var ad: String { ["intro", "card", "cutoff", "purchase", "aha"][rawValue] }   // analitikte adımın adı
+        case giris, kart, kesim, harcama, sonuc, asistan
+        var ad: String { ["intro", "card", "cutoff", "purchase", "aha", "assistant"][rawValue] }   // analitikte adımın adı
     }
 
     @EnvironmentObject private var model: Model
+    @EnvironmentObject private var abonelik: Abonelik
     @Environment(\.scenePhase) private var scenePhase
     var baslangic = 0       // ekran görüntüleri: açılacak adım (Ornek.swift TurEkrani, "tanitimN")
     var ornek = false       // ekran görüntüsü: cevaplar dolu; analitik, bildirim izni ve pencerenin kapanması yok
@@ -65,6 +70,8 @@ struct KarsilamaEkrani: View {
     @State private var ahaYazildi = false
     @State private var hata: String?
     @State private var girisAcik = false
+    @State private var odemeAcik = false
+    @State private var hatirlatmaAcildi = false
     @State private var bekliyor = false
     @State private var akisBasi = Date()
     @State private var adimBasi = Date()
@@ -82,6 +89,7 @@ struct KarsilamaEkrani: View {
                 case .kesim: kesimAdimi
                 case .harcama: harcama
                 case .sonuc: sonuc
+                case .asistan: asistanAdimi
                 }
             }
             .padding(.horizontal, 20)
@@ -106,6 +114,10 @@ struct KarsilamaEkrani: View {
             }
         }
         .sheet(isPresented: $girisAcik) { GirisEkrani(welcome: false, kaynak: "onboarding") }
+        // Ödeme ekranı kapanınca (alınsa da alınmasa da) akış biter
+        .sheet(isPresented: $odemeAcik, onDismiss: { bitir(hatirlatma: hatirlatmaAcildi) }) {
+            PremiumEkrani(neden: "onboarding_ai")
+        }
     }
 
     // ── Adımlar ─────────────────────────────────────────────────────────────────
@@ -232,6 +244,38 @@ struct KarsilamaEkrani: View {
             }
         }
         .sensoryFeedback(.success, trigger: ozet != nil)
+    }
+
+    // Premium'un yapay zekâ asistanı: kullanıcının kendi sıradaki ödemesiyle örnek bir soru ve cevap
+    private var asistanAdimi: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            baslik(L("Kartlarını yapay zekâya sor"),
+                   L("CashFollow'u Claude, ChatGPT ya da Gemini'ye bağla; yazarak sor, o hesaplasın ve eklesin."))
+            SohbetOnizlemesi(soru: L("Kartıma sıradaki ödemem ne zaman?"), cevap: asistanCevabi)
+            Kart(dolgu: 14) {
+                madde("doc.text.viewfinder", L("Ekstreni ver, taksitleri o eklesin"))
+                madde("text.bubble", L("“Telefonu 6 taksitle karta ekle” demen yeter"))
+                madde("questionmark.circle", L("Almadan önce sor: hangi ay ne ödersin?"))
+            }
+            Text(L("Yapay zekâ asistanı CashFollow Premium'da. Bağlamak için ücretsiz bir hesap açarsın."))
+                .font(.footnote).foregroundStyle(Tema.metin3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func madde(_ simge: String, _ metin: String) -> some View {
+        Label { Text(metin).fixedSize(horizontal: false, vertical: true) } icon: {
+            Image(systemName: simge).foregroundStyle(Tema.marka)
+        }
+        .font(.subheadline)
+    }
+
+    // Örnek cevap: kartın sıradaki ödemesi (karşılamada girilen kayıttan); yoksa genel bir cümle
+    private var asistanCevabi: String {
+        guard let p = ozet?.upcomingPayments.first(where: { $0.card != "Nakit" }) ?? ozet?.upcomingPayments.first else {
+            return L("Kartını ve harcamalarını ekledikçe her ayın ödemesini söylerim.")
+        }
+        return L("{0} günü {1} kartına {2} ödeyeceksin.", Bicim.day(p.date), Bicim.kartAdi(p.card), Bicim.tl(p.total))
     }
 
     // ── Parçalar ────────────────────────────────────────────────────────────────
@@ -386,11 +430,14 @@ struct KarsilamaEkrani: View {
                     AltKaydet(eksik: nil, baslik: L("Hatırlat")) { hatirlat() }
                     ikincil(L("Şimdi değil")) {
                         if !ornek { Hatirlatma.ertele(kaynak: "onboarding") }
-                        bitir()
+                        sonucSonrasi()
                     }
                 } else {
-                    AltKaydet(eksik: nil, baslik: L("Devam")) { bitir() }
+                    AltKaydet(eksik: nil, baslik: L("Devam")) { sonucSonrasi() }
                 }
+            case .asistan:
+                AltKaydet(eksik: nil, baslik: L("Premium'u gör")) { premiumuAc() }
+                ikincil(L("Şimdi değil")) { asistaniAtla() }
             }
         }
         .disabled(bekliyor)
@@ -462,8 +509,8 @@ struct KarsilamaEkrani: View {
                                             paraBirimi: Locale.current.currency?.identifier, ulkeler: model.constants?.countries ?? [])
             ulkeKesin = !ulke.isEmpty
         }
-        adim = Adim(rawValue: min(max(baslangic, 0), 4)) ?? .giris
-        if adim == .sonuc { sonucuHazirla() }
+        adim = Adim(rawValue: min(max(baslangic, 0), 5)) ?? .giris
+        if adim.rawValue >= Adim.sonuc.rawValue { sonucuHazirla() }
         adimGosterildi(adim)
     }
 
@@ -596,14 +643,33 @@ struct KarsilamaEkrani: View {
         guard !ornek, !bekliyor else { return }
         bekliyor = true
         Task {
-            let acildi = await Hatirlatma.ac(model, kaynak: "onboarding")
+            hatirlatmaAcildi = await Hatirlatma.ac(model, kaynak: "onboarding")
             bekliyor = false
-            bitir(hatirlatma: acildi)
+            sonucSonrasi()
         }
+    }
+
+    // "Planın hazır"dan sonra: Premium'u olmayana yapay zekâ asistanı ekranı, olana akışın sonu
+    private func sonucSonrasi() {
+        if ornek || abonelik.premium { bitir(hatirlatma: hatirlatmaAcildi) } else { git(.asistan) }
+    }
+
+    private func premiumuAc() {
+        guard !ornek else { return }
+        Karsilama.olay("onboarding_step_completed", ["step": adim.ad, "step_index": adim.rawValue,
+                                                     "seconds": saniye(adimBasi, 600), "method": "paywall"])
+        odemeAcik = true   // kapanınca bitir (sheet onDismiss)
+    }
+
+    private func asistaniAtla() {
+        guard !ornek else { return }
+        Karsilama.olay("onboarding_step_skipped", ["step": adim.ad, "reason": "not_now", "seconds": saniye(adimBasi, 600)])
+        bitir(hatirlatma: hatirlatmaAcildi)
     }
 
     private func kapat() {
         guard !ornek else { return }
+        if adim == .asistan { return asistaniAtla() }   // akış zaten tamamlandı: ✕ "Şimdi değil" demek
         Karsilama.olay("onboarding_closed", ["step": adim.ad, "seconds": saniye(adimBasi, 600)])
         bitir(yol: "closed")
     }
@@ -699,6 +765,35 @@ private struct GunIzgarasi: View {
             }
         }
         .sensoryFeedback(.selection, trigger: secili)
+    }
+}
+
+// Asistanla örnek sohbet: sağda kullanıcının sorusu, solda asistanın cevabı (marka adı yok: hangi asistan olduğu fark etmez)
+private struct SohbetOnizlemesi: View {
+    let soru: String
+    let cevap: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(soru)
+                .font(.subheadline.weight(.medium)).foregroundStyle(Tema.ustMetin)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(Tema.metin, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.leading, 40)
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "sparkles").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Tema.marka, in: Circle())
+                Text(cevap)
+                    .font(.subheadline).foregroundStyle(Tema.metin)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(Tema.yuzey2, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+            .padding(.trailing, 32)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

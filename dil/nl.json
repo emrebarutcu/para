@@ -1591,5 +1591,15 @@
  "Onay bekleyen olunca": "Als er iets op goedkeuring wacht",
  "Banka e-postası ya da mesajından eklenen harcamalar ve onayını bekleyenler. Uygulama açıkken bildirim gelmez; iPhone kapalıyken ne zaman bakacağına iOS karar verir.": "Aankopen uit een e-mail of bericht van de bank en aankopen die op je goedkeuring wachten. Als de app open is, komt er geen melding; als hij dicht is, bepaalt iOS wanneer er gekeken wordt.",
  "Bildirimler bu telefonda kurulur; verin hiçbir yere gönderilmez.": "Meldingen worden op deze telefoon ingesteld; je gegevens worden nergens naartoe gestuurd.",
- "{0} açık": "{0} aan"
+ "{0} açık": "{0} aan",
+ "Kartlarını yapay zekâya sor": "Vraag AI naar je kaarten",
+ "CashFollow'u Claude, ChatGPT ya da Gemini'ye bağla; yazarak sor, o hesaplasın ve eklesin.": "Koppel CashFollow aan Claude, ChatGPT of Gemini; typ gewoon, het rekent en voegt toe voor je.",
+ "Kartıma sıradaki ödemem ne zaman?": "Wanneer is mijn volgende kaartbetaling?",
+ "Ekstreni ver, taksitleri o eklesin": "Geef je afschrift, het voegt de termijnen toe",
+ "“Telefonu 6 taksitle karta ekle” demen yeter": "Zeg gewoon „Zet de telefoon in 6 termijnen op mijn kaart”",
+ "Almadan önce sor: hangi ay ne ödersin?": "Vraag het vóór je koopt: wat betaal je per maand?",
+ "Yapay zekâ asistanı CashFollow Premium'da. Bağlamak için ücretsiz bir hesap açarsın.": "De AI-assistent hoort bij CashFollow Premium. Om hem te koppelen maak je een gratis account.",
+ "Kartını ve harcamalarını ekledikçe her ayın ödemesini söylerim.": "Zodra je kaarten en aankopen toevoegt, vertel ik wat je elke maand betaalt.",
+ "{0} günü {1} kartına {2} ödeyeceksin.": "Op {0} betaal je {2} voor je kaart {1}.",
+ "Premium'u gör": "Bekijk Premium"
 }
