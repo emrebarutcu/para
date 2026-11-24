@@ -23,7 +23,20 @@ enum Analitik {
         get { !UserDefaults.standard.bool(forKey: "analitik.kapali") }
         set { UserDefaults.standard.set(!newValue, forKey: "analitik.kapali"); if !newValue { kuyruk.removeAll() } }
     }
-    private static var etkin: Bool { acik && !Yapilandirma.posthogKey.isEmpty && !CommandLine.arguments.contains("-ornek") }
+    private static var etkin: Bool { acik && !Yapilandirma.posthogKey.isEmpty && !CommandLine.arguments.contains("-ornek") && !otomasyon }
+
+    // Simülatör (CI'daki öz denetim ve model denemesi, ekran görüntüleri, geliştirme) ve otomatik çalıştırmalar gönderilmez:
+    // yoksa her CI koşusu yeni kurulum gibi karşılama hunisine girer (Kasım 2026: "ilk ekranda kalanların" yarısından
+    // çoğu buydu; TUTUNDURMA.md). Simülatörde göndermeyi denemek için -analitik
+    private static let otomasyon: Bool = {
+        let a = CommandLine.arguments
+        if a.contains("-analitik") { return false }
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return a.contains("-oz-denetim") || a.contains("-zeka-dene")
+        #endif
+    }()
 
     // Rastgele cihaz kimliği (kişisel bilgi değil); giriş yapınca hesabın kimliği kullanılır
     private static var kimlik: String {
