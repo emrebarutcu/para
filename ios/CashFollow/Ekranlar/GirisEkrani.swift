@@ -29,6 +29,14 @@ struct GirisEkrani: View {
                         .padding(.vertical, 4)
                     }
                 }
+                // Tek dokunuşla hesap: e-posta doğrulaması yok (kayıt en çok burada takılıyordu)
+                Section {
+                    AppleIleGiris(ulke: ulke, kaynak: welcome ? "welcome" : kaynak) { if !welcome { dismiss() } }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                } footer: {
+                    Text(L("ya da e-postayla:"))
+                }
                 Section {
                     Picker("", selection: $register) {
                         Text(L("Giriş Yap")).tag(false)

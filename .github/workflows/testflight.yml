@@ -93,7 +93,9 @@ jobs:
           APP="$W/Payload/CashFollow.app"
           test -f "$APP/js/tools.js"
           cp "$RUNNER_TEMP/imza/profil.mobileprovision" "$APP/embedded.mobileprovision"
-          # App Store yetkileri (Xcode'un App Store dışa aktarmasındakiyle aynı)
+          # App Store yetkileri (Xcode'un App Store dışa aktarmasındakiyle aynı); Apple ile giriş, App ID'de açıksa (asc_imza.py → SIWA)
+          SIWA_YETKI=""
+          if [ "${SIWA:-0}" = "1" ]; then SIWA_YETKI="<key>com.apple.developer.applesignin</key><array><string>Default</string></array>"; fi
           cat > "$RUNNER_TEMP/yetkiler.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -103,6 +105,7 @@ jobs:
             <key>com.apple.developer.team-identifier</key><string>$TEAM_ID</string>
             <key>beta-reports-active</key><true/>
             <key>get-task-allow</key><false/>
+            $SIWA_YETKI
           </dict>
           </plist>
           PLIST

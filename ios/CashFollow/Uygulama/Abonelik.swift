@@ -11,9 +11,9 @@ final class Abonelik: ObservableObject {
     static let kimlikler = ["yearly", "monthly", "weekly"].map { "app.cashfollow.ios.premium.\($0)" }
     static let ucretsizKart = 2
     static let ucretsizKisi = 2   // sen ve bir kişi daha (eşin gibi)
-    // Ücretsiz tat: Akış'ta bu ay ve sonraki ay Premium'suz açık (web: TASTE_MONTHS). PostHog'da free_taste bayrağının
+    // Ücretsiz tat: Akış'ta ilk 3 ay (bu ay ve sonraki iki ay; 24 Kasım 2026'ya kadar 2 ay) Premium'suz açık (web: TASTE_MONTHS). PostHog'da free_taste bayrağının
     // "off" kolu kapatır; bayrak yoksa ya da henüz gelmediyse açıktır.
-    static let tatAy = 2
+    static let tatAy = 3
     static var ucretsizTat: Bool { Analitik.bayrak("free_taste") != "off" }
 
     // Hesabın sunucudaki satırı (yalnızca okunur; RLS)
@@ -66,11 +66,13 @@ final class Abonelik: ObservableObject {
         }
     }
 
-    func satinAl(_ urun: Product) async {
+    // neden: ödeme ekranının hangi kilitten açıldığı (paywall_shown reason); satın alma olaylarına da yazılır, kilit
+    // başına dönüşüm böyle ölçülür
+    func satinAl(_ urun: Product, neden: String = "unknown") async {
         calisiyor = true
         defer { calisiyor = false }
         hata = nil
-        Analitik.olay("purchase_started", ["product": urun.id])
+        Analitik.olay("purchase_started", ["product": urun.id, "reason": neden])
         var secenekler: Set<Product.PurchaseOption> = []
         if let id = await hesap()?.id, let uuid = UUID(uuidString: id) { secenekler.insert(.appAccountToken(uuid)) }
         do {
@@ -78,7 +80,7 @@ final class Abonelik: ObservableObject {
             case .success(let sonuc):
                 guard case .verified(let t) = sonuc else {
                     hata = L("App Store satın alımı doğrulanamadı.")
-                    Analitik.olay("purchase_failed", ["product": urun.id, "error": "unverified"])
+                    Analitik.olay("purchase_failed", ["product": urun.id, "reason": neden, "error": "unverified"])
                     return
                 }
                 await t.finish()
@@ -86,7 +88,7 @@ final class Abonelik: ObservableObject {
                 // Fiyat bilgi içindir (gelir değil): deneme başlangıcında ücret alınmaz; gerçek tahsilatı sunucu gönderir.
                 // environment: Production (App Store) / Sandbox (TestFlight, App Review) / Xcode; sunucunun
                 // subscription_* olaylarındakiyle aynı değerler, panoda test alımlarını ayırmak için
-                Analitik.olay("purchase_completed", ["product": urun.id, "trial": Self.deneme(t),
+                Analitik.olay("purchase_completed", ["product": urun.id, "reason": neden, "trial": Self.deneme(t),
                                                      "price": NSDecimalNumber(decimal: urun.price).doubleValue,
                                                      "currency": urun.priceFormatStyle.currencyCode,
                                                      "environment": t.environment.rawValue,
@@ -95,15 +97,15 @@ final class Abonelik: ObservableObject {
                 await hesabaBagla()
             case .pending:
                 hata = L("Satın alma onay bekliyor (ör. Aile Paylaşımı'nda ebeveyn onayı). Onaylanınca Premium kendiliğinden açılır.")
-                Analitik.olay("purchase_pending", ["product": urun.id])
+                Analitik.olay("purchase_pending", ["product": urun.id, "reason": neden])
             case .userCancelled:
-                Analitik.olay("purchase_cancelled", ["product": urun.id])
+                Analitik.olay("purchase_cancelled", ["product": urun.id, "reason": neden])
             @unknown default:
                 break
             }
         } catch {
             hata = error.localizedDescription
-            Analitik.olay("purchase_failed", ["product": urun.id, "error": String(String(describing: error).prefix(80))])
+            Analitik.olay("purchase_failed", ["product": urun.id, "reason": neden, "error": String(String(describing: error).prefix(80))])
         }
     }
 

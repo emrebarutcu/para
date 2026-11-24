@@ -31,7 +31,7 @@ struct AkisEkrani: View {
                         }
                     }
                 } else if Abonelik.ucretsizTat {
-                    // Ücretsiz tat: bu ay ve sonraki ayın ödeme günleri; sonrası ve 12 aylık grafik Premium
+                    // Ücretsiz tat: ilk Abonelik.tatAy ayın (3) ödeme günleri; sonrası ve 12 aylık grafik Premium
                     Okunan(tool: "get_cashflow", args: ["months": Abonelik.tatAy], key: "tat") { (a: Akis) in
                         VStack(alignment: .leading, spacing: 14) {
                             ForEach(a.months.filter { !$0.payments.isEmpty }) { m in ay(m) }

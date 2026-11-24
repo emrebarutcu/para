@@ -71,6 +71,7 @@ struct KarsilamaEkrani: View {
     @State private var hata: String?
     @State private var girisAcik = false
     @State private var odemeAcik = false
+    @State private var saglayici: String?       // Pay in 4 yolu: sağlayıcı (klarna…); nil ise kart / nakit yolu
     @State private var hatirlatmaAcildi = false
     @State private var bekliyor = false
     @State private var akisBasi = Date()
@@ -148,6 +149,7 @@ struct KarsilamaEkrani: View {
                     .focused($kartOdak)
                     .onSubmit { if !kartAdiBos { ilerle(.kesim, yontem: "typed") } }
             }
+            if payIn4Var { payIn4Secenegi }
         }
         .task {
             guard !ornek || ornekBos, kartAdi.isEmpty else { return }
@@ -187,7 +189,9 @@ struct KarsilamaEkrani: View {
             // Taksidin öne çıktığı ülkede evet / hayır sorusu ("Taksitle aldığın bir şey var mı?") "Şimdilik atla"ya
             // götürüyordu (Kasım 2026: Türkiye'de kartı giren 5 kişiden hiçbiri bu adımı bitirmedi); yapılacak iş ve
             // "yaklaşık yeter" güvencesi. Başka ülkede soru kalır (orada bitiriliyordu)
-            if kartId != nil && model.installmentsPrimary {
+            if saglayici != nil {
+                baslik(L("Pay in 4 ile ne aldın?"), L("Tutarı yaz; dört ödemenin tarihlerini hemen göstereyim."))
+            } else if kartId != nil && model.installmentsPrimary {
                 baslik(L("Taksitli bir alışverişini yaz"), L("Yaklaşık tutar yeter; sonra düzeltebilirsin."))
             } else {
                 baslik(L("Son harcaman ne kadardı?"), nil)
@@ -206,11 +210,20 @@ struct KarsilamaEkrani: View {
                     taksitSecimi
                     if taksit > 1 { neZaman }
                 }
+            } else if saglayici != nil {
+                Kart {
+                    etiket(L("Sağlayıcı"))
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(saglayicilar) { s in Cip(ad: s.name, secili: saglayici == s.id) { saglayici = s.id } }
+                        }
+                    }
+                }
             }
             if let p = onizleme { OdemePlani(sonuc: p, taksitli: taksitSayisi > 1) }
             HataMetni(text: hata)
         }
-        .task(id: "\(tutar)|\(taksit)|\(ayOnce)|\(kartId ?? "")") { onizle() }
+        .task(id: "\(tutar)|\(taksit)|\(ayOnce)|\(kartId ?? "")|\(saglayici ?? "")") { onizle() }
         .onChange(of: taksit) { _, n in if ayOnce >= n { ayOnce = max(n - 1, 0) } }
         .task {
             guard !ornek, tutar.isEmpty else { return }
@@ -227,18 +240,25 @@ struct KarsilamaEkrani: View {
                     BuAyKarti(o: o)
                 } else if let ilk = o.upcomingPayments.first {
                     ilkOdemeKarti(ilk, o)
+                } else if let b = bugun {
+                    kartTakvimi(b)   // kartı girip harcamayı atlayan: bugünkü alışverişin ödeme günü
                 } else {
                     Kart { Text(L("Ödenecek taksit yok")).font(.subheadline).foregroundStyle(Tema.metin2) }
                 }
                 // Hatırlatma teklifi tutarın hemen altında: altındaki düğmeler ondan sorar. Önceden "Bir harcama daha
                 // ekle"nin altındaydı; Kasım 2026'da teklifi gören 4 kişinin 4'ü "Şimdi değil" dedi
-                if let p = hatirlatilacak { hatirlatmaKarti(p) }
-                if let aciklama {
+                if let p = hatirlatilacak {
+                    hatirlatmaKarti(BildirimOnizlemesi(odeme: p), L("Son ödeme gününden bir gün önce bildirim gelir. Ayarlar'dan değiştirebilirsin."))
+                } else if kesimTeklifi, let b = bugun {
+                    hatirlatmaKarti(BildirimOnizlemesi(kesimKarti: kartAdiTemiz, kesim: b.statementCutoff, sonOdeme: b.dueDate),
+                                    L("Kesim gününden bir gün önce bildirim gelir. Ayarlar'dan değiştirebilirsin."))
+                }
+                if let aciklama, !(o.upcomingPayments.isEmpty) {
                     Label(aciklama, systemImage: "info.circle")
                         .font(.footnote).foregroundStyle(Tema.metin2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                KucukDugme(ad: L("Bir harcama daha ekle"), simge: "plus") { dahaEkle() }
+                KucukDugme(ad: eklenen > 0 ? L("Bir harcama daha ekle") : L("Bir harcama ekle"), simge: "plus") { dahaEkle() }
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 120)
             }
@@ -368,17 +388,65 @@ struct KarsilamaEkrani: View {
         }
     }
 
-    private func hatirlatmaKarti(_ p: Ozet.Yaklasan) -> some View {
+    private func hatirlatmaKarti(_ onizleme: BildirimOnizlemesi, _ not: String) -> some View {
         Kart {
             HStack(spacing: 10) {
                 Image(systemName: "bell.badge").font(.title3).foregroundStyle(Tema.metin2)
                 Text(L("Ödeme günlerini hatırlatayım mı?")).font(.body.weight(.semibold))
             }
-            BildirimOnizlemesi(odeme: p)
-            Text(L("Son ödeme gününden bir gün önce bildirim gelir. Ayarlar'dan değiştirebilirsin."))
+            onizleme
+            Text(not)
                 .font(.footnote).foregroundStyle(Tema.metin2)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    // Kartı girip harcamayı atlayan: bugünkü alışverişin hangi gün ödeneceği (kesim ve son ödeme gününden)
+    private func kartTakvimi(_ b: KartGorunumu.Bugun) -> some View {
+        Kart {
+            HStack {
+                Text(L("Bugün alırsan ödeme günü")).font(.subheadline).foregroundStyle(Tema.metin2)
+                Spacer()
+                Text(Bicim.relative(b.dueDate)).font(.subheadline.weight(.semibold))
+            }
+            Text(Bicim.day(b.dueDate)).font(.system(size: 34, weight: .bold)).foregroundStyle(Tema.metin)
+            Text(kartAdiTemiz).font(.subheadline).foregroundStyle(Tema.metin2)
+            Ayirici()
+            Text(L("{0} dahil yapılan harcamalar {1} günü ödenir; sonrakiler bir ay sonra.", Bicim.day(b.statementCutoff), Bicim.day(b.dueDate)))
+                .font(.footnote).foregroundStyle(Tema.metin2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // Pay in 4 (şimdi al sonra öde): taksidin ikincil olduğu ve sağlayıcıların sunulduğu ülkede kart adımında ikinci yol.
+    // Türkiye dışında kart adımında ✕ ile kapatma yüksekti (Kasım 2026: 6 kişinin 5'i); kartı olmayan ya da Pay in 4
+    // kullanan kart adını yazmadan harcamaya geçer
+    private var payIn4Var: Bool { model.bnplAllowed && !model.installmentsPrimary && !saglayicilar.isEmpty }
+    private var saglayicilar: [Sabitler.Kategori] { model.bnplProviders().filter { $0.id != "other" } }
+
+    private var payIn4Secenegi: some View {
+        Button { payIn4Sec() } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "calendar.badge.clock").font(.title3).foregroundStyle(Tema.marka)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("Pay in 4 ile ödüyorum")).font(.body.weight(.semibold)).foregroundStyle(Tema.metin)
+                    Text(saglayicilar.prefix(3).map(\.name).joined(separator: ", ")).font(.footnote).foregroundStyle(Tema.metin2)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background { KartZemini(cizgi: true, golge: 0.04) }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func payIn4Sec() {
+        saglayici = saglayicilar.first?.id
+        kartOdak = false
+        ilerle(.harcama, yontem: "bnpl")
     }
 
     // Üstte: geri, ilerleme (4 adım), kapat
@@ -424,9 +492,12 @@ struct KarsilamaEkrani: View {
                 AltKaydet(eksik: (Bicim.parse(tutar) ?? 0) <= 0 ? L("Tutarı yaz") : nil, baslik: L("Hesapla")) {
                     if harcamayiKaydet() { ilerle(.sonuc, yontem: "button") }
                 }
-                ikincil(L("Şimdilik atla")) { if eklenen > 0 { git(.sonuc) } else { atla(nil, neden: "skipped") } }
+                // Kartı girip harcamayı atlayan da "Planın hazır"ı görür (bugünkü alışverişin ödeme günü, kesim hatırlatması)
+                ikincil(L("Şimdilik atla")) {
+                    if eklenen > 0 { git(.sonuc) } else if kartId != nil { atla(.sonuc, neden: "skipped") } else { atla(nil, neden: "skipped") }
+                }
             case .sonuc:
-                if hatirlatilacak != nil {
+                if hatirlatilacak != nil || kesimTeklifi {
                     AltKaydet(eksik: nil, baslik: L("Hatırlat")) { hatirlat() }
                     ikincil(L("Şimdi değil")) {
                         if !ornek { Hatirlatma.ertele(kaynak: "onboarding") }
@@ -459,7 +530,7 @@ struct KarsilamaEkrani: View {
 
     private var kartAdiTemiz: String { kartAdi.trimmingCharacters(in: .whitespaces) }
     private var kartAdiBos: Bool { kartAdiTemiz.isEmpty }
-    private var taksitSayisi: Int { kartId == nil ? 1 : taksit }
+    private var taksitSayisi: Int { saglayici != nil ? 4 : kartId == nil ? 1 : taksit }
 
     // Geri: kart kaydedildikten sonra kesime dönülebilir (günler düzeltilir); harcama kaydedildikten sonra dönülmez
     private var geriHedef: Adim? {
@@ -478,6 +549,12 @@ struct KarsilamaEkrani: View {
 
     // Hatırlatma sorulacak ödeme: kartın sıradaki ödemesi; bildirim izni daha önce sorulmadıysa
     private var hatirlatilacak: Ozet.Yaklasan? { hatirlatilacak(ozet) }
+
+    // Harcamasız kartlı kullanıcıya kesim günü hatırlatması (ödeme hatırlatmasıyla aynı izin, Hatirlatma.ac)
+    private var kesimTeklifi: Bool {
+        guard let o = ozet, o.upcomingPayments.isEmpty, bugun != nil else { return false }
+        return ornek || (!Hatirlatma.acik && izin == .notDetermined)
+    }
 
     private func hatirlatilacak(_ o: Ozet?) -> Ozet.Yaklasan? {
         guard let o, let p = o.upcomingPayments.first(where: { $0.card != "Nakit" && $0.late != true }) else { return nil }
@@ -543,6 +620,7 @@ struct KarsilamaEkrani: View {
         hata = nil
         // Harcamaya ilk gelişte taksit: kartla ve taksidin öne çıktığı ülkede 6, değilse peşin
         if hedef == .harcama, tutar.isEmpty { taksit = kartId != nil && model.installmentsPrimary ? 6 : 1 }
+        if hedef == .kart { saglayici = nil }   // Pay in 4'ten geri dönüldü
         withAnimation(.snappy(duration: 0.3)) { adim = hedef }
         if hedef == .sonuc { sonucuHazirla() }
     }
@@ -581,8 +659,14 @@ struct KarsilamaEkrani: View {
     private func harcamaArgumanlari() -> [String: Any]? {
         guard let t = Bicim.parse(tutar), t > 0 else { return nil }
         let n = taksitSayisi
-        return ["description": n > 1 ? L("Taksitli alışveriş") : L("Harcama"), "amount": t, "installments": n,
-                "date": Bicim.key(Karsilama.tarih(ayOnce: n > 1 ? ayOnce : 0)), "card": kartId ?? "nakit", "person": kisi]
+        var a: [String: Any] = ["description": n > 1 ? L("Taksitli alışveriş") : L("Harcama"), "amount": t, "installments": n,
+                                "date": Bicim.key(Karsilama.tarih(ayOnce: n > 1 && saglayici == nil ? ayOnce : 0)),
+                                "card": kartId ?? "nakit", "person": kisi]
+        if let s = saglayici {
+            a["bnpl"] = s
+            a["description"] = saglayicilar.first { $0.id == s }?.name ?? "Pay in 4"
+        }
+        return a
     }
 
     // Ödeme planı önizlemesi (kaydetmeden; harcama düzenlemedeki gibi add_purchase dry_run)
@@ -601,7 +685,7 @@ struct KarsilamaEkrani: View {
             guard !ornek else { return true }
             Puanlama.olumluAn(titresim: false)
             let n = taksitSayisi
-            Analitik.olay("purchase_added", ["installments": n, "repeat": false, "bnpl": false, "bonus": 0, "cash": kartId == nil,
+            Analitik.olay("purchase_added", ["installments": n, "repeat": false, "bnpl": saglayici != nil, "bonus": 0, "cash": kartId == nil,
                                              "afford_shown": false, "source": "onboarding", "is_first": eklenen == 1,
                                              "months_ago": n > 1 ? ayOnce : 0])
             return true
@@ -627,7 +711,9 @@ struct KarsilamaEkrani: View {
             Karsilama.olay("onboarding_aha_viewed", ["has_due_this_month": o.dueThisMonth > 0.004,
                                                      "upcoming_count": min(o.upcomingPayments.count, 10),
                                                      "installments": taksitSayisi, "seconds_since_start": saniye(akisBasi, 1800),
-                                                     "reminder_offered": hatirlatilacak(o) != nil])
+                                                     "reminder_offered": hatirlatilacak(o) != nil || kesimTeklifi,
+                                                     "card_only": o.upcomingPayments.isEmpty && bugun != nil,
+                                                     "bnpl": saglayici != nil])
         }
     }
 
@@ -799,10 +885,25 @@ private struct SohbetOnizlemesi: View {
 
 // Bildirimin önizlemesi: Hatirlatma.kur'un gönderdiği metinle (bir gün önce)
 private struct BildirimOnizlemesi: View {
-    let odeme: Ozet.Yaklasan
+    let baslik: String
+    let metin: String
+    let gun: Date?   // bildirimin geleceği gün
+
+    // Ödeme günü hatırlatması: son ödemeden bir gün önce
+    init(odeme: Ozet.Yaklasan) {
+        baslik = L("Yarın ödeme var")
+        metin = "\(Bicim.kartAdi(odeme.card)) · \(Bicim.tl(odeme.total))"
+        gun = Bicim.date(odeme.date).flatMap { Calendar.current.date(byAdding: .day, value: -1, to: $0) }
+    }
+
+    // Kesim günü hatırlatması (Hatirlatma.ekleriKur'daki metinle): kesimden bir gün önce
+    init(kesimKarti: String, kesim: String, sonOdeme: String) {
+        baslik = L("Yarın {0} kesimi", kesimKarti)
+        metin = L("Yarına kadarki alışveriş: son ödeme {0}.", Bicim.day(sonOdeme))
+        gun = Bicim.date(kesim).flatMap { Calendar.current.date(byAdding: .day, value: -1, to: $0) }
+    }
 
     var body: some View {
-        let gun = Bicim.date(odeme.date).flatMap { Calendar.current.date(byAdding: .day, value: -1, to: $0) }
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "creditcard.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                 .frame(width: 30, height: 30)
@@ -813,8 +914,8 @@ private struct BildirimOnizlemesi: View {
                     Spacer()
                     if let gun { Text(Bicim.day(Bicim.key(gun))).font(.caption).foregroundStyle(Tema.metin3) }
                 }
-                Text(L("Yarın ödeme var")).font(.subheadline.weight(.semibold))
-                Text("\(Bicim.kartAdi(odeme.card)) · \(Bicim.tl(odeme.total))").font(.subheadline).foregroundStyle(Tema.metin2)
+                Text(baslik).font(.subheadline.weight(.semibold))
+                Text(metin).font(.subheadline).foregroundStyle(Tema.metin2)
             }
         }
         .padding(12)

@@ -364,6 +364,21 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
   yüklenir, araçlar çağrılır, cevaplar Swift görünümlerine çözülür). Web modülleri ya da `mcp/tools.js` değişince de çalışır;
   araç cevabının alanı değişirse `Cekirdek/Gorunumler.swift` de güncellenir.
 
+#### Apple ile giriş (Sign in with Apple)
+
+iPhone'da giriş ekranında ve yapay zekâ asistanı ekranında "Apple ile devam et" (`Ekranlar/AppleIleGiris.swift`): Apple'ın
+kimlik belirteci Supabase'e verilir (`Auth.signInWithApple`, `grant_type=id_token`). E-posta doğrulaması yoktur; yeni hesabın
+ülkesi seçili ülkeden yazılır. Üç yer ayarlanır:
+
+1. **App ID:** Sign In with Apple yeteneği. TestFlight iş akışı (`ios/scripts/asc_imza.py`) API ile açar; açamazsa uyarı
+   yazar ve uygulama bu yetki olmadan imzalanır (developer.apple.com → Identifiers → `app.cashfollow.ios` → Sign In with
+   Apple elle açılır). Yetki: `ios/CashFollow.entitlements` (Xcode) ve `testflight.yml`'deki `yetkiler.plist` (`SIWA=1`).
+2. **Supabase:** Auth → Providers → Apple açık, Client IDs'te `app.cashfollow.ios` (yerel giriş için gizli anahtar
+   gerekmez). Betik: `supabase/apple.sh` (Actions → Supabase SQL → dosya `supabase/apple.sh`).
+3. **App Store incelemesinden önce (açık iş):** hesap silinirken Apple belirtecinin iptali (Sign in with Apple REST API
+   `/auth/revoke`) incelemede istenir. Bunun için Apple'da bir Sign in with Apple anahtarı (.p8) ve sunucuda iptal çağrısı
+   gerekir; TestFlight'ta (dahili test) gerekmez.
+
 #### TestFlight (Mac gerekmez)
 
 `.github/workflows/testflight.yml` uygulamayı GitHub'ın Xcode 27 makinesinde (`xcode-27`: macOS 27, Apple Silicon; `macos-26`
@@ -477,7 +492,11 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
 - PostHog proje ayarlarında **Discard client IP data** açılır (IP saklanmaz).
 - Ödeme ekranı hunisi (iPhone): `paywall_shown` / `paywall_closed` (`reason`: hangi kilit; `plan`), `purchase_started`,
   `purchase_completed` (`trial`, `price`, `currency`), `purchase_cancelled`, `purchase_pending`, `purchase_failed`, `restore`
-  (`found`).
+  (`found`). 1.5.0'dan beri satın alma olaylarında da `reason` (ödeme ekranının açıldığı kilit): kilit başına dönüşüm
+  `paywall_shown` → `purchase_completed` aynı `reason`la okunur. Ödeme ekranının başlığı da kilide göre değişir
+  (`PremiumEkrani.baslik`).
+- Apple ile giriş (`Ekranlar/AppleIleGiris.swift`): `apple_sign_in` (`source`: welcome, settings, onboarding, assistant;
+  `new`), `apple_sign_in_failed` (`stage`: apple, server, network; `status`); yeni hesapta `account_created` `method: apple`.
 - Abonelik olayları sunucudan (`mcp/abonelik.js`, App Store bildirimleri): `subscription_subscribed`, `subscription_did_renew`,
   `subscription_did_change_renewal_status` (iptal), `subscription_expired`, `subscription_refund`… Production'daki tahsilatta
   `revenue` ve `currency` (PostHog → Revenue analytics'te bu özellik seçilir); sandbox gelir sayılmaz.
@@ -531,7 +550,8 @@ penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
 - **Ücretsiz sürüm:** 2 kart, 2 kişi (kullanıcı ve eşi gibi biri), Özet, harcamalar ve taksitler, borçlar
   (`Abonelik.ucretsizKart`, `ucretsizKisi`; web `FREE_CARDS`, `FREE_PEOPLE`); iyi haber içgörüleri (serbest nakit, son
   taksit, bugünün kartı: `icgoru.js` `FREE`; biri Özet'in tepesinde tek satır, `headline`); asistanda yalnızca özet
-  okuması (`get_overview`; `mcp/server.js` `FREE_TOOLS`); Akış'ta bu ay ve sonraki ayın ödeme planı (ücretsiz tat:
+  okuması (`get_overview`; `mcp/server.js` `FREE_TOOLS`); Akış'ta ilk 3 ayın (bu ay ve sonraki iki ay; 1.5.0'a kadar 2)
+  ödeme planı (ücretsiz tat:
   `Abonelik.tatAy`, web `TASTE_MONTHS`; PostHog'da `free_taste` bayrağının `off` kolu kapatır, bayrak yoksa açıktır).
   Web kilitlerinde App Store bağlantısı ve geniş ekranda QR (`config.js` `APP_STORE_URL`, `appstore-qr.svg`; `app_store_opened`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir
   miyim?", öbür içgörüler (uyarılar, öneriler), Varlığın seyri, kart borcu geri ödeme planı, asistanın öbür araçları

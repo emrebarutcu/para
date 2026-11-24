@@ -13,7 +13,7 @@ borçlar ile Varlıklar; en son açılan yüz hatırlanır. Aşağıdaki tabloda
 | Sekme | Yanıtladığı soru | İçerik |
 |-------|------------------|--------|
 | Özet | Bu ay ne ödeyeceğim, sırada ne var, param yetecek mi? | Bu ay ödenecek (ödenen / kalan, gelecek ay hafifliyor mu, son taksit, iyi haber satırı: ay sonunda kalan serbest nakit ya da bugünün kartı), sıradaki 5 ödeme, 2 içgörü (ücretsizde iyi haberler, gerisi kilitli), Nakit; yeri gelince biten taksidin kutlaması ve geçen ayın özeti |
-| Akış | Önümüzdeki aylarda hangi gün ne ödeyeceğim? | Ücretsizde bu ay ve sonraki ay açık, sonrası kilitli. 12 aylık grafik, ay ay ödeme günleri; "Sonraki 12 ayı da göster" |
+| Akış | Önümüzdeki aylarda hangi gün ne ödeyeceğim? | Ücretsizde ilk 3 ay açık, sonrası kilitli. 12 aylık grafik, ay ay ödeme günleri; "Sonraki 12 ayı da göster" |
 | Harcamalar | Neye harcadım? | Liste ya da Kategoriler; kişi süzgeci, arama, bitenler altta |
 | Kartlar | Kartlarım, kredilerim, kim bana borçlu? | Toplam borç, kartlar, kartından harcayanlar, borç / alacaklar |
 | Varlıklar | Neyim var, nasıl değişiyor? | Varlıkların, seyri, para birimleri, fon / hisse, hareketler |
@@ -33,7 +33,7 @@ ilgili satırdaki "Ödendi" / "Ödedi" düğmesindedir.
 
 | # | Akış | 7.1 | 1. tur | Şimdi | Nasıl |
 |---|------|:---:|:------:|:-----:|-------|
-| 1 | İlk açılış | 3 | 3 | 5 | Yeni kullanıcıya karşılama: ülke → "Hesap açmadan başla" → kart → kesim günü → bir taksit → "Planın hazır" (bu ay ödenecek + hatırlatma izni) → Premium'u olmayana "Kartlarını yapay zekâya sor" (kendi ödemesiyle örnek soru / cevap, "Premium'u gör" / "Şimdi değil"); hesap isteğe bağlı ("Hesabım var, giriş yap") |
+| 1 | İlk açılış | 3 | 3 | 5 | Yeni kullanıcıya karşılama: ülke → "Hesap açmadan başla" → kart → kesim günü → bir taksit → "Planın hazır" (bu ay ödenecek + hatırlatma izni) → Premium'u olmayana "Kartlarını yapay zekâya sor" (kendi ödemesiyle örnek soru / cevap, "Premium'u gör" / "Şimdi değil"). Harcamayı atlayan kartlı kullanıcı da "Planın hazır"ı görür (bugünkü alışverişin ödeme günü, kesim hatırlatması). Pay in 4 sunulan ülkede kart adımında "Pay in 4 ile ödüyorum" (sağlayıcı, tutar, dört ödeme). Hesap isteğe bağlı ("Hesabım var, giriş yap": Apple ile devam et ya da e-posta) |
 | 2 | Yeni kullanıcının ilk adımları | 1 | 1 | 5 | Özet'te "Başlarken": kart ekle, harcama ekle, maaşını ekle (yapılanlar işaretlenir; karşılamada girilenler işaretli gelir, maaş her ay tekrarlar) |
 | 3 | Taksitli harcama ekleme | 3 | 5 | 5 | + → tutar, ne alındı, kart, taksit → altta Kaydet (eksik ne ise yazar). Adın altında önceki işyerleri: dokununca kartı, taksidi ve kategorisi de dolar. Kaydedince üstte kısa bant: "Kaydedildi · ilk ödeme 20 Kasım" ve o ayın ödemesi önce → sonra |
 | 4 | Alabilir miyim, hangi kartla? | 1 | 4 | 5 | Formda tutar yazınca: ilk ödeme, o ayın ödemesi önce → sonra, gelir yetiyor mu, kalan limit, daha geç ödenen kart önerisi |

@@ -80,6 +80,17 @@ enum Auth {
         return s
     }
 
+    // Apple ile giriş (Sign in with Apple, iPhone'un yerel penceresi): Apple'ın kimlik belirteci Supabase'e verilir
+    // (grant_type=id_token, provider apple; Supabase'de Apple sağlayıcısı açık ve istemci kimliği uygulamanın paket kimliği:
+    // supabase/apple.sh). nonce: Apple'a özeti (SHA-256) gönderilen rastgele değerin kendisi. yeni: hesap şimdi açıldı
+    static func signInWithApple(idToken: String, nonce: String) async throws -> (oturum: Oturum, yeni: Bool) {
+        let json = try await post(endpoint("token?grant_type=id_token"), ["provider": "apple", "id_token": idToken, "nonce": nonce])
+        guard let s = session(json) else { throw AuthHatasi(status: 0, code: nil, message: L("Oturum açılamadı")) }
+        let user = json["user"] as? [String: Any]
+        let acilis = (user?["created_at"] as? String).flatMap { ISO8601DateFormatter.supabase.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
+        return (s, acilis.map { Date().timeIntervalSince($0) < 120 } ?? false)
+    }
+
     static func signUp(email: String, password: String, country: String) async throws -> KayitSonucu {
         let json = try await post(endpoint("signup", redirect: true), ["email": email, "password": password, "data": ["country": country, "lang": Dil.kod]])
         if let s = session(json) { return .session(s) }
@@ -133,4 +144,13 @@ enum Auth {
     static func store(_ s: Oturum?) {
         if let s, let data = try? JSONEncoder().encode(s) { AnahtarZinciri.save(data) } else { AnahtarZinciri.delete() }
     }
+}
+
+private extension ISO8601DateFormatter {
+    // Supabase zaman damgası: 2026-11-02T12:00:00.123456Z
+    static let supabase: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
 }
