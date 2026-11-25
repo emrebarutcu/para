@@ -33,15 +33,22 @@ export function jwsPayload(jws) {
   }
 }
 
-// App Store Server API için ES256 JWT (20 dakika). WebCrypto'nun ECDSA imzası JWS'in istediği r‖s biçimindedir.
-export async function appleToken(env, now = Date.now()) {
-  const der = bytesOf(env.APPSTORE_KEY_P8.replace(/-----[^-]+-----|\s+/g, ""));
+// ES256 JWT (Apple'ın .p8 anahtarıyla). WebCrypto'nun ECDSA imzası JWS'in istediği r‖s biçimindedir. Apple ile girişin
+// client_secret'ı da bununla imzalanır (apple.js).
+export async function es256(p8, header, claims) {
+  const der = bytesOf(String(p8).replace(/-----[^-]+-----|\s+/g, ""));
   const key = await crypto.subtle.importKey("pkcs8", der, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
-  const iat = Math.floor(now / 1000);
   const part = o => b64url(enc.encode(JSON.stringify(o)));
-  const input = `${part({ alg: "ES256", kid: env.APPSTORE_KEY_ID, typ: "JWT" })}.${part({ iss: env.APPSTORE_ISSUER_ID, iat, exp: iat + 1200, aud: "appstoreconnect-v1", bid: BUNDLE_ID })}`;
+  const input = `${part({ alg: "ES256", ...header })}.${part(claims)}`;
   const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, enc.encode(input));
   return `${input}.${b64url(new Uint8Array(sig))}`;
+}
+
+// App Store Server API için JWT (20 dakika)
+export async function appleToken(env, now = Date.now()) {
+  const iat = Math.floor(now / 1000);
+  return es256(env.APPSTORE_KEY_P8, { kid: env.APPSTORE_KEY_ID, typ: "JWT" },
+    { iss: env.APPSTORE_ISSUER_ID, iat, exp: iat + 1200, aud: "appstoreconnect-v1", bid: BUNDLE_ID });
 }
 
 // Apple'ın bir aboneliği → subscriptions satırı. Erişimin bittiği an: ek sürede ek sürenin sonu, değilse dönemin sonu;

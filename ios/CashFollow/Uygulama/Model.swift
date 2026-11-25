@@ -456,6 +456,12 @@ final class Model: ObservableObject {
         pushTimer?.cancel()
         guard var s = session else { return }
         s.accessToken = try await token()
+        // Apple ile açılan hesapta önce Apple belirteci iptal edilir (vazgeçerse CancellationError: silinmez)
+        if s.appleIle {
+            let kod = try await AppleYenidenOnay.kod()
+            let r = await Auth.revokeApple(code: kod, s)
+            Analitik.olay(r.ok ? "apple_token_revoked" : "apple_revoke_failed", ["status": r.status])
+        }
         try await Auth.deleteAccount(s)
         Analitik.olay("account_deleted")
         Analitik.cikisYapti()

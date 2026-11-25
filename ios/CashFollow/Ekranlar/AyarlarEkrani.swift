@@ -156,6 +156,7 @@ struct AyarlarEkrani: View {
                     siliniyor = true
                     Task {
                         do { try await model.deleteAccount(); dismiss() }
+                        catch is CancellationError {}   // Apple onayından vazgeçti: hesap silinmedi
                         catch { silmeHatasi = (error as? AuthHatasi)?.turkish ?? error.localizedDescription }
                         siliniyor = false
                     }

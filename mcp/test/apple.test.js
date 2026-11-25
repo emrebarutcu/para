@@ -1,0 +1,75 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { handleAppleRevoke, clientSecret } from "../apple.js";
+import { jwsPayload, BUNDLE_ID } from "../abonelik.js";
+
+const NOW = Date.parse("2026-11-25T12:00:00Z");
+const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+const pkcs8 = Buffer.from(await crypto.subtle.exportKey("pkcs8", pair.privateKey)).toString("base64");
+const P8 = `-----BEGIN PRIVATE KEY-----\n${pkcs8.match(/.{1,64}/g).join("\n")}\n-----END PRIVATE KEY-----`;
+const ENV = { APPLE_SIWA_KEY_P8: P8, APPLE_SIWA_KEY_ID: "SIWA123", APPLE_TEAM_ID: "TEAM456" };
+const CODE = "c0de.abcdefghijklmnop";
+
+// Sahte Supabase (kullanıcı) + Apple (token, revoke)
+function world({ token = { status: 200, body: { access_token: "at", refresh_token: "rt" } }, revoke = 200 } = {}) {
+  const calls = [];
+  async function f(url, init = {}) {
+    const u = new URL(url);
+    if (u.pathname === "/auth/v1/user") {
+      return init.headers.Authorization === "Bearer tok1" ? new Response(JSON.stringify({ id: "u1" })) : new Response("{}", { status: 401 });
+    }
+    assert.equal(u.host, "appleid.apple.com");
+    const p = Object.fromEntries(new URLSearchParams(init.body));
+    calls.push({ path: u.pathname, p });
+    if (u.pathname === "/auth/token") return new Response(JSON.stringify(token.body), { status: token.status });
+    if (u.pathname === "/auth/revoke") return new Response("", { status: revoke });
+    throw new Error(`beklenmeyen istek ${url}`);
+  }
+  return { f, calls };
+}
+const req = (body, auth = "Bearer tok1") => new Request("https://cashfollow.app/api/apple-iptal", { method: "POST", headers: auth ? { Authorization: auth } : {}, body: JSON.stringify(body) });
+
+test("client_secret: Apple'ın istediği ES256 JWT ve imzası doğrulanır", async () => {
+  const jwt = await clientSecret(ENV, NOW);
+  const [h, p, s] = jwt.split(".");
+  assert.deepEqual(JSON.parse(Buffer.from(h, "base64url")), { alg: "ES256", kid: "SIWA123" });
+  assert.deepEqual(jwsPayload(jwt), { iss: "TEAM456", iat: NOW / 1000, exp: NOW / 1000 + 300, aud: "https://appleid.apple.com", sub: BUNDLE_ID });
+  const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pair.publicKey, Buffer.from(s, "base64url"), new TextEncoder().encode(`${h}.${p}`));
+  assert.ok(ok);
+});
+
+test("code → refresh token → iptal", async () => {
+  const w = world();
+  const res = await handleAppleRevoke(req({ code: CODE }), ENV, { fetch: w.f, now: NOW });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { revoked: true });
+  assert.deepEqual(w.calls.map(c => c.path), ["/auth/token", "/auth/revoke"]);
+  assert.equal(w.calls[0].p.code, CODE);
+  assert.equal(w.calls[0].p.grant_type, "authorization_code");
+  assert.equal(w.calls[0].p.client_id, BUNDLE_ID);
+  assert.deepEqual([w.calls[1].p.token, w.calls[1].p.token_type_hint], ["rt", "refresh_token"]);
+});
+
+test("refresh token yoksa access token iptal edilir", async () => {
+  const w = world({ token: { status: 200, body: { access_token: "at" } } });
+  const res = await handleAppleRevoke(req({ code: CODE }), ENV, { fetch: w.f, now: NOW });
+  assert.equal(res.status, 200);
+  assert.deepEqual([w.calls[1].p.token, w.calls[1].p.token_type_hint], ["at", "access_token"]);
+});
+
+test("Apple code'u reddederse 502 ve hata adı", async () => {
+  const w = world({ token: { status: 400, body: { error: "invalid_grant" } } });
+  const res = await handleAppleRevoke(req({ code: CODE }), ENV, { fetch: w.f, now: NOW });
+  assert.equal(res.status, 502);
+  assert.deepEqual(await res.json(), { error: "invalid_grant" });
+  assert.equal(w.calls.length, 1);
+});
+
+test("girişsiz 401, anahtar yoksa 503, bozuk code 400", async () => {
+  const w = world();
+  assert.equal((await handleAppleRevoke(req({ code: CODE }, null), ENV, { fetch: w.f })).status, 401);
+  assert.equal((await handleAppleRevoke(req({ code: CODE }, "Bearer kotu"), ENV, { fetch: w.f })).status, 401);
+  assert.equal((await handleAppleRevoke(req({ code: CODE }), {}, { fetch: w.f })).status, 503);
+  assert.equal((await handleAppleRevoke(req({ code: "x" }), ENV, { fetch: w.f })).status, 400);
+  assert.equal(w.calls.length, 0);
+});

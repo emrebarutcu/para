@@ -77,3 +77,49 @@ struct AppleIleGiris: View {
         SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }
+
+// Hesap silinirken (Model.deleteAccount): Apple ile hesap açanlara Apple bir kez daha onaylatılır; gelen yeni authorization
+// code sunucuya gider ve Apple belirteci iptal edilir (App Store kuralı 5.1.1(v); mcp/apple.js, /api/apple-iptal).
+// Kullanıcı vazgeçerse CancellationError: hesap silinmez.
+final class AppleYenidenOnay: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    private var devam: CheckedContinuation<String, Error>?
+    private static var etkin: AppleYenidenOnay?   // istek sürerken nesneyi tutar (denetleyicinin temsilcisi zayıf)
+
+    @MainActor static func kod() async throws -> String {
+        let o = AppleYenidenOnay()
+        etkin = o
+        defer { etkin = nil }
+        return try await withCheckedThrowingContinuation { c in
+            o.devam = c
+            let istek = ASAuthorizationAppleIDProvider().createRequest()
+            istek.requestedScopes = []
+            let k = ASAuthorizationController(authorizationRequests: [istek])
+            k.delegate = o
+            k.presentationContextProvider = o
+            k.performRequests()
+        }
+    }
+
+    private func bitir(_ sonuc: Result<String, Error>) {
+        devam?.resume(with: sonuc)
+        devam = nil
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        if let veri = (authorization.credential as? ASAuthorizationAppleIDCredential)?.authorizationCode,
+           let kod = String(data: veri, encoding: .utf8) {
+            bitir(.success(kod))
+        } else {
+            bitir(.failure(AuthHatasi(status: 0, code: nil, message: L("Apple ile giriş yapılamadı."))))
+        }
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        bitir(.failure((error as? ASAuthorizationError)?.code == .canceled ? CancellationError() : error))
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        let sahneler = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return sahneler.flatMap(\.windows).first(where: \.isKeyWindow) ?? sahneler.first.map { UIWindow(windowScene: $0) } ?? UIWindow()
+    }
+}

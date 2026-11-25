@@ -9,6 +9,18 @@ struct Oturum: Codable, Equatable {
     var userId: String
     var email: String
     var country: String?   // kayıtta seçilen ülke (user_metadata.country); eski hesaplarda yok: Türkiye
+
+    // Hesap Apple ile mi açıldı / bağlı mı: erişim belirtecinin (JWT) app_metadata.providers'ı
+    var appleIle: Bool {
+        let parca = accessToken.split(separator: ".")
+        guard parca.count == 3 else { return false }
+        var b = String(parca[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        b += String(repeating: "=", count: (4 - b.count % 4) % 4)
+        guard let veri = Data(base64Encoded: b),
+              let json = (try? JSONSerialization.jsonObject(with: veri)) as? [String: Any],
+              let meta = json["app_metadata"] as? [String: Any] else { return false }
+        return (meta["providers"] as? [String])?.contains("apple") == true || meta["provider"] as? String == "apple"
+    }
 }
 
 enum KayitSonucu {
@@ -124,6 +136,19 @@ enum Auth {
     // Hesabı ve bütün verisini kalıcı olarak siler (supabase: delete_my_account; tablolar hesaba "on delete cascade" bağlı)
     static func deleteAccount(_ s: Oturum) async throws {
         _ = try await post(URL(string: Yapilandirma.supabaseURL.absoluteString + "/rest/v1/rpc/delete_my_account")!, [:], token: s.accessToken)
+    }
+
+    // Apple belirtecinin iptali (mcp/apple.js): yeni authorization code sunucuda refresh token'a çevrilip iptal edilir.
+    // Sunucu hazır değilse (503) ya da Apple reddederse false: hesap yine silinir, olay analitiğe gider.
+    static func revokeApple(code: String, _ s: Oturum) async -> (ok: Bool, status: Int) {
+        var req = URLRequest(url: Yapilandirma.site.appendingPathComponent("api/apple-iptal"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(s.accessToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["code": code])
+        guard let (_, res) = try? await URLSession.shared.data(for: req) else { return (false, 0) }
+        let status = (res as? HTTPURLResponse)?.statusCode ?? 0
+        return (status == 200, status)
     }
 
     // Cihazın saat dilimi (user_metadata.tz) ve uygulamanın dili (lang): asistan "bugün"ü kullanıcının saatine göre
