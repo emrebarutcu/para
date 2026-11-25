@@ -375,9 +375,16 @@ kimlik belirteci Supabase'e verilir (`Auth.signInWithApple`, `grant_type=id_toke
    Apple elle açılır). Yetki: `ios/CashFollow.entitlements` (Xcode) ve `testflight.yml`'deki `yetkiler.plist` (`SIWA=1`).
 2. **Supabase:** Auth → Providers → Apple açık, Client IDs'te `app.cashfollow.ios` (yerel giriş için gizli anahtar
    gerekmez). Betik: `supabase/apple.sh` (Actions → Supabase SQL → dosya `supabase/apple.sh`).
-3. **App Store incelemesinden önce (açık iş):** hesap silinirken Apple belirtecinin iptali (Sign in with Apple REST API
-   `/auth/revoke`) incelemede istenir. Bunun için Apple'da bir Sign in with Apple anahtarı (.p8) ve sunucuda iptal çağrısı
-   gerekir; TestFlight'ta (dahili test) gerekmez.
+3. **Hesap silinirken Apple belirtecinin iptali** (App Store kuralı 5.1.1(v), incelemede istenir): Apple ile açılan hesapta
+   "Hesabı sil" önce Apple'a bir kez daha onaylatır (`AppleYenidenOnay`), yeni authorization code'u `POST /api/apple-iptal`'e
+   gönderir (`mcp/apple.js`: code → refresh token → `appleid.apple.com/auth/revoke`), sonra hesabı siler. Belirteç
+   saklanmaz. Vazgeçerse hesap silinmez; sunucu hazır değilse ya da Apple reddederse hesap yine silinir. Bir kez:
+   - developer.apple.com → Certificates, IDs & Profiles → **Keys** → + → ad "CashFollow SIWA", **Sign in with Apple**
+     işaretli → Configure → Primary App ID `app.cashfollow.ios` → Save → Continue → Register → **.p8'i indir** (bir kez
+     indirilebilir) ve **Key ID**'yi not et.
+   - Cloudflare → Workers & Pages → `para` → Settings → Variables and Secrets: `APPLE_SIWA_KEY_P8` (Secret; .p8'in bütün
+     metni, BEGIN/END satırlarıyla), `APPLE_SIWA_KEY_ID` (Key ID), `APPLE_TEAM_ID` (Team ID: developer.apple.com →
+     Membership). Biri eksikse uç 503 verir (`apple_revoke_failed`, `status: 503`).
 
 #### TestFlight (Mac gerekmez)
 
@@ -497,6 +504,7 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
   (`PremiumEkrani.baslik`).
 - Apple ile giriş (`Ekranlar/AppleIleGiris.swift`): `apple_sign_in` (`source`: welcome, settings, onboarding, assistant;
   `new`), `apple_sign_in_failed` (`stage`: apple, server, network; `status`); yeni hesapta `account_created` `method: apple`.
+  Apple hesabını silerken: `apple_token_revoked` ya da `apple_revoke_failed` (`status`: 0 ağ, 503 anahtar yok, 502 Apple).
 - Abonelik olayları sunucudan (`mcp/abonelik.js`, App Store bildirimleri): `subscription_subscribed`, `subscription_did_renew`,
   `subscription_did_change_renewal_status` (iptal), `subscription_expired`, `subscription_refund`… Production'daki tahsilatta
   `revenue` ve `currency` (PostHog → Revenue analytics'te bu özellik seçilir); sandbox gelir sayılmaz.
