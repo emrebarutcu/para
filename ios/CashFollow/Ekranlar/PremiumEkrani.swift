@@ -3,10 +3,12 @@ import StoreKit
 
 // CashFollow Premium ödeme ekranı (her temada koyu): başlık uygulamanın çekirdek vaadi ("Önümüzdeki 12 ayı gör, almadan
 // önce sor"), altında kullanıcının kendi önümüzdeki 12 ayı (ilk iki ay açık: zaten gördüğü tutarlar; gerisi bulanık),
-// Premium'un özellikleri (yapay zekâ asistanı da burada), üç plan (yıllık seçili; ücretsiz deneme ve süresi
-// StoreKit'ten), altta sabit düğme. Fiyat, dönem,
-// kendiliğinden yenilenme, Kullanım Koşulları, Gizlilik Politikası ve geri yükleme düğmenin altında (App Store yönergesi
-// 3.1.2). neden: hangi kilitten açıldığı (analitik). Fiyatlar App Store'dan; örnek modunda ABD fiyatları.
+// Premium'un faydaları (en fazla 5, açan kilidinki ilk sırada), güven satırı, üç plan (yıllık seçili, tasarruf rozetli;
+// planın altında aylık karşılığı; ücretsiz deneme ve süresi StoreKit'ten), altta sabit düğme. Fiyat, dönem, denemenin
+// bittiği tarih, kendiliğinden yenilenme, Kullanım Koşulları, Gizlilik Politikası ve geri yükleme düğmenin altında (App
+// Store yönergesi 3.1.2). neden: hangi kilitten açıldığı (analitik). Fiyatlar App Store'dan; örnek modunda ABD fiyatları.
+// Kasım 2026 (paywall-optimization denetimi): 8 özellik adı yerine faydası yazılı 5 madde, haftalık yerine aylık
+// karşılık, rozette deneme yerine tasarruf (deneme düğmede), denemede "bugün ödeme yok" ve ücretin başlayacağı tarih.
 struct PremiumEkrani: View {
     var neden = "settings"
     @EnvironmentObject private var abonelik: Abonelik
@@ -23,17 +25,33 @@ struct PremiumEkrani: View {
         let ad: String
         let fiyat: String
         let donem: String
-        var haftalik: String?      // haftaya düşen (karşılaştırma için)
+        var aylikKarsilik: String? // aya düşen (yıllık ve haftalıkta; karşılaştırma için)
         var deneme: String?        // "7 gün"
+        var denemeBitis: Date?     // ücretin başlayacağı gün
         var rozet: String?         // "%52 tasarruf"
         var urun: Product?
     }
 
-    // Karşılamanın yapay zekâ ekranından açılınca asistan ilk sırada
-    private var ozellikler: [String] {
-        let liste = [L("Akış"), L("Alabilir miyim?"), L("İçgörüler"), L("Varlığın seyri"), L("Borç planı"), L("Sınırsız kart"),
-                     L("Sınırsız kişi")]
-        return neden == "onboarding_ai" ? [L("Yapay zekâ asistanı")] + liste : liste + [L("Yapay zekâ asistanı")]
+    // Faydalar: en fazla 5 madde (taranabilsin), açan kilidinki ilk sırada. Bütün liste Ayarlar → CashFollow Premium'da
+    private struct Fayda { let anahtar: String; let simge: String; let metin: String }
+    private var faydalar: [Fayda] {
+        let hepsi = [
+            Fayda(anahtar: "cash_flow", simge: "calendar", metin: L("Önümüzdeki 12 ayın ödeme planı")),
+            Fayda(anahtar: "afford", simge: "cart", metin: L("Almadan önce sor: alabilir miyim?")),
+            Fayda(anahtar: "insights", simge: "bell.badge", metin: L("Sıkışacağın ayı önceden gösteren uyarılar")),
+            Fayda(anahtar: "limit", simge: "creditcard", metin: L("Sınırsız kart ve kişi")),
+            Fayda(anahtar: "assistant", simge: "sparkles", metin: L("Yapay zekâ asistanı: Claude, ChatGPT, Gemini")),
+            Fayda(anahtar: "net_worth", simge: "chart.line.uptrend.xyaxis", metin: L("Varlığının aylar içindeki seyri")),
+            Fayda(anahtar: "payoff", simge: "flag.checkered", metin: L("Kart borcunun ne zaman biteceği")),
+        ]
+        let anahtar: String
+        switch neden {
+        case "card_limit", "person_limit": anahtar = "limit"
+        case "onboarding_ai": anahtar = "assistant"
+        default: anahtar = neden
+        }
+        let one = hepsi.filter { $0.anahtar == anahtar }
+        return Array((one + hepsi.prefix(5).filter { $0.anahtar != anahtar }).prefix(5))
     }
     private static let zemin = Color(red: 0.035, green: 0.04, blue: 0.055)
 
@@ -78,13 +96,19 @@ struct PremiumEkrani: View {
                 Spacer(minLength: 0)
                 if aylar.contains(where: { $0.total > 0.004 }) { onizleme }
                 Spacer(minLength: 0)
-                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 10) {
-                    ForEach(ozellikler, id: \.self) { ad in
-                        Label { Text(ad).lineLimit(1).minimumScaleFactor(0.85) } icon: {
-                            Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Tema.marka)
+                VStack(alignment: .leading, spacing: 11) {
+                    ForEach(faydalar, id: \.anahtar) { f in
+                        Label { Text(f.metin).fixedSize(horizontal: false, vertical: true) } icon: {
+                            Image(systemName: f.simge).font(.footnote.weight(.semibold)).foregroundStyle(Tema.marka).frame(width: 22)
                         }
-                        .font(.subheadline).foregroundStyle(.white.opacity(0.85))
+                        .font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.88))
                     }
+                    // Güven: bağlanma ve gizlilik (sosyal kanıt yerine; uydurma puan ya da kullanıcı sayısı yazılmaz)
+                    Label { Text(L("Banka şifresi istemez · Reklam ve izleme yok")) } icon: {
+                        Image(systemName: "lock.shield").font(.footnote.weight(.semibold)).frame(width: 22)
+                    }
+                    .font(.footnote.weight(.medium)).foregroundStyle(.white.opacity(0.5))
+                    .padding(.top, 2)
                 }
                 Spacer(minLength: 0)
                 if abonelik.premium { premiumAcik } else { planlar }
@@ -179,15 +203,16 @@ struct PremiumEkrani: View {
         }
     }
 
-    // Seçili plan beyaz; rozet: ücretsiz deneme, yoksa tasarruf
+    // Seçili plan beyaz; rozet: tasarruf, yoksa ücretsiz deneme (deneme ayrıca düğmede ve altındaki satırda yazar).
+    // Altta aylık karşılık; aylık planda "her ay ödenir". Ödenecek tutar (fiyat) her zaman en büyük yazı (3.1.2)
     private func planKutusu(_ p: Plan) -> some View {
         let sec = p.id == secili
-        let rozet = p.deneme.map { L("{0} ücretsiz", $0) } ?? p.rozet
+        let rozet = p.rozet ?? p.deneme.map { L("{0} ücretsiz", $0) }
         return Button { withAnimation(.snappy(duration: 0.2)) { secili = p.id } } label: {
             VStack(spacing: 4) {
                 Text(p.ad).font(.subheadline.weight(.semibold))
                 Text(p.fiyat).font(.system(size: 22, weight: .bold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-                Text(p.haftalik.map { L("haftada {0}", $0) } ?? " ").font(.caption2).opacity(0.55).lineLimit(1).minimumScaleFactor(0.8)
+                Text(p.aylikKarsilik.map { L("ayda {0}", $0) } ?? L("her ay ödenir")).font(.caption2).opacity(0.55).lineLimit(1).minimumScaleFactor(0.8)
             }
             .foregroundStyle(sec ? Color.black : Color.white)
             .frame(maxWidth: .infinity)
@@ -246,10 +271,15 @@ struct PremiumEkrani: View {
         }
     }
 
-    // Fiyat, dönem, deneme ve kendiliğinden yenilenme (App Store yönergesi 3.1.2)
+    // Fiyat, dönem, deneme ve kendiliğinden yenilenme (App Store yönergesi 3.1.2). Denemede ücretin başlayacağı gün
+    // yazılır: "ne zaman ödeyeceğim" kaygısı denemeye başlamayı en çok durduran şey
     private func kisaAciklama(_ p: Plan) -> String {
-        (p.deneme.map { L("{0} ücretsiz, sonra {1} / {2}.", $0, p.fiyat, p.donem) } ?? L("{0} / {1}.", p.fiyat, p.donem))
-            + " " + L("Kendiliğinden yenilenir, istediğin zaman iptal et.")
+        if p.deneme != nil, let bitis = p.denemeBitis {
+            let gun = bitis.formatted(Bicim.tarih.day().month(.wide))
+            return L("Bugün ödeme yok: {0} tarihine kadar ücretsiz, sonra {1} / {2}. Kendiliğinden yenilenir; o tarihten önce iptal edersen ücret alınmaz.",
+                     gun, p.fiyat, p.donem)
+        }
+        return L("{0} / {1}.", p.fiyat, p.donem) + " " + L("Kendiliğinden yenilenir, istediğin zaman iptal et.")
     }
 
     // ── Premium açıkken ──────────────────────────────────────────────────────
@@ -271,10 +301,11 @@ struct PremiumEkrani: View {
     private var planListesi: [Plan] {
         if Ornek.premium != nil {
             return [
-                Plan(id: Abonelik.kimlikler[0], ad: L("Yıllık"), fiyat: "$39.99", donem: L("yıl"), haftalik: "$0.77",
-                     deneme: L("{0} gün", 7), rozet: L("%{0} tasarruf", 52)),
-                Plan(id: Abonelik.kimlikler[1], ad: L("Aylık"), fiyat: "$6.99", donem: L("ay"), haftalik: "$1.61"),
-                Plan(id: Abonelik.kimlikler[2], ad: L("Haftalık"), fiyat: "$2.99", donem: L("hafta")),
+                Plan(id: Abonelik.kimlikler[0], ad: L("Yıllık"), fiyat: "$39.99", donem: L("yıl"), aylikKarsilik: "$3.33",
+                     deneme: L("{0} gün", 7), denemeBitis: Calendar.current.date(byAdding: .day, value: 7, to: .now),
+                     rozet: L("%{0} tasarruf", 52)),
+                Plan(id: Abonelik.kimlikler[1], ad: L("Aylık"), fiyat: "$6.99", donem: L("ay")),
+                Plan(id: Abonelik.kimlikler[2], ad: L("Haftalık"), fiyat: "$2.99", donem: L("hafta"), aylikKarsilik: "$12.96"),
             ]
         }
         let aylik = abonelik.urunler.first { $0.subscription?.subscriptionPeriod.unit == .month && $0.subscription?.subscriptionPeriod.value == 1 }
@@ -282,24 +313,41 @@ struct PremiumEkrani: View {
             guard let s = u.subscription else { return nil }
             let d = s.subscriptionPeriod
             var p = Plan(id: u.id, ad: Self.planAdi(d), fiyat: u.displayPrice, donem: Self.donemAdi(d), urun: u)
-            if let hafta = Self.haftaSayisi(d), hafta > 1 { p.haftalik = (u.price / Decimal(hafta)).formatted(u.priceFormatStyle) }
+            if let ay = Self.aySayisi(d), abs(ay - 1) > 0.01 {
+                p.aylikKarsilik = (u.price / Decimal(ay)).formatted(u.priceFormatStyle)
+            }
             if d.unit == .year, let a = aylik, a.price > 0 {
                 let oran = 1 - NSDecimalNumber(decimal: u.price).doubleValue / (NSDecimalNumber(decimal: a.price).doubleValue * 12)
                 if oran >= 0.1 { p.rozet = L("%{0} tasarruf", Int((oran * 100).rounded())) }
             }
-            if let o = s.introductoryOffer, o.paymentMode == .freeTrial, denemeUygun.contains(u.id) { p.deneme = Self.sure(o.period) }
+            if let o = s.introductoryOffer, o.paymentMode == .freeTrial, denemeUygun.contains(u.id) {
+                p.deneme = Self.sure(o.period)
+                p.denemeBitis = Self.bitis(o.period)
+            }
             return p
         }
     }
 
-    // Dönemdeki hafta (fiyat karşılaştırması): yıl 52, ay 52/12
-    private static func haftaSayisi(_ d: Product.SubscriptionPeriod) -> Double? {
+    // Dönemdeki ay (aylık karşılık): yıl 12, hafta 12/52
+    private static func aySayisi(_ d: Product.SubscriptionPeriod) -> Double? {
         switch d.unit {
-        case .year: return 52 * Double(d.value)
-        case .month: return 52.0 / 12 * Double(d.value)
-        case .week: return Double(d.value)
+        case .year: return 12 * Double(d.value)
+        case .month: return Double(d.value)
+        case .week: return 12.0 / 52 * Double(d.value)
         default: return nil
         }
+    }
+
+    // Deneme bugün başlarsa ücretin alınacağı gün
+    private static func bitis(_ d: Product.SubscriptionPeriod) -> Date? {
+        let birim: Calendar.Component
+        switch d.unit {
+        case .day: birim = .day
+        case .week: birim = .weekOfYear
+        case .month: birim = .month
+        default: birim = .year
+        }
+        return Calendar.current.date(byAdding: birim, value: d.value, to: .now)
     }
 
     private static func planAdi(_ d: Product.SubscriptionPeriod) -> String {

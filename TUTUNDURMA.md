@@ -161,6 +161,25 @@ Kullanıcı kararıyla (24 Kasım 2026) yapılanlar:
   `account_created` `method: apple` payı; `paywall_shown` cash_flow sayısı (3 ay tadıyla düşmeli) ve ödeme ekranı başına
   satın alma.
 
+## Ödeme ekranı denetimi (1.5.2)
+
+Kullanıcı isteğiyle (25 Kasım 2026) `paywall-optimization` skill'iyle denetlendi. Son 30 gün (PostHog, iPhone):
+uygulamayı açan 65 kişiden 19'u ödeme ekranını gördü (%29; skill eşiği %50, ama akışta ödeme ekranı yok, kilitte
+açılır: bilinçli). Ekranı gören 21 kişiden 10'u satın almayı başlattı (%48, sağlıklı aralık %25–45), 7'si tamamladı;
+5 iptal. Sayılar küçük ve bir kısmı test / sandbox; A/B testi için kilit başına yüzlerce kişi gerekir, bu yüzden
+deneme değil hızlı kazanımlar yayınlandı. 1.5.0'dan önceki sürümlerin satın alma olaylarında `reason` yok.
+
+- **Faydalar:** 8 özellik adı (Akış, İçgörüler…) yerine faydası yazılı en fazla 5 madde; açan kilidin maddesi ilk sırada.
+- **Güven satırı:** "Banka şifresi istemez · Reklam ve izleme yok" (sosyal kanıt yerine; puan / kullanıcı sayısı
+  uydurulmaz. App Store puanı yeterince birikince eklenebilir).
+- **Fiyat çapası:** plan kutusunda haftalık karşılık yerine aylık karşılık ("ayda $3.33"; haftalıkta "ayda $12.96");
+  aylıkta "her ay ödenir". Yıllığın rozeti tasarruf (önceden deneme rozeti tasarrufu gizliyordu; deneme düğmede).
+- **Deneme:** düğmenin altında "Bugün ödeme yok: <tarih> tarihine kadar ücretsiz, sonra … ; o tarihten önce iptal
+  edersen ücret alınmaz."
+- **Ölçüm (önce / sonra, 1.5.2 kohortu):** `paywall_shown` → `purchase_started` (ekran başına başlatma) ve
+  `purchase_completed` `trial: true` payı; `reason` kırılımıyla. Kitle büyüyünce sıradaki testler: deneme süresi (7 gün /
+  1 ay), denemenin bitişinden önce hatırlatma sözü, haftalık planın kaldırılması.
+
 ## Yol haritası
 
 Karşılama denemesi yapılmadığı için (aşağıda "Verilen kararlar") ilk haftayı değiştiren işler beklemeden yayınlanır;
