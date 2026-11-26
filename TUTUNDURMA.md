@@ -176,6 +176,11 @@ deneme değil hızlı kazanımlar yayınlandı. 1.5.0'dan önceki sürümlerin s
   aylıkta "her ay ödenir". Yıllığın rozeti tasarruf (önceden deneme rozeti tasarrufu gizliyordu; deneme düğmede).
 - **Deneme:** düğmenin altında "Bugün ödeme yok: <tarih> tarihine kadar ücretsiz, sonra … ; o tarihten önce iptal
   edersen ücret alınmaz."
+- **Görünüm (aynı gün, kullanıcı geri bildirimi):** ilk hâli "yapay zekâ kokuyordu" (zorla koyu zemin, parlayan
+  yeşil degrade, her maddede renkli simge, yüzen hap rozet) ve yan yana üç plan kutusu uzun para birimlerinde (₺1.999,99)
+  ve uzun plan adlarında sığmıyordu. Ekran uygulamanın kendi görünümüne geçti: `Tema.zemin`, beyaz `Kart`lar, siyah ana
+  düğme (Kaydet gibi), açık / koyu tema; planlar alt alta tam genişlikte satır, fiyat sağda; 12 aylık önizlemede kilitli
+  aylar bulanık yeşil değil gri.
 - **Deneme süresi 14 günden 7 güne** (kullanıcı kararı, 26 Kasım 2026; yıllık plan, bütün ülkeler, App Store Connect'te
   `magaza.yml abonelik` ile). Ödeme ekranı süreyi StoreKit'ten okur, kod değişmedi. Ölçüm: deneme başlatma payı ve
   denemeden ücretliye geçiş (sunucunun `subscription_*` olayları), 26 Kasım öncesi / sonrası.
