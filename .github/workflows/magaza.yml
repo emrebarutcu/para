@@ -5,6 +5,7 @@
 #   kuru   → neyin değişeceği, değişmez (claude/magaza* dallarına magaza/ değişikliği itilince kendiliğinden)
 #   gonder → değiştirir
 #   incele → gonder + version.js sürümünü App Review'a gönderir (TestFlight build'i VALID olmalı; kullanıcının onayıyla)
+#   abonelik → yalnızca abonelikler: dil metinleri, ülkeler, ücretsiz deneme süresi (ayarlar.json → abonelik.deneme)
 # Elle: Actions → App Store sayfası → Run workflow (dosya main'de olmalı); ya da her dalda magaza-<işlem>-* etiketi:
 # git tag magaza-oku-1 && git push origin magaza-oku-1
 name: App Store sayfası
@@ -13,12 +14,12 @@ on:
   workflow_dispatch:
     inputs:
       islem:
-        description: "oku: durum, kuru: ne değişecek, gonder: yaz, incele: yaz ve incelemeye gönder"
+        description: "oku: durum, kuru: ne değişecek, gonder: yaz, incele: yaz ve incelemeye gönder, abonelik: yalnızca abonelikleri yaz"
         type: choice
-        options: [oku, kuru, gonder, incele]
+        options: [oku, kuru, gonder, incele, abonelik]
         default: kuru
   push:
-    tags: ["magaza-oku-*", "magaza-kuru-*", "magaza-gonder-*", "magaza-incele-*"]
+    tags: ["magaza-oku-*", "magaza-kuru-*", "magaza-gonder-*", "magaza-incele-*", "magaza-abonelik-*"]
     branches: ["claude/magaza*"]
     paths: ["magaza/**", "ios/scripts/asc_magaza.py", ".github/workflows/magaza.yml"]
 

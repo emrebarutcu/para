@@ -176,6 +176,9 @@ deneme değil hızlı kazanımlar yayınlandı. 1.5.0'dan önceki sürümlerin s
   aylıkta "her ay ödenir". Yıllığın rozeti tasarruf (önceden deneme rozeti tasarrufu gizliyordu; deneme düğmede).
 - **Deneme:** düğmenin altında "Bugün ödeme yok: <tarih> tarihine kadar ücretsiz, sonra … ; o tarihten önce iptal
   edersen ücret alınmaz."
+- **Deneme süresi 14 günden 7 güne** (kullanıcı kararı, 26 Kasım 2026; yıllık plan, bütün ülkeler, App Store Connect'te
+  `magaza.yml abonelik` ile). Ödeme ekranı süreyi StoreKit'ten okur, kod değişmedi. Ölçüm: deneme başlatma payı ve
+  denemeden ücretliye geçiş (sunucunun `subscription_*` olayları), 26 Kasım öncesi / sonrası.
 - **Ölçüm (önce / sonra, 1.5.2 kohortu):** `paywall_shown` → `purchase_started` (ekran başına başlatma) ve
   `purchase_completed` `trial: true` payı; `reason` kırılımıyla. Kitle büyüyünce sıradaki testler: deneme süresi (7 gün /
   1 ay), denemenin bitişinden önce hatırlatma sözü, haftalık planın kaldırılması.

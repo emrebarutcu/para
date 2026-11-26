@@ -551,7 +551,8 @@ yenileme, iptal, gelir (Sales and Trends → Subscriptions); **PostHog** uygulam
 
 Haftalık, aylık, yıllık otomatik yenilenen abonelik (StoreKit 2, `Uygulama/Abonelik.swift`, ödeme ekranı
 `Ekranlar/PremiumEkrani.swift`: önde çekirdek vaat ve kullanıcının kendi 12 ayı, yapay zekâ asistanı özellik listesinde).
-Fiyat ve deneme App Store Connect'te; kodda fiyat yok. Asistanı
+Fiyat App Store Connect'te; kodda fiyat yok. Ücretsiz deneme süresi `magaza/ayarlar.json` → `abonelik.deneme`'de
+(yıllıkta `ONE_WEEK`; 26 Kasım 2026'ya kadar `TWO_WEEKS` idi), `magaza.yml` → `abonelik` işlemiyle yazılır. Asistanı
 bağlama iPhone'da Ayarlar → CashFollow Premium → Yapay zekâ asistanı (`Ekranlar/AsistanEkrani.swift`; web'deki Yapay zekâ
 penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
 
