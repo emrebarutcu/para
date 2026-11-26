@@ -81,12 +81,12 @@ struct PremiumEkrani: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            // Pro Max'te üç plan da düğmenin üstünde, kaydırmadan görünür (ekran görüntüsüyle denetlendi)
+            VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L("CashFollow Premium")).font(.subheadline.weight(.semibold)).foregroundStyle(Tema.metin3)
-                        .frame(minHeight: 34, alignment: .center)   // kapatma düğmesiyle aynı satır
-                    Text(baslik.0).font(.system(size: 30, weight: .bold)).foregroundStyle(Tema.metin)
+                    Text(baslik.0).font(.system(size: 28, weight: .bold)).foregroundStyle(Tema.metin)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.trailing, 40)   // kapatma düğmesi
                     Text(baslik.1).font(.body).foregroundStyle(Tema.metin2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -146,14 +146,14 @@ struct PremiumEkrani: View {
                     VStack(spacing: 6) {
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
                             .fill(acik ? Tema.metin : Tema.yuzey3)
-                            .frame(height: max(4, CGFloat(64 * a.total / enBuyuk)))
+                            .frame(height: max(4, CGFloat(50 * a.total / enBuyuk)))
                         Text(Bicim.date(a.month + "-01").map { $0.formatted(Bicim.tarih.month(.narrow)) } ?? "")
                             .font(.system(size: 10, weight: .medium)).foregroundStyle(acik ? Tema.metin2 : Tema.metin3).lineLimit(1).fixedSize()
                     }
                     .frame(maxWidth: .infinity, alignment: .bottom)
                 }
             }
-            .frame(height: 84, alignment: .bottom)
+            .frame(height: 68, alignment: .bottom)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L("Senin önümüzdeki 12 ayın"))
@@ -161,9 +161,9 @@ struct PremiumEkrani: View {
 
     // Faydalar kartı ve altında güven notu (sosyal kanıt yerine; uydurma puan ya da kullanıcı sayısı yazılmaz)
     private var faydaKarti: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Kart(dolgu: 16) {
-                VStack(alignment: .leading, spacing: 9) {
+                VStack(alignment: .leading, spacing: 7) {
                     ForEach(faydalar, id: \.anahtar) { f in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Image(systemName: "checkmark").font(.footnote.weight(.bold)).foregroundStyle(Tema.iyi)
@@ -189,7 +189,7 @@ struct PremiumEkrani: View {
             Text(L("Fiyatlar App Store'dan alınamadı. Bağlantını kontrol edip yeniden dene."))
                 .font(.subheadline).foregroundStyle(Tema.metin2)
         } else {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 ForEach(liste) { p in planSatiri(p) }
             }
         }
@@ -218,7 +218,7 @@ struct PremiumEkrani: View {
                     .lineLimit(1).minimumScaleFactor(0.7).layoutPriority(1)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
             .background(Tema.yuzey, in: sekil)
             .overlay(sekil.strokeBorder(sec ? Tema.metin : Tema.cizgi, lineWidth: sec ? 1.5 : 1))
             .contentShape(sekil)
