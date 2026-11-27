@@ -6,6 +6,8 @@
   asc_magaza.py gonder [--ekran DIR] → değiştirir: metinler, adresler, kategori, telif, yaş sınırı, ülkeler, fiyat,
                                         build, ekran görüntüleri (DIR: ekran-goruntuleri dalının içeriği)
   asc_magaza.py incele [--ekran DIR] → gonder, ardından sürümü incelemeye gönderir (kullanıcının onayıyla çalıştırılır)
+  asc_magaza.py eski-build[-kuru]    → TestFlight'ta version.js'teki sürümden büyük sürümlü build'leri süresi dolmuş
+                                        yapar (kuru: yalnızca listeler; geri alınamaz)
   asc_magaza.py abonelik             → yalnızca abonelikler: dil metinleri, ülkeler, ücretsiz deneme süresi
                                         (ayarlar.json → abonelik.deneme); sürüme, metinlere, görüntülere dokunmaz
 
@@ -303,6 +305,31 @@ def oku_build(app):
         a = b["attributes"]
         pv = surum.get((b["relationships"]["preReleaseVersion"]["data"] or {}).get("id"))
         print(f"  {pv} ({a['version']}): {a['processingState']}, {a['uploadedDate']}" + (", süresi doldu" if a.get("expired") else ""))
+
+
+def surum_sayi(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v or "0")[:3])
+
+
+def eski_buildler(app):
+    """TestFlight'ta version.js'teki sürümden büyük numaralı build'leri süresi dolmuş yapar (geri alınamaz). Sürüm kuralı
+    yayından sonra artar (SETUP.md → Sürüm); daha önce her PR'da artırılmış numaralarla yüklenen build'ler (Kasım 2026:
+    1.5.x) TestFlight'ta mağazaya gidecek sürümün üstünde görünür ve cihaz ona geçmez."""
+    v = web_surumu()
+    builds, inc = hepsi(f"/builds?filter[app]={app['id']}&limit=200&include=preReleaseVersion"
+                        "&fields[builds]=version,processingState,expired,preReleaseVersion")
+    surum = {i["id"]: i["attributes"]["version"] for i in inc if i["type"] == "preReleaseVersions"}
+    secilen = []
+    for b in builds:
+        pv = surum.get(((b["relationships"].get("preReleaseVersion") or {}).get("data") or {}).get("id"))
+        if pv and surum_sayi(pv) > surum_sayi(v) and not b["attributes"].get("expired"):
+            secilen.append((pv, b))
+    if not secilen:
+        print(f"  {v}'den büyük süresi dolmamış build yok")
+        return
+    for pv, b in sorted(secilen, key=lambda x: int(x[1]["attributes"]["version"])):
+        yaz("PATCH", f"/builds/{b['id']}", {"data": {"type": "builds", "id": b["id"], "attributes": {"expired": True}}},
+            f"{pv} ({b['attributes']['version']}) süresi dolmuş yapılıyor")
 
 
 def oku(ay):
@@ -754,6 +781,9 @@ if __name__ == "__main__":
     elif islem in ("kuru", "gonder"):
         KURU = islem == "kuru"
         gonder(ayarlar(), klasor)
+    elif islem in ("eski-build-kuru", "eski-build"):   # TestFlight'ta version.js'ten büyük sürümlü build'ler
+        KURU = islem == "eski-build-kuru"
+        bolum(f"TestFlight: {web_surumu()}'den büyük sürümlü build'ler", eski_buildler, uygulama(ayarlar()))
     elif islem == "abonelik":       # yalnızca abonelikler (dil metinleri, ülkeler, deneme süresi); sürüme dokunmaz
         KURU = False
         ay = ayarlar()

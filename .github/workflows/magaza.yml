@@ -7,6 +7,7 @@
 #   incele → gonder + version.js sürümünü App Review'a gönderir (TestFlight build'i VALID olmalı; kullanıcının onayıyla)
 #            ve yayin-<sürüm> etiketini koyar: sonraki PR'lar sürümü bir sonrakine çeker (scripts/surum.sh, SETUP.md → Sürüm)
 #   abonelik → yalnızca abonelikler: dil metinleri, ülkeler, ücretsiz deneme süresi (ayarlar.json → abonelik.deneme)
+#   eski-build(-kuru) → TestFlight'ta version.js'teki sürümden büyük sürümlü build'leri süresi dolmuş yapar (geri alınamaz)
 # Elle: Actions → App Store sayfası → Run workflow (dosya main'de olmalı); ya da her dalda magaza-<işlem>-* etiketi:
 # git tag magaza-oku-1 && git push origin magaza-oku-1
 name: App Store sayfası
@@ -17,7 +18,7 @@ on:
       islem:
         description: "oku: durum, kuru: ne değişecek, gonder: yaz, incele: yaz ve incelemeye gönder, abonelik: yalnızca abonelikleri yaz"
         type: choice
-        options: [oku, kuru, gonder, incele, abonelik]
+        options: [oku, kuru, gonder, incele, abonelik, eski-build-kuru, eski-build]
         default: kuru
   push:
     tags: ["magaza-oku-*", "magaza-kuru-*", "magaza-gonder-*", "magaza-incele-*", "magaza-abonelik-*"]

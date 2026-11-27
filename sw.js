@@ -1,4 +1,4 @@
-// Sürüm 1.4.0 (yapı 1) — scripts/surum.sh yazar: dosyanın kendisi her PR'da değişir, tarayıcılar (Safari dahil) yeni
+// Sürüm 1.4.0 (yapı 2) — scripts/surum.sh yazar: dosyanın kendisi her PR'da değişir, tarayıcılar (Safari dahil) yeni
 // service worker'ı yalnızca içe aktarılan version.js'e bakmadan da hemen fark eder
 importScripts('/version.js', '/dil.js');
 const CACHE = 'cashfollow-' + self.APP_VERSION + '-' + self.APP_BUILD;
