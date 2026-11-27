@@ -6,6 +6,8 @@
   asc_magaza.py gonder [--ekran DIR] → değiştirir: metinler, adresler, kategori, telif, yaş sınırı, ülkeler, fiyat,
                                         build, ekran görüntüleri (DIR: ekran-goruntuleri dalının içeriği)
   asc_magaza.py incele [--ekran DIR] → gonder, ardından sürümü incelemeye gönderir (kullanıcının onayıyla çalıştırılır)
+  asc_magaza.py abonelik             → yalnızca abonelikler: dil metinleri, ülkeler, ücretsiz deneme süresi
+                                        (ayarlar.json → abonelik.deneme); sürüme, metinlere, görüntülere dokunmaz
 
 gonder incelemeye göndermez; incele, version.js sürümünün geçerli build'i seçiliyse sürümü App Review'a yollar.
 Depo herkese açık, Actions günlükleri de: inceleme iletişim bilgileri ve demo hesap yalnızca "dolu / boş" diye yazılır.
@@ -616,7 +618,40 @@ def gonder_abonelik(app, ay):
                 "relationships": {"subscription": {"data": {"type": "subscriptions", "id": s["id"]}},
                                   "availableTerritories": {"data": [{"type": "territories", "id": t} for t in ulkeler]}}}},
                 f"{pid}: {len(ulkeler)} ülkede satışa açılıyor")
-    print("  (fiyat ve ücretsiz deneme App Store Connect'te)")
+        if pid in ab.get("deneme", {}):
+            gonder_deneme(s["id"], pid, ab["deneme"][pid])
+    print("  (fiyat App Store Connect'te)")
+
+
+def gonder_deneme(sub_id, pid, sure):
+    """Ücretsiz deneme süresi (ayarlar.json → abonelik.deneme, ör. ONE_WEEK, TWO_WEEKS, ONE_MONTH). Tanıtım teklifinin
+    süresi değiştirilemez: farklı olan her ülkede eskisi silinip aynı ülkeye yenisi açılır (ülke ülke, aradaki boşluk
+    bir istek kadar). Yalnızca teklifi olan ülkelere dokunulur; ücretli tanıtım teklifi de ücretsiz denemeyle değişir."""
+    io, inc = hepsi(f"/subscriptions/{sub_id}/introductoryOffers?include=territory&limit=200")
+    farkli = [o for o in io if o["attributes"].get("offerMode") != "FREE_TRIAL" or o["attributes"].get("duration") != sure]
+    simdi = sorted({f"{o['attributes'].get('offerMode')} {o['attributes'].get('duration')}" for o in io}) or ["yok"]
+    if not io:
+        print(f"  {pid}: tanıtım teklifi yok; deneme açılmadı (App Store Connect'te bir kez ülkeleriyle açılır)")
+        return
+    if not farkli:
+        print(f"  {pid}: deneme zaten FREE_TRIAL {sure} ({len(io)} ülke)")
+        return
+    print(("  [kuru] " if KURU else "  → ") + f"{pid}: deneme {', '.join(simdi)} → FREE_TRIAL {sure} ({len(farkli)} ülke)")
+    if KURU:
+        return
+    for o in farkli:
+        ulke = (o["relationships"].get("territory", {}).get("data") or {}).get("id")
+        if not ulke:
+            HATALAR.append(f"{pid}: {o['id']} teklifinin ülkesi okunamadı, dokunulmadı")
+            continue
+        call("DELETE", f"/subscriptionIntroductoryOffers/{o['id']}")
+        call("POST", "/subscriptionIntroductoryOffers", {"data": {"type": "subscriptionIntroductoryOffers",
+            "attributes": {"duration": sure, "offerMode": "FREE_TRIAL", "numberOfPeriods": 1},
+            "relationships": {"subscription": {"data": {"type": "subscriptions", "id": sub_id}},
+                              "territory": {"data": {"type": "territories", "id": ulke}}}}})
+    yeni = hepsi(f"/subscriptions/{sub_id}/introductoryOffers?limit=200")[0]
+    print(f"  {pid}: şimdi " + ", ".join(sorted({f"{o['attributes'].get('offerMode')} {o['attributes'].get('duration')}" for o in yeni}))
+          + f" ({len(yeni)} ülke)")
 
 
 def gonder(ay, klasor):
@@ -719,6 +754,10 @@ if __name__ == "__main__":
     elif islem in ("kuru", "gonder"):
         KURU = islem == "kuru"
         gonder(ayarlar(), klasor)
+    elif islem == "abonelik":       # yalnızca abonelikler (dil metinleri, ülkeler, deneme süresi); sürüme dokunmaz
+        KURU = False
+        ay = ayarlar()
+        bolum("Abonelikler (dil metinleri, ülkeler, deneme)", gonder_abonelik, uygulama(ay), ay)
     elif islem == "incele":
         KURU = False
         incele(ayarlar(), klasor)

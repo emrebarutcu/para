@@ -141,6 +141,9 @@
     ]
   },
   "abonelik": {
+    "deneme": {
+      "app.cashfollow.ios.premium.yearly": "ONE_WEEK"
+    },
     "grup": {
       "tr": "CashFollow Premium",
       "en-US": "CashFollow Premium",

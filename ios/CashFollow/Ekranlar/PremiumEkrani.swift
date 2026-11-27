@@ -1,12 +1,14 @@
 import SwiftUI
 import StoreKit
 
-// CashFollow Premium ödeme ekranı (her temada koyu): başlık uygulamanın çekirdek vaadi ("Önümüzdeki 12 ayı gör, almadan
-// önce sor"), altında kullanıcının kendi önümüzdeki 12 ayı (ilk iki ay açık: zaten gördüğü tutarlar; gerisi bulanık),
-// Premium'un özellikleri (yapay zekâ asistanı da burada), üç plan (yıllık seçili; ücretsiz deneme ve süresi
-// StoreKit'ten), altta sabit düğme. Fiyat, dönem,
+// CashFollow Premium ödeme ekranı, uygulamanın kendi görünümüyle (zemin, beyaz kartlar, siyah ana düğme; açık ve koyu
+// temada): başlık açan kilidin vaadi, altında kullanıcının kendi önümüzdeki 12 ayı (ücretsiz aylar koyu, gerisi gri ve
+// kilitli), Premium'un faydaları (en fazla 5, açan kilidinki ilk sırada) ve güven notu, alt alta üç plan (yıllık seçili;
+// tasarruf, aylık karşılık ve deneme StoreKit'ten), altta sabit düğme. Fiyat, dönem, denemenin bittiği tarih,
 // kendiliğinden yenilenme, Kullanım Koşulları, Gizlilik Politikası ve geri yükleme düğmenin altında (App Store yönergesi
-// 3.1.2). neden: hangi kilitten açıldığı (analitik). Fiyatlar App Store'dan; örnek modunda ABD fiyatları.
+// 3.1.2). neden: hangi kilitten açıldığı (analitik). Fiyatlar App Store'dan; örnek modunda Türkiye'de lira, öbür
+// ülkelerde dolar. Kasım 2026: önceki koyu, parlak degradeli, yan yana üç kutulu tasarım şablon gibi duruyordu ve uzun
+// para birimlerinde kutulara sığmıyordu.
 struct PremiumEkrani: View {
     var neden = "settings"
     @EnvironmentObject private var abonelik: Abonelik
@@ -23,19 +25,34 @@ struct PremiumEkrani: View {
         let ad: String
         let fiyat: String
         let donem: String
-        var haftalik: String?      // haftaya düşen (karşılaştırma için)
+        var aylikKarsilik: String? // aya düşen (yıllık ve haftalıkta; karşılaştırma için)
         var deneme: String?        // "7 gün"
+        var denemeBitis: Date?     // ücretin başlayacağı gün
         var rozet: String?         // "%52 tasarruf"
         var urun: Product?
     }
 
-    // Karşılamanın yapay zekâ ekranından açılınca asistan ilk sırada
-    private var ozellikler: [String] {
-        let liste = [L("Akış"), L("Alabilir miyim?"), L("İçgörüler"), L("Varlığın seyri"), L("Borç planı"), L("Sınırsız kart"),
-                     L("Sınırsız kişi")]
-        return neden == "onboarding_ai" ? [L("Yapay zekâ asistanı")] + liste : liste + [L("Yapay zekâ asistanı")]
+    // Faydalar: en fazla 5 madde (taranabilsin), açan kilidinki ilk sırada. Bütün liste Ayarlar → CashFollow Premium'da
+    private struct Fayda { let anahtar: String; let metin: String }
+    private var faydalar: [Fayda] {
+        let hepsi = [
+            Fayda(anahtar: "cash_flow", metin: L("Önümüzdeki 12 ayın ödeme planı")),
+            Fayda(anahtar: "afford", metin: L("Almadan önce sor: alabilir miyim?")),
+            Fayda(anahtar: "insights", metin: L("Sıkışacağın ayı önceden gösteren uyarılar")),
+            Fayda(anahtar: "limit", metin: L("Sınırsız kart ve kişi")),
+            Fayda(anahtar: "assistant", metin: L("Yapay zekâ asistanı: Claude, ChatGPT, Gemini")),
+            Fayda(anahtar: "net_worth", metin: L("Varlığının aylar içindeki seyri")),
+            Fayda(anahtar: "payoff", metin: L("Kart borcunun ne zaman biteceği")),
+        ]
+        let anahtar: String
+        switch neden {
+        case "card_limit", "person_limit": anahtar = "limit"
+        case "onboarding_ai": anahtar = "assistant"
+        default: anahtar = neden
+        }
+        let one = hepsi.filter { $0.anahtar == anahtar }
+        return Array((one + hepsi.prefix(5).filter { $0.anahtar != anahtar }).prefix(5))
     }
-    private static let zemin = Color(red: 0.035, green: 0.04, blue: 0.055)
 
     // Başlık ve alt başlık: hangi kilitten gelindiyse onun vaadi (Kasım 2026: herkese aynı başlık çıkıyordu; en çok Akış
     // kilidinden geliniyor). Bilinmeyen nedende çekirdek vaat
@@ -63,55 +80,36 @@ struct PremiumEkrani: View {
     }
 
     var body: some View {
-        // Büyük ekranda artan boşluk bölümler arasına eşit dağılır; planlar düğmenin hemen üstünde
-        GeometryReader { alan in
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(L("CashFollow Premium"), systemImage: "sparkles").font(.footnote.weight(.semibold)).foregroundStyle(Tema.marka)
-                    Text(baslik.0).font(.system(size: 30, weight: .bold)).foregroundStyle(.white)
+            // Pro Max'te üç plan da düğmenin üstünde, kaydırmadan görünür (ekran görüntüsüyle denetlendi)
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(baslik.0).font(.system(size: 28, weight: .bold)).foregroundStyle(Tema.metin)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(baslik.1)
-                        .font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.55))
+                        .padding(.trailing, 40)   // kapatma düğmesi
+                    Text(baslik.1).font(.body).foregroundStyle(Tema.metin2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 0)
+                .padding(.horizontal, 4)
                 if aylar.contains(where: { $0.total > 0.004 }) { onizleme }
-                Spacer(minLength: 0)
-                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 10) {
-                    ForEach(ozellikler, id: \.self) { ad in
-                        Label { Text(ad).lineLimit(1).minimumScaleFactor(0.85) } icon: {
-                            Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Tema.marka)
-                        }
-                        .font(.subheadline).foregroundStyle(.white.opacity(0.85))
-                    }
-                }
-                Spacer(minLength: 0)
+                faydaKarti
                 if abonelik.premium { premiumAcik } else { planlar }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 38)
-            .padding(.bottom, 16)
-            .frame(minHeight: alan.size.height, alignment: .top)
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
         }
         .scrollIndicators(.hidden)
-        }
-        .background {
-            ZStack {
-                Self.zemin
-                RadialGradient(colors: [Tema.marka.opacity(0.42), .clear], center: .topTrailing, startRadius: 10, endRadius: 420)
-                RadialGradient(colors: [Tema.seri(0).opacity(0.18), .clear], center: .leading, startRadius: 10, endRadius: 360)
-            }
-            .ignoresSafeArea()
-        }
-        .environment(\.colorScheme, .dark)
+        .background(Tema.zemin.ignoresSafeArea())
         .overlay(alignment: .topTrailing) {
             Button { dismiss() } label: {
-                Image(systemName: "xmark").font(.footnote.weight(.bold)).foregroundStyle(.white.opacity(0.8))
-                    .frame(width: 30, height: 30).background(.white.opacity(0.12), in: Circle())
+                Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).foregroundStyle(Tema.metin2)
+                    .frame(width: 34, height: 34).background(Tema.yuzey3, in: Circle())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(L("Kapat"))
-            .padding(14)
+            .padding(.top, 14)
+            .padding(.trailing, 16)
         }
         .safeAreaInset(edge: .bottom) { if !abonelik.premium { altCubuk } }
         .alert(L("Satın alınamadı"), isPresented: Binding(get: { abonelik.hata != nil }, set: { if !$0 { abonelik.hata = nil } })) {
@@ -134,99 +132,121 @@ struct PremiumEkrani: View {
 
     // ── Kullanıcının kendi 12 ayı ───────────────────────────────────────────
 
-    // Önümüzdeki 12 ayın ödemeleri çubuklarla: bu ay ve gelecek ay açık (Özet'te zaten gördüğü tutarlar), sonraki aylar
-    // bulanık. Kilitli olanın kendi verisi olduğunu gösterir; tutar yazılmaz.
+    // Önümüzdeki 12 ayın ödemeleri çubuklarla, uygulamanın kartında: ücretsiz aylar (Özet'te ve Akış'ta zaten gördüğü
+    // tutarlar) koyu, sonrakiler gri ve kilitli. Kilitli olanın kendi verisi olduğunu gösterir; tutar yazılmaz.
     private var onizleme: some View {
         let enBuyuk = max(aylar.map(\.total).max() ?? 0, 1)
-        return VStack(alignment: .leading, spacing: 12) {
-            Text(L("Senin önümüzdeki 12 ayın")).font(.footnote.weight(.semibold)).foregroundStyle(.white.opacity(0.6))
+        return Kart(dolgu: 16) {
+            KartBasligi(baslik: L("Senin önümüzdeki 12 ayın")) {
+                Label(L("Premium"), systemImage: "lock.fill").font(.caption.weight(.semibold)).foregroundStyle(Tema.metin3)
+            }
             HStack(alignment: .bottom, spacing: 6) {
                 ForEach(Array(aylar.enumerated()), id: \.offset) { i, a in
+                    let acik = i < Abonelik.tatAy
                     VStack(spacing: 6) {
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(i < Abonelik.tatAy ? Color.white : Tema.marka)
-                            .frame(height: max(4, CGFloat(92 * a.total / enBuyuk)))
-                            .blur(radius: i < Abonelik.tatAy ? 0 : 5)
+                            .fill(acik ? Tema.metin : Tema.yuzey3)
+                            .frame(height: max(4, CGFloat(50 * a.total / enBuyuk)))
                         Text(Bicim.date(a.month + "-01").map { $0.formatted(Bicim.tarih.month(.narrow)) } ?? "")
-                            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(i < Abonelik.tatAy ? 0.75 : 0.4)).lineLimit(1).fixedSize()
+                            .font(.system(size: 10, weight: .medium)).foregroundStyle(acik ? Tema.metin2 : Tema.metin3).lineLimit(1).fixedSize()
                     }
                     .frame(maxWidth: .infinity, alignment: .bottom)
                 }
             }
-            .frame(height: 116, alignment: .bottom)
+            .frame(height: 68, alignment: .bottom)
         }
-        .padding(14)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.white.opacity(0.1), lineWidth: 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L("Senin önümüzdeki 12 ayın"))
+    }
+
+    // Faydalar kartı ve altında güven notu (sosyal kanıt yerine; uydurma puan ya da kullanıcı sayısı yazılmaz)
+    private var faydaKarti: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Kart(dolgu: 16) {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(faydalar, id: \.anahtar) { f in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Image(systemName: "checkmark").font(.footnote.weight(.bold)).foregroundStyle(Tema.iyi)
+                            Text(f.metin).font(.subheadline).foregroundStyle(Tema.metin).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            Text(L("Banka şifresi istemez · Reklam ve izleme yok")).font(.footnote).foregroundStyle(Tema.metin3)
+                .padding(.horizontal, 4)
+        }
     }
 
     // ── Planlar ─────────────────────────────────────────────────────────────
 
     private var secim: Plan? { planListesi.first { $0.id == secili } }
 
+    // Planlar alt alta, tam genişlikte: fiyat sağda tek satır. Yan yana üç kutuda uzun para birimleri (₺1.999,99,
+    // Rp 649.000) ve uzun plan adları (Wöchentlich) sığmıyordu
     @ViewBuilder private var planlar: some View {
         let liste = planListesi
         if liste.isEmpty {
             Text(L("Fiyatlar App Store'dan alınamadı. Bağlantını kontrol edip yeniden dene."))
-                .font(.subheadline).foregroundStyle(.white.opacity(0.6))
+                .font(.subheadline).foregroundStyle(Tema.metin2)
         } else {
-            HStack(alignment: .top, spacing: 10) {
-                ForEach(liste) { p in planKutusu(p) }
+            VStack(spacing: 6) {
+                ForEach(liste) { p in planSatiri(p) }
             }
-            .padding(.top, 6)
         }
     }
 
-    // Seçili plan beyaz; rozet: ücretsiz deneme, yoksa tasarruf
-    private func planKutusu(_ p: Plan) -> some View {
+    // Seçili satır koyu çerçeveli, solda dolu daire. Adın yanında tasarruf (yeşil), altında aylık karşılık ve deneme.
+    // Ödenecek tutar (fiyat) satırın en belirgin rakamı (3.1.2)
+    private func planSatiri(_ p: Plan) -> some View {
         let sec = p.id == secili
-        let rozet = p.deneme.map { L("{0} ücretsiz", $0) } ?? p.rozet
+        let alt = [p.aylikKarsilik.map { L("ayda {0}", $0) } ?? L("her ay ödenir"), p.deneme.map { L("{0} ücretsiz", $0) }]
+            .compactMap { $0 }.joined(separator: " · ")
+        let sekil = RoundedRectangle(cornerRadius: Tema.yaricapOrta, style: .continuous)
         return Button { withAnimation(.snappy(duration: 0.2)) { secili = p.id } } label: {
-            VStack(spacing: 4) {
-                Text(p.ad).font(.subheadline.weight(.semibold))
-                Text(p.fiyat).font(.system(size: 22, weight: .bold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-                Text(p.haftalik.map { L("haftada {0}", $0) } ?? " ").font(.caption2).opacity(0.55).lineLimit(1).minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(sec ? Color.black : Color.white)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 6)
-            .padding(.top, 22)
-            .padding(.bottom, 16)
-            .background(sec ? Color.white : Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(sec ? 0 : 0.14), lineWidth: 1))
-            .overlay(alignment: .top) {
-                if let r = rozet {
-                    Text(r).font(.caption2.weight(.bold)).foregroundStyle(.white).lineLimit(1)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Tema.marka, in: Capsule())
-                        .offset(y: -10)
+            HStack(spacing: 12) {
+                Image(systemName: sec ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22)).foregroundStyle(sec ? Tema.metin : Tema.cizgi2)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(p.ad).font(.body.weight(.semibold)).foregroundStyle(Tema.metin)
+                        if let r = p.rozet { Text(r).font(.footnote.weight(.semibold)).foregroundStyle(Tema.iyi).lineLimit(1) }
+                    }
+                    Text(alt).font(.footnote).foregroundStyle(Tema.metin2).fixedSize(horizontal: false, vertical: true)
                 }
+                Spacer(minLength: 8)
+                Text(p.fiyat).font(.body.weight(.semibold)).monospacedDigit().foregroundStyle(Tema.metin)
+                    .lineLimit(1).minimumScaleFactor(0.7).layoutPriority(1)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Tema.yuzey, in: sekil)
+            .overlay(sekil.strokeBorder(sec ? Tema.metin : Tema.cizgi, lineWidth: sec ? 1.5 : 1))
+            .contentShape(sekil)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(sec ? .isSelected : [])
     }
 
-    // Altta sabit: düğme, fiyat ve yenilenme satırı, geri yükleme ve bağlantılar
+    // Altta sabit: uygulamanın ana düğmesi (Kaydet gibi siyah), fiyat ve yenilenme satırı, geri yükleme ve bağlantılar
     private var altCubuk: some View {
         let p = secim
         return VStack(spacing: 10) {
             Button { if let u = p?.urun { Task { await abonelik.satinAl(u, neden: neden) } } } label: {
                 ZStack {
                     Text(p?.deneme.map { L("{0} ücretsiz dene", $0) } ?? L("Abone ol")).opacity(abonelik.calisiyor ? 0 : 1)
-                    if abonelik.calisiyor { ProgressView().tint(.white) }
+                    if abonelik.calisiyor { ProgressView().tint(Tema.ustMetin) }
                 }
                 .font(.body.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Tema.ustMetin)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(Tema.marka, in: Capsule())
+                .padding(.vertical, 15)
+                .background(Tema.metin, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(abonelik.calisiyor || (p?.urun == nil && Ornek.premium == nil))
             if let p {
-                Text(kisaAciklama(p)).font(.caption).foregroundStyle(.white.opacity(0.6)).multilineTextAlignment(.center)
+                Text(kisaAciklama(p)).font(.caption).foregroundStyle(Tema.metin2).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 18) {
                 Button(L("Geri yükle")) { Task { await abonelik.geriYukle() } }
@@ -234,35 +254,35 @@ struct PremiumEkrani: View {
                 Link(L("Gizlilik"), destination: Yapilandirma.gizlilik)
             }
             .font(.caption.weight(.medium))
-            .foregroundStyle(.white.opacity(0.45))
+            .foregroundStyle(Tema.metin3)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 14)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
         .padding(.bottom, 4)
         .background {
-            // Üstü saydamdan koyuya: kaydırılan içerik düğmenin altına yumuşak girer, planların üstüne taşmaz
-            LinearGradient(stops: [.init(color: Self.zemin.opacity(0), location: 0), .init(color: Self.zemin, location: 0.06)], startPoint: .top, endPoint: .bottom)
+            // Üstü saydamdan zemine: kaydırılan içerik düğmenin altına yumuşak girer
+            LinearGradient(stops: [.init(color: Tema.zemin.opacity(0), location: 0), .init(color: Tema.zemin, location: 0.08)], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
         }
     }
 
-    // Fiyat, dönem, deneme ve kendiliğinden yenilenme (App Store yönergesi 3.1.2)
+    // Fiyat, dönem, deneme ve kendiliğinden yenilenme (App Store yönergesi 3.1.2). Denemede ücretin başlayacağı gün
+    // yazılır: "ne zaman ödeyeceğim" kaygısı denemeye başlamayı en çok durduran şey
     private func kisaAciklama(_ p: Plan) -> String {
-        (p.deneme.map { L("{0} ücretsiz, sonra {1} / {2}.", $0, p.fiyat, p.donem) } ?? L("{0} / {1}.", p.fiyat, p.donem))
-            + " " + L("Kendiliğinden yenilenir, istediğin zaman iptal et.")
+        if p.deneme != nil, let bitis = p.denemeBitis {
+            let gun = bitis.formatted(Bicim.tarih.day().month(.wide))
+            return L("Bugün ödeme yok: {0} tarihine kadar ücretsiz, sonra {1} / {2}. Kendiliğinden yenilenir; o tarihten önce iptal edersen ücret alınmaz.",
+                     gun, p.fiyat, p.donem)
+        }
+        return L("{0} / {1}.", p.fiyat, p.donem) + " " + L("Kendiliğinden yenilenir, istediğin zaman iptal et.")
     }
 
     // ── Premium açıkken ──────────────────────────────────────────────────────
 
     private var premiumAcik: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label(L("Premium açık. Teşekkürler!"), systemImage: "checkmark.seal.fill").foregroundStyle(Tema.marka).font(.body.weight(.semibold))
-            Button { asistan = true } label: {
-                Text(L("Yapay zekâ asistanını bağla")).font(.body.weight(.semibold)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 16)
-                    .background(Tema.marka, in: Capsule())
-            }
-            .buttonStyle(.plain)
+            Label(L("Premium açık. Teşekkürler!"), systemImage: "checkmark.seal.fill").foregroundStyle(Tema.iyi).font(.body.weight(.semibold))
+            AltKaydet(eksik: nil, baslik: L("Yapay zekâ asistanını bağla")) { asistan = true }
         }
         .padding(.top, 6)
     }
@@ -270,11 +290,16 @@ struct PremiumEkrani: View {
     // Planlar App Store ürünlerinden; örnek modunda ABD fiyatlarıyla (ekran görüntüsü, App Store incelemesi)
     private var planListesi: [Plan] {
         if Ornek.premium != nil {
+            // Türkiye örneğinde uzun yazılan lira fiyatları (sığma denemesi; gerçek fiyat App Store'dan gelir). ABD:
+            // App Store incelemesinin istediği görüntü (en-ucretsiz-galeri7, -ulke US) dolarla
+            let f = Ornek.ulke == "TR" ? ["₺1.999,99", "₺166,67", "₺349,99", "₺149,99", "₺649,96"]
+                                       : ["$39.99", "$3.33", "$6.99", "$2.99", "$12.96"]
             return [
-                Plan(id: Abonelik.kimlikler[0], ad: L("Yıllık"), fiyat: "$39.99", donem: L("yıl"), haftalik: "$0.77",
-                     deneme: L("{0} gün", 7), rozet: L("%{0} tasarruf", 52)),
-                Plan(id: Abonelik.kimlikler[1], ad: L("Aylık"), fiyat: "$6.99", donem: L("ay"), haftalik: "$1.61"),
-                Plan(id: Abonelik.kimlikler[2], ad: L("Haftalık"), fiyat: "$2.99", donem: L("hafta")),
+                Plan(id: Abonelik.kimlikler[0], ad: L("Yıllık"), fiyat: f[0], donem: L("yıl"), aylikKarsilik: f[1],
+                     deneme: L("{0} gün", 7), denemeBitis: Calendar.current.date(byAdding: .day, value: 7, to: .now),
+                     rozet: L("%{0} tasarruf", 52)),
+                Plan(id: Abonelik.kimlikler[1], ad: L("Aylık"), fiyat: f[2], donem: L("ay")),
+                Plan(id: Abonelik.kimlikler[2], ad: L("Haftalık"), fiyat: f[3], donem: L("hafta"), aylikKarsilik: f[4]),
             ]
         }
         let aylik = abonelik.urunler.first { $0.subscription?.subscriptionPeriod.unit == .month && $0.subscription?.subscriptionPeriod.value == 1 }
@@ -282,24 +307,41 @@ struct PremiumEkrani: View {
             guard let s = u.subscription else { return nil }
             let d = s.subscriptionPeriod
             var p = Plan(id: u.id, ad: Self.planAdi(d), fiyat: u.displayPrice, donem: Self.donemAdi(d), urun: u)
-            if let hafta = Self.haftaSayisi(d), hafta > 1 { p.haftalik = (u.price / Decimal(hafta)).formatted(u.priceFormatStyle) }
+            if let ay = Self.aySayisi(d), abs(ay - 1) > 0.01 {
+                p.aylikKarsilik = (u.price / Decimal(ay)).formatted(u.priceFormatStyle)
+            }
             if d.unit == .year, let a = aylik, a.price > 0 {
                 let oran = 1 - NSDecimalNumber(decimal: u.price).doubleValue / (NSDecimalNumber(decimal: a.price).doubleValue * 12)
                 if oran >= 0.1 { p.rozet = L("%{0} tasarruf", Int((oran * 100).rounded())) }
             }
-            if let o = s.introductoryOffer, o.paymentMode == .freeTrial, denemeUygun.contains(u.id) { p.deneme = Self.sure(o.period) }
+            if let o = s.introductoryOffer, o.paymentMode == .freeTrial, denemeUygun.contains(u.id) {
+                p.deneme = Self.sure(o.period)
+                p.denemeBitis = Self.bitis(o.period)
+            }
             return p
         }
     }
 
-    // Dönemdeki hafta (fiyat karşılaştırması): yıl 52, ay 52/12
-    private static func haftaSayisi(_ d: Product.SubscriptionPeriod) -> Double? {
+    // Dönemdeki ay (aylık karşılık): yıl 12, hafta 12/52
+    private static func aySayisi(_ d: Product.SubscriptionPeriod) -> Double? {
         switch d.unit {
-        case .year: return 52 * Double(d.value)
-        case .month: return 52.0 / 12 * Double(d.value)
-        case .week: return Double(d.value)
+        case .year: return 12 * Double(d.value)
+        case .month: return Double(d.value)
+        case .week: return 12.0 / 52 * Double(d.value)
         default: return nil
         }
+    }
+
+    // Deneme bugün başlarsa ücretin alınacağı gün
+    private static func bitis(_ d: Product.SubscriptionPeriod) -> Date? {
+        let birim: Calendar.Component
+        switch d.unit {
+        case .day: birim = .day
+        case .week: birim = .weekOfYear
+        case .month: birim = .month
+        default: birim = .year
+        }
+        return Calendar.current.date(byAdding: birim, value: d.value, to: .now)
     }
 
     private static func planAdi(_ d: Product.SubscriptionPeriod) -> String {

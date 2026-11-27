@@ -161,6 +161,33 @@ Kullanıcı kararıyla (24 Kasım 2026) yapılanlar:
   `account_created` `method: apple` payı; `paywall_shown` cash_flow sayısı (3 ay tadıyla düşmeli) ve ödeme ekranı başına
   satın alma.
 
+## Ödeme ekranı denetimi (1.5.2)
+
+Kullanıcı isteğiyle (25 Kasım 2026) `paywall-optimization` skill'iyle denetlendi. Son 30 gün (PostHog, iPhone):
+uygulamayı açan 65 kişiden 19'u ödeme ekranını gördü (%29; skill eşiği %50, ama akışta ödeme ekranı yok, kilitte
+açılır: bilinçli). Ekranı gören 21 kişiden 10'u satın almayı başlattı (%48, sağlıklı aralık %25–45), 7'si tamamladı;
+5 iptal. Sayılar küçük ve bir kısmı test / sandbox; A/B testi için kilit başına yüzlerce kişi gerekir, bu yüzden
+deneme değil hızlı kazanımlar yayınlandı. 1.5.0'dan önceki sürümlerin satın alma olaylarında `reason` yok.
+
+- **Faydalar:** 8 özellik adı (Akış, İçgörüler…) yerine faydası yazılı en fazla 5 madde; açan kilidin maddesi ilk sırada.
+- **Güven satırı:** "Banka şifresi istemez · Reklam ve izleme yok" (sosyal kanıt yerine; puan / kullanıcı sayısı
+  uydurulmaz. App Store puanı yeterince birikince eklenebilir).
+- **Fiyat çapası:** plan kutusunda haftalık karşılık yerine aylık karşılık ("ayda $3.33"; haftalıkta "ayda $12.96");
+  aylıkta "her ay ödenir". Yıllığın rozeti tasarruf (önceden deneme rozeti tasarrufu gizliyordu; deneme düğmede).
+- **Deneme:** düğmenin altında "Bugün ödeme yok: <tarih> tarihine kadar ücretsiz, sonra … ; o tarihten önce iptal
+  edersen ücret alınmaz."
+- **Görünüm (aynı gün, kullanıcı geri bildirimi):** ilk hâli "yapay zekâ kokuyordu" (zorla koyu zemin, parlayan
+  yeşil degrade, her maddede renkli simge, yüzen hap rozet) ve yan yana üç plan kutusu uzun para birimlerinde (₺1.999,99)
+  ve uzun plan adlarında sığmıyordu. Ekran uygulamanın kendi görünümüne geçti: `Tema.zemin`, beyaz `Kart`lar, siyah ana
+  düğme (Kaydet gibi), açık / koyu tema; planlar alt alta tam genişlikte satır, fiyat sağda; 12 aylık önizlemede kilitli
+  aylar bulanık yeşil değil gri.
+- **Deneme süresi 14 günden 7 güne** (kullanıcı kararı, 26 Kasım 2026; yıllık plan, bütün ülkeler, App Store Connect'te
+  `magaza.yml abonelik` ile). Ödeme ekranı süreyi StoreKit'ten okur, kod değişmedi. Ölçüm: deneme başlatma payı ve
+  denemeden ücretliye geçiş (sunucunun `subscription_*` olayları), 26 Kasım öncesi / sonrası.
+- **Ölçüm (önce / sonra, 1.5.2 kohortu):** `paywall_shown` → `purchase_started` (ekran başına başlatma) ve
+  `purchase_completed` `trial: true` payı; `reason` kırılımıyla. Kitle büyüyünce sıradaki testler: deneme süresi (7 gün /
+  1 ay), denemenin bitişinden önce hatırlatma sözü, haftalık planın kaldırılması.
+
 ## Yol haritası
 
 Karşılama denemesi yapılmadığı için (aşağıda "Verilen kararlar") ilk haftayı değiştiren işler beklemeden yayınlanır;
