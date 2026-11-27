@@ -78,10 +78,7 @@ Gizlilik: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
-- Bildirimlerinizi seçin: ödeme günü, hesap kesimi, taksit bitişi, ay özeti ve bankadan gelenler ayrı ayrı açılıp kapanır.
-- Banka mesajından harcama: bankanızın harcama SMS'i kendiliğinden harcama olarak eklenir. Kısayollar ile bir kez kurulur; mesaj telefonunuzda okunur, hiçbir yere gönderilmez.
-- Özet yenilendi: bu ay ne kadarını ödediniz, ne kaldı; gelecek ay hafifliyor mu, taksitleriniz hangi ay bitiyor.
-- Harcama eklemek kolaylaştı: önceki işyerleri bir dokunuşla gelir; kart, taksit ve kategori kendiliğinden dolar. "Yine" ile aynı harcamayı yeniden ekleyin.
-- Yeni bildirimler: hesap kesiminden bir gün önce, taksit bitince ve her ayın başında ay özeti.
-- Taksit bitince kutlama: her ay ne kadarın boşaldığını görün.
-- Ay özeti: geçen ay ne ödediniz, hangi taksitler bitti, bu ay ne bekliyor.
+- Apple ile giriş: hesabınızı tek dokunuşla açın, e-posta doğrulaması gerekmez.
+- Akış'ın ilk 3 ayı ücretsiz: önümüzdeki üç ayın ödeme planını Premium olmadan görün.
+- İlk kartınızı ekleyince bugünkü alışverişin hangi gün ödeneceğini ve hesap kesimi hatırlatmasını hemen görün.
+- Yenilenen Premium ekranı: planlar ve fiyatlar daha net; ücretsiz denemede ödemenin hangi gün başlayacağı yazıyor.
