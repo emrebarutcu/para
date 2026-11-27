@@ -49,7 +49,7 @@ struct PremiumEkrani: View {
         switch neden {
         case "card_limit", "person_limit": anahtar = "limit"
         case "onboarding_ai": anahtar = "assistant"
-        case "tag_report": anahtar = "tags"
+        case "tag_report", "tag_manage", "tag_budget", "tag_active": anahtar = "tags"
         default: anahtar = neden
         }
         let one = hepsi.filter { $0.anahtar == anahtar }
@@ -76,7 +76,7 @@ struct PremiumEkrani: View {
             return (L("Sıkışacağın ayı önceden gör"), L("Açık verecek ay, yükselen harcama ve fırsatlar için uyarılar."))
         case "payoff":
             return (L("Kart borcunu planla"), L("Hangi ay ne kadar ödersen borcun ne zaman biter."))
-        case "tags", "tag_report":
+        case "tags", "tag_report", "tag_manage", "tag_budget", "tag_active":
             return (L("Gezinin tam maliyetini gör"), L("Sınırsız etiket; ne kadarı ödendi, ne kadar kaldı, kategoriye, kişiye ve karta göre dağılım. Ücretsiz sürümde {0} etiket var.", Abonelik.ucretsizEtiket))
         default:
             return (L("Önümüzdeki 12 ayı gör, almadan önce sor"), L("Her ayın ödemesi, paranın yetip yetmeyeceği, ilk ödemesi en geç gelen kart."))

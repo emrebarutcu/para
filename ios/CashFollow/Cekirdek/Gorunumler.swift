@@ -186,10 +186,15 @@ struct EtiketListesi: Decodable {
         let firstPurchase: String?
         let lastPurchase: String?
         let missingRates: Bool?
+        let budget: Double?
+        let travelMode: GeziModu?
         var id: String { tag }
     }
     let tags: [Etiket]
 }
+
+// Etiketin gezi modu (set_tag): from–until arasındaki yeni harcamalar etiketi kendiliğinden alır; on bugün açık mı
+struct GeziModu: Decodable, Hashable { let from: String?; let until: String; let on: Bool }
 
 // Bir etiketin raporu (tag_summary): toplam, ödenen / kalan, son ödeme, dağılımlar ve harcamalar
 struct EtiketRaporu: Decodable {
@@ -204,6 +209,8 @@ struct EtiketRaporu: Decodable {
         let value: Double           // ana para biriminde
         let left: Double
         let card: String
+        let person: String
+        let category: String?
     }
     let tag: String
     let purchases: Int
@@ -221,6 +228,10 @@ struct EtiketRaporu: Decodable {
     let byCard: [Pay]
     let list: [Kalem]
     let missingRates: Int?
+    let budget: Double?
+    let budgetLeft: Double?
+    let budgetUsed: Double?
+    let travelMode: GeziModu?
 }
 
 // Kartın dönem dönem harcamaları (card_statements): yeniden eskiye; ilki bugünün dönemi

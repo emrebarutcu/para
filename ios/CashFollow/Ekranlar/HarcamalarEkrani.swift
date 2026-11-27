@@ -917,6 +917,10 @@ struct HarcamaFormu: View {
             } else { tutarOdak = true }
             taksitli = count > 1
         }
+        // Yeni harcamada gezi modundaki etiketler hazır gelir (çıkarılabilir; "Yine" kendi etiketleriyle)
+        if !yuklendi, duzenle == nil, yine == nil, etiketler.isEmpty {
+            etiketler = bilinenEtiketler.filter { $0.travelMode?.on == true }.map(\.tag)
+        }
         yuklendi = true
         if person.isEmpty { person = people.first?.id ?? "ben" }
     }

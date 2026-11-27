@@ -471,3 +471,29 @@ test("etiketler: formdan etiket, liste ve rapor; köprüde de aynı araçlar", a
   // Etiket kaydedilen veride de (eşitleme purchases.tags yazar)
   assert.deepEqual(JSON.parse(e.saved()).installments.map(p => p.tags), [["Maldivler"], ["Maldivler", "Balayı"]]);
 });
+
+// Aşama 2–3 (EtiketRaporuEkrani menüsü, EtiketTopluEkle, GeziModuFormu): set_tag, tag_purchases, rename_tag, delete_tag
+test("etiketler: bütçe ve gezi modu, toplu ekleme, yeniden adlandırma, silme; ayarlar eşitlenen veride", async () => {
+  const e = engine();
+  await e.call("add_card", { name: "Bonus", limit: 50000, cutoff_day: 10, due_day: 20 });
+  const g = await e.call("set_tag", { tag: "Maldivler", budget: 30000, active_from: "2026-10-30", active_until: "2026-11-05" });
+  assert.deepEqual(g.ok.travelMode, { from: "2026-10-30", until: "2026-11-05", on: true });
+  const a = await e.call("add_purchase", { description: "Otel", amount: 8000, date: "2026-10-31", card: "Bonus" });
+  assert.deepEqual(a.ok.purchase.tags, ["Maldivler"]);                     // gezi modu
+  // Köprünün denemesinde rastgele kimlikler aynı çıkar: toplu ekleme kimlikle değil etiketle denenir (tag_purchases
+  // asistan testlerinde)
+  await e.call("add_purchase", { description: "Uçak", amount: 12000, date: "2026-10-20", card: "Bonus", tags: ["MALDİVLER"] });
+  const l = await e.call("list_purchases", { status: "all", from: "2026-10-15", to: "2026-10-25" });
+  assert.deepEqual(l.ok.purchases.map(p => [p.description, p.tags]), [["Uçak", ["Maldivler"]]]);
+  const r = await e.call("tag_summary", { tag: "Maldivler" });
+  assert.deepEqual([r.ok.total, r.ok.budget, r.ok.budgetLeft], [20000, 30000, 10000]);
+  for (const k of ["person", "category", "card"]) assert.ok(k in r.ok.list[0], k);
+  const t = await e.call("list_tags");
+  assert.equal(t.ok.tags[0].budget, 30000);
+  const n = await e.call("rename_tag", { tag: "Maldivler", new_name: "Maldivler 2026" });
+  assert.equal(n.ok.tag, "Maldivler 2026");
+  assert.deepEqual(JSON.parse(e.saved()).tags.map(x => [x.id, x.budget]), [["maldivler 2026", 30000]]);
+  await e.call("delete_tag", { tag: "Maldivler 2026" });
+  assert.deepEqual(JSON.parse(e.saved()).tags, []);
+  assert.ok(JSON.parse(e.saved()).installments.every(p => !p.tags));
+});
