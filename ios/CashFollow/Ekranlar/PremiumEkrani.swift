@@ -43,11 +43,13 @@ struct PremiumEkrani: View {
             Fayda(anahtar: "assistant", metin: L("Yapay zekâ asistanı: Claude, ChatGPT, Gemini")),
             Fayda(anahtar: "net_worth", metin: L("Varlığının aylar içindeki seyri")),
             Fayda(anahtar: "payoff", metin: L("Kart borcunun ne zaman biteceği")),
+            Fayda(anahtar: "tags", metin: L("Etiketler: gezinin, düğünün tam maliyeti")),
         ]
         let anahtar: String
         switch neden {
         case "card_limit", "person_limit": anahtar = "limit"
         case "onboarding_ai": anahtar = "assistant"
+        case "tag_report": anahtar = "tags"
         default: anahtar = neden
         }
         let one = hepsi.filter { $0.anahtar == anahtar }
@@ -74,6 +76,8 @@ struct PremiumEkrani: View {
             return (L("Sıkışacağın ayı önceden gör"), L("Açık verecek ay, yükselen harcama ve fırsatlar için uyarılar."))
         case "payoff":
             return (L("Kart borcunu planla"), L("Hangi ay ne kadar ödersen borcun ne zaman biter."))
+        case "tags", "tag_report":
+            return (L("Gezinin tam maliyetini gör"), L("Sınırsız etiket; ne kadarı ödendi, ne kadar kaldı, kategoriye, kişiye ve karta göre dağılım. Ücretsiz sürümde {0} etiket var.", Abonelik.ucretsizEtiket))
         default:
             return (L("Önümüzdeki 12 ayı gör, almadan önce sor"), L("Her ayın ödemesi, paranın yetip yetmeyeceği, ilk ödemesi en geç gelen kart."))
         }

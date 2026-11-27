@@ -11,6 +11,7 @@ final class Abonelik: ObservableObject {
     static let kimlikler = ["yearly", "monthly", "weekly"].map { "app.cashfollow.ios.premium.\($0)" }
     static let ucretsizKart = 2
     static let ucretsizKisi = 2   // sen ve bir kişi daha (eşin gibi)
+    static let ucretsizEtiket = 2 // farklı etiket (var olanlar harcamalara eklenebilir; web FREE_TAGS)
     // Ücretsiz tat: Akış'ta ilk 3 ay (bu ay ve sonraki iki ay; 24 Kasım 2026'ya kadar 2 ay) Premium'suz açık (web: TASTE_MONTHS). PostHog'da free_taste bayrağının
     // "off" kolu kapatır; bayrak yoksa ya da henüz gelmediyse açıktır.
     static let tatAy = 3

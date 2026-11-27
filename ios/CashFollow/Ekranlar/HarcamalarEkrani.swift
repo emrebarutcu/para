@@ -10,7 +10,7 @@ struct HarcamalarEkrani: View {
     @State private var kisi = ""                 // "" hepsi, yoksa kişinin kimliği
     @State private var kategori: KategoriSecimi? // kategoriye dokununca liste süzülür
     @State private var bitenler = false
-    @State private var gorunum = "liste"           // liste | kategori
+    @State private var gorunum = "liste"           // liste | kategori | etiket
     @State private var silinecek: Harcama?
     @State private var yine: Harcama?            // "Yine": aynı harcama bugünün tarihiyle, form dolu açılır
     @State private var filtre = false
@@ -37,9 +37,11 @@ struct HarcamalarEkrani: View {
                 if search.isEmpty, !model.epostalar.isEmpty { EpostaKarti() }
                 if search.isEmpty, !ekstreIpucuGizli { EkstreIpucu(gizle: { withAnimation { ekstreIpucuGizli = true } }) }
                 if search.isEmpty {
-                    Secici(secim: $gorunum, ogeler: [("liste", L("Liste")), ("kategori", L("Kategoriler"))])
+                    Secici(secim: $gorunum, ogeler: [("liste", L("Liste")), ("kategori", L("Kategoriler")), ("etiket", L("Etiketler"))])
                 }
-                if gorunum == "kategori" && search.isEmpty {
+                if gorunum == "etiket" && search.isEmpty {
+                    Okunan(tool: "list_tags") { (l: EtiketListesi) in EtiketlerKarti(etiketler: l.tags) }
+                } else if gorunum == "kategori" && search.isEmpty {
                     Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
                         KategoriKarti(months: k.months, secili: kategori.map { $0.id }) { k in
                             withAnimation { kategori = k; gorunum = "liste" }
@@ -86,6 +88,7 @@ struct HarcamalarEkrani: View {
             }
             .sheet(item: $yine) { HarcamaFormu(yine: $0) }
             .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
+            .navigationDestination(for: EtiketHedefi.self) { EtiketRaporuEkrani(etiket: $0.ad) }
             .searchable(text: $search, prompt: Text(L("Ara")))
             .yenilenebilir(model)
             .ekleDugmesi(.harcama)
@@ -341,6 +344,9 @@ struct HarcamaSatiri: View {
                 .font(.footnote).foregroundStyle(Tema.metin3)
                 let plan = p.bnpl.map { "\($0.name) · Pay in \($0.payments)" } ?? p.bonus?.name ?? p.repeat?.label ?? (p.installments > 1 ? L("{0} taksit", p.installments) : L("Peşin"))
                 Text([plan, p.categoryName].compactMap { $0 }.joined(separator: " · ")).font(.footnote).foregroundStyle(Tema.metin3)
+                if let t = p.tags, !t.isEmpty {
+                    Text(t.map { "#" + $0 }.joined(separator: " ")).font(.footnote.weight(.medium)).foregroundStyle(Tema.metin2).lineLimit(1)
+                }
                 if p.installments > 1, p.repeat == nil {
                     let odenen = p.bnpl?.paid ?? p.paidInstallments   // Pay in 4: çekilen ödemeler
                     HStack(spacing: 8) {
@@ -417,6 +423,7 @@ struct HarcamaDetayi: View {
                     VStack(spacing: 10) {
                         if let d = p.date { Satir(title: L("Tarih"), value: Bicim.day(d)) }
                         if let c = p.categoryName { Satir(title: L("Kategori"), value: c) }
+                        if let t = p.tags, !t.isEmpty { Satir(title: L("Etiketler"), value: t.map { "#" + $0 }.joined(separator: " ")) }
                         if let cut = p.statementCutoff { Satir(title: L("Ekstre kesimi"), value: Bicim.day(cut)) }
                         if let r = p.repeat?.label { Satir(title: L("Tekrar"), value: r) }
                         if let b = p.bnpl {
@@ -513,6 +520,10 @@ struct HarcamaFormu: View {
     @State private var card = "nakit"
     @State private var person = ""
     @State private var category = ""
+    @State private var etiketler: [String] = []           // harcamanın etiketleri (EtiketlerEkrani.swift)
+    @State private var yeniEtiket = ""
+    @State private var bilinenEtiketler: [EtiketListesi.Etiket] = []
+    @State private var etiketKilidi = false              // ücretsiz sürümde yeni etiket: ödeme ekranı (tags)
     @State private var cards: [KartGorunumu] = []
     @State private var people: [Kisi] = []
     @State private var preview: HarcamaSonucu?
@@ -659,6 +670,8 @@ struct HarcamaFormu: View {
                             }
                             .labelsHidden()
                         }
+                        Ayirici()
+                        etiketAlani
                     }
                     .font(.subheadline)
                     .tint(Tema.metin)
@@ -677,6 +690,7 @@ struct HarcamaFormu: View {
                 ToolbarItem(placement: .confirmationAction) { Button(L("Kaydet"), action: save).fontWeight(.semibold).disabled(!valid) }
             }
             .task { load() }
+            .sheet(isPresented: $etiketKilidi) { PremiumEkrani(neden: "tags") }
             .task(id: desc) { oneriler = duzenle == nil && ornek == nil ? (model.motor?.merchants(desc, limit: 4) ?? []) : [] }
             .task(id: "\(desc)|\(amount)|\(count)|\(taksitli)|\(tekrar)|\(bnpl)|\(bonus)|\(saglayici)|\(Bicim.key(date))|\(card)|\(person)") { dryRun() }
         }
@@ -700,6 +714,75 @@ struct HarcamaFormu: View {
 
     private func etiket(_ s: String) -> some View {
         Text(s).font(.footnote.weight(.semibold)).foregroundStyle(Tema.metin3)
+    }
+
+    // Etiketler: seçilenler (dokununca çıkar), yazıp Bitti ile yeni etiket, altında önceki etiketler (en son kullanılan önce).
+    // Aynı etiket başka yazılışla varsa o yazılış kullanılır.
+    private var etiketAlani: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L("Etiketler"))
+            if !etiketler.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(etiketler, id: \.self) { t in
+                            Button { withAnimation { etiketler.removeAll { $0 == t } } } label: {
+                                HStack(spacing: 5) {
+                                    Text("#" + t).font(.subheadline.weight(.semibold))
+                                    Image(systemName: "xmark").font(.caption2.weight(.bold))
+                                }
+                                .foregroundStyle(Tema.ustMetin)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(Tema.metin, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(L("{0} etiketini çıkar", t))
+                        }
+                    }
+                }
+            }
+            TextField(L("Etiket ekle, ör. Maldivler"), text: $yeniEtiket)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .onSubmit { etiketEkle(yeniEtiket) }
+                .onChange(of: yeniEtiket) { _, v in if v.contains(",") { etiketEkle(v) } }
+            let oneriler = etiketOnerileri
+            if !oneriler.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(oneriler) { t in
+                            Cip(ad: "#" + t.tag, sayi: t.purchases, secili: false) { etiketEkle(t.tag) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Önceki etiketler: seçilmeyenler, yazılana uyanlar, en fazla 8
+    private var etiketOnerileri: [EtiketListesi.Etiket] {
+        let secili = Set(etiketler.map(Etiket.anahtar))
+        let q = Etiket.anahtar(yeniEtiket)
+        return Array(bilinenEtiketler.filter { !secili.contains(Etiket.anahtar($0.tag)) && (q.isEmpty || Etiket.anahtar($0.tag).contains(q)) }.prefix(8))
+    }
+
+    // Yazılan (virgülle birden fazla) etiketleri ekler. Ücretsiz sürümde yeni etiket, farklı etiket sayısı sınırdaysa
+    // ödeme ekranını açar ve false döner
+    @discardableResult
+    private func etiketEkle(_ ham: String) -> Bool {
+        for parca in ham.split(separator: ",") {
+            guard let ad = Etiket.ad(String(parca)) else { continue }
+            let k = Etiket.anahtar(ad)
+            if etiketler.contains(where: { Etiket.anahtar($0) == k }) { continue }
+            if etiketler.count >= Etiket.enFazla { error = L("Bir harcamaya en fazla {0} etiket eklenir.", Etiket.enFazla); return false }
+            let varOlan = bilinenEtiketler.first { Etiket.anahtar($0.tag) == k }
+            if varOlan == nil, !abonelik.premium {
+                let hepsi = Set(bilinenEtiketler.map { Etiket.anahtar($0.tag) } + etiketler.map(Etiket.anahtar))
+                if hepsi.count >= Abonelik.ucretsizEtiket { etiketKilidi = true; return false }
+            }
+            withAnimation { etiketler.append(varOlan?.tag ?? ad) }
+        }
+        yeniEtiket = ""
+        return true
     }
 
     // İşyeri önerileri: "Migros" / "Bonus · Peşin · Market"; dokununca ad, kart, taksit ve kategori dolar
@@ -760,6 +843,7 @@ struct HarcamaFormu: View {
         if let c = p.cardId { if cards.contains(where: { $0.id == c }) { card = c } } else { card = "nakit" }
         person = p.personId
         category = p.category ?? ""
+        etiketler = p.tags ?? []
         kaynak = "repeat"
     }
 
@@ -801,6 +885,7 @@ struct HarcamaFormu: View {
     private func load() {
         cards = (try? model.read("list_cards") as KartListesi)?.cards ?? []
         people = (try? model.read("list_people") as KisiListesi)?.people ?? []
+        bilinenEtiketler = (try? model.read("list_tags") as EtiketListesi)?.tags ?? []
         if !yuklendi, let p = duzenle {
             desc = p.description
             amount = p.total.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2)))
@@ -809,6 +894,7 @@ struct HarcamaFormu: View {
             card = p.cardId ?? "nakit"
             person = p.personId
             category = p.category ?? ""
+            etiketler = p.tags ?? []
             if let b = p.bnpl { bnpl = true; saglayici = b.provider }
             taksitli = count > 1
             if let b = p.bonus { bonus = b.payments }
@@ -860,6 +946,7 @@ struct HarcamaFormu: View {
         if tekrar { a["repeat"] = 0 }
         if bnpl { a["bnpl"] = saglayici } else if duzenle?.bnpl != nil { a["bnpl"] = NSNull() }
         if !category.isEmpty { a["category"] = category } else if duzenle?.category != nil { a["category"] = NSNull() }
+        if !etiketler.isEmpty { a["tags"] = etiketler } else if !(duzenle?.tags ?? []).isEmpty { a["tags"] = NSNull() }
         if let p = duzenle {
             a["id"] = p.id
             if p.asset != Bicim.home { a["asset"] = p.asset }
@@ -882,12 +969,17 @@ struct HarcamaFormu: View {
     }
 
     private func save() {
+        // Etiket alanında yazılı kalan da eklenir; sınıra takılırsa (ödeme ekranı) kayıt durur
+        if Etiket.ad(yeniEtiket) != nil, !etiketEkle(yeniEtiket) { return }
         do {
             let sonuc = try model.write(duzenle == nil ? "add_purchase" : "update_purchase", args, as: HarcamaSonucu.self)
             if duzenle == nil { sonKart = card; Puanlama.olumluAn(); Bant.goster(kayitSonucu(sonuc)) }
             if let e = eposta { Task { await model.epostaBitti(e.emailId) } }
             if bnpl { sonBnpl = saglayici }
             // source: kayıt nereden geldi (elle, işyeri önerisi, "Yine", banka e-postası): otomatik kayıt payı bununla ölçülür
+            let onceki = Set((duzenle?.tags ?? []).map(Etiket.anahtar))
+            let eklenen = etiketler.filter { !onceki.contains(Etiket.anahtar($0)) }.count
+            if eklenen > 0 { Analitik.olay("tag_added", ["count": eklenen, "tags": etiketler.count, "source": "form"]) }
             Analitik.olay(duzenle == nil ? "purchase_added" : "purchase_edited",
                           ["installments": bonusEtkin > 0 ? bonusEtkin : taksitSayisi, "repeat": tekrar, "bnpl": bnpl, "bonus": bonusEtkin, "cash": card == "nakit", "afford_shown": sim != nil && abonelik.premium, "source": kaynak])
             dismiss()

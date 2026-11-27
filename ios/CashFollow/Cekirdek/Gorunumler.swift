@@ -174,6 +174,53 @@ struct Harcama: Decodable, Identifiable, Hashable {
     let payments: [Taksit]?
     let bnpl: SimdiAl?
     let bonus: BonusOdemesi?
+    let tags: [String]?           // etiketler (1.4'ten önceki araçlarda yok)
+}
+
+// Etiketler (list_tags): en son kullanılan önce; total bütün taksitlerle, ana para biriminde
+struct EtiketListesi: Decodable {
+    struct Etiket: Decodable, Identifiable, Hashable {
+        let tag: String
+        let purchases: Int
+        let total: Double
+        let firstPurchase: String?
+        let lastPurchase: String?
+        let missingRates: Bool?
+        var id: String { tag }
+    }
+    let tags: [Etiket]
+}
+
+// Bir etiketin raporu (tag_summary): toplam, ödenen / kalan, son ödeme, dağılımlar ve harcamalar
+struct EtiketRaporu: Decodable {
+    struct Pay: Decodable, Hashable { let id: String?; let name: String; let amount: Double; let share: Double }
+    struct Birim: Decodable, Hashable { let asset: String; let amount: Double }
+    struct Kalem: Decodable, Identifiable, Hashable {
+        let id: String
+        let description: String
+        let date: String?
+        let asset: String
+        let amount: Double          // kendi biriminde (dövizde dolar…)
+        let value: Double           // ana para biriminde
+        let left: Double
+        let card: String
+    }
+    let tag: String
+    let purchases: Int
+    let total: Double
+    let paid: Double
+    let left: Double
+    let lastPayment: String?
+    let firstPurchase: String?
+    let lastPurchase: String?
+    let days: Int?
+    let perDay: Double?
+    let byCurrency: [Birim]
+    let byCategory: [Pay]
+    let byPerson: [Pay]
+    let byCard: [Pay]
+    let list: [Kalem]
+    let missingRates: Int?
 }
 
 // Kartın dönem dönem harcamaları (card_statements): yeniden eskiye; ilki bugünün dönemi

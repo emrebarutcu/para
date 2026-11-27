@@ -453,3 +453,21 @@ test("banka mesajları: şifre ve ekstre eklenmez, harcama eklenir, model anlaş
   assert.equal((await e.call("list_inbox")).ok.emails[0].needsReview, "Looks like a purchase already added");
 });
 
+
+// Etiketler: harcama formu add_purchase tags ile yazar, Etiketler görünümü list_tags, rapor tag_summary okur
+// (EtiketlerEkrani.swift; Gorunumler.swift EtiketListesi / EtiketRaporu)
+test("etiketler: formdan etiket, liste ve rapor; köprüde de aynı araçlar", async () => {
+  const e = engine();
+  await e.call("add_card", { name: "Bonus", limit: 50000, cutoff_day: 10, due_day: 20 });
+  const a = await e.call("add_purchase", { description: "Uçak", amount: 12000, installments: 3, date: "2026-10-05", card: "Bonus", tags: ["#Maldivler"] });
+  assert.deepEqual(a.ok.purchase.tags, ["Maldivler"]);
+  await e.call("add_purchase", { description: "Otel", amount: 8000, date: "2026-10-20", card: "nakit", tags: ["maldivler", "Balayı"] });
+  const l = await e.call("list_tags");
+  assert.deepEqual(l.ok.tags.map(t => [t.tag, t.purchases, t.total]), [["Maldivler", 2, 20000], ["Balayı", 1, 8000]]);
+  const r = await e.call("tag_summary", { tag: "MALDİVLER" });
+  assert.equal(r.ok.total, 20000);
+  assert.equal(r.ok.list.length, 2);
+  for (const k of ["paid", "left", "byCurrency", "byCategory", "byPerson", "byCard", "list"]) assert.ok(k in r.ok, k);
+  // Etiket kaydedilen veride de (eşitleme purchases.tags yazar)
+  assert.deepEqual(JSON.parse(e.saved()).installments.map(p => p.tags), [["Maldivler"], ["Maldivler", "Balayı"]]);
+});

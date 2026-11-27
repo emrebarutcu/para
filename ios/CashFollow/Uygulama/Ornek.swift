@@ -119,6 +119,11 @@ enum Ornek {
         market["personId"] = "baba"
         var kira = harcama("p10", "Kira", nil, 25000, 1, 150, "ev")
         kira["repeat"] = 0
+        // Etiket: bir gezinin harcamaları (Harcamalar → Etiketler)
+        var ucak = harcama("p4", "Uçak bileti", "axess", 9600, 3, 25, "seyahat")
+        ucak["tags"] = ["Kapadokya"]
+        var restoran = harcama("p5", "Restoran", "bonus", 1850, 1, 6, "yeme")
+        restoran["tags"] = ["Kapadokya"]
         return [
             "people": [["id": "ben", "name": "Ben", "color": 0], ["id": "es", "name": "Ayşe", "color": 1],
                        ["id": "elif", "name": "Elif", "color": 3], ["id": "baba", "name": "Hilal Baba", "color": 2]],
@@ -130,8 +135,8 @@ enum Ornek {
                 harcama("p1", "iPhone", "bonus", 54000, 9, 40, "elektronik"),
                 harcama("p2", "Migros", "bonus", 2400, 1, 12, "market"),
                 harcama("p3", "Migros", "axess", 3100, 1, 40, "market"),
-                harcama("p4", "Uçak bileti", "axess", 9600, 3, 25, "seyahat"),
-                harcama("p5", "Restoran", "bonus", 1850, 1, 6, "yeme"),
+                ucak,
+                restoran,
                 harcama("p6", "Opet", "axess", 2200, 1, 9, "ulasim"),
                 harcama("p7", "Koltuk takımı", "bonus", 42000, 12, 70, "ev"),
                 harcama("p8", "Netflix", "bonus", 230, 1, 3, "eglence"),
@@ -172,6 +177,10 @@ enum Ornek {
         sam["personId"] = "sam"
         var kira = harcama("p10", yerel ? L("Kira") : "Rent", nil, 2400, 1, 150, "ev")
         kira["repeat"] = 0
+        var ucak = harcama("p4", yerel ? L("Uçak bileti") : "Delta flight", "chase", 486, 1, 25, "seyahat")
+        ucak["tags"] = ["Hawaii"]
+        var yemek = harcama("p5", yerel ? "Starbucks" : "Chipotle", "amex", 24.80, 1, 2, "yeme")
+        yemek["tags"] = ["Hawaii"]
         var spotify = harcama("p11", "Spotify", "chase", 11.99, 1, 120, "eglence")
         spotify["repeat"] = 0
         // Pay in 4 (Klarna, banka kartından) ve döner kredi: Chase elle ödeniyor (APR %24,99); son ekstresinin (son
@@ -192,8 +201,8 @@ enum Ornek {
                 harcama("p1", "iPhone 17 Pro", "amex", 1199, 12, 40, "elektronik"),
                 harcama("p2", yerel ? L("Market") : "Whole Foods", "chase", 142.35, 1, 4, "market"),
                 harcama("p3", yerel ? "Amazon" : "Trader Joe's", "chase", 88.20, 1, 11, "market"),
-                harcama("p4", yerel ? L("Uçak bileti") : "Delta flight", "chase", 486, 1, 25, "seyahat"),
-                harcama("p5", yerel ? "Starbucks" : "Chipotle", "amex", 24.80, 1, 2, "yeme"),
+                ucak,
+                yemek,
                 harcama("p6", "Shell", "chase", 52.10, 1, 6, "ulasim"),
                 harcama("p7", yerel ? "IKEA" : "IKEA sofa", "amex", 1350, 6, 70, "ev"),
                 harcama("p8", "Netflix", "chase", 15.49, 1, 3, "eglence"),
