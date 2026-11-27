@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handleAppleRevoke, clientSecret } from "../apple.js";
+import { handleAppleRevoke, clientSecret, _denetimSifirla } from "../apple.js";
 import { jwsPayload, BUNDLE_ID } from "../abonelik.js";
 
 const NOW = Date.parse("2026-11-25T12:00:00Z");
@@ -72,4 +72,51 @@ test("girişsiz 401, anahtar yoksa 503, bozuk code 400", async () => {
   assert.equal((await handleAppleRevoke(req({ code: CODE }), {}, { fetch: w.f })).status, 503);
   assert.equal((await handleAppleRevoke(req({ code: "x" }), ENV, { fetch: w.f })).status, 400);
   assert.equal(w.calls.length, 0);
+});
+
+// GET: kurulum denetimi
+const getReq = () => new Request("https://cashfollow.app/api/apple-iptal");
+function appleCevap(status, body, calls = []) {
+  return async (url, init = {}) => {
+    calls.push({ url, p: Object.fromEntries(new URLSearchParams(init.body)) });
+    return new Response(JSON.stringify(body), { status });
+  };
+}
+
+test("denetim: anahtar yoksa hangi değişkenlerin eksik olduğu, Apple'a gidilmez", async () => {
+  _denetimSifirla();
+  const calls = [];
+  const res = await handleAppleRevoke(getReq(), { APPLE_TEAM_ID: "TEAM456" }, { fetch: appleCevap(200, {}, calls), now: NOW });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ready: false, missing: ["APPLE_SIWA_KEY_P8", "APPLE_SIWA_KEY_ID"] });
+  assert.equal(calls.length, 0);
+});
+
+test("denetim: Apple yalnızca code'u reddederse (invalid_grant) kurulum doğru; gizli bilgi dönmez", async () => {
+  _denetimSifirla();
+  const calls = [];
+  const res = await handleAppleRevoke(getReq(), ENV, { fetch: appleCevap(400, { error: "invalid_grant" }, calls), now: NOW });
+  const body = await res.json();
+  assert.deepEqual(body, { ready: true, apple: "ok" });
+  assert.ok(!JSON.stringify(body).includes("SIWA123") && !JSON.stringify(body).includes("TEAM456"));
+  assert.equal(new URL(calls[0].url).pathname, "/auth/token");
+  assert.equal(calls[0].p.client_id, BUNDLE_ID);
+  assert.equal(calls[0].p.grant_type, "authorization_code");
+});
+
+test("denetim: invalid_client → anahtar, Key ID ya da Team ID yanlış", async () => {
+  _denetimSifirla();
+  const res = await handleAppleRevoke(getReq(), ENV, { fetch: appleCevap(400, { error: "invalid_client" }), now: NOW });
+  assert.deepEqual(await res.json(), { ready: true, apple: "invalid_client" });
+});
+
+test("denetim: bozuk .p8 → bad_key_format; sonuç 10 dakika saklanır", async () => {
+  _denetimSifirla();
+  const kotu = { ...ENV, APPLE_SIWA_KEY_P8: "-----BEGIN PRIVATE KEY-----\nbozuk\n-----END PRIVATE KEY-----" };
+  const calls = [];
+  const r1 = await (await handleAppleRevoke(getReq(), kotu, { fetch: appleCevap(400, { error: "invalid_grant" }, calls), now: NOW })).json();
+  assert.equal(r1.apple, "bad_key_format");
+  const r2 = await (await handleAppleRevoke(getReq(), kotu, { fetch: appleCevap(400, { error: "invalid_grant" }, calls), now: NOW + 60_000 })).json();
+  assert.equal(r2.apple, "bad_key_format");
+  assert.equal(calls.length, 0);
 });

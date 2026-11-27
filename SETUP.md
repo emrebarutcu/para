@@ -385,6 +385,11 @@ kimlik belirteci Supabase'e verilir (`Auth.signInWithApple`, `grant_type=id_toke
    - Cloudflare → Workers & Pages → `para` → Settings → Variables and Secrets: `APPLE_SIWA_KEY_P8` (Secret; .p8'in bütün
      metni, BEGIN/END satırlarıyla), `APPLE_SIWA_KEY_ID` (Key ID), `APPLE_TEAM_ID` (Team ID: developer.apple.com →
      Membership). Biri eksikse uç 503 verir (`apple_revoke_failed`, `status: 503`).
+   - **Denetim:** `https://cashfollow.app/api/apple-iptal` adresini tarayıcıda açın (GET, giriş gerekmez, gizli bilgi
+     dönmez). `{"ready":true,"apple":"ok"}`: anahtar, Key ID ve Team ID doğru (Apple'a geçersiz bir code gider; yalnızca
+     code'u reddeder). `"ready":false` ve `missing`: eksik değişkenler. `"apple":"invalid_client"`: anahtar / Key ID /
+     Team ID yanlış ya da anahtar `app.cashfollow.ios`'a bağlı değil. `"bad_key_format"`: .p8 metni bozuk. Sonuç 10
+     dakika saklanır.
 
 #### TestFlight (Mac gerekmez)
 
