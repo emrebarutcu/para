@@ -6,7 +6,8 @@ import UIKit
 // "-sekme N" açılış sekmesi (0 Özet … 4 Varlıklar), "-galeri N" yalnızca grafikler (1: Nakit ve kategoriler,
 // 2: aylık ödemeler ve Varlığın seyri, 3: harcama formu ve "Alabilir miyim?", 4: kredi formu, 5: döviz formu, 6: Ayarlar,
 // 7: CashFollow Premium ödeme ekranı, 8: yapay zekâ asistanı, 9: Özet'te yeri gelince görünen kartlar — biten taksit,
-// ay kapanışı; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
+// ay kapanışı, 10: banka mesajları, 11: bildirimler, 12: etiketler, 13: etiket raporu, 14: etiketli harcamanın formu,
+// 15: tarih aralığından etiketleme, 16: gezi modu; "-bos" ile verisiz). Örnek veride Premium açıktır, "-ucretsiz" ile ücretsiz sürüm
 // (kilitler) görünür. Turda "tanitimN" (0…5) ilk açılış akışının N. ekranı (KarsilamaEkrani, cevaplar dolu; "-bos" ile);
 // "tanitimNbos" o adımın cevabı boş (kart adı yazılmamış, kesim günü seçilmemiş).
 // Gerçek kullanımda hiçbiri yoktur. Gerçek ilk açılış akışını simülatörde denemek: yeni kurulumda "-karsilama".
@@ -148,6 +149,8 @@ enum Ornek {
                 ["id": "e3", "personId": "ben", "asset": "USD", "amount": 1000, "desc": "Dolar alımı", "date": gun(-100), "price": 41.2, "settle": true],
                 ["id": "e4", "personId": "ben", "asset": "GAU", "amount": 10, "desc": "Altın alımı", "date": gun(-60), "price": 5800, "settle": true],
             ],
+            // Etiketin bütçesi (gezi modu yok: açık olsaydı harcama formu görüntülerine de etiket gelirdi)
+            "tags": [["id": "kapadokya", "name": "Kapadokya", "budget": 15000]],
             "debts": [
                 // Kredide amount geri ödenecek toplamdır (taksit × sayı; add_debt amount_type per_installment bunu hesaplar)
                 ["id": "d1", "kind": "loan", "personId": "ben", "party": "Ziraat", "asset": "TRY", "amount": 54000, "principal": 45000,
@@ -212,6 +215,7 @@ enum Ornek {
                 ["id": "e1", "personId": "ben", "asset": para, "amount": tutar(6200), "desc": yerel ? L("Maaş") : "Paycheck", "date": gun(-150), "repeat": 0],
                 ["id": "e2", "personId": "ben", "asset": para, "amount": tutar(9500), "desc": yerel ? L("Açılış bakiyesi") : "Opening balance", "date": gun(-151)],
             ],
+            "tags": [["id": "hawaii", "name": "Hawaii", "budget": tutar(900)]],
             "debts": [
                 // 48 × 465 $ (amount toplamdır)
                 ["id": "d1", "kind": "loan", "personId": "ben", "party": yerel ? L("Taşıt kredisi") : "Ally Auto", "asset": para, "amount": tutar(22320), "principal": tutar(18000),
@@ -249,10 +253,28 @@ struct GrafikGalerisi: View {
             NavigationStack { MesajAyarlari() }
         } else if sayfa == 11 {
             NavigationStack { BildirimAyarlari() }
+        } else if sayfa == 12 {
+            // Harcamalar → Etiketler
+            NavigationStack {
+                Sayfa { Okunan(tool: "list_tags") { (l: EtiketListesi) in EtiketlerKarti(etiketler: l.tags) } }
+                    .navigationTitle(L("Etiketler"))
+                    .sayfaZemini()
+            }
+        } else if sayfa == 13 {
+            NavigationStack { EtiketRaporuEkrani(etiket: ornekEtiket) }
+        } else if sayfa == 14 {
+            // Etiketli harcamanın formu (Uçak bileti)
+            Okunan(tool: "get_purchase", args: ["id": "p4"]) { (p: Harcama) in HarcamaFormu(duzenle: p) }
+        } else if sayfa == 15 {
+            EtiketTopluEkle(etiket: ornekEtiket, ilk: Bicim.key(Date().addingTimeInterval(-30 * 86400)), son: Bicim.key(Date()))
+        } else if sayfa == 16 {
+            GeziModuFormu(etiket: ornekEtiket, mod: nil)
         } else {
             galeri
         }
     }
+
+    private var ornekEtiket: String { ulke == "TR" ? "Kapadokya" : "Hawaii" }
 
     // Özet'te yeri gelince görünen kartlar, örnek değerlerle (gerçek veride tarihe bağlıdır): biten taksidin kutlaması,
     // "geçen ayın özeti hazır" ve ay kapanışının kartı
