@@ -73,9 +73,8 @@ Datenschutz: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
-- Wähle deine Mitteilungen: Zahltag, Abrechnungsschluss, Ende einer Ratenzahlung und Monatsübersicht, jede einzeln an oder aus.
-- Neue Übersicht: wie viel von diesem Monat schon bezahlt ist und was noch offen ist, ob der nächste Monat leichter wird und in welchem Monat deine Raten enden.
-- Schneller eintragen: frühere Händler mit einem Tipp, samt Karte, Raten und Kategorie. „Nochmal“ trägt einen Kauf erneut ein.
-- Neue Mitteilungen: am Tag vor der Abrechnung, wenn ein Ratenkauf abbezahlt ist, und ein Monatsrückblick.
-- Ein kleiner Glückwunsch, wenn ein Ratenkauf abbezahlt ist, mit dem Betrag, der dadurch jeden Monat frei wird.
-- Monatsrückblick: was du bezahlt hast, was abbezahlt ist und was diesen Monat ansteht.
+- Mit Apple anmelden: Konto mit einem Tipp anlegen, ohne E-Mail-Bestätigung.
+- Die ersten 3 Monate im Cashflow sind kostenlos: Sieh deinen Zahlungsplan für die nächsten drei Monate ohne Premium.
+- Zahlst du mit Pay in 4? Trag es bei der Einrichtung ein, und alle vier Zahlungstermine landen in deinem Plan.
+- Füge deine erste Karte hinzu und sieh sofort, wann der heutige Einkauf fällig ist, mit Erinnerung vor dem Abrechnungsschluss.
+- Neuer Premium-Bildschirm: klarere Pläne und Preise; beim kostenlosen Test steht, ab welchem Tag abgebucht wird.

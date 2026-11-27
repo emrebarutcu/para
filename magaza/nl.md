@@ -73,9 +73,8 @@ Privacy: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
-- Kies je meldingen: betaaldag, afsluitdatum, einde van een betaalplan en maandoverzicht, elk apart aan of uit.
-- Nieuw overzicht: hoeveel van deze maand al betaald is en wat er nog openstaat, of volgende maand lichter wordt en in welke maand je termijnen aflopen.
-- Sneller invullen: eerdere winkels met één tik, met hun kaart, termijnen en categorie. 'Opnieuw' voegt een aankoop nog eens toe.
-- Nieuwe meldingen: de dag vóór de afschriftdatum, als een termijnaankoop is afbetaald, en een maandoverzicht.
-- Een klein feestje als een aankoop is afbetaald, met het bedrag dat daardoor elke maand vrijkomt.
-- Maandoverzicht: wat je hebt betaald, wat is afbetaald en wat deze maand op je afkomt.
+- Inloggen met Apple: maak je account aan met één tik, zonder e-mailbevestiging.
+- De eerste 3 maanden van Cashflow zijn gratis: zie je betaalplan voor de komende drie maanden zonder Premium.
+- Betaal je met betalen in 4? Voeg het toe bij het instellen en alle vier de betaaldata komen in je plan.
+- Voeg je eerste kaart toe en zie meteen wanneer de aankoop van vandaag wordt afgeschreven, met een herinnering voor de afsluitdatum.
+- Nieuw Premium-scherm: duidelijkere abonnementen en prijzen; bij de gratis proefperiode staat op welke dag de betaling begint.

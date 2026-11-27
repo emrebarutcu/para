@@ -73,9 +73,8 @@ Confidentialité : https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
-- Choisissez vos notifications : jour de paiement, arrêté du relevé, fin d'un échéancier et résumé du mois, chacune activable à part.
-- Nouvel aperçu : ce qui est déjà payé ce mois-ci et ce qu'il reste, si le mois prochain est plus léger, et le mois où vos mensualités se terminent.
-- Saisie plus rapide : les commerçants déjà utilisés en un geste, avec leur carte, leurs mensualités et leur catégorie. « Encore » ajoute à nouveau un achat.
-- Nouvelles notifications : la veille de l'arrêté du relevé, quand un achat en plusieurs fois est remboursé, et le bilan du mois.
-- Un petit bravo quand un achat est remboursé, avec le montant libéré chaque mois.
-- Bilan du mois : ce que vous avez payé, ce qui est terminé et ce qui arrive ce mois-ci.
+- Connexion avec Apple : créez votre compte en un geste, sans confirmation par e-mail.
+- Les 3 premiers mois de la Trésorerie sont gratuits : voyez votre plan de paiement des trois prochains mois sans Premium.
+- Vous payez en 4 fois ? Ajoutez-le dès la configuration et les quatre échéances entrent dans votre plan.
+- Ajoutez votre première carte et voyez tout de suite quand l'achat du jour sera prélevé, avec un rappel avant l'arrêté du relevé.
+- Nouvel écran Premium : formules et prix plus clairs ; l'essai gratuit indique le jour où la facturation commence.

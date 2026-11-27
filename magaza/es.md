@@ -73,9 +73,8 @@ Privacidad: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
-- Elige tus notificaciones: día de pago, cierre del extracto, fin de un plazo y resumen del mes, cada una por separado.
-- Nuevo resumen: cuánto de este mes ya está pagado y cuánto queda, si el mes que viene es más ligero y en qué mes terminan tus plazos.
-- Más rápido de apuntar: los comercios anteriores con un toque, con su tarjeta, sus cuotas y su categoría. «Otra vez» vuelve a añadir una compra.
-- Nuevas notificaciones: el día antes del cierre del extracto, cuando terminas de pagar una compra a plazos y el resumen del mes.
-- Una pequeña celebración cuando terminas de pagar una compra, con el importe que te libera cada mes.
-- Resumen del mes: lo que has pagado, lo que has terminado de pagar y lo que vence este mes.
+- Inicia sesión con Apple: crea tu cuenta con un toque, sin confirmar el correo.
+- Los 3 primeros meses del Flujo son gratis: mira tu plan de pagos de los próximos tres meses sin Premium.
+- ¿Pagas con pago en 4? Añádelo al empezar y las cuatro fechas de pago entran en tu plan.
+- Añade tu primera tarjeta y mira al momento cuándo se paga la compra de hoy, con un aviso antes del cierre del extracto.
+- Nueva pantalla Premium: planes y precios más claros; la prueba gratuita indica el día en que empieza el cobro.

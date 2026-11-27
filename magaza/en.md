@@ -73,9 +73,8 @@ Privacy: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
-- Choose your notifications: payment day, statement cutoff, finished payment plans and the monthly summary, each on or off.
-- New Overview: how much of this month is already paid and what's left, whether next month is lighter, and the month your installments end.
-- Faster to add: past merchants come up in one tap with their card, number of payments and category. "Again" re-adds a purchase.
-- New notifications: the day before a statement closes, when a payment plan is paid off, and a monthly recap.
-- A small celebration when a plan is paid off, with the monthly amount it frees up.
-- Monthly recap: what you paid, which plans finished and what's due this month.
+- Sign in with Apple: create your account in one tap, no email confirmation.
+- The first 3 months of Cash Flow are free: see your payment plan for the next three months without Premium.
+- Paying with Pay in 4? Add it while setting up and all four payment dates go into your plan.
+- Add your first card and see right away when today's purchase is due, with a reminder before the statement closes.
+- Redesigned Premium screen: clearer plans and prices; the free trial shows the day billing starts.

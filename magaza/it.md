@@ -73,9 +73,8 @@ Privacy: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
-- Scegli le tue notifiche: giorno di pagamento, chiusura dell'estratto conto, fine delle rate e riepilogo del mese, ognuna a parte.
-- Nuovo riepilogo: quanto di questo mese è già pagato e quanto resta, se il mese prossimo è più leggero e in che mese finiscono le tue rate.
-- Più veloce da inserire: i negozi già usati con un tocco, con carta, rate e categoria. «Di nuovo» aggiunge ancora un acquisto.
-- Nuove notifiche: il giorno prima della chiusura dell'estratto conto, quando finisci di pagare un acquisto a rate e il riepilogo del mese.
-- Un piccolo festeggiamento quando finisci di pagare un acquisto, con l'importo che ti libera ogni mese.
-- Riepilogo del mese: cosa hai pagato, cosa hai finito di pagare e cosa scade questo mese.
+- Accedi con Apple: crea il tuo account con un tocco, senza conferma via e-mail.
+- I primi 3 mesi del Flusso sono gratis: vedi il tuo piano di pagamenti dei prossimi tre mesi senza Premium.
+- Paghi con paga in 4? Aggiungilo all'inizio e le quattro scadenze entrano nel tuo piano.
+- Aggiungi la tua prima carta e vedi subito quando verrà addebitato l'acquisto di oggi, con un promemoria prima della chiusura dell'estratto conto.
+- Nuova schermata Premium: piani e prezzi più chiari; la prova gratuita indica il giorno in cui inizia l'addebito.
