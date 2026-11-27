@@ -84,14 +84,27 @@ Netlify'da da çalışır (`netlify.toml`); yeni adres yerleştikten sonra eski 
 
 ### Sürüm
 
-Uygulamanın sürümü `version.js`'tedir (`MAJOR.MINOR.PATCH`, ör. `1.4.2`) ve Ayarlar'ın altında görünür. `main`'e açılan
-her PR sürümü artırır:
+İki numara var, ikisi de `version.js`'te ve Ayarlar'ın altında görünür ("CashFollow v1.4.0 (57)"):
+
+- **Sürüm** (`APP_VERSION`, `MAJOR.MINOR.PATCH`): App Store'daki numara (iOS `MARKETING_VERSION`). Yalnızca son yayından
+  sonra **gerektiği kadar** artar: 1.3.4 yayındayken gelen ilk düzeltme 1.3.5 yapar, sonraki düzeltmeler 1.3.5'te
+  kalır; araya bir MINOR girerse 1.4.0 olur ve yayına kadar orada kalır. Böylece mağazada sayı atlanmaz, TestFlight'a
+  aynı sürümle istenildiği kadar build yüklenir (build numarası iş akışının çalışma sayısıdır).
+- **Yapı** (`APP_BUILD`): her PR'da 1 artar. Web her `main` birleştirmesinde yayına çıktığı için service worker önbelleği
+  bundan yenilenir.
+
+`main`'e açılan her PR:
 
 ```sh
-scripts/surum.sh          # PATCH: 1.4.2 → 1.4.3
-scripts/surum.sh minor    # MINOR: 1.4.2 → 1.5.0
-scripts/surum.sh major    # MAJOR: 1.4.2 → 2.0.0
+scripts/surum.sh          # PATCH (yayında 1.4.2 → 1.4.3; zaten 1.4.3 ya da 1.5.0 ise kalır)
+scripts/surum.sh minor    # MINOR (yayında 1.4.2 → 1.5.0)
+scripts/surum.sh major    # MAJOR (yayında 1.4.2 → 2.0.0)
 ```
+
+**Yayındaki sürüm** en yüksek `yayin-X.Y.Z` git etiketidir. `magaza.yml` **incele** sürümü App Review'a gönderince
+etiketi kendisi koyar; App Store Connect'ten elle gönderilen sürüm için `scripts/surum.sh yayin [X.Y.Z]` (varsayılan
+`version.js`'teki). İnceleme reddedilir de aynı numarayla düzeltilip yeniden gönderilecekse etiket silinir
+(`git push origin :yayin-X.Y.Z && git tag -d yayin-X.Y.Z`), yoksa sonraki PR numarayı bir ileri götürür.
 
 Hangisinin artacağı, değişikliğin kodun dışında kalan ve bizim yönetmediğimiz şeyleri bozup bozmadığına göre seçilir:
 cihazlarda önbellekte kalan eski sürümler (aynı tablolara yazmayı sürdürürler), Supabase şeması, asistanların çağırdığı
@@ -104,21 +117,25 @@ MCP araçları ve kullanıcının mevcut verisinin anlamı.
 | **PATCH** | Yeni yetenek yok: hata düzeltmesi, metin, stil, performans, belgeler, yalnızca altyapı (Worker paketleme, önbellek başlıkları) | Çıkışta verinin temizlenmesi |
 
 Bir PR'da birden fazla değişiklik varsa en yükseği belirler; kararsız kalınırsa yükseği seçilir. MAJOR'da bu dosyaya
-yükseltme notu (çalıştırılacak SQL, MCP kullananların dikkat edeceği) yazılır. Mağaza sürümü (App Store
-`CFBundleShortVersionString`) gönderim anındaki web sürümüdür; Google Play `versionCode`'u ondan üretilir:
+yükseltme notu (çalıştırılacak SQL, MCP kullananların dikkat edeceği) yazılır. Yükseltme notu yayına çıkacak sürümün
+numarasıyla yazılır (arada aynı numarada kalan PR'lar notu genişletir). Google Play `versionCode`'u sürümden üretilir:
 `MAJOR × 1000000 + MINOR × 1000 + PATCH` (ör. `1.4.2` → `1004002`).
 
-`.github/workflows/surum.yml` ("Sürüm" denetimi) sürüm main'dekinden büyük değilse PR'ı kırmızıya çeker. Bilinçli
-sıfırlamada (8.15.1 → 1.0.0, Kasım 2026: App Store'da ilk yayın) PR'a **`surum-sifirla`** etiketi konur; denetim etiketle
-yeniden çalışır ve geçer. Sıfırlama App Store'da yalnızca daha yüksek numaralı bir sürüm hiç onaylanmamışsa olur.
+`.github/workflows/surum.yml` ("Sürüm" denetimi) şu durumlarda PR'ı kırmızıya çeker: yapı `main`'dekinden büyük değil;
+sürüm geri gitmiş; sürüm yayındakinden büyük değil (o numaraya yeni build yüklenemez); sürüm yayındakinin bir sonraki
+patch / minor / major'ı değil (sayı atlanmış); `sw.js` satırı ya da `MARKETING_VERSION` `version.js`'le aynı değil.
+Bilinçli sıfırlamada (8.15.1 → 1.0.0, Kasım 2026: App Store'da ilk yayın) PR'a **`surum-sifirla`** etiketi konur. 27 Kasım 2026'da kurala
+geçilirken de kondu: 1.4.0–1.5.4 yalnızca TestFlight'a yüklenmişti, mağazada 1.3.4 vardı; sürüm 1.4.0'a çekildi ve
+yapı 1'den başladı. `yayin-1.3.4` etiketi yok (bu oturumdan etiket itilemiyordu): ilk `incele` `yayin-1.4.0`'ı koyana
+kadar Sürüm denetimi "bir adım ileri" kuralını atlar.
 GitHub → Settings → Branches → `main` kuralında şu ikisi açılmalı: **Require status checks to pass** (altında **Sürüm**)
-ve **Require branches to be up to date before merging**. İkincisi olmazsa paralel iki PR aynı sürümü yazıp ikisi de
+ve **Require branches to be up to date before merging**. İkincisi olmazsa paralel iki PR aynı yapıyı yazıp ikisi de
 birleşebilir (aynı satırdaki aynı değişiklik git'te çakışma sayılmaz); PR main'i alınca denetim yeniden çalışır,
-aynı sürüm yakalanır ve sürüm yeniden artırılır.
+aynı yapı yakalanır ve `scripts/surum.sh` yeniden çalıştırılır.
 
-Service worker önbelleğinin adı sürümden gelir; yeni sürüm yayınlanınca cihazlardaki eski dosyalar kendiliğinden yenilenir.
-`scripts/surum.sh` sürümü `sw.js`'in ilk satırına da yazar ("// Sürüm 6.0.2 …"; Sürüm denetimi ikisinin aynı olduğuna
-bakar): dosyanın kendisi her sürümde değişir, tarayıcılar (Safari dahil) yeni service worker'ı içe aktarılan `version.js`'e
+Service worker önbelleğinin adı sürüm ve yapıdan gelir; her birleştirmede cihazlardaki eski dosyalar kendiliğinden
+yenilenir. `scripts/surum.sh` ikisini `sw.js`'in ilk satırına da yazar ("// Sürüm 1.4.0 (yapı 57) …"; Sürüm denetimi
+aynı olduklarına bakar): dosyanın kendisi her sürümde değişir, tarayıcılar (Safari dahil) yeni service worker'ı içe aktarılan `version.js`'e
 bakmadan da fark eder. Yeni service worker denetimi alınca açık sayfa bir kez yenilenir (açık form varsa kapanınca).
 
 ### Yerelde çalıştırma ve tutarlılık denetimi
@@ -357,8 +374,9 @@ dosyaları pakete kopyalar). Bu yüzden ayrı depo değil: şema, araçlar ve iO
   ve ay özeti ödeme hatırlatmasına bağlıydı; `Hatirlatma.gecis()` bir kez çalışıp hatırlatması kapalı olanlarda üçünü
   kapalı başlatır (kimseye yeni bildirim kendiliğinden açılmaz). Banka bildirimleri tek ayardı (`eposta.bildirim`);
   "onay bekleyen olunca" ilk okunuşta onun değerini alır.
-- **Sürüm:** mağaza sürümü web sürümüdür; `scripts/surum.sh` `MARKETING_VERSION`'ı da yazar, Sürüm denetimi ikisinin aynı
-  olduğuna bakar. `CURRENT_PROJECT_VERSION` (build numarası) her TestFlight yüklemesinde elle artırılır.
+- **Sürüm:** mağaza sürümü `version.js`'teki `APP_VERSION`'dır ve yalnızca yayından sonra artar (yukarıda Sürüm);
+  `scripts/surum.sh` `MARKETING_VERSION`'ı da yazar, Sürüm denetimi ikisinin aynı olduğuna bakar. Build numarası
+  (`CURRENT_PROJECT_VERSION`) TestFlight iş akışının çalışma sayısıdır: aynı sürüme birçok build yüklenebilir.
 - **Denetim** (`.github/workflows/ios.yml`, iOS): `node --test ios/test/*.test.mjs` köprüyü JavaScriptCore'a benzer ortamda
   dener; macOS'ta uygulama simülatör için derlenir ve `-oz-denetim` ile açılır (`Uygulama/OzDenetim.swift`: modüller
   yüklenir, araçlar çağrılır, cevaplar Swift görünümlerine çözülür). Web modülleri ya da `mcp/tools.js` değişince de çalışır;

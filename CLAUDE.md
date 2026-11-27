@@ -16,8 +16,9 @@ Kredi kartı taksitleri, nakit akışı, borçlar ve varlıklar. Üç yüz, tek 
   çalışır; yeni metnin tüm dillere çevirisi eklenir). iPhone ve web cihazın / tarayıcının tercih ettiği ilk desteklenen
   dili seçer, yoksa İngilizce (`dil.js` → `choose`, `Dil.swift`, `dil-sayfa.js`; `index.html`'in sabit metinleri de
   sözlükten çevrilir, `data-tr` olanlar Türkçe kalır). Ayrıntı: `SETUP.md` → Diller. Asistan şimdilik yalnızca Türkçe.
-- Sürüm: `version.js`, `sw.js` ve Xcode `MARKETING_VERSION` birlikte, `sh scripts/surum.sh [patch|minor|major]` ile. Hangisi
-  olacağı ve MAJOR'da yükseltme notu: `SETUP.md` → Sürüm.
+- Sürüm: her PR'da `sh scripts/surum.sh [patch|minor|major]` (`version.js`, `sw.js`, Xcode `MARKETING_VERSION` birlikte).
+  Yapı her PR'da artar; sürüm yalnızca yayındaki sürümden (`yayin-*` etiketi) bir adım ileri gider, mağazada sayı atlanmaz.
+  Hangisi olacağı ve MAJOR'da yükseltme notu: `SETUP.md` → Sürüm.
 - `main`'e kullanıcı onayı olmadan birleştirme yapılmaz; iş `claude/…` dallarında, PR ile.
 - Gizli anahtarlar (`SUPABASE_ACCESS_TOKEN`, `CLOUDFLARE_*`) ortamda durur; değerleri yazdırılmaz, dosyaya ya da commit'e girmez.
 - Kullanıcıyla Türkçe konuşulur; yanıtlar kısa, telefondan okunabilir.
@@ -46,4 +47,4 @@ sh supabase/sql.sh supabase/gecis/<sürüm>.sql
 ```
 
 GitHub Actions: `ios.yml` (derleme + öz-denetim), `ekran.yml` (ekran görüntüleri → `ekran-goruntuleri` dalı; elle
-çalıştırınca koyu tema seçilebilir), `testflight.yml` (elle, `main`'den: TestFlight'a yükler), `magaza.yml` (App Store sayfası: `magaza/` → App Store Connect; oku / kuru / gonder), `sql.yml`, `surum.yml`.
+çalıştırınca koyu tema seçilebilir), `testflight.yml` (elle, `main`'den: TestFlight'a yükler), `magaza.yml` (App Store sayfası: `magaza/` → App Store Connect; oku / kuru / gonder / incele — incele `yayin-<sürüm>` etiketini koyar), `sql.yml`, `surum.yml`.
