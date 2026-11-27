@@ -1,6 +1,15 @@
 # Etiketler
 
-Tasarım taslağı (27 Kasım 2026). Henüz kodlanmadı. Sıra ve kararlar kullanıcıyla netleşince `SETUP.md`'ye taşınır.
+Tasarım (27 Kasım 2026). Kullanıcı onayladı: ücretsizde **2 etiket**, toplam ücretsizde **açık**, **Aşama 1** yapıldı
+(sürüm **1.4.0**). Çalışan özelliğin belgesi `SETUP.md` → 4 → Etiketler; burada kararlar ve sonraki aşamalar.
+
+Aşama 1'de tasarımdan farklar:
+- Ayrı `etiket.js` yok: ad / kimlik `tablo.js`'te (`tags`, `tagName`, `tagKey`), rapor `icgoru.js`'te (`tagList`,
+  `tagSummary`). Böylece iPhone'un JavaScriptCore'una, web'e ve Xcode'un "Web modülleri" adımına yeni dosya eklenmedi.
+- GIN indeksi eklenmedi: veri istemcide süzülüyor, sunucuda etikete göre sorgu yok.
+- Sürüm 1.6.0 değil 1.4.0: sürüm yalnızca yayındakinden (1.3.4) bir adım ileri gider (`SETUP.md` → Sürüm).
+- Asistanın `tag_purchases` aracı Aşama 1'de: id'leriyle toplu ekle / çıkar (tarih aralığını asistan `list_purchases`
+  ile bulur). Uygulamada tarih aralığından toplu etiketleme Aşama 2'de.
 
 ## Ne
 
@@ -82,7 +91,7 @@ create table if not exists tags (
 
 | Yer | İş |
 | --- | --- |
-| `etiket.js` (yeni, ortak UMD) | Ad temizleme / normalize, öneri (son kullanılan), `summary(state, tag, today, rates)`: toplam, ödenen / kalan, dağılımlar, birimler, tarih aralığı. `taksit.js` ve `icgoru.js`'i kullanır. `kopru.js` ve `index.html`'e eklenir. |
+| `tablo.js`, `icgoru.js` (yapıldı) | Ad temizleme / kimlik (`tags`, `tagKey`), etiket listesi ve rapor (`tagList`, `tagSummary`): toplam, ödenen / kalan, dağılımlar, birimler, tarih aralığı. |
 | `tablo.js` | `purchases.tags` okuma / yazma, `SCHEMA = 10` |
 | `mcp/tools.js` | `PURCHASE_FIELDS.tags` (add / update), `list_purchases` → `tag`; yeni `list_tags`, `tag_summary`, `rename_tag` (birleştirme de), `tag_purchases` (toplu ekle / çıkar, tarih aralığıyla) |
 | `eposta.js`, iPhone SMS | Etkin etiket varsa gelen harcamaya eklenir (ikinci tur) |
@@ -130,19 +139,19 @@ Analitik: `tag_added` (`source`: form / bulk / active / email / sms / assistant;
 
 ## Sürüm ve yayın
 
-- Eklemeli şema + yeni MCP araçları + isteğe bağlı parametreler → **MINOR** (1.5.3 → 1.6.0).
-- Yayından önce `sh supabase/sql.sh supabase/gecis/1.6.0.sql` (yeni istemci `tags` yazar; sütun yoksa yazma düşer).
+- Eklemeli şema + yeni MCP araçları + isteğe bağlı parametreler → **MINOR**: yayındaki 1.3.4'ten 1.4.0 (zaten 1.4.0'dı, yapı arttı).
+- Yayından önce `sh supabase/sql.sh supabase/gecis/1.4.0.sql` (yeni istemci `tags` yazar; sütun yoksa yazma düşer).
 - Mağaza: sürüm notları 10 dilde, ödeme ekranı ekran görüntüsü (`-galeri 7`) ve isterseniz etiket raporu için yeni galeri.
 
 ## Aşamalar (her biri ayrı PR, web + iPhone + asistan birlikte)
 
-1. **Temel (1.6.0):** `purchases.tags`, formda etiket, süzme, Etiketler sayfası (toplam + sayı), rapor, ücretsiz 2 etiket
+1. **Temel (1.4.0, yapıldı):** `purchases.tags`, formda etiket, süzme, Etiketler sayfası (toplam + sayı), rapor, ücretsiz 2 etiket
    sınırı ve rapor kilidi, asistan araçları.
 2. **Toplu etiketleme ve yönetim:** tarih aralığından ekleme, yeniden adlandırma / birleştirme.
 3. **`tags` tablosu:** etkin etiket (form, e-posta, SMS), etiket bütçesi ve içgörü ("Maldivler bütçesinin %80'i").
 
 ## Açık sorular
 
-- Ücretsiz sınır 2 mi, 3 mü? (Öneri: 2, kart / kişiyle aynı.)
+- ~~Ücretsiz sınır 2 mi, 3 mü?~~ 2 (onaylandı).
 - Etiket raporu girişsiz (yalnızca cihazda) kullanıcıda da olsun mu? (Öneri: evet; Premium cihazdaki abonelikten de gelir.)
 - Varlık hareketleri (ör. gezide döviz bozdurma, iade) ikinci turda etiketlenebilsin mi?

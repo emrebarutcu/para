@@ -73,6 +73,7 @@ Privacy: https://cashfollow.app/privacy
 
 ## What's new (≤4000)
 
+- Tags: add tags like "Hawaii" to purchases and see what a trip, a wedding or a renovation cost in total on one screen.
 - Sign in with Apple: create your account in one tap, no email confirmation.
 - The first 3 months of Cash Flow are free: see your payment plan for the next three months without Premium.
 - Paying with Pay in 4? Add it while setting up and all four payment dates go into your plan.

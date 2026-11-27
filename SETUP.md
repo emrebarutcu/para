@@ -149,6 +149,12 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 
 ### Yükseltme notları
 
+- **1.4.0** — **Etiketler** (yukarıda 4 → Etiketler; `ETIKETLER.md`): harcamaya birden fazla etiket ve etiketin raporu
+  (gezinin toplam maliyeti, ödenen / kalan, dağılımlar). **Yayından önce** (web `main`'e birleşince yayına çıkar)
+  `supabase/gecis/1.4.0.sql` çalıştırılır: `purchases.tags` (boş olabilen sütun, `etiketler_gecerli` kısıtı). Yeni istemci
+  bu sütunu yazdığı için çalışmazsa harcama eşitlemesi durur. Eşitleme biçimi `SCHEMA = 10`; eski istemciler etiketi
+  bilmez ama silmez. MCP: `add_purchase` / `update_purchase` `tags`, `list_purchases` `tag`, yeni `list_tags`,
+  `tag_summary`, `tag_purchases`; harcama görünümünde `tags`. Ücretsiz sürümde 2 etiket, raporun ayrıntısı Premium.
 - **1.3.0** — **Banka mesajından harcama** (iPhone, Türkiye; Kısayollar otomasyonu, bölüm 6 → Banka mesajları) ve
   **bildirim seçimi** (Ayarlar → Bildirimler: her tür ayrı). **Yayından önce** `supabase/gecis/1.3.0.sql` çalıştırılır (18 Kasım 2026'da
   çalıştırıldı): `app_config` tablosu (herkes okur, yalnızca panelden yazılır; `sms_shortcut_url`). Tablo yoksa uygulama çalışır, yalnızca
@@ -584,10 +590,11 @@ penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
   taksit, bugünün kartı: `icgoru.js` `FREE`; biri Özet'in tepesinde tek satır, `headline`); asistanda yalnızca özet
   okuması (`get_overview`; `mcp/server.js` `FREE_TOOLS`); Akış'ta ilk 3 ayın (bu ay ve sonraki iki ay; 1.5.0'a kadar 2)
   ödeme planı (ücretsiz tat:
-  `Abonelik.tatAy`, web `TASTE_MONTHS`; PostHog'da `free_taste` bayrağının `off` kolu kapatır, bayrak yoksa açıktır).
+  `Abonelik.tatAy`, web `TASTE_MONTHS`; PostHog'da `free_taste` bayrağının `off` kolu kapatır, bayrak yoksa açıktır);
+  2 farklı etiket ve etiketin toplamı (`Abonelik.ucretsizEtiket`, web `FREE_TAGS`; yeni etiket `tags`, rapor `tag_report` kilidi).
   Web kilitlerinde App Store bağlantısı ve geniş ekranda QR (`config.js` `APP_STORE_URL`, `appstore-qr.svg`; `app_store_opened`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir
   miyim?", öbür içgörüler (uyarılar, öneriler), Varlığın seyri, kart borcu geri ödeme planı, asistanın öbür araçları
-  (yazma dahil). Sınırı aşan eski kart ve kişiler kalır;
+  (yazma dahil), sınırsız etiket ve etiket raporunun ayrıntısı (ödenen / kalan, dağılımlar). Sınırı aşan eski kart ve kişiler kalır;
   yalnızca yenisi eklenemez. **Web** aynı sınırları uygular (`app.js` → CashFollow Premium; web'de "Alabilir miyim?" ve
   borç planı yok): satın alma yok, Premium iPhone'da alınır ve hesaba bağlanınca web'de de açılır. Web hesabın satırını
   oturum açılınca ve sekme öne gelince (en sık dakikada bir) okur, son değeri saklar; girişsiz web ücretsizdir.
@@ -1001,6 +1008,32 @@ aynı denemede %13–38 doğru buldu, 300–800 MB indirme ve telefonda öneri b
 Açılışta, eşitlemeden sonra ve e-postadan harcama eklenince kategorisiz harcamalar en yeniden başlayarak ayrılır
 (bulutta 25'erli istekler). Mobil uygulamada: web görünümüyle (Capacitor gibi) paketlenirse bu kod olduğu gibi çalışır;
 yerel (native) uygulamada aynı ONNX dosyası ONNX Runtime Mobile ile çalıştırılır, sıralama `kategori.js`'teki gibidir.
+
+### Etiketler
+
+Harcamaya serbest adlı, birden fazla etiket ("Maldivler", "Düğün", "Ev tadilatı"): bir olayın ya da projenin bütün
+harcamalarını kart, kişi, kategori ve ay fark etmeden toplar. Kategori *ne* alındığını, etiket *neden* alındığını söyler.
+Tasarım ve Premium kararı: `ETIKETLER.md`.
+
+- **Veri:** `purchases.tags text[]` (1.4.0; harcama başına en fazla 10, her biri 1–40 harf, virgül / satır sonu yok;
+  boşsa null). Ad ve kimlik `tablo.js` `tags` / `tagName` / `tagKey`: baştaki `#` atılır, boşluklar teke iner; büyük /
+  küçük harf, Türkçe İ / ı ve İngilizce I / i farkı aynı etiket sayılır, hesapta var olan yazılış kullanılır.
+  Eski istemciler sütunu bilmez ama silmez (yazma yalnızca gönderilen sütunları değiştirir).
+- **Rapor** (`icgoru.js` `tagList`, `tagSummary`): toplam maliyet harcamanın tamamıdır (bütün taksitler, gelecektekiler
+  dahil; tekrarlayanda bugüne kadar gelen tekrarlar; tarihsiz kayıtta asıl toplamı); ödenen / kalan (bugünden önce /
+  sonra ödenecek taksitler), son ödeme günü, ilk ve son harcama, günlük ortalama; kategoriye, kişiye, karta (nakit
+  dahil) göre dağılım ve para birimleri. Döviz ve altın bugünkü kurla (kategori dağılımı gibi); kuru bilinmeyen harcama
+  toplama girmez (`missing`). Hesaba katılmayan kartın (eşin kartı) harcamaları da sayılır: gezinin maliyetidir.
+- **Web:** harcama formunda Etiketler satırı (yazıp Enter / virgül, önceki etiketlere dokunma), harcama satırında
+  `#etiket`, Harcamalar → **Etiketler** görünümü (etiket, harcama sayısı, tarih aralığı, toplam), dokununca rapor penceresi.
+- **iPhone:** formda Etiketler (`HarcamalarEkrani.swift` `etiketAlani`), Harcamalar → Etiketler ve rapor
+  (`EtiketlerEkrani.swift`), harcama ayrıntısında Etiketler satırı. Örnek veride "Kapadokya" (ABD'de "Hawaii").
+- **Asistan:** `add_purchase` / `update_purchase` `tags` (düzenlemede verilen liste eskisinin yerine geçer, null siler),
+  `list_purchases` `tag`, `list_tags`, `tag_summary`, `tag_purchases` (toplu ekle / çıkar).
+- **Premium:** ücretsizde 2 farklı etiket (`Abonelik.ucretsizEtiket`, web `FREE_TAGS`; var olanlar harcamalara eklenmeye
+  devam eder, yenisi kilitli: `tags` kilidi) ve raporda toplam, harcama sayısı, tarihler ve harcamalar; ödenen / kalan,
+  son ödeme ve dağılımlar Premium (`tag_report` kilidi). Abonelik bitince etiketler kalır. Analitik: `tag_added`
+  (`count`, `tags`, `source`), `tag_report_viewed` (`locked`).
 
 ## 5. Taksitler Excel'ini içe aktarma
 
