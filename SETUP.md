@@ -150,11 +150,15 @@ Varlık, nakit ya da içgörü hesabına dokunan değişiklikten sonra çalışt
 ### Yükseltme notları
 
 - **1.4.0** — **Etiketler** (yukarıda 4 → Etiketler; `ETIKETLER.md`): harcamaya birden fazla etiket ve etiketin raporu
-  (gezinin toplam maliyeti, ödenen / kalan, dağılımlar). **Yayından önce** (web `main`'e birleşince yayına çıkar)
-  `supabase/gecis/1.4.0.sql` çalıştırılır: `purchases.tags` (boş olabilen sütun, `etiketler_gecerli` kısıtı). Yeni istemci
-  bu sütunu yazdığı için çalışmazsa harcama eşitlemesi durur. Eşitleme biçimi `SCHEMA = 10`; eski istemciler etiketi
-  bilmez ama silmez. MCP: `add_purchase` / `update_purchase` `tags`, `list_purchases` `tag`, yeni `list_tags`,
-  `tag_summary`, `tag_purchases`; harcama görünümünde `tags`. Ücretsiz sürümde 2 etiket, raporun ayrıntısı Premium.
+  (gezinin toplam maliyeti, ödenen / kalan, dağılımlar), yeniden adlandırma / birleştirme, toplu etiketleme, CSV, etiket
+  bütçesi ve gezi modu. **Yayından önce** (web `main`'e birleşince yayına çıkar; `sql.yml` geçiş dosyasını birleşmede
+  kendisi çalıştırır) `supabase/gecis/1.4.0.sql`: `purchases.tags` (boş olabilen sütun, `etiketler_gecerli` kısıtı) ve
+  `tags` tablosu (etiketin bütçesi ve gezi modu; RLS, `touch_row`, Realtime). Yeni istemci ikisini de okuyup yazdığı
+  için çalışmazsa eşitleme durur. Eşitleme biçimi `SCHEMA = 10`, `Tablo.TABLES`'a `tags` eklendi; eski istemciler sütunu
+  ve tabloyu bilmez ama silmez. MCP: `add_purchase` / `update_purchase` `tags`, `list_purchases` `tag` / `from` / `to`,
+  yeni `list_tags`, `tag_summary`, `tag_purchases`, `rename_tag`, `delete_tag`, `set_tag`; harcama görünümünde `tags`;
+  gezi modunda `add_purchase` ve `check_inbox` etiketi kendisi ekler. Ücretsiz sürümde 2 etiket; raporun ayrıntısı,
+  yönetim, bütçe ve gezi modu Premium.
 - **1.3.0** — **Banka mesajından harcama** (iPhone, Türkiye; Kısayollar otomasyonu, bölüm 6 → Banka mesajları) ve
   **bildirim seçimi** (Ayarlar → Bildirimler: her tür ayrı). **Yayından önce** `supabase/gecis/1.3.0.sql` çalıştırılır (18 Kasım 2026'da
   çalıştırıldı): `app_config` tablosu (herkes okur, yalnızca panelden yazılır; `sms_shortcut_url`). Tablo yoksa uygulama çalışır, yalnızca
@@ -591,10 +595,11 @@ penceresiyle aynı Claude / ChatGPT / Gemini bağlantıları).
   okuması (`get_overview`; `mcp/server.js` `FREE_TOOLS`); Akış'ta ilk 3 ayın (bu ay ve sonraki iki ay; 1.5.0'a kadar 2)
   ödeme planı (ücretsiz tat:
   `Abonelik.tatAy`, web `TASTE_MONTHS`; PostHog'da `free_taste` bayrağının `off` kolu kapatır, bayrak yoksa açıktır);
-  2 farklı etiket ve etiketin toplamı (`Abonelik.ucretsizEtiket`, web `FREE_TAGS`; yeni etiket `tags`, rapor `tag_report` kilidi).
+  2 farklı etiket ve etiketin toplamı (`Abonelik.ucretsizEtiket`, web `FREE_TAGS`; kilitler: yeni etiket `tags`, rapor
+  `tag_report`, toplu ekleme / ad / CSV `tag_manage`, bütçe `tag_budget`, gezi modu `tag_active`).
   Web kilitlerinde App Store bağlantısı ve geniş ekranda QR (`config.js` `APP_STORE_URL`, `appstore-qr.svg`; `app_store_opened`). **Premium:** sınırsız kart ve kişi, Akış sekmesi, "Alabilir
   miyim?", öbür içgörüler (uyarılar, öneriler), Varlığın seyri, kart borcu geri ödeme planı, asistanın öbür araçları
-  (yazma dahil), sınırsız etiket ve etiket raporunun ayrıntısı (ödenen / kalan, dağılımlar). Sınırı aşan eski kart ve kişiler kalır;
+  (yazma dahil), sınırsız etiket, etiket raporunun ayrıntısı (ödenen / kalan, dağılımlar), etiket yönetimi, bütçe ve gezi modu. Sınırı aşan eski kart ve kişiler kalır;
   yalnızca yenisi eklenemez. **Web** aynı sınırları uygular (`app.js` → CashFollow Premium; web'de "Alabilir miyim?" ve
   borç planı yok): satın alma yok, Premium iPhone'da alınır ve hesaba bağlanınca web'de de açılır. Web hesabın satırını
   oturum açılınca ve sekme öne gelince (en sık dakikada bir) okur, son değeri saklar; girişsiz web ücretsizdir.
@@ -1024,16 +1029,32 @@ Tasarım ve Premium kararı: `ETIKETLER.md`.
   sonra ödenecek taksitler), son ödeme günü, ilk ve son harcama, günlük ortalama; kategoriye, kişiye, karta (nakit
   dahil) göre dağılım ve para birimleri. Döviz ve altın bugünkü kurla (kategori dağılımı gibi); kuru bilinmeyen harcama
   toplama girmez (`missing`). Hesaba katılmayan kartın (eşin kartı) harcamaları da sayılır: gezinin maliyetidir.
+- **Etiketin ayarı** (`tags` tablosu, `state.tags`: `{ id: tagKey, name, budget?, activeFrom?, activeUntil? }`):
+  - **Bütçe** (ana para biriminde): raporda harcanan / bütçe çubuğu, kalan ya da aşılan; içgörü `etiket-butce` (harcama
+    bütçenin %80'ini geçince ya da aşınca; gezi modu sürüyorsa ya da son harcaması 60 gün içindeyse; Premium).
+  - **Gezi modu**: `activeFrom`–`activeUntil` arasındaki tarihli yeni harcamalar etiketi kendiliğinden alır (`icgoru.js`
+    `activeTags`): formda çip hazır gelir (çıkarılabilir), banka e-postası ve SMS'ten gelen harcamaya eklenir (web
+    `emailPurchase`, asistan / iPhone `check_inbox` `withActiveTags`), asistanın `add_purchase`'ında `tags` verilmezse eklenir.
+  - Ayarı olup harcaması olmayan etiket de listelenir (gezi öncesi konmuş bütçe). Ayarı kalmayan etiketin satırı silinir.
+- **Yönetim** (`tablo.js` `renameTag`, `removeTag`): yeniden adlandırma; yeni ad başka bir etiketse birleşir (harcamada bir
+  kez kalır; ayar hedefinki, yoksa eskisininki). Silme etiketi bütün harcamalardan ve ayarından kaldırır, harcamalar kalır.
+  Tarih aralığından toplu etiketleme: aralıktaki, etiketi olmayan tarihli harcamalar işaretli gelir. CSV: etiketin
+  harcamaları (tarih, açıklama, kart, kişi, kategori, tutar, birim, ana para birimi karşılığı, kalan; virgüllü dillerde `;`).
 - **Web:** harcama formunda Etiketler satırı (yazıp Enter / virgül, önceki etiketlere dokunma), harcama satırında
-  `#etiket`, Harcamalar → **Etiketler** görünümü (etiket, harcama sayısı, tarih aralığı, toplam), dokununca rapor penceresi.
+  `#etiket`, Harcamalar → **Etiketler** görünümü (etiket, harcama sayısı, tarih aralığı, toplam, bütçe, gezi modu),
+  dokununca rapor penceresi; raporda araçlar: Harcama ekle, Bütçe, Gezi modu, Yeniden adlandır, CSV, Etiketi sil.
 - **iPhone:** formda Etiketler (`HarcamalarEkrani.swift` `etiketAlani`), Harcamalar → Etiketler ve rapor
-  (`EtiketlerEkrani.swift`), harcama ayrıntısında Etiketler satırı. Örnek veride "Kapadokya" (ABD'de "Hawaii").
+  (`EtiketlerEkrani.swift`; sağ üstteki menü aynı araçlar, `EtiketTopluEkle`, `GeziModuFormu`, CSV `ShareLink`), harcama
+  ayrıntısında Etiketler satırı. Örnek veride "Kapadokya" (ABD'de "Hawaii").
 - **Asistan:** `add_purchase` / `update_purchase` `tags` (düzenlemede verilen liste eskisinin yerine geçer, null siler),
-  `list_purchases` `tag`, `list_tags`, `tag_summary`, `tag_purchases` (toplu ekle / çıkar).
+  `list_purchases` `tag`, `from` / `to`, `list_tags`, `tag_summary` (bütçe, gezi modu dahil), `tag_purchases` (kimlikle ya
+  da tarih aralığıyla toplu ekle / çıkar), `rename_tag`, `delete_tag`, `set_tag` (bütçe, gezi modu).
 - **Premium:** ücretsizde 2 farklı etiket (`Abonelik.ucretsizEtiket`, web `FREE_TAGS`; var olanlar harcamalara eklenmeye
-  devam eder, yenisi kilitli: `tags` kilidi) ve raporda toplam, harcama sayısı, tarihler ve harcamalar; ödenen / kalan,
-  son ödeme ve dağılımlar Premium (`tag_report` kilidi). Abonelik bitince etiketler kalır. Analitik: `tag_added`
-  (`count`, `tags`, `source`), `tag_report_viewed` (`locked`).
+  devam eder, yenisi kilitli: `tags` kilidi), raporda toplam, harcama sayısı, tarihler ve harcamalar, etiketi silme.
+  Premium: ödenen / kalan, son ödeme ve dağılımlar (`tag_report`), toplu ekleme, yeniden adlandırma / birleştirme ve CSV
+  (`tag_manage`), bütçe (`tag_budget`), gezi modu (`tag_active`). Abonelik bitince etiketler ve ayarları kalır, açık gezi
+  modu bitiş gününe kadar sürer. Analitik: `tag_added` (`count`, `tags`, `source`: form / web / bulk), `tag_report_viewed`
+  (`locked`), `tag_active_set` (`days`), `tag_csv_exported`.
 
 ## 5. Taksitler Excel'ini içe aktarma
 

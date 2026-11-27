@@ -74,6 +74,7 @@ Privacy: https://cashfollow.app/privacy
 ## What's new (≤4000)
 
 - Etichette: aggiungi etichette come «Sardegna» agli acquisti e vedi in una schermata il costo totale di un viaggio, un matrimonio o una ristrutturazione.
+- Modalità viaggio e budget: gli acquisti dei giorni scelti ricevono l'etichetta da soli; dai un budget all'etichetta e ricevi un avviso se lo superi.
 - Accedi con Apple: crea il tuo account con un tocco, senza conferma via e-mail.
 - I primi 3 mesi del Flusso sono gratis: vedi il tuo piano di pagamenti dei prossimi tre mesi senza Premium.
 - Paghi con paga in 4? Aggiungilo all'inizio e le quattro scadenze entrano nel tuo piano.

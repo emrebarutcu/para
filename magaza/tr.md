@@ -79,6 +79,7 @@ Gizlilik: https://cashfollow.app/privacy
 ## What's new (≤4000)
 
 - Etiketler: harcamalara "Maldivler" gibi etiketler ekleyin; bir gezinin, düğünün ya da tadilatın toplam maliyetini tek ekranda görün.
+- Gezi modu ve bütçe: seçtiğiniz günlerde eklenen harcamalar etiketi kendiliğinden alır; etikete bütçe koyun, aşılınca haberiniz olsun.
 - Apple ile giriş: hesabınızı tek dokunuşla açın, e-posta doğrulaması gerekmez.
 - Akış'ın ilk 3 ayı ücretsiz: önümüzdeki üç ayın ödeme planını Premium olmadan görün.
 - İlk kartınızı ekleyince bugünkü alışverişin hangi gün ödeneceğini ve hesap kesimi hatırlatmasını hemen görün.

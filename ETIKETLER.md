@@ -1,7 +1,7 @@
 # Etiketler
 
-Tasarım (27 Kasım 2026). Kullanıcı onayladı: ücretsizde **2 etiket**, toplam ücretsizde **açık**, **Aşama 1** yapıldı
-(sürüm **1.4.0**). Çalışan özelliğin belgesi `SETUP.md` → 4 → Etiketler; burada kararlar ve sonraki aşamalar.
+Tasarım (27 Kasım 2026). Kullanıcı onayladı: ücretsizde **2 etiket**, toplam ücretsizde **açık**. **Aşama 1, 2 ve 3
+yapıldı** (hepsi sürüm **1.4.0**'da; 1.4.0 henüz yayınlanmadığı için sürüm ve yapı numarası aynı kaldı). Çalışan özelliğin belgesi `SETUP.md` → 4 → Etiketler; burada kararlar ve sonraki aşamalar.
 
 Aşama 1'de tasarımdan farklar:
 - Ayrı `etiket.js` yok: ad / kimlik `tablo.js`'te (`tags`, `tagName`, `tagKey`), rapor `icgoru.js`'te (`tagList`,
@@ -147,8 +147,14 @@ Analitik: `tag_added` (`source`: form / bulk / active / email / sms / assistant;
 
 1. **Temel (1.4.0, yapıldı):** `purchases.tags`, formda etiket, süzme, Etiketler sayfası (toplam + sayı), rapor, ücretsiz 2 etiket
    sınırı ve rapor kilidi, asistan araçları.
-2. **Toplu etiketleme ve yönetim:** tarih aralığından ekleme, yeniden adlandırma / birleştirme.
-3. **`tags` tablosu:** etkin etiket (form, e-posta, SMS), etiket bütçesi ve içgörü ("Maldivler bütçesinin %80'i").
+2. **Toplu etiketleme ve yönetim (yapıldı):** tarih aralığından ekleme, yeniden adlandırma / birleştirme, silme, CSV.
+3. **`tags` tablosu (yapıldı):** gezi modu (form, e-posta, SMS, asistan), etiket bütçesi ve içgörü ("Maldivler
+   bütçesinin %80'i"). Renk ve arşiv eklenmedi.
+
+Aşama 2–3'te tasarımdan farklar: etiketi silmek ücretsiz (kullanıcı ücretsiz sürümün 2 etiketini boşaltabilsin);
+`tags` tablosunda renk / arşiv yok; gezi modunun başlangıcı da tutulur (`active_from`, varsayılan bugün) ki gezi öncesi
+tarihli banka e-postaları etiket almasın. Harcamalar'ın filtresine etiket eklenmedi: raporun harcama listesi süzgeç işini
+görüyor.
 
 ## Açık sorular
 
