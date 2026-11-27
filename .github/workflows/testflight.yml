@@ -4,7 +4,7 @@
 # çalışmanın başında ayıklanır (ios/scripts/asc_imza.py; Xcode'un imzası neden kullanılmıyor da orada). Kurulum: SETUP.md → TestFlight.
 # Elle (Actions → TestFlight → Run workflow; dosya main'de olmalı) ya da testflight-* etiketiyle (her dalda) çalışır.
 # GitHub'ın Xcode 27 makinesinde (xcode-27: macOS 27, Apple Silicon) en yeni Xcode ile. Nisan 2027'den sonra App Store
-# Connect iOS 27 SDK'sından eski SDK ile yapılmış build'i kabul etmez (ITMS-90725); macos-26 makinesinde Xcode 27 yok. Build numarası iş akışının çalışma sayısıdır, sürüm web sürümüdür (MARKETING_VERSION).
+# Connect iOS 27 SDK'sından eski SDK ile yapılmış build'i kabul etmez (ITMS-90725); macos-26 makinesinde Xcode 27 yok. Build numarası iş akışının çalışma sayısıdır, sürüm version.js'teki APP_VERSION (MARKETING_VERSION; yayından sonra artar, SETUP.md → Sürüm).
 name: TestFlight
 
 on:

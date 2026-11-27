@@ -34,7 +34,32 @@ export async function revoke(code, env, { fetch: f = fetch, now = Date.now() } =
   return out.ok ? { ok: true } : { ok: false, error: `revoke_${out.status}` };
 }
 
+// GET /api/apple-iptal: kurulum denetimi (girişsiz; gizli bilgi dönmez). Anahtar tanımlıysa Apple'a geçersiz bir code
+// ile gidilir: "invalid_grant" → Apple istemciyi tanıdı, yalnızca code'u reddetti: anahtar, Key ID ve Team ID doğru
+// (apple: "ok"); "invalid_client" → anahtar / Key ID / Team ID yanlış ya da anahtar bu App ID'ye bağlı değil. Sonuç
+// 10 dakika saklanır (Apple'a sık gidilmesin).
+let denetimSonucu = null;
+export async function denetim(env, { fetch: f = fetch, now = Date.now() } = {}) {
+  if (!ready(env)) return { ready: false, missing: ["APPLE_SIWA_KEY_P8", "APPLE_SIWA_KEY_ID", "APPLE_TEAM_ID"].filter(k => !env[k]) };
+  if (denetimSonucu && now - denetimSonucu.at < 600_000) return denetimSonucu.body;
+  let apple, secret;
+  try { secret = await clientSecret(env, now); } catch { apple = "bad_key_format"; }   // .p8 okunamadı
+  if (secret) {
+    try {
+      const res = await f(`${APPLE}/auth/token`, form({ client_id: BUNDLE_ID, client_secret: secret,
+        code: "denetim.gecersiz.kod", grant_type: "authorization_code" }));
+      const err = (await res.json().catch(() => ({}))).error;
+      apple = err === "invalid_grant" ? "ok" : err || `http_${res.status}`;
+    } catch { apple = "unreachable"; }
+  }
+  const body = { ready: true, apple };
+  denetimSonucu = { at: now, body };
+  return body;
+}
+export const _denetimSifirla = () => { denetimSonucu = null; };   // testler için
+
 export async function handleAppleRevoke(request, env = {}, { fetch: f = fetch, now = Date.now() } = {}) {
+  if (request.method === "GET") return json(await denetim(env, { fetch: f, now }));
   if (request.method !== "POST") return json({ error: "POST" }, 405);
   const bearer = (request.headers.get("Authorization") || "").match(/^Bearer\s+(\S+)$/i)?.[1];
   if (!bearer) return json({ error: "unauthorized" }, 401);
