@@ -3,4 +3,4 @@
 // mağazada sayı atlanmaz. APP_BUILD her PR'da 1 artar (web önbelleği, Ayarlar'da parantez içinde).
 // İkisini de scripts/surum.sh yazar, .github/workflows/surum.yml denetler; kurallar SETUP.md → Sürüm.
 self.APP_VERSION = '1.4.0';
-self.APP_BUILD = 1;
+self.APP_BUILD = 2;
