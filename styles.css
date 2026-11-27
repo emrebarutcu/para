@@ -1951,3 +1951,20 @@ a.hero-eq { display: block; width: fit-content; }
 /* ── Kartlar ve borçlar: borçlar bölümü (eski Borçlar sekmesi; #borclar buraya kaydırır) ── */
 .debt-section { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 76px; }
 @media (min-width: 900px) { .debt-section { gap: 20px; } }
+
+/* ── Etiketler (harcama formu, Harcamalar → Etiketler, rapor) ── */
+.p-meta .tag-tag { color: var(--s1); font-weight: 500; }
+.tag-input { width: 100%; margin-top: 8px; }
+#tagChips:not([hidden]) + .tag-input { margin-top: 10px; }
+#tagSuggest { margin-top: 8px; }
+#tagLock { margin-top: 10px; }
+.tag-chip .ic { width: 14px; height: 14px; margin-inline-start: 4px; }
+.tag-panel .list-panel { margin: 0; }
+.tag-hero { padding: 4px 0 12px; }
+.tag-hero .hero-amount { margin: 2px 0 4px; }
+.tag-hero .hint { margin: 2px 0; }
+.tag-sec { margin-top: 18px; }
+.tag-sec h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--text-2); }
+.tag-progress { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
+.tag-progress > span { display: block; height: 100%; background: var(--text); border-radius: 4px; }
+.tag-split { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 14px; font-variant-numeric: tabular-nums; }

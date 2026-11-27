@@ -9,6 +9,7 @@ const YZ = window.YZ;
 const B = window.Borc;
 const N = window.Nakit;   // Nakit grafiği ve Varlığın seyri (nakit.js)
 const P = window.Para;    // ülkeler ve para birimleri (para.js)
+const Tb = window.Tablo;  // etiketlerin adı ve kimliği (tablo.js tags, tagKey)
 // Görünen metinler Türkçe yazılır, L(metin) ile gösterilir: tarayıcı Türkçe değilse dilinin sözlüğünden (dil/<kod>.json, dil.js;
 // sözlük index.html'de app.js'ten önce dil-sayfa.js yükler, üst düzeydeki sabitler de çevrilir). Değişken yerleri {0}, {1}…
 const D = window.Dil;
@@ -68,7 +69,7 @@ let chartBy = readPref(PREF.chartBy) === "card" ? "card" : "person";
 let flowMode = readPref(PREF.flowMode) === "table" ? "table" : "list";
 let personFilter = "all";
 let showDone = false;
-let purchaseMode = "list";    // Harcamalar: list | categories (ayın harcamaları kategoriye göre)
+let purchaseMode = "list";    // Harcamalar: list | categories (ayın harcamaları kategoriye göre) | tags (etiketler)
 let purchaseSort = PURCHASE_SORTS.includes(readPref(PREF.purchaseSort)) ? readPref(PREF.purchaseSort) : "next";
 let openEventKey = null;      // akışta açılan ödeme
 let focusIdx = null;          // akışta vurgulanan ay (grafikten gelince)
@@ -189,6 +190,9 @@ window.onAuthLogout = function () {
 const TASTE_MONTHS = 3;
 const freeTaste = () => window.Analitik?.flag("free_taste") !== "off";
 const FREE_CARDS = 2, FREE_PEOPLE = 2;   // ücretsiz sürüm: 2 kart, 2 kişi (sen ve eşin gibi biri)
+// Etiketler: ücretsiz sürümde 2 farklı etiket (var olanlar harcamalara eklenebilir, yenisi kilitli; iPhone:
+// Abonelik.ucretsizEtiket) ve etiketin toplamı; raporun ayrıntısı (ödenen / kalan, dağılımlar) Premium
+const FREE_TAGS = 2;
 const PREMIUM_TTL = 60_000;        // öne gelince en sık bu aralıkla yeniden sorulur
 let premium = null;                // true / false / null (bilinmiyor)
 let premiumUser = undefined;       // durumu tutulan kullanıcı (girişsizse null)
@@ -551,6 +555,12 @@ const els = {
   authBtn: $("authBtn"), exportBtn: $("exportBtn"), importInput: $("importInput"),
   toast: $("toast"),
 };
+// Etiketler: harcama formundaki alan, Harcamalar'daki liste ve rapor penceresi
+Object.assign(els, {
+  tagRow: $("tagRow"), tagVal: $("tagVal"), tagChips: $("tagChips"), tagInput: $("tagInput"), tagSuggest: $("tagSuggest"), tagLock: $("tagLock"),
+  tagPanel: $("tagPanel"), tagList: $("tagList"), tagCount: $("tagCount"), tagEmpty: $("tagEmpty"),
+  tagSheet: $("tagSheet"), tagTitle: $("tagTitle"), tagBody: $("tagBody"),
+});
 
 // ---------- Render ----------
 // Kart ve nakit ödemeleri aylara göre (taksit.js buildCashflow). Hesaba katılmayan kartın (borc.js) ekstreleri ödeme
@@ -583,6 +593,7 @@ function render() {
   if (view === "harcamalar") renderPurchases();
   if (view === "kartlar") { renderCards(); renderPeopleSummary(); renderDebts(); loadRates(); }
   if (view === "varliklar") { renderAssets(); loadRates(); }
+  if (els.tagSheet.open) renderTagSheet();   // etiket raporu açıkken veri (eşitleme, kur) değişti
 
   // + düğmesi bulunulan görünümün işini açar: Varlıklar'da hareket, Kartlar'da borç / alacak (kart "Kart ekle" ile), diğerlerinde harcama
   const adding = view === "varliklar" ? "entry" : view === "kartlar" ? (debtSide === "debt" ? "debt" : "receivable") : "purchase";
@@ -2236,13 +2247,15 @@ function renderPurchases() {
     b.classList.toggle("active", b.dataset.mode === purchaseMode);
     b.setAttribute("aria-pressed", String(b.dataset.mode === purchaseMode));
   }
-  const cats = purchaseMode === "categories";
+  const cats = purchaseMode === "categories", tagged = purchaseMode === "tags";
   els.catPanel.hidden = !cats;
-  els.personFilter.hidden = els.purchaseWrap.hidden = cats;
-  if (cats) {
+  els.tagPanel.hidden = !tagged;
+  els.personFilter.hidden = els.purchaseWrap.hidden = cats || tagged;
+  if (cats || tagged) {
     els.inboxWrap.hidden = els.purchaseTools.hidden = true;
     els.purchaseWrap.replaceChildren();
-    renderCategories(T.monthIndex(currentMonth));
+    if (cats) renderCategories(T.monthIndex(currentMonth));
+    else renderTagList();
     return;
   }
 
@@ -2334,6 +2347,7 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   else if (plan > 1 || !rule) meta.append(el("span", "", plan > 1 ? L("{0} taksit", plan) : L("Peşin")));
   if (rule) meta.append(el("span", "", R.label(p) + (rule.n ? " · " + L("{0} kez", rule.n) : "")));
   if (K.valid(p.category)) meta.append(el("span", "cat-tag" + (p.categoryBy === "user" ? "" : " ai"), K.category(p.category).name));
+  for (const t of Tb.tags(p.tags) || []) meta.append(el("span", "tag-tag", "#" + t));
   main.append(meta);
   if (rule?.n) {
     const done = R.countUntil(p, today);
@@ -2378,6 +2392,144 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
   row.addEventListener("click", () => openPurchaseSheet(p));
   row.addEventListener("keydown", e => { if (e.key === "Enter") openPurchaseSheet(p); });
   return row;
+}
+
+// ---------- Etiketler (Harcamalar → Etiketler; icgoru.js tagList, tagSummary) ----------
+// Her etiket: harcama sayısı, tarih aralığı ve toplam maliyeti (taksitlerin hepsi; döviz bugünkü kurla). Dokununca
+// rapor: toplam ve harcamalar herkese açık, ödenen / kalan ve dağılımlar Premium (tag_report kilidi).
+let tagOpen = null;   // raporu açık etiket
+
+function tagDates(first, last) {
+  if (!first) return "";
+  if (first === last) return fmtDay(first);
+  return T.yearOf(T.parseDate(first).idx) === T.yearOf(T.parseDate(last).idx) ? `${fmtDayShort(first)} – ${fmtDay(last)}` : `${fmtDay(first)} – ${fmtDay(last)}`;
+}
+
+function renderTagList() {
+  const list = I.tagList(state, T.todayKey(), curRates());
+  if (list.some(t => t.missing)) loadRates();
+  els.tagCount.textContent = list.length ? L("{0} etiket", list.length) : "";
+  els.tagEmpty.hidden = list.length > 0;
+  els.tagList.hidden = !list.length;
+  els.tagList.replaceChildren(...list.map(t => {
+    const row = el("div", "purchase tag-row");
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    const main = el("div", "p-main");
+    main.append(el("div", "p-title", "#" + t.name));
+    const meta = el("div", "p-meta");
+    meta.append(el("span", "", L("{0} harcama", t.count)));
+    if (t.first) meta.append(el("span", "", tagDates(t.first, t.last)));
+    main.append(meta);
+    const side = el("div", "p-side");
+    side.append(el("span", "amount", fmt(t.total)));
+    row.append(markOf(icon("tag")), main, side);
+    const open = () => openTagSheet(t.name);
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", e => { if (e.key === "Enter") open(); });
+    return row;
+  }));
+}
+
+function openTagSheet(name) {
+  tagOpen = name;
+  renderTagSheet();
+  openSheet(els.tagSheet);
+  window.Analitik?.event("tag_report_viewed", { locked: locked() });
+}
+
+// Dağılım: ad, tutar, oran çubuğu (Kategoriler görünümüyle aynı biçim)
+function tagSplit(title, rows) {
+  const sec = el("section", "tag-sec");
+  sec.append(el("h3", "", title));
+  const ul = el("ul", "cat-list");
+  const max = rows[0]?.value || 1;
+  for (const r of rows) {
+    const li = el("li", "cat-row");
+    const head = el("div", "cat-head");
+    head.append(el("span", "cat-name", r.name), el("span", "cat-amt", fmt(r.value)));
+    const bar = el("div", "cat-bar");
+    const fill = el("span");
+    fill.style.width = `${(r.value / max) * 100}%`;
+    bar.append(fill);
+    const meta = el("div", "cat-meta");
+    meta.append(el("span", "", D.pct(Math.round(r.share * 100))));
+    li.append(head, bar, meta);
+    ul.append(li);
+  }
+  sec.append(ul);
+  return sec;
+}
+
+function renderTagSheet() {
+  const today = T.todayKey();
+  const s = tagOpen ? I.tagSummary(state, tagOpen, today, curRates()) : null;
+  if (!s) { if (els.tagSheet.open) els.tagSheet.close(); return; }
+  tagOpen = s.name;
+  if (s.missing) loadRates();
+  els.tagTitle.textContent = "#" + s.name;
+  const body = [];
+
+  // Toplam maliyet: herkese açık (sorunun cevabı)
+  const hero = el("section", "tag-hero");
+  hero.append(el("div", "hero-label", L("Toplam maliyet")), el("div", "hero-amount", fmt(s.total)));
+  const meta = [L("{0} harcama", s.count)];
+  if (s.first) meta.push(tagDates(s.first, s.last));
+  hero.append(el("p", "hint", meta.join(" · ")));
+  if (s.assets.some(a => a.asset !== HOME)) {
+    hero.append(el("p", "hint", s.assets.map(a => money(a.amount, a.asset)).join(" + ") + " · " + L("döviz ve altın bugünkü kurla")));
+  }
+  if (s.missing) hero.append(el("p", "hint", L("Kuru alınamayan {0} harcama toplama girmedi.", s.missing)));
+  body.push(hero);
+
+  if (locked()) {
+    body.push(premiumLock(null, L("Etiketin raporu Premium'da: ne kadarı ödendi, ne kadar kaldı, son taksit hangi ay; kategoriye, kişiye ve karta göre dağılım."), "tag_report"));
+  } else {
+    const pay = el("section", "tag-sec");
+    const bar = el("div", "bar tag-progress");
+    const fill = el("span");
+    fill.style.width = `${s.total > EPS ? (s.paid / s.total) * 100 : 0}%`;
+    bar.append(fill);
+    const split = el("div", "tag-split");
+    split.append(el("span", "", L("Ödenen {0}", fmt(s.paid))), el("span", "", L("Kalan {0}", fmt(s.left))));
+    pay.append(bar, split);
+    if (s.left > EPS && s.lastPayment) pay.append(el("p", "hint", L("Son ödeme: {0}", monthLong(T.parseDate(s.lastPayment).idx))));
+    if (s.perDay && s.days > 1) pay.append(el("p", "hint", L("Günde ortalama {0} ({1} gün)", fmt(s.perDay), s.days)));
+    body.push(pay, tagSplit(L("Kategoriye göre"), s.categories));
+    if (s.people.length > 1) body.push(tagSplit(L("Kişiye göre"), s.people));
+    body.push(tagSplit(L("Karta göre"), s.cards));
+  }
+
+  // Etiketin harcamaları (süzme herkese açık); dokununca harcama formu
+  const sec = el("section", "tag-sec");
+  sec.append(el("h3", "", L("Harcamalar")));
+  const panel = el("div", "panel list-panel");
+  for (const x of s.purchases) {
+    const p = state.installments.find(q => q.id === x.id);
+    if (!p) continue;
+    const row = el("div", "purchase");
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    const main = el("div", "p-main");
+    main.append(el("div", "p-title", p.desc));
+    const m = el("div", "p-meta");
+    const card = el("span", "card-tag");
+    card.append(cardMark(p.cardId), document.createTextNode(cardName(p.cardId)));
+    m.append(card);
+    if (x.date) m.append(el("span", "", fmtDay(x.date)));
+    main.append(m);
+    const side = el("div", "p-side");
+    side.append(el("span", "amount", money(x.amount, x.asset)));
+    if (x.left > EPS) side.append(el("span", "sub", L("kalan {0}", fmt(x.left))));
+    row.append(purchaseMark(p), main, side);
+    const open = () => { els.tagSheet.close(); openPurchaseSheet(p); };
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", e => { if (e.key === "Enter") open(); });
+    panel.append(row);
+  }
+  sec.append(panel);
+  body.push(sec);
+  els.tagBody.replaceChildren(...body);
 }
 
 // ---------- Kartlar ----------
@@ -3112,6 +3264,7 @@ function spendRow(p, r, today) {
   if (rule) meta.append(el("span", "", R.label(p) + (rule.n ? " · " + L("{0} kez", rule.n) : "")));
   else if (T.planLength(p) > 1) meta.append(el("span", "", L("{0} taksit", T.planLength(p))));
   if (K.valid(p.category)) meta.append(el("span", "cat-tag" + (p.categoryBy === "user" ? "" : " ai"), K.category(p.category).name));
+  for (const t of Tb.tags(p.tags) || []) meta.append(el("span", "tag-tag", "#" + t));
   main.append(meta);
 
   const side = el("div", "p-side");
@@ -3871,7 +4024,7 @@ function openPurchaseSheet(p, draft) {
   els.personChips.replaceChildren(...state.people.map(x =>
     radioChip("person", x.id, x.name, x.id === personId, dot(seriesVar(x)))));
   els.personField.hidden = state.people.length < 2;
-  for (const d of [els.dateRow, els.repeatRow, els.categoryRow, els.personField, els.assetRow]) d.open = false;
+  for (const d of [els.dateRow, els.repeatRow, els.categoryRow, els.tagRow, els.personField, els.assetRow]) d.open = false;
 
   const code = T.assetOf(src, HOME);
   els.purchaseAssetChips.replaceChildren(...V.assetsFor(HOME).map(a => radioChip("asset", a.code, L(a.name), a.code === code)));
@@ -3889,6 +4042,10 @@ function openPurchaseSheet(p, draft) {
   categoryFor = categorySource === "ai" ? src.desc : null;
   els.categoryChips.replaceChildren(...K.CATEGORIES.map(c => radioChip("category", c.id, c.name, c.id === src?.category)));
   setCategoryHint(categorySource === "ai" ? L("öneri") : "");
+  formTags = Tb.tags(src?.tags) || [];
+  els.tagInput.value = "";
+  els.tagLock.hidden = true;
+  renderFormTags();
   renderPurchaseStatus(p);
   syncChecked(f);
   updatePurchasePreview();
@@ -4006,6 +4163,86 @@ function renderCountTiles(f = els.purchaseForm.elements, grid = els.countChips, 
     tile.querySelector(".per").textContent = value == null ? "" : short(value);
   }
 }
+
+// ---------- Etiketler (harcama formu) ----------
+// Serbest adlı etiketler (tablo.js tags): yazıp Enter / virgülle ya da önceki etiketlere dokunarak eklenir, çipe
+// dokununca çıkar. Hesapta aynı etiket başka yazılışla varsa o yazılış kullanılır ("maldivler" → "Maldivler").
+// Ücretsiz sürümde en fazla FREE_TAGS farklı etiket: var olanlar eklenebilir, yenisi kilitlenir (tags kilidi).
+let formTags = [];
+
+const knownTags = () => I.tagList(state, T.todayKey());
+
+function tagAllowed(name) {
+  if (!locked()) return true;
+  const keys = new Set([...knownTags().map(t => t.key), ...formTags.map(Tb.tagKey)]);
+  return keys.has(Tb.tagKey(name)) || keys.size < FREE_TAGS;
+}
+
+// Etiketi forma ekler; eklenemezse (sınır) false
+function addFormTag(raw) {
+  const name = Tb.tagName(raw);
+  if (!name) return true;
+  const key = Tb.tagKey(name);
+  if (formTags.some(t => Tb.tagKey(t) === key)) return true;
+  if (formTags.length >= Tb.MAX_TAGS) { toast(L("Bir harcamaya en fazla {0} etiket eklenir.", Tb.MAX_TAGS)); return false; }
+  if (!tagAllowed(name)) {
+    els.tagLock.replaceChildren(premiumLock(null, L("Ücretsiz sürümde {0} etiket olur; var olanları harcamalara ekleyebilirsin. Premium'da sınırsız etiket ve etiketin raporu: ödenen / kalan, kategoriye, kişiye ve karta göre dağılım.", FREE_TAGS), "tags"));
+    els.tagLock.hidden = false;
+    return false;
+  }
+  formTags.push(knownTags().find(t => t.key === key)?.name ?? name);
+  return true;
+}
+
+function renderFormTags() {
+  els.tagVal.textContent = formTags.map(t => "#" + t).join(" ");
+  els.tagChips.hidden = !formTags.length;
+  els.tagChips.replaceChildren(...formTags.map(t => {
+    const b = el("button", "chip on tag-chip");
+    b.type = "button";
+    b.setAttribute("aria-label", L("{0} etiketini çıkar", t));
+    b.append(document.createTextNode("#" + t), icon("x"));
+    b.addEventListener("click", () => {
+      formTags = formTags.filter(x => x !== t);
+      els.tagLock.hidden = true;
+      renderFormTags();
+    });
+    return b;
+  }));
+  const q = Tb.tagKey(els.tagInput.value);
+  const chosen = new Set(formTags.map(Tb.tagKey));
+  const list = knownTags().filter(t => !chosen.has(t.key) && (!q || t.key.includes(q))).slice(0, 8);
+  els.tagSuggest.hidden = !list.length;
+  els.tagSuggest.replaceChildren(...list.map(t => {
+    const b = el("button", "chip");
+    b.type = "button";
+    b.append(document.createTextNode("#" + t.name), el("span", "count", String(t.count)));
+    b.addEventListener("click", () => {
+      if (addFormTag(t.name)) els.tagInput.value = "";
+      renderFormTags();
+    });
+    return b;
+  }));
+}
+
+// Yazılanı ekler (Enter, virgül, Kaydet); eklenemezse false
+function commitTagInput() {
+  let ok = true;
+  for (const x of els.tagInput.value.split(",")) if (Tb.tagName(x)) ok = addFormTag(x) && ok;
+  if (ok) els.tagInput.value = "";
+  renderFormTags();
+  return ok;
+}
+
+els.tagInput.addEventListener("keydown", e => {
+  if (e.key !== "Enter" && e.key !== ",") return;
+  e.preventDefault();
+  commitTagInput();
+});
+els.tagInput.addEventListener("input", () => {
+  if (els.tagInput.value.includes(",")) commitTagInput();
+  else renderFormTags();
+});
 
 // ---------- Kategori önerisi ----------
 // Önce kullanıcının aynı işyerine verdiği kategori (kategori.js), yoksa cihazdaki model (yz.js). Kullanıcı bir
@@ -4130,6 +4367,7 @@ function collectPurchase() {
     if (!date && !errors.includes("date")) errors.push("date");   // ilk ödeme harcama günü
   }
   if (K.valid(f.category.value)) Object.assign(p, { category: f.category.value, categoryBy: categorySource === "user" ? "user" : "ai" });
+  if (formTags.length) p.tags = [...formTags];
   if (date) {
     p.date = date;
   } else if (editing?.firstDue) {
@@ -4349,6 +4587,8 @@ els.dateChips.addEventListener("click", e => {
 
 els.purchaseForm.addEventListener("submit", e => {
   e.preventDefault();
+  // Etiket alanında yazılı kalan da eklenir; sınıra takılırsa kayıt durur, kilit görünür
+  if (els.tagInput.value.trim() && !commitTagInput()) { els.tagRow.open = true; return; }
   const { p, personId, errors } = collectPurchase();
   const f = els.purchaseForm.elements;
   for (const name of ["desc", "amount", "count", "date", "every", "timesN"]) f[name].classList.toggle("invalid", errors.includes(name));
@@ -4372,6 +4612,9 @@ els.purchaseForm.addEventListener("submit", e => {
   }
   const id = editingId ?? uid();
   const adding = !editingId;
+  const tagsBefore = new Set((Tb.tags(state.installments.find(x => x.id === editingId)?.tags) || []).map(Tb.tagKey));
+  const tagsAdded = (p.tags || []).filter(t => !tagsBefore.has(Tb.tagKey(t))).length;
+  if (tagsAdded) window.Analitik?.event("tag_added", { count: tagsAdded, tags: p.tags.length, source: "web" });
   const converted = !!convertingEntryId;          // eski varlık çıkışı harcamaya dönüşüyor: yeni harcama sayılmaz (ölçümde)
   const totals = adding ? monthTotals() : null;   // ekleme: ayların ödemesi önce → sonra (kaydın sonucu)
   if (editingId) {
