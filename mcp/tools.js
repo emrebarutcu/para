@@ -585,7 +585,11 @@ function buildPurchase(state, args, today, base = null, ctx = { home: homeOf(sta
     const guess = K.remembered(desc, K.learned(state.installments));
     if (guess) Object.assign(p, { category: guess, categoryBy: "ai" });
   }
-  const tags = args.tags !== undefined ? tagsArg(state, args.tags) : Tb.tags(base?.tags);
+  // Etiketler: verilmezse düzenlenen kayıttakiler kalır; yeni harcamaya (e-postadan gelen dahil) o gün gezi modunda
+  // olan etiketler eklenir (icgoru.js activeTags)
+  const tags = args.tags !== undefined ? tagsArg(state, args.tags)
+    : base?.id ? Tb.tags(base.tags)
+    : Tb.tags([...(Tb.tags(base?.tags) || []), ...I.activeTags(state, date || today)]);
   if (tags) p.tags = tags;
   if (date) {
     p.date = date;
@@ -657,6 +661,12 @@ function emailCard(state, parsed) {
 
 function emailPurchase(parsed, card) {
   return { desc: parsed.merchant || "Kart harcaması", cardId: card?.id ?? null, count: parsed.count, total: parsed.amount, date: parsed.date };
+}
+
+// Gezi modundaki etiketler (icgoru.js activeTags): banka e-postasından kendiliğinden eklenen harcamaya
+function withActiveTags(state, p, today) {
+  const t = Tb.tags([...(Tb.tags(p.tags) || []), ...I.activeTags(state, p.date || today)]);
+  return t ? { ...p, tags: t } : p;
 }
 
 // Kullanıcının aynı işyerine daha önce verdiği kategori (app.js'teki gibi)
@@ -1405,6 +1415,8 @@ export const TOOLS = [
       search: S.str("Case-insensitive text to look for in the description."),
       category: { ...PURCHASE_FIELDS.category, description: 'Only this category (id); null = purchases without a category.' },
       tag: S.str("Only purchases with this tag (case doesn't matter)."),
+      from: S.date("Only purchases made on or after this date, YYYY-MM-DD (purchase date; undated imported records are left out)."),
+      to: S.date("Only purchases made on or before this date, YYYY-MM-DD."),
       kind: { type: "string", enum: PURCHASE_KINDS, description: 'Only this kind: "installment" (2+ monthly installments), "single" (one payment), "repeat" (recurring), "bnpl" (Pay in 4) or "bonus" (bonus payment, Japan).' },
       sort: { type: "string", enum: Object.keys(PURCHASE_SORTS), description: 'Order: "next_payment" (default; soonest first), "added" (when it was entered; newest first), "date" (purchase date; newest first) or "amount" (largest first).' },
       order: { type: "string", enum: ["asc", "desc"], description: 'Reverse the default direction of sort: "asc" = oldest / smallest / soonest first, "desc" = newest / largest / latest first.' },
@@ -1426,6 +1438,8 @@ export const TOOLS = [
       const q = args.search ? T.normalize(args.search) : "";
       const category = args.category !== undefined ? categoryArg(args.category) : undefined;
       const tag = args.tag !== undefined && args.tag !== null ? Tb.tagKey(args.tag) : null;
+      for (const k of ["from", "to"]) if (args[k] != null && !validDate(args[k])) fail(`${k} must be a date like "2026-03-10".`);
+      const from = args.from ?? null, to = args.to ?? null;
       // Eklenme sırası: veri dizisindeki yer (yeni harcama sona eklenir; eşitlemede tablolar oluşturulma sırasıyla gelir)
       const added = new Map(state.installments.map((p, i) => [p.id, i]));
       const dir = order === "asc" ? 1 : -1;
@@ -1436,6 +1450,7 @@ export const TOOLS = [
         .filter(p => !q || T.normalize(p.desc).includes(q))
         .filter(p => !kind || purchaseKind(p, state) === kind)
         .filter(p => !tag || (Tb.tags(p.tags) || []).some(t => Tb.tagKey(t) === tag))
+        .filter(p => (!from && !to) || (p.date && (!from || p.date >= from) && (!to || p.date <= to)))
         .map(p => purchaseView(state, p, ctx.today))
         .filter(v => status === "all" || v.status === status)
         .sort((a, b) => dir * PURCHASE_SORTS[sort](a, b, added)
@@ -1529,6 +1544,7 @@ export const TOOLS = [
       const rates = foreign ? (await ratesOrNull(ctx))?.rates : null;
       const tags = I.tagList(state, ctx.today, rates).map(t => ({
         tag: t.name, purchases: t.count, total: t.total, firstPurchase: t.first, lastPurchase: t.last, ...(t.missing && { missingRates: true }),
+        budget: t.budget, travelMode: t.activeUntil ? { from: t.activeFrom, until: t.activeUntil, on: t.active } : null,
       }));
       return { count: tags.length, tags, currency: homeOf(state) };
     },
@@ -1547,11 +1563,13 @@ export const TOOLS = [
       const foreign = state.installments.some(p => (Tb.tags(p.tags) || []).some(t => Tb.tagKey(t) === key) && T.assetOf(p, home) !== home);
       const rates = foreign ? (await ratesOrNull(ctx))?.rates : null;
       const s = I.tagSummary(state, args.tag, ctx.today, rates);
-      if (!s) fail(`No purchase has the tag "${Tb.tagName(args.tag)}". list_tags lists the tags.`);
+      if (!s) fail(`No purchase has the tag "${Tb.tagName(args.tag)}" and it has no budget. list_tags lists the tags.`);
       const split = rows => rows.map(r => ({ id: r.id, name: r.name, amount: r.value, share: Math.round(r.share * 1000) / 1000 }));
       return {
         tag: s.name, purchases: s.count, total: s.total, paid: s.paid, left: s.left, lastPayment: s.lastPayment,
         firstPurchase: s.first, lastPurchase: s.last, days: s.days, perDay: s.perDay,
+        budget: s.budget, budgetLeft: s.budgetLeft, budgetUsed: s.budgetUsed,
+        travelMode: s.activeUntil ? { from: s.activeFrom, until: s.activeUntil, on: s.active } : null,
         byCurrency: s.assets, byCategory: split(s.categories), byPerson: split(s.people), byCard: split(s.cards),
         list: s.purchases.map(p => ({
           id: p.id, description: p.desc, date: p.date, asset: p.asset, amount: p.amount, value: p.value, left: p.left,
@@ -1570,13 +1588,18 @@ export const TOOLS = [
       tag: S.str("The tag. Case doesn't matter: an existing tag is reused with its spelling."),
       add: { type: "array", items: { type: "string" }, description: "Ids of purchases to tag." },
       remove: { type: "array", items: { type: "string" }, description: "Ids of purchases to take the tag off." },
+      from: S.date("Also tag every purchase made from this date (YYYY-MM-DD; with to), e.g. a trip's first day."),
+      to: S.date("…up to and including this date."),
     }, ["tag"]),
     annotations: { ...WRITE, idempotentHint: true },
     async run(args, ctx) {
-      const add = args.add ?? [], remove = args.remove ?? [];
-      if (!Array.isArray(add) || !Array.isArray(remove)) fail("add and remove must be lists of purchase ids.");
-      if (!add.length && !remove.length) fail("Pass purchase ids in add or remove.");
+      const ids = args.add ?? [], remove = args.remove ?? [];
+      if (!Array.isArray(ids) || !Array.isArray(remove)) fail("add and remove must be lists of purchase ids.");
+      const range = args.from != null || args.to != null;
+      if (range && !(validDate(args.from) && validDate(args.to) && args.from <= args.to)) fail('from and to must be dates like "2026-03-03" and "2026-03-10", from not after to.');
+      if (!ids.length && !remove.length && !range) fail("Pass purchase ids in add or remove, or a date range (from, to).");
       return ctx.mutate(state => {
+        const add = [...ids, ...(range ? state.installments.filter(p => p.date && p.date >= args.from && p.date <= args.to).map(p => p.id) : [])];
         const name = canonicalTags(state, Tb.tags([String(args.tag ?? "")]))?.[0];
         if (!name) fail("tag is required.");
         const key = Tb.tagKey(name);
@@ -1598,6 +1621,88 @@ export const TOOLS = [
           changed.push({ id: p.id, description: p.desc, tags: next });
         }
         return { saved: changed.length > 0, tag: name, changed };
+      });
+    },
+  },
+  {
+    name: "rename_tag",
+    title: "Rename or merge a tag",
+    description: "Rename a tag on every purchase that has it. If the new name is another existing tag (case doesn't matter), the two are merged into it (e.g. \"maldiv\" into \"Maldivler\"); its budget and travel mode stay, or the renamed tag's move over if it had none.",
+    inputSchema: obj({ tag: S.str("The tag to rename."), new_name: S.str("The new name, or an existing tag to merge into.") }, ["tag", "new_name"]),
+    annotations: { ...WRITE, idempotentHint: true },
+    async run(args, ctx) {
+      return ctx.mutate(state => {
+        const key = Tb.tagKey(args.tag ?? "");
+        const known = state.installments.some(p => (Tb.tags(p.tags) || []).some(t => Tb.tagKey(t) === key)) || state.tags.some(t => t.id === key);
+        if (!key || !known) fail(`There is no tag "${Tb.tagName(args.tag ?? "")}". list_tags lists the tags.`);
+        const r = Tb.renameTag(state, args.tag, args.new_name ?? "");
+        if (!r) fail("new_name must be a non-empty name (up to 40 characters, no commas).");
+        state.installments = r.installments;
+        state.tags = r.tags;
+        return { saved: true, tag: r.name, merged: r.merged, purchases: r.changed };
+      });
+    },
+  },
+  {
+    name: "delete_tag",
+    title: "Delete a tag",
+    description: "Take a tag off every purchase and delete its budget and travel mode. The purchases themselves stay.",
+    inputSchema: obj({ tag: S.str("The tag.") }, ["tag"]),
+    annotations: { ...DESTROY, idempotentHint: true },
+    async run(args, ctx) {
+      return ctx.mutate(state => {
+        const r = Tb.removeTag(state, args.tag ?? "");
+        const had = r.changed > 0 || r.tags.length !== state.tags.length;
+        state.installments = r.installments;
+        state.tags = r.tags;
+        return { deleted: had, tag: Tb.tagName(args.tag ?? ""), purchases: r.changed };
+      });
+    },
+  },
+  {
+    name: "set_tag",
+    title: "Tag budget and travel mode",
+    description: "Set a tag's budget (in the account's currency; tag_summary and get_insights compare it with what the tag's purchases cost) and its travel mode: from active_from (default today) until active_until, every new purchase dated in between gets the tag by itself — added in the app, by the assistant or from bank e-mails / SMS. The tag can be new (e.g. a trip's budget before buying anything). Omitted fields stay; null clears.",
+    inputSchema: obj({
+      tag: S.str("The tag. Case doesn't matter: an existing tag keeps its spelling."),
+      budget: { type: ["number", "null"], description: "Budget in the account's currency; null removes it." },
+      active_until: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Last day of travel mode, YYYY-MM-DD; null turns it off." },
+      active_from: S.date("First day of travel mode, YYYY-MM-DD. Default: today (or the current start)."),
+    }, ["tag"]),
+    annotations: { ...WRITE, idempotentHint: true },
+    async run(args, ctx) {
+      return ctx.mutate(state => {
+        const name = canonicalTags(state, Tb.tags([String(args.tag ?? "")]))?.[0];
+        if (!name) fail("tag is required.");
+        const id = Tb.tagKey(name);
+        const cur = state.tags.find(t => t.id === id);
+        const next = { ...(cur ?? {}), id, name: cur && !state.installments.some(p => (Tb.tags(p.tags) || []).includes(name)) ? cur.name : name };
+        if (args.budget !== undefined) {
+          if (args.budget === null) delete next.budget;
+          else if (typeof args.budget === "number" && args.budget > 0 && Number.isFinite(args.budget)) next.budget = round(args.budget);
+          else fail("budget must be a positive number or null.");
+        }
+        if (args.active_until !== undefined) {
+          if (args.active_until === null) { delete next.activeUntil; delete next.activeFrom; }
+          else {
+            if (!validDate(args.active_until)) fail('active_until must be a date like "2026-03-10".');
+            const from = args.active_from ?? (cur?.activeUntil && cur.activeUntil >= ctx.today ? cur.activeFrom : null) ?? ctx.today;
+            if (!validDate(from) || from > args.active_until) fail("active_from must be a date on or before active_until.");
+            Object.assign(next, { activeFrom: from, activeUntil: args.active_until });
+          }
+        } else if (args.active_from !== undefined) {
+          if (!next.activeUntil) fail("Set active_until to turn travel mode on.");
+          if (!validDate(args.active_from) || args.active_from > next.activeUntil) fail("active_from must be a date on or before active_until.");
+          next.activeFrom = args.active_from;
+        }
+        state.tags = state.tags.filter(t => t.id !== id);
+        if (next.budget != null || next.activeUntil) state.tags.push(next);
+        const s = I.tagSummary(state, next.name, ctx.today, null);
+        return {
+          saved: true, tag: next.name, budget: next.budget ?? null,
+          travelMode: next.activeUntil ? { from: next.activeFrom ?? null, until: next.activeUntil, on: I.activeTags(state, ctx.today).includes(next.name) } : null,
+          spent: s?.total ?? 0, budgetLeft: s?.budgetLeft ?? null,
+        };
       });
     },
   },
@@ -2355,7 +2460,7 @@ export const TOOLS = [
             const personId = fresh.people[0].id;
             return toAdd.map(x => {
               const card = emailCard(fresh, x.parsed);
-              const p = withRemembered(fresh, { id: uid(), personId, ...emailPurchase(x.parsed, card) });
+              const p = withActiveTags(fresh, withRemembered(fresh, { id: uid(), personId, ...emailPurchase(x.parsed, card) }), ctx.today);
               fresh.installments.push(p);
               return purchaseView(fresh, p, ctx.today);
             });
@@ -2600,7 +2705,7 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Funds and stocks (only for accounts in Turkey for now) are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
 - Deleting a card or a person also deletes their purchases (a card also its statement payments, a person also their asset entries and debts); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
-- Tags (etiketler) group the purchases of one event or project — a trip ("Maldivler"), a wedding, a renovation — across cards, people, categories and months; a purchase can have several. Add them with add_purchase / update_purchase tags or tag_purchases (tagging many at once, e.g. a trip's dates found with list_purchases). "What did the trip cost?" is tag_summary: the whole cost (every installment), paid and left, by category, person and card. list_tags lists them, list_purchases tag filters.
+- Tags (etiketler) group the purchases of one event or project — a trip ("Maldivler"), a wedding, a renovation — across cards, people, categories and months; a purchase can have several. Add them with add_purchase / update_purchase tags or tag_purchases (tagging many at once, e.g. a trip's dates found with list_purchases). "What did the trip cost?" is tag_summary: the whole cost (every installment), paid and left, by category, person and card. list_tags lists them, list_purchases tag filters. rename_tag renames or merges, delete_tag removes one, set_tag gives a tag a budget and a travel mode (new purchases in its dates get the tag by themselves).
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving; get_month_summary reviews a month (paid, installments that finished, next month, categories).
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.

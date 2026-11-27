@@ -131,3 +131,80 @@ test("asistan: list_tags, tag_summary, list_purchases tag, add / update tags, ta
   assert.match((await run(ctx, "tag_purchases", { tag: "x" })).error, /add or remove/);
   assert.match((await run(ctx, "tag_purchases", { tag: "x", add: ["yok"] })).error, /No purchase with id/);
 });
+
+test("yeniden adlandırma / birleştirme, silme (tablo.js renameTag, removeTag)", () => {
+  const s = STATE();
+  s.tags = [{ id: "balayi", name: "Balayı", budget: 50000 }];
+  const r = Tablo.renameTag(s, "balayı", "Maldivler");          // birleşir: Otel'de bir kez kalır
+  assert.equal(r.merged, true);
+  assert.equal(r.name, "Maldivler");
+  assert.deepEqual(r.installments.find(p => p.id === "o").tags, ["Maldivler"]);
+  assert.deepEqual(r.tags, [{ id: "maldivler", name: "Maldivler", budget: 50000 }]);   // bütçe birleşilen etikete geçer
+  const n = Tablo.renameTag(s, "Maldivler", "Maldivler 2026");
+  assert.equal(n.merged, false);
+  assert.equal(n.changed, 4);
+  assert.deepEqual(n.installments.find(p => p.id === "o").tags, ["Maldivler 2026", "Balayı"]);
+  assert.equal(Tablo.renameTag(s, "Maldivler", "  "), null);
+  const d = Tablo.removeTag(s, "MALDİVLER");
+  assert.equal(d.changed, 4);
+  assert.deepEqual(d.installments.map(p => p.tags ?? null), [null, ["Balayı"], null, null, null]);
+  assert.deepEqual(d.tags, s.tags);
+});
+
+test("etiket ayarları tablosu: satır, eşitleme, bütçe ve gezi modu (activeTags), bütçe içgörüsü", () => {
+  const row = JSON.parse(Tablo.keyOf("tags", { id: "maldivler", name: "Maldivler", budget: 150000, activeFrom: "2026-11-14", activeUntil: "2026-11-21" }));
+  assert.deepEqual(row, { id: "maldivler", name: "Maldivler", budget: 150000, active_from: "2026-11-14", active_until: "2026-11-21" });
+  assert.equal(Tablo.keyOf("tags", { id: "x", name: "Maldivler" }), null);           // kimlik addan gelir
+  assert.equal(JSON.parse(Tablo.keyOf("tags", { id: "a", name: "A", activeFrom: "2026-01-01" })).active_from, null);   // bitişsiz başlangıç yok
+  assert.deepEqual(Tablo.toState({ tags: [{ ...row, created_at: "1" }] }).tags, [{ id: "maldivler", name: "Maldivler", budget: 150000, activeUntil: "2026-11-21", activeFrom: "2026-11-14" }]);
+  assert.ok(Tablo.TABLES.includes("tags"));
+
+  const s = STATE();
+  s.tags = [{ id: "maldivler", name: "Maldivler", budget: 150000, activeFrom: "2026-11-14", activeUntil: "2026-11-21" }, { id: "kayak", name: "Kayak", budget: 20000 }];
+  assert.deepEqual(I.activeTags(s, "2026-11-14"), ["Maldivler"]);
+  assert.deepEqual(I.activeTags(s, "2026-11-22"), []);
+  const list = I.tagList(s, "2026-11-20", RATES);
+  assert.deepEqual(list.map(t => [t.name, t.count, t.active]), [["Maldivler", 4, true], ["Balayı", 1, false], ["Kayak", 0, false]]);
+  const r = I.tagSummary(s, "maldivler", "2026-11-27", RATES);
+  assert.equal(r.budget, 150000);
+  assert.equal(r.budgetLeft, 150000 - r.total);
+  assert.ok(r.budgetUsed > 1);
+  assert.equal(I.tagSummary(s, "kayak", "2026-11-27").count, 0);                     // harcamasız, bütçeli etiket
+  const ins = I.insights(s, { today: "2026-11-27", rates: RATES }).filter(x => x.id === "etiket-butce");
+  assert.equal(ins.length, 1);
+  assert.match(ins[0].title, /Maldivler bütçesi aşıldı/);
+  assert.equal(ins[0].free, false);
+});
+
+test("asistan: rename_tag, delete_tag, set_tag; gezi modunda yeni harcama etiketlenir; tarih aralığıyla toplu etiket", async () => {
+  const ctx = ctxFor("2026-11-15");
+  const set = await run(ctx, "set_tag", { tag: "maldivler", budget: 150000, active_until: "2026-11-21" });
+  assert.deepEqual([set.tag, set.budget, set.travelMode], ["Maldivler", 150000, { from: "2026-11-15", until: "2026-11-21", on: true }]);
+  const a = await run(ctx, "add_purchase", { description: "Dalış", amount: 8400, card: "Kart A", date: "2026-11-18" });
+  assert.deepEqual(a.purchase.tags, ["Maldivler"]);
+  const b = await run(ctx, "add_purchase", { description: "Market", amount: 100, card: "Kart A", date: "2026-11-25" });
+  assert.deepEqual(b.purchase.tags, []);                                        // gezi modu bitti
+  const c = await run(ctx, "add_purchase", { description: "Hediye", amount: 100, card: "Kart A", date: "2026-11-19", tags: null });
+  assert.deepEqual(c.purchase.tags, []);                                        // açıkça etiketsiz
+  const sum = await run(ctx, "tag_summary", { tag: "Maldivler" });
+  assert.equal(sum.budget, 150000);
+  assert.equal(sum.budgetLeft, 150000 - sum.total);
+  assert.equal((await run(ctx, "list_tags")).tags[0].travelMode.on, true);
+  assert.match((await run(ctx, "set_tag", { tag: "x", active_until: "2026-11-01" })).error, /on or before/);
+  assert.equal((await run(ctx, "set_tag", { tag: "maldivler", active_until: null })).travelMode, null);
+
+  // Tarih aralığından toplu etiket ve list_purchases from / to
+  const range = await run(ctx, "list_purchases", { status: "all", from: "2026-11-15", to: "2026-11-20" });
+  assert.deepEqual(range.purchases.map(p => p.description).sort(), ["Akşam yemeği", "Dalış", "Hediye", "Market", "Transfer"]);
+  const tp = await run(ctx, "tag_purchases", { tag: "Kayak", from: "2026-11-15", to: "2026-11-16" });
+  assert.deepEqual(tp.changed.map(x => x.id), ["t", "m"]);
+  assert.match((await run(ctx, "tag_purchases", { tag: "Kayak", from: "2026-11-20", to: "2026-11-01" })).error, /from not after to/);
+
+  const ren = await run(ctx, "rename_tag", { tag: "kayak", new_name: "Maldivler" });
+  assert.deepEqual([ren.tag, ren.merged, ren.purchases], ["Maldivler", true, 2]);
+  assert.match((await run(ctx, "rename_tag", { tag: "yok", new_name: "a" })).error, /There is no tag/);
+  const del = await run(ctx, "delete_tag", { tag: "maldivler" });
+  assert.equal(del.deleted, true);
+  assert.equal((await run(ctx, "list_tags")).tags.map(t => t.tag).join(), "Balayı");
+  assert.equal(ctx.raw().tags.length, 0);
+});

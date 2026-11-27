@@ -19,7 +19,7 @@ const FUNDS = {
 const STOCKS = { THYAO: { symbol: "THYAO", last: 250, basePrice: 240, dayClose: 240, updateDate: "2026-10-16T18:10:00.000+03" } };
 function fakeSupabase({ users = { good: { id: "u1", email: "a@b.c" }, other: { id: "u2", email: "x@y.z" } } } = {}) {
   const db = {
-    people: [], cards: [], purchases: [], entries: [], debts: [], inbox_messages: [], inbox_addresses: [],
+    people: [], cards: [], purchases: [], entries: [], debts: [], tags: [], inbox_messages: [], inbox_addresses: [],
     subscriptions: [{ user_id: "u1", source: "grandfathered", status: "active", expires_at: null }, { user_id: "u2", source: "grandfathered", status: "active", expires_at: null }],
   };
   const rates = { down: false };
