@@ -6746,7 +6746,7 @@ els.cashDefList.addEventListener("change", e => {
 });
 els.cashDefReset.addEventListener("click", () => { setCashDef(null); renderCashDef(); toast(L("Nakit: {0}", cashDefText())); });
 els.cashDefBtn.addEventListener("click", openCashDefSheet);
-if (window.APP_VERSION) $("appVersion").textContent = `CashFollow v${window.APP_VERSION}`;
+if (window.APP_VERSION) $("appVersion").textContent = `CashFollow v${window.APP_VERSION} (${window.APP_BUILD})`;
 // Giriş penceresi (sync.js) ayarların üstünde açılsın diye önce ayarları kapat
 els.authBtn.addEventListener("click", () => els.settingsSheet.close());
 
