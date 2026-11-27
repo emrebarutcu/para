@@ -2,6 +2,11 @@
 
 Kullanıcıyla konuşulup sıraya alınanlar. Kullanıcıyı tutmaya yönelik yol haritası `TUTUNDURMA.md`'de.
 
+## Etiketler
+
+Harcamaya birden fazla serbest etiket ("Maldivler") ve etiketin raporu: gezi kaça mal oldu. Tasarım ve Premium ile
+birleşmesi `ETIKETLER.md`'de. Etiket bütçesi aşağıdaki tek seferlik bütçenin ilk adımı olur.
+
 ## Bütçe ayırma
 
 Belirli şeylere para ayırma:
