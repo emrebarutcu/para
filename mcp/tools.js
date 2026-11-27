@@ -19,6 +19,7 @@ import K from "../kategori.js";
 import I from "../icgoru.js";
 import B from "../borc.js";
 import P from "../para.js";
+import Tb from "../tablo.js";
 
 // Hesabın ana para birimi (para.js; state.home, ctx.load verir): kartlar, nakit harcamalar ve toplamlar onunla
 const homeOf = state => P.homeOf(state);
@@ -136,6 +137,20 @@ function entryAssetArg(v, name = "asset") {
 }
 
 // Kategori kimliği ya da adı ("market", "Yeme-içme", "yeme içme"…); null kategoriyi kaldırır
+// Etiketler (tablo.js tags): liste ya da virgülle ayrılmış metin; null / [] / "" hepsini kaldırır. Hesapta aynı etiket
+// başka yazılışla varsa (büyük / küçük harf) o yazılış kullanılır: "maldivler" → "Maldivler".
+function tagsArg(state, v) {
+  if (v === null || v === "") return null;
+  if (typeof v !== "string" && !(Array.isArray(v) && v.every(x => typeof x === "string"))) fail("tags must be a list of strings (or null to remove them).");
+  return canonicalTags(state, Tb.tags(v));
+}
+function canonicalTags(state, list) {
+  if (!list) return null;
+  const known = new Map();
+  for (const p of state.installments) for (const t of Tb.tags(p.tags) || []) if (!known.has(Tb.tagKey(t))) known.set(Tb.tagKey(t), t);
+  return Tb.tags(list.map(t => known.get(Tb.tagKey(t)) ?? t));
+}
+
 function categoryArg(v) {
   if (v === null || v === "") return null;
   const s = K.keyOf(v);
@@ -255,6 +270,7 @@ function purchaseView(state, p, today, { schedule = false } = {}) {
     category: K.valid(p.category) ? p.category : null,
     categoryName: K.category(p.category)?.name ?? null,
     asset: T.assetOf(p, homeOf(state)),
+    tags: Tb.tags(p.tags) ?? [],
   };
   if (T.repeats(p)) v.repeat = repeatView(p, today);
   if (T.bnpl(p)) {
@@ -569,6 +585,8 @@ function buildPurchase(state, args, today, base = null, ctx = { home: homeOf(sta
     const guess = K.remembered(desc, K.learned(state.installments));
     if (guess) Object.assign(p, { category: guess, categoryBy: "ai" });
   }
+  const tags = args.tags !== undefined ? tagsArg(state, args.tags) : Tb.tags(base?.tags);
+  if (tags) p.tags = tags;
   if (date) {
     p.date = date;
   } else {
@@ -1232,6 +1250,7 @@ const PURCHASE_FIELDS = {
   asset: { type: "string", description: 'What the purchase is paid in: the account currency (default; the currency field of the answers, TRY in Turkey), another currency code (USD, EUR, GBP…) or GAU (grams of gold). Purchases in another currency are paid at once in cash from that asset (card "nakit", installments 1).' },
   bnpl: { type: ["string", "null"], enum: [...T.BNPL, null], description: 'Buy now, pay later provider ("Pay in 4"), only the providers offered in the account\'s country (the enum; "other" for any other provider). installments payments (default 4, 2–12), the first on date, then every 2 weeks, from the card (each payment goes on the statement of its own date) or cash. What is not paid yet is owed to the provider (list_debts bnpl). null turns it back into a regular purchase. Affirm\'s monthly plans are loans (add_debt) or regular card installments.' },
   bonus: { type: ["string", "null"], enum: ["once", "twice", null], description: 'Bonus payment (ボーナス払い; accounts in Japan only), on a credit card: "once" = the whole amount on the card\'s due day in its next bonus month (ボーナス一括払い; the summer bonus is paid in August, winter in January, unless the card\'s bonus_months differ), "twice" = half on each of the next two bonuses (ボーナス2回払い). The bonus is the first one whose month is at least 2 months after the purchase\'s statement cutoff (cutoff on the 15th: bought up to Jun 15 → August, Jun 16 – Nov 15 → January). Usually interest-free. Leave out installments. null turns it back into a regular payment.' },
+  tags: { type: ["array", "null"], items: { type: "string", maxLength: Tb.TAG_LEN }, maxItems: Tb.MAX_TAGS, description: `Tags (etiketler): free names that group the purchases of one event or project across cards, people, categories and months, e.g. ["Maldivler"] for a trip or ["Düğün"] for a wedding (list_tags, tag_summary). At most ${Tb.MAX_TAGS}, each up to ${Tb.TAG_LEN} characters, no commas. Case doesn't matter: an existing tag is reused with its spelling. On update the list replaces the old one (omit to keep it; null removes all; tag_purchases adds or removes one tag).` },
   ...REPEAT_FIELDS,
 };
 const CARD_FIELDS = {
@@ -1385,6 +1404,7 @@ export const TOOLS = [
       card: { type: ["string", "null"], description: 'Only this card (id, name or last 4); "nakit" for cash.' },
       search: S.str("Case-insensitive text to look for in the description."),
       category: { ...PURCHASE_FIELDS.category, description: 'Only this category (id); null = purchases without a category.' },
+      tag: S.str("Only purchases with this tag (case doesn't matter)."),
       kind: { type: "string", enum: PURCHASE_KINDS, description: 'Only this kind: "installment" (2+ monthly installments), "single" (one payment), "repeat" (recurring), "bnpl" (Pay in 4) or "bonus" (bonus payment, Japan).' },
       sort: { type: "string", enum: Object.keys(PURCHASE_SORTS), description: 'Order: "next_payment" (default; soonest first), "added" (when it was entered; newest first), "date" (purchase date; newest first) or "amount" (largest first).' },
       order: { type: "string", enum: ["asc", "desc"], description: 'Reverse the default direction of sort: "asc" = oldest / smallest / soonest first, "desc" = newest / largest / latest first.' },
@@ -1405,6 +1425,7 @@ export const TOOLS = [
       const card = args.card !== undefined ? findCard(state, args.card) : undefined;
       const q = args.search ? T.normalize(args.search) : "";
       const category = args.category !== undefined ? categoryArg(args.category) : undefined;
+      const tag = args.tag !== undefined && args.tag !== null ? Tb.tagKey(args.tag) : null;
       // Eklenme sırası: veri dizisindeki yer (yeni harcama sona eklenir; eşitlemede tablolar oluşturulma sırasıyla gelir)
       const added = new Map(state.installments.map((p, i) => [p.id, i]));
       const dir = order === "asc" ? 1 : -1;
@@ -1414,6 +1435,7 @@ export const TOOLS = [
         .filter(p => card === undefined || (card ? p.cardId === card.id : !cardById(state, p.cardId)))
         .filter(p => !q || T.normalize(p.desc).includes(q))
         .filter(p => !kind || purchaseKind(p, state) === kind)
+        .filter(p => !tag || (Tb.tags(p.tags) || []).some(t => Tb.tagKey(t) === tag))
         .map(p => purchaseView(state, p, ctx.today))
         .filter(v => status === "all" || v.status === status)
         .sort((a, b) => dir * PURCHASE_SORTS[sort](a, b, added)
@@ -1490,6 +1512,92 @@ export const TOOLS = [
         const p = findPurchase(state, args.id);
         state.installments = state.installments.filter(x => x.id !== p.id);
         return { deleted: { id: p.id, description: p.desc } };
+      });
+    },
+  },
+
+  // ── Etiketler (icgoru.js tagList, tagSummary) ──
+  {
+    name: "list_tags",
+    title: "List tags (Etiketler)",
+    description: "The user's tags with how many purchases each has, their total cost (every installment, future ones included; foreign currency at today's rate) and the first and last purchase date. Most recently used first.",
+    inputSchema: obj({}),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const foreign = state.installments.some(p => Tb.tags(p.tags) && T.assetOf(p, homeOf(state)) !== homeOf(state));
+      const rates = foreign ? (await ratesOrNull(ctx))?.rates : null;
+      const tags = I.tagList(state, ctx.today, rates).map(t => ({
+        tag: t.name, purchases: t.count, total: t.total, firstPurchase: t.first, lastPurchase: t.last, ...(t.missing && { missingRates: true }),
+      }));
+      return { count: tags.length, tags, currency: homeOf(state) };
+    },
+  },
+  {
+    name: "tag_summary",
+    title: "Tag report",
+    description: "What one tag (e.g. a trip) cost in total: every installment of its purchases (future ones included; a recurring purchase's occurrences up to today), how much is paid and left and the last payment date, the purchase dates and daily average, amounts per currency (foreign currency at today's rate), and the split by category, person and card (cash as card null), with its purchases.",
+    inputSchema: obj({ tag: S.str("The tag (case doesn't matter).") }, ["tag"]),
+    annotations: READ,
+    async run(args, ctx) {
+      const state = await ctx.load();
+      const key = Tb.tagKey(args.tag ?? "");
+      if (!key) fail("tag is required.");
+      const home = homeOf(state);
+      const foreign = state.installments.some(p => (Tb.tags(p.tags) || []).some(t => Tb.tagKey(t) === key) && T.assetOf(p, home) !== home);
+      const rates = foreign ? (await ratesOrNull(ctx))?.rates : null;
+      const s = I.tagSummary(state, args.tag, ctx.today, rates);
+      if (!s) fail(`No purchase has the tag "${Tb.tagName(args.tag)}". list_tags lists the tags.`);
+      const split = rows => rows.map(r => ({ id: r.id, name: r.name, amount: r.value, share: Math.round(r.share * 1000) / 1000 }));
+      return {
+        tag: s.name, purchases: s.count, total: s.total, paid: s.paid, left: s.left, lastPayment: s.lastPayment,
+        firstPurchase: s.first, lastPurchase: s.last, days: s.days, perDay: s.perDay,
+        byCurrency: s.assets, byCategory: split(s.categories), byPerson: split(s.people), byCard: split(s.cards),
+        list: s.purchases.map(p => ({
+          id: p.id, description: p.desc, date: p.date, asset: p.asset, amount: p.amount, value: p.value, left: p.left,
+          category: p.category, person: personName(state, p.personId), card: cardById(state, p.cardId)?.name ?? "Nakit",
+        })),
+        ...(s.missing && { missingRates: s.missing }),
+        currency: home,
+      };
+    },
+  },
+  {
+    name: "tag_purchases",
+    title: "Tag purchases",
+    description: `Add a tag to purchases or take it off, e.g. to tag a trip's purchases after it ("tag everything from 3 to 10 March as Maldivler": find them with list_purchases first, then pass their ids). Other tags on the purchases stay. A purchase has at most ${Tb.MAX_TAGS} tags.`,
+    inputSchema: obj({
+      tag: S.str("The tag. Case doesn't matter: an existing tag is reused with its spelling."),
+      add: { type: "array", items: { type: "string" }, description: "Ids of purchases to tag." },
+      remove: { type: "array", items: { type: "string" }, description: "Ids of purchases to take the tag off." },
+    }, ["tag"]),
+    annotations: { ...WRITE, idempotentHint: true },
+    async run(args, ctx) {
+      const add = args.add ?? [], remove = args.remove ?? [];
+      if (!Array.isArray(add) || !Array.isArray(remove)) fail("add and remove must be lists of purchase ids.");
+      if (!add.length && !remove.length) fail("Pass purchase ids in add or remove.");
+      return ctx.mutate(state => {
+        const name = canonicalTags(state, Tb.tags([String(args.tag ?? "")]))?.[0];
+        if (!name) fail("tag is required.");
+        const key = Tb.tagKey(name);
+        const changed = [];
+        for (const id of add) {
+          const p = findPurchase(state, id);
+          const cur = Tb.tags(p.tags) || [];
+          if (cur.some(t => Tb.tagKey(t) === key)) continue;
+          if (cur.length >= Tb.MAX_TAGS) fail(`Purchase "${p.desc}" already has ${Tb.MAX_TAGS} tags.`);
+          p.tags = [...cur, name];
+          changed.push({ id: p.id, description: p.desc, tags: p.tags });
+        }
+        for (const id of remove) {
+          const p = findPurchase(state, id);
+          const cur = Tb.tags(p.tags) || [];
+          if (!cur.some(t => Tb.tagKey(t) === key)) continue;
+          const next = cur.filter(t => Tb.tagKey(t) !== key);
+          if (next.length) p.tags = next; else delete p.tags;
+          changed.push({ id: p.id, description: p.desc, tags: next });
+        }
+        return { saved: changed.length > 0, tag: name, changed };
       });
     },
   },
@@ -2492,6 +2600,7 @@ export const INSTRUCTIONS = `CashFollow tracks credit card and cash purchases (s
 - Funds and stocks (only for accounts in Turkey for now) are asset entries too, in units: TEFAS funds as FON:<code> (search_market finds a fund's code by name) and Borsa İstanbul stocks as BIST:<ticker>. A buy is direction in, a sale out; with a price (TRY per unit; default the current price for today's trades) the amount leaves / enters the TRY balance unless settle is false (units the user already had). get_assets lists holdings with current prices and profit.
 - Deleting a card or a person also deletes their purchases (a card also its statement payments, a person also their asset entries and debts); confirm destructive actions with the user.
 - Purchases can have a spending category (market, yeme, ulasim, alisveris, elektronik, ev, fatura, saglik, egitim, eglence, seyahat, diger). Set one when you add a purchase if it is clear; the app learns from it. The app also suggests categories with an on-device model.
+- Tags (etiketler) group the purchases of one event or project — a trip ("Maldivler"), a wedding, a renovation — across cards, people, categories and months; a purchase can have several. Add them with add_purchase / update_purchase tags or tag_purchases (tagging many at once, e.g. a trip's dates found with list_purchases). "What did the trip cost?" is tag_summary: the whole cost (every installment), paid and left, by category, person and card. list_tags lists them, list_purchases tag filters.
 - get_insights gives the app's insight cards; simulate_purchase answers "can I afford it / which card" without saving; get_month_summary reviews a month (paid, installments that finished, next month, categories).
 - Debts and receivables (Borçlar): list_debts shows card debt per card (unpaid installments; the next statement and each person's part), unpaid cash installments, bank loans (each installment counts as paid the day after its date, unless paid by hand) and money borrowed from or lent to someone (add_debt; repaid when recorded with pay_debt, in parts too, or on the installment dates with auto_pay), in TRY/USD/EUR/GAU. Each card's statements are tracked from its trackSince (set automatically; update_card track_statements only when the user asks): from that date a statement leaves the first person's lira balance the day after its due day (on a card paid by hand, when marked paid), and other people's purchases on the card are owed to the user until recorded with pay_debt person=…. get_assets gives totalAssetsTry = netWorthTry + debtsTry.
 - Payment mode (auto_pay), per card and per debt: automatic is the default for cards and loans — a statement counts as paid the day after its due day, a loan installment the day after its date. Paid by hand (update_card / add_card auto_pay false; add_debt / update_debt auto_pay false, the default for borrowed / lent) — a statement or installment stays owed until marked paid (Ödendi) with pay_debt (card=… for a card statement: amount defaults to what is due, a partial payment leaves the rest owed; debt=… for a loan or debt) and shows as overdue after its date (list_debts, get_overview debts.unpaidCardStatements, get_insights borc-vade). A loan's mode cannot change once it has an installment between its date and today, a borrowed / lent debt's once it has an installment before today; a card switched back to automatic counts its unpaid past statements as paid, and cannot switch while card payments would stop counting (on a statement's due day, switch the next day; for payments made ahead, delete or reduce them, or wait until the day after those due days); on a day a card payment is dated, switching a card to paid by hand (or turning its tracking back on) starts tomorrow and the card stays automatic today. Don't change a mode unless the user asks.

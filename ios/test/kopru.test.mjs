@@ -139,7 +139,7 @@ test("eşitleme: değişen satırlar, uzaktan gelenler, boş veri", async () => 
   const f = JSON.parse(S.fromRows(e.sandbox.Kopru.defaultState(), JSON.stringify({ cards: [row] })));
   assert.equal(f.state.cards.length, 1);
   assert.equal(f.state.people[0].id, "ben");
-  assert.equal(S.SCHEMA, 9);
+  assert.equal(S.SCHEMA, 10);
 });
 
 test("grafikler: Nakit ve Varlığın seyri web'deki nakit.js ile", async () => {

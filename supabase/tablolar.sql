@@ -447,6 +447,16 @@ $$;
 revoke all on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
 
+-- ── Etiketler (1.4) ─────────────────────────────────────────────────────────
+-- Harcamanın serbest adlı etiketleri ("Maldivler", "Düğün"): bir olayın ya da projenin bütün harcamalarını toplar
+-- (icgoru.js tagSummary). En fazla 10, her biri 1–40 harf, virgül / satır sonu / sekme yok; boşsa null. Aynı etiket
+-- büyük / küçük harf farkıyla yazılmış olabilir, uygulama birleştirir (tablo.js tagKey). supabase/gecis/1.4.0.sql ile aynı.
+create or replace function etiketler_gecerli(t text[]) returns boolean language sql immutable as $$
+  select t is null or (cardinality(t) between 1 and 10
+    and not exists (select 1 from unnest(t) x where x is null or length(x) not between 1 and 40 or x ~ '[,\n\r\t]'))
+$$;
+alter table purchases add column if not exists tags text[] check (etiketler_gecerli(tags));
+
 -- ── Uygulama ayarları (1.3) ──────────────────────────────────────────────────
 -- Sürüm çıkarmadan değiştirilebilen, herkese açık değerler (anahtar → değer). Herkes okur, yalnızca panelden / service
 -- role ile yazılır. sms_shortcut_url: iPhone'da "Kısayolu ekle"nin açtığı hazır kısayolun iCloud bağlantısı (boşken düğme

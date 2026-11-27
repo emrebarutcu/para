@@ -622,10 +622,108 @@
     };
   }
 
+  // ── Etiketler (purchases.tags; tablo.js tags) ───────────────────────────────
+  // Bir olayın ya da projenin ("Maldivler", "Düğün") bütün harcamaları. Toplam, harcamanın tamamıdır (taksitlerin
+  // hepsi, gelecektekiler dahil): soru "bu ay ne ödedim" değil, "neye mal oldu". Tekrarlayan harcamanın bugüne kadar
+  // gelen tekrarları sayılır. Döviz ve altın bugünkü kurla ana para birimine çevrilir (kategori dağılımı gibi); kuru
+  // bilinmeyen harcama toplama girmez (missing).
+  const Tb = () => (node ? require("./tablo.js") : root.Tablo);
+  const tagsOf = p => Tb().tags(p?.tags) || [];
+  const hasTag = (p, key) => tagsOf(p).some(t => Tb().tagKey(t) === key);
+  // Harcamanın bugüne kadarki tekrarlarının tarihleri (tek seferlikte kendi tarihi; tarihsizde null)
+  function occurrences(p, today) {
+    if (!T.repeats(p)) return [p.date ?? null];
+    return R.between(p, p.date, today).map(x => x.date);
+  }
+
+  // Bütün etiketler: [{ key, name, count (harcama), total (ana para biriminde), first, last (harcama tarihleri),
+  // missing (kuru bilinmediği için toplama girmeyen harcama var) }]; en son harcaması olan önce. name: etiketin en son
+  // eklenen harcamadaki yazılışı. Harcama formunun önerileri ve Etiketler sayfası.
+  function tagList(state, today = T.todayKey(), rates = null) {
+    home = P.homeOf(state);
+    const map = new Map();
+    for (const p of known(state).purchases) {
+      const names = tagsOf(p);
+      if (!names.length) continue;
+      const dates = occurrences(p, today).filter(Boolean);
+      const v = V.toTry(T.originalTotal(p) * Math.max(dates.length, p.date ? 0 : 1), T.assetOf(p, home), rates, home);
+      for (const name of names) {
+        const key = Tb().tagKey(name);
+        const g = map.get(key) || { key, name, count: 0, total: 0, first: null, last: null, missing: false };
+        g.name = name;
+        g.count++;
+        if (v == null) g.missing = true; else g.total += v;
+        for (const d of dates) {
+          if (!g.first || d < g.first) g.first = d;
+          if (!g.last || d > g.last) g.last = d;
+        }
+        map.set(key, g);
+      }
+    }
+    return [...map.values()].map(g => ({ ...g, total: round(g.total) }))
+      .sort((a, b) => (b.last ?? "").localeCompare(a.last ?? "") || b.count - a.count || a.name.localeCompare(b.name, D.locale()));
+  }
+
+  // Bir etiketin raporu; etiketli harcama yoksa null.
+  // { key, name, count, total, paid (bugünden önce ödenen), left (bugün ve sonra ödenecek), lastPayment (son ödeme
+  //   günü), first, last (ilk / son harcama tarihi), days (aradaki gün, ikisi dahil), perDay, assets: [{ asset, amount }]
+  //   (kendi biriminde), categories / people / cards: [{ id, name, value, share }] (kartta id null: nakit), purchases:
+  //   [{ id, desc, date, asset, amount (kendi biriminde), value, left, category, personId, cardId }] (yeniden eskiye),
+  //   missing (kuru bilinmediği için sayılmayan harcama sayısı) }
+  function tagSummary(state, tag, today = T.todayKey(), rates = null) {
+    home = P.homeOf(state);
+    const key = Tb().tagKey(tag);
+    const list = key ? known(state).purchases.filter(p => hasTag(p, key)) : [];
+    if (!list.length) return null;
+    let name = null, total = 0, paid = 0, left = 0, missing = 0, lastPayment = null, first = null, last = null;
+    const assets = new Map(), cats = new Map(), people = new Map(), cards = new Map(), items = [];
+    const add = (m, id, v) => m.set(id, (m.get(id) || 0) + v);
+    for (const p of list) {
+      name = tagsOf(p).find(t => Tb().tagKey(t) === key) ?? name;
+      const asset = T.assetOf(p, home), card = cardOf(state, p);
+      const dates = occurrences(p, today);
+      const spent = T.originalTotal(p) * dates.filter(d => d || !p.date).length;
+      const pays = T.payments(p, card, today);
+      const rest = Math.min(pays.filter(x => x.key >= today).reduce((s, x) => s + x.amount, 0), spent);
+      for (const d of dates.filter(Boolean)) {
+        if (!first || d < first) first = d;
+        if (!last || d > last) last = d;
+      }
+      const end = pays.at(-1)?.key;
+      if (end && (!lastPayment || end > lastPayment)) lastPayment = end;
+      add(assets, asset, spent);
+      const v = V.toTry(spent, asset, rates, home), r = V.toTry(rest, asset, rates, home);
+      if (v == null) { missing++; continue; }
+      total += v;
+      left += r;
+      paid += v - r;
+      add(cats, K.valid(p.category) ? p.category : "", v);
+      add(people, p.personId, v);
+      add(cards, card ? card.id : "", v);
+      items.push({
+        id: p.id, desc: p.desc, date: dates.filter(Boolean).at(-1) ?? null, asset, amount: round(spent), value: round(v),
+        left: round(r), category: K.valid(p.category) ? p.category : null, personId: p.personId, cardId: card ? card.id : null,
+      });
+    }
+    const rows = (m, nameOf) => [...m.entries()].map(([id, value]) => ({ id: id || null, name: nameOf(id), value: round(value), share: total > EPS ? value / total : 0 }))
+      .sort((a, b) => b.value - a.value);
+    const days = first && last ? Math.round((T.toDate(last) - T.toDate(first)) / 86400000) + 1 : null;
+    return {
+      key, name, count: list.length, total: round(total), paid: round(paid), left: round(left), lastPayment, first, last, days,
+      perDay: days ? round(total / days) : null,
+      assets: [...assets.entries()].map(([asset, amount]) => ({ asset, amount: round(amount) })).sort((a, b) => (a.asset === home ? -1 : b.asset === home ? 1 : a.asset.localeCompare(b.asset))),
+      categories: rows(cats, id => K.category(id)?.name ?? L("Kategorisiz")),
+      people: rows(people, id => state.people.find(x => x.id === id)?.name ?? ""),
+      cards: rows(cards, id => state.cards.find(c => c.id === id)?.name ?? L("Nakit")),
+      purchases: items.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "")),
+      missing,
+    };
+  }
+
   const api = {
     insights, monthFlows, categoryBreakdown, spendingByMonth, recurring, cardTiming, HORIZON,
     progress, lastInstallment, finishing, merchants, monthSummary,
-    FREE, headline,
+    FREE, headline, tagList, tagSummary,
   };
   if (node) module.exports = api;
   else root.Icgoru = api;

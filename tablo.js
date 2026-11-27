@@ -29,6 +29,34 @@
   const validCategory = c => typeof c === "string" && /^[a-z]{1,20}$/.test(c);
   const CATEGORY_BY = ["user", "ai"];
 
+  // Etiketler (purchases.tags): harcamanın serbest adlı etiketleri ("Maldivler", "Düğün"). Harcama başına en fazla
+  // MAX_TAGS, her biri en fazla TAG_LEN harf; virgül ayırıcıdır, ad içinde virgül / satır sonu / sekme olmaz, baştaki #
+  // atılır. Aynı etiket büyük / küçük harf ve boşluk farkıyla yazılmış olabilir: tagKey aynıdır (Türkçe İ / ı ile
+  // İngilizce I / i aynı sayılır), ilk yazılış kalır. Boş liste null.
+  const MAX_TAGS = 10, TAG_LEN = 40;
+  function tagName(s) {
+    const t = String(s ?? "").normalize("NFC").replace(/[,\n\r\t]+/g, " ").replace(/\s+/g, " ").trim().replace(/^#+\s*/, "");
+    const chars = Array.from(t);
+    return chars.length <= TAG_LEN ? t : chars.slice(0, TAG_LEN).join("").trim();
+  }
+  function tagKey(s) {
+    return tagName(s).toLocaleLowerCase("tr-TR").replace(/ı/g, "i").replace(/\u0307/g, "");
+  }
+  // Liste ya da virgülle ayrılmış metin → temiz liste (en fazla MAX_TAGS, tekrarsız) ya da null
+  function tags(list) {
+    const raw = typeof list === "string" ? list.split(",") : Array.isArray(list) ? list : [];
+    const out = [], seen = new Set();
+    for (const x of raw) {
+      if (typeof x !== "string") continue;
+      const name = tagName(x), key = tagKey(name);
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      out.push(name);
+      if (out.length === MAX_TAGS) break;
+    }
+    return out.length ? out : null;
+  }
+
   // Tekrar (tekrar.js): repeat_count 0 (süresiz) ya da 2…600, repeat_every 1…99, repeat_unit day | week | month.
   // Tek seferlikte üçü de boş; varsayılanlar (her 1, ay) boş yazılır.
   const UNITS = ["day", "week", "month"];
@@ -114,6 +142,7 @@
         bnpl: date && repeatCols(p).repeat_count == null ? bnplOf(p.bnpl) : null,
         // Bonus ödemesi (Japonya): kartlı, tarihli, tekrarlamayan, 1 ya da 2 ödemeli harcamada (taksit.js bonus)
         bonus: date && p.bonus === true && validId(p.cardId) && (count === 1 || count === 2) && repeatCols(p).repeat_count == null ? true : null,
+        tags: tags(p.tags),
       };
     },
     // Fon / hisse tekrarlamaz. price birim fiyat ya da kur (TL; fon, hisse, döviz ve altında, tek seferlik), settle
@@ -188,6 +217,8 @@
       repeatFields(r, p);
       if (r.date && bnplOf(r.bnpl) && p.repeat == null) p.bnpl = r.bnpl;
       if (r.date && r.bonus === true && r.card_id && (r.count === 1 || r.count === 2) && p.repeat == null) p.bonus = true;
+      const t = tags(r.tags);
+      if (t) p.tags = t;
       return p;
     },
     entries: r => {
@@ -224,11 +255,12 @@
 
   // Satır biçimi (ROW) değişince artırılır. Önceki biçimle kaydedilmiş taban rekey ile çevrilir; yoksa yeni sütun
   // yüzünden her kayıt yerelde değişmiş görünür, eşitleme bütün satırları yeni sütunu boş yazarak ezer.
-  const SCHEMA = 9;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
+  const SCHEMA = 10;   // 2: cards.history, entries.repeat_count; 3: purchases.category, category_by;
                       // 4: purchases.asset, repeat_count / repeat_every / repeat_unit, entries.repeat_every / repeat_unit;
                       // 5: cards.track_since / track_off (debts yeni tablo); 6: cards.manual_since, debts.card_id;
                       // 7: entries.price / settle (fon, hisse, döviz ve altın); 8: cards.apr, purchases.bnpl;
-                      // 9: cards.bonus_months, purchases.bonus (Japonya'da bonus ödemesi); boş bnpl artık null yazılır
+                      // 9: cards.bonus_months, purchases.bonus (Japonya'da bonus ödemesi); boş bnpl artık null yazılır;
+                      // 10: purchases.tags (etiketler)
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base, home = "TRY") {
@@ -403,7 +435,7 @@
     return Number.isFinite(t) && t > now;
   }
 
-  const api = { TABLES, FIELD, SCHEMA, keyOf, rekey, toState, baseOf, stale, changes, merge, combine, premium };
+  const api = { TABLES, FIELD, SCHEMA, MAX_TAGS, TAG_LEN, tagName, tagKey, tags, keyOf, rekey, toState, baseOf, stale, changes, merge, combine, premium };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Tablo = api;
 })(this);
