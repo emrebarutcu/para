@@ -1968,3 +1968,18 @@ a.hero-eq { display: block; width: fit-content; }
 .tag-progress { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
 .tag-progress > span { display: block; height: 100%; background: var(--text); border-radius: 4px; }
 .tag-split { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.tag-progress.over > span { background: var(--danger); }
+.tag-tools .tag-tool-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-tools .btn.on { background: var(--surface-3); }
+.tag-tools > div { margin-top: 12px; }
+.tag-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.tag-form input[type="text"] { flex: 1 1 180px; min-width: 0; }
+.tag-dates { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tag-dates input { flex: 1 1 130px; min-width: 0; }
+.tag-pick { display: flex; flex-direction: column; margin: 10px 0; border: 1px solid var(--line); border-radius: 12px; max-height: 280px; overflow: auto; }
+.tag-pick-row { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; padding: 9px 12px; border-top: 1px solid var(--line); font-size: 14px; cursor: pointer; }
+.tag-pick-row:first-child { border-top: none; }
+.tag-pick-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-pick-meta { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tag-bulk .tag-dates { margin-top: 6px; }
+.tag-bulk input[type="date"], .tag-trip input[type="date"] { padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface-2); }

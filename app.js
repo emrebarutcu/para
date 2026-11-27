@@ -2398,6 +2398,9 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
 // Her etiket: harcama sayısı, tarih aralığı ve toplam maliyeti (taksitlerin hepsi; döviz bugünkü kurla). Dokununca
 // rapor: toplam ve harcamalar herkese açık, ödenen / kalan ve dağılımlar Premium (tag_report kilidi).
 let tagOpen = null;   // raporu açık etiket
+let tagTool = null;   // raporda açık araç: "bulk" (tarih aralığından ekle) | "rename" | "budget" | "trip"; kilitliyse "lock:<neden>"
+let tagRange = null;  // toplu eklemede { from, to, skip: Set(id) }
+let tagAbort = null;  // yeniden çizilen raporda eski Sil düğmesinin dinleyicileri (confirmTap)
 
 function tagDates(first, last) {
   if (!first) return "";
@@ -2420,9 +2423,11 @@ function renderTagList() {
     const meta = el("div", "p-meta");
     meta.append(el("span", "", L("{0} harcama", t.count)));
     if (t.first) meta.append(el("span", "", tagDates(t.first, t.last)));
+    if (t.active) meta.append(el("span", "tag-tag", L("Gezi modu · {0}", fmtDayShort(t.activeUntil))));
     main.append(meta);
     const side = el("div", "p-side");
     side.append(el("span", "amount", fmt(t.total)));
+    if (t.budget) side.append(el("span", "sub" + (t.total > t.budget + EPS ? " out-text" : ""), L("bütçe {0}", fmt(t.budget))));
     row.append(markOf(icon("tag")), main, side);
     const open = () => openTagSheet(t.name);
     row.addEventListener("click", open);
@@ -2433,6 +2438,8 @@ function renderTagList() {
 
 function openTagSheet(name) {
   tagOpen = name;
+  tagTool = null;
+  tagRange = null;
   renderTagSheet();
   openSheet(els.tagSheet);
   window.Analitik?.event("tag_report_viewed", { locked: locked() });
@@ -2481,9 +2488,12 @@ function renderTagSheet() {
   }
   if (s.missing) hero.append(el("p", "hint", L("Kuru alınamayan {0} harcama toplama girmedi.", s.missing)));
   body.push(hero);
+  if (!locked() && (s.budget || s.activeUntil)) body.push(tagPlanBox(s, today));
+  body.push(tagTools(s, today));
 
   if (locked()) {
-    body.push(premiumLock(null, L("Etiketin raporu Premium'da: ne kadarı ödendi, ne kadar kaldı, son taksit hangi ay; kategoriye, kişiye ve karta göre dağılım."), "tag_report"));
+    // Bir aracın kilidi açıksa (aşağıda) ikinci kilit gösterilmez
+    if (!tagTool?.startsWith("lock:")) body.push(premiumLock(null, L("Etiketin raporu Premium'da: ne kadarı ödendi, ne kadar kaldı, son taksit hangi ay; kategoriye, kişiye ve karta göre dağılım."), "tag_report"));
   } else {
     const pay = el("section", "tag-sec");
     const bar = el("div", "bar tag-progress");
@@ -2527,9 +2537,259 @@ function renderTagSheet() {
     row.addEventListener("keydown", e => { if (e.key === "Enter") open(); });
     panel.append(row);
   }
-  sec.append(panel);
-  body.push(sec);
+  if (s.purchases.length) {
+    sec.append(panel);
+    body.push(sec);
+  }
   els.tagBody.replaceChildren(...body);
+}
+
+// Bütçe (harcanan / bütçe çubuğu, kalan ya da aşılan) ve gezi modu (açıkken bitiş günü)
+function tagPlanBox(s, today) {
+  const box = el("section", "tag-sec tag-plan");
+  if (s.budget) {
+    const over = s.budgetLeft < -EPS;
+    const bar = el("div", "bar tag-progress" + (over ? " over" : ""));
+    const fill = el("span");
+    fill.style.width = `${Math.min(s.budgetUsed, 1) * 100}%`;
+    bar.append(fill);
+    const split = el("div", "tag-split");
+    split.append(el("span", "", L("Bütçe {0}", fmt(s.budget))),
+      el("span", over ? "out-text" : "", over ? L("{0} aşıldı", fmt(-s.budgetLeft)) : L("Kalan {0}", fmt(s.budgetLeft))));
+    box.append(bar, split);
+  }
+  if (s.activeUntil && s.activeUntil >= today) {
+    box.append(el("p", "hint", s.active
+      ? L("Gezi modu açık: {0} tarihine kadar eklenen harcamalar #{1} etiketini kendiliğinden alır.", fmtDay(s.activeUntil), s.name)
+      : L("Gezi modu {0} – {1}: bu günlerdeki yeni harcamalar #{2} etiketini kendiliğinden alır.", fmtDay(s.activeFrom ?? today), fmtDay(s.activeUntil), s.name)));
+  }
+  return box;
+}
+
+// Etiketin ayarını yazar: { budget?, activeFrom?, activeUntil? } (null siler); ayarı kalmayan etiketin satırı silinir
+function saveTagSetting(name, patch) {
+  const id = Tb.tagKey(name);
+  const cur = state.tags.find(t => t.id === id) ?? { id, name };
+  const next = { ...cur, name: cur.name ?? name };
+  for (const [k, v] of Object.entries(patch)) { if (v == null) delete next[k]; else next[k] = v; }
+  if (!next.activeUntil) delete next.activeFrom;
+  state.tags = state.tags.filter(t => t.id !== id);
+  if (next.budget || next.activeUntil) state.tags.push(next);
+  saveState();
+  render();
+}
+
+// Etiketi yönetme: toplu ekleme, yeniden adlandırma / birleştirme, bütçe, gezi modu, CSV (Premium); silme herkese açık
+function tagTools(s, today) {
+  const sec = el("section", "tag-sec tag-tools");
+  const row = el("div", "tag-tool-row");
+  const premiumTool = (label, tool, reason) => {
+    const b = el("button", "btn btn-ghost sm" + (tagTool === tool ? " on" : ""), label);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      tagTool = locked() ? `lock:${reason}` : tagTool === tool ? null : tool;
+      if (tagTool === "bulk") tagRange = { from: s.first ?? T.addDays(today, -7), to: s.last ?? today, skip: new Set() };
+      renderTagSheet();
+    });
+    return b;
+  };
+  row.append(
+    premiumTool(L("Harcama ekle"), "bulk", "tag_manage"),
+    premiumTool(L("Bütçe"), "budget", "tag_budget"),
+    premiumTool(L("Gezi modu"), "trip", "tag_active"),
+    premiumTool(L("Yeniden adlandır"), "rename", "tag_manage"),
+  );
+  const csv = el("button", "btn btn-ghost sm", L("CSV"));
+  csv.type = "button";
+  csv.addEventListener("click", () => {
+    if (locked()) { tagTool = "lock:tag_manage"; renderTagSheet(); return; }
+    downloadTagCsv(s);
+  });
+  const del = el("button", "btn btn-danger sm");
+  del.type = "button";
+  del.append(icon("trash"), el("span", "", L("Etiketi sil")));
+  tagAbort?.abort();
+  tagAbort = new AbortController();
+  const signal = tagAbort.signal;
+  // confirmTap pencereyi düğmenin atasından bulur: düğme rapora yerleşince (renderTagSheet aynı adımda yerleştirir)
+  queueMicrotask(() => confirmTap(del, () => {
+    const r = Tb.removeTag(state, s.name);
+    state.installments = r.installments;
+    state.tags = r.tags;
+    saveState();
+    els.tagSheet.close();
+    toast(L("#{0} etiketi kaldırıldı; harcamalar duruyor", s.name));
+    render();
+  }, signal));
+  row.append(csv, del);
+  sec.append(row);
+
+  if (tagTool?.startsWith("lock:")) {
+    const reason = tagTool.slice(5);
+    sec.append(premiumLock(null, {
+      tag_manage: L("Tarih aralığından toplu etiketleme, yeniden adlandırma, birleştirme ve CSV Premium'da."),
+      tag_budget: L("Etikete bütçe koymak ve aşılınca uyarı almak Premium'da."),
+      tag_active: L("Gezi modu Premium'da: seçtiğin günlerde eklenen her harcama (banka e-postası ve SMS dahil) etiketi kendiliğinden alır."),
+    }[reason], reason));
+  } else if (tagTool === "bulk") sec.append(tagBulkBox(s));
+  else if (tagTool === "rename") sec.append(tagRenameBox(s));
+  else if (tagTool === "budget") sec.append(tagBudgetBox(s));
+  else if (tagTool === "trip") sec.append(tagTripBox(s, today));
+  return sec;
+}
+
+// Küçük satır içi form: alanlar ve düğme
+function tagForm(fields, label, run) {
+  const form = el("form", "tag-form field");
+  form.noValidate = true;
+  const btn = el("button", "btn btn-primary sm", label);
+  btn.type = "submit";
+  form.append(...fields, btn);
+  form.addEventListener("submit", e => { e.preventDefault(); run(); });
+  return form;
+}
+function tagInputEl(type, value, label) {
+  const i = el("input");
+  i.type = type;
+  i.value = value ?? "";
+  i.setAttribute("aria-label", label);
+  if (type === "text") { i.maxLength = Tb.TAG_LEN; i.autocomplete = "off"; }
+  if (label === L("Bütçe")) i.inputMode = "decimal";
+  return i;
+}
+
+// Tarih aralığından ekleme: aralıktaki, etiketi olmayan tarihli harcamalar işaretli gelir, istenmeyen çıkarılır
+function tagBulkBox(s) {
+  const box = el("div", "tag-bulk");
+  const key = Tb.tagKey(s.name);
+  const from = tagInputEl("date", tagRange.from, L("Başlangıç")), to = tagInputEl("date", tagRange.to, L("Bitiş"));
+  const update = () => { tagRange.from = from.value; tagRange.to = to.value; renderTagSheet(); };
+  from.addEventListener("change", update);
+  to.addEventListener("change", update);
+  const dates = el("div", "tag-dates");
+  dates.append(from, el("span", "", "–"), to);
+  box.append(el("p", "hint", L("Bu günlerdeki harcamalar #{0} etiketini alır; istemediklerinin işaretini kaldır.", s.name)), dates);
+  const ok = T.parseDate(tagRange.from) && T.parseDate(tagRange.to) && tagRange.from <= tagRange.to;
+  const items = ok ? knownPurchases().filter(p => p.date && p.date >= tagRange.from && p.date <= tagRange.to
+    && !(Tb.tags(p.tags) || []).some(t => Tb.tagKey(t) === key)).sort((a, b) => a.date.localeCompare(b.date)) : [];
+  if (!items.length) {
+    box.append(el("p", "empty", ok ? L("Bu günlerde etiketlenecek harcama yok.") : L("Geçerli bir tarih aralığı seç.")));
+    return box;
+  }
+  const list = el("div", "tag-pick");
+  for (const p of items) {
+    const label = el("label", "tag-pick-row");
+    const cb = el("input");
+    cb.type = "checkbox";
+    cb.checked = !tagRange.skip.has(p.id);
+    cb.addEventListener("change", () => { if (cb.checked) tagRange.skip.delete(p.id); else tagRange.skip.add(p.id); });
+    label.append(cb, el("span", "tag-pick-name", p.desc), el("span", "tag-pick-meta", `${fmtDayShort(p.date)} · ${money(T.originalTotal(p), T.assetOf(p, HOME))}`));
+    list.append(label);
+  }
+  const add = el("button", "btn btn-primary sm", L("Etiketle"));
+  add.type = "button";
+  add.addEventListener("click", () => {
+    const ids = new Set(items.filter(p => !tagRange.skip.has(p.id)).map(p => p.id));
+    let n = 0, full = 0;
+    state.installments = state.installments.map(p => {
+      if (!ids.has(p.id)) return p;
+      const cur = Tb.tags(p.tags) || [];
+      if (cur.length >= Tb.MAX_TAGS) { full++; return p; }
+      n++;
+      return { ...p, tags: [...cur, s.name] };
+    });
+    saveState();
+    tagTool = null;
+    toast(L("{0} harcama #{1} etiketini aldı", n, s.name) + (full ? " · " + L("{0} harcamada yer yok (en fazla {1} etiket)", full, Tb.MAX_TAGS) : ""));
+    window.Analitik?.event("tag_added", { count: n, source: "bulk" });
+    render();
+  });
+  box.append(list, add);
+  return box;
+}
+
+// Yeniden adlandırma; yeni ad başka bir etiketse birleşir
+function tagRenameBox(s) {
+  const input = tagInputEl("text", s.name, L("Yeni ad"));
+  const box = el("div", "tag-rename");
+  box.append(el("p", "hint", L("Başka bir etiketin adını yazarsan ikisi birleşir.")), tagForm([input], L("Kaydet"), () => {
+    const r = Tb.renameTag(state, s.name, input.value);
+    if (!r) { input.classList.add("invalid"); return; }
+    state.installments = r.installments;
+    state.tags = r.tags;
+    saveState();
+    tagOpen = r.name;
+    tagTool = null;
+    toast(r.merged ? L("#{0} etiketine birleştirildi", r.name) : L("Etiket #{0} oldu", r.name));
+    render();
+  }));
+  setTimeout(() => input.focus(), 0);
+  return box;
+}
+
+function tagBudgetBox(s) {
+  const input = tagInputEl("text", s.budget ? amountText(s.budget, 0) : "", L("Bütçe"));
+  input.setAttribute("data-amount", "0");
+  input.placeholder = L("ör. {0}", amountText(150000, 0));
+  const box = el("div", "tag-budget");
+  box.append(el("p", "hint", L("Etiketin harcamaları (bütün taksitler) bu tutarla karşılaştırılır; yaklaşınca ve aşılınca uyarılırsın.")),
+    tagForm([input], L("Kaydet"), () => {
+      const v = input.value.trim() ? parseAmount(input.value) : null;
+      if (v != null && !(v > 0)) { input.classList.add("invalid"); return; }
+      tagTool = null;
+      saveTagSetting(s.name, { budget: v == null ? null : Math.round(v * 100) / 100 });
+      toast(v == null ? L("Bütçe kaldırıldı") : L("#{0} bütçesi {1}", s.name, fmt(v)));
+    }));
+  return box;
+}
+
+// Gezi modu: bugünden (ya da seçilen günden) bitiş gününe kadar yeni harcamalar etiketi alır
+function tagTripBox(s, today) {
+  const box = el("div", "tag-trip");
+  if (s.activeUntil && s.activeUntil >= today) {
+    const off = el("button", "btn btn-ghost sm", L("Gezi modunu kapat"));
+    off.type = "button";
+    off.addEventListener("click", () => {
+      tagTool = null;
+      saveTagSetting(s.name, { activeFrom: null, activeUntil: null });
+      toast(L("Gezi modu kapandı"));
+    });
+    box.append(off);
+  }
+  const from = tagInputEl("date", s.activeUntil >= today ? s.activeFrom ?? today : today, L("Başlangıç"));
+  const to = tagInputEl("date", s.activeUntil >= today ? s.activeUntil : T.addDays(today, 7), L("Bitiş"));
+  const dates = el("div", "tag-dates");
+  dates.append(from, el("span", "", "–"), to);
+  box.append(el("p", "hint", L("Bu günlerde formdan, banka e-postasından, SMS'ten ya da asistandan eklenen her harcama #{0} etiketini kendiliğinden alır.", s.name)),
+    tagForm([dates], L("Gezi modunu aç"), () => {
+      if (!T.parseDate(from.value) || !T.parseDate(to.value) || from.value > to.value || to.value < today) { to.classList.add("invalid"); return; }
+      tagTool = null;
+      saveTagSetting(s.name, { activeFrom: from.value, activeUntil: to.value });
+      toast(L("Gezi modu açık: {0} tarihine kadar", fmtDay(to.value)));
+      window.Analitik?.event("tag_active_set", { days: Math.round((T.toDate(to.value) - T.toDate(from.value)) / 864e5) + 1 });
+    }));
+  return box;
+}
+
+// CSV: etiketin harcamaları (Excel'in açabileceği; virgüllü dillerde ; ayırıcı)
+function downloadTagCsv(s) {
+  const sep = DECIMAL === "," ? ";" : ",";
+  const q = v => { const t = String(v ?? ""); return /[";,\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const num = n => (Math.round(n * 100) / 100).toLocaleString(D.locale(), { useGrouping: false, maximumFractionDigits: 2 });
+  const head = [L("Tarih"), L("Açıklama"), L("Kart"), L("Kişi"), L("Kategori"), L("Tutar"), L("Birim"), L("Tutar ({0})", HOME), L("Kalan ({0})", HOME)];
+  const lines = [head.map(q).join(sep)];
+  for (const x of s.purchases) {
+    lines.push([x.date ?? "", x.desc, x.cardId ? cardName(x.cardId) : L("Nakit"), personById(x.personId)?.name ?? "",
+      K.category(x.category)?.name ?? "", num(x.amount), x.asset, num(x.value), num(x.left)].map(q).join(sep));
+  }
+  const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = el("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${s.name}.csv`;
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  window.Analitik?.event("tag_csv_exported", { count: s.purchases.length });
 }
 
 // ---------- Kartlar ----------
@@ -4042,7 +4302,8 @@ function openPurchaseSheet(p, draft) {
   categoryFor = categorySource === "ai" ? src.desc : null;
   els.categoryChips.replaceChildren(...K.CATEGORIES.map(c => radioChip("category", c.id, c.name, c.id === src?.category)));
   setCategoryHint(categorySource === "ai" ? L("öneri") : "");
-  formTags = Tb.tags(src?.tags) || [];
+  // Yeni harcamada gezi modundaki etiketler hazır gelir (çıkarılabilir)
+  formTags = Tb.tags(src?.tags) || (p ? [] : I.activeTags(state, f.elements.date.value || T.todayKey()));
   els.tagInput.value = "";
   els.tagLock.hidden = true;
   renderFormTags();
@@ -6401,7 +6662,9 @@ function emailCard(parsed) {
 }
 
 function emailPurchase(parsed, card) {
-  return { desc: parsed.merchant || "Kart harcaması", cardId: card?.id ?? null, count: parsed.count, total: parsed.amount, date: parsed.date };
+  const p = { desc: parsed.merchant || "Kart harcaması", cardId: card?.id ?? null, count: parsed.count, total: parsed.amount, date: parsed.date };
+  const tags = I.activeTags(state, parsed.date || T.todayKey());   // gezi modundaki etiketler (tools.js withActiveTags gibi)
+  return tags.length ? { ...p, tags } : p;
 }
 
 // kind: purchase (harcama bildirimi), verification (Gmail yönlendirme onayı ya da bankanın adres doğrulaması: "Onayla"
