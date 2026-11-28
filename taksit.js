@@ -445,7 +445,6 @@
     if (!Array.isArray(s.installments)) s.installments = [];
     if (!Array.isArray(s.entries)) s.entries = [];
     if (!Array.isArray(s.debts)) s.debts = [];
-    if (!Array.isArray(s.tags)) s.tags = [];   // etiketin ayarları (tablo.js; bütçe, gezi modu)
     s.cards = s.cards.map(c => {
       if (!c || typeof c !== "object" || !("history" in c)) return c;
       const { history, ...rest } = c;

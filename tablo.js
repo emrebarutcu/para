@@ -4,10 +4,9 @@
 // (taban: tablo → id → satırın JSON'u) bugünkü veriyle karşılaştırır: yalnızca değişen satırlar yazılır, veriden
 // çıkanlar silindi olarak işaretlenir. Uzaktan gelen satır, yerelde henüz yazılmamış değişikliği ezmez.
 (function (root) {
-  // Yazma sırası da budur: harcama kişisine ve kartına, hareket ve borç kişisine bağlıdır. tags: etiketin ayarları
-  // (bütçe, gezi modu); harcamalar etikete adıyla bağlanır (purchases.tags), yabancı anahtar yok
-  const TABLES = ["people", "cards", "purchases", "entries", "debts", "tags"];
-  const FIELD = { people: "people", cards: "cards", purchases: "installments", entries: "entries", debts: "debts", tags: "tags" };
+  // Yazma sırası da budur: harcama kişisine ve kartına, hareket ve borç kişisine bağlıdır
+  const TABLES = ["people", "cards", "purchases", "entries", "debts"];
+  const FIELD = { people: "people", cards: "cards", purchases: "installments", entries: "entries", debts: "debts" };
   const P = typeof module === "object" && module.exports ? require("./para.js") : root.Para;
   // Para birimi (para.js) ya da gram altın. Harcamada boş varlık ana para birimidir (state.home; verilmezse TL).
   const money = c => c === "GAU" || P.isCurrency(c);
@@ -43,9 +42,6 @@
   function tagKey(s) {
     return tagName(s).toLocaleLowerCase("tr-TR").replace(/ı/g, "i").replace(/\u0307/g, "");
   }
-  // Etiketin ayarları (tags tablosu; state.tags): { id: tagKey(name), name, budget?, activeFrom?, activeUntil? }.
-  // Gezi modu activeFrom–activeUntil (ikisi de dahil); yalnızca bitişi olan mod bugünden başlar sayılır.
-
   // Liste ya da virgülle ayrılmış metin → temiz liste (en fazla MAX_TAGS, tekrarsız) ya da null
   function tags(list) {
     const raw = typeof list === "string" ? list.split(",") : Array.isArray(list) ? list : [];
@@ -149,16 +145,6 @@
         tags: tags(p.tags),
       };
     },
-    // Etiketin ayarları: kimlik adından gelir (tagKey); geçersiz ad ya da kimliği uymayan kayıt yazılmaz
-    tags: t => {
-      const name = tagName(t.name);
-      if (!name || !validId(t.id) || t.id !== tagKey(name)) return null;
-      const until = dateKey(t.activeUntil), from = dateKey(t.activeFrom);
-      return {
-        id: t.id, name, budget: pos(t.budget),
-        active_from: until && from && from <= until ? from : null, active_until: until,
-      };
-    },
     // Fon / hisse tekrarlamaz. price birim fiyat ya da kur (TL; fon, hisse, döviz ve altında, tek seferlik), settle
     // yalnızca fiyatla (miktar × fiyat TL bakiyesine işlenir)
     entries: (e, home) => {
@@ -202,16 +188,6 @@
 
   // Satır → kayıt (uygulamadaki biçim: boş alanlar yazılmaz)
   const ITEM = {
-    tags: r => {
-      const t = { id: r.id, name: r.name };
-      if (pos(r.budget) != null) t.budget = Number(r.budget);
-      const until = dateKey(r.active_until), from = dateKey(r.active_from);
-      if (until) {
-        t.activeUntil = until;
-        if (from && from <= until) t.activeFrom = from;
-      }
-      return t;
-    },
     people: r => ({ id: r.id, name: r.name, color: r.color }),
     cards: r => {
       const c = { id: r.id, name: r.name, limit: Number(r.credit_limit), cutoffDay: r.cutoff_day, dueDay: r.due_day, color: r.color };
@@ -284,7 +260,7 @@
                       // 5: cards.track_since / track_off (debts yeni tablo); 6: cards.manual_since, debts.card_id;
                       // 7: entries.price / settle (fon, hisse, döviz ve altın); 8: cards.apr, purchases.bnpl;
                       // 9: cards.bonus_months, purchases.bonus (Japonya'da bonus ödemesi); boş bnpl artık null yazılır;
-                      // 10: purchases.tags (etiketler), tags tablosu (etiketin bütçesi ve gezi modu)
+                      // 10: purchases.tags (etiketler)
 
   // Eski biçimdeki taban → bugünkü biçim (satırda olmayan sütun boş sayılır)
   function rekey(base, home = "TRY") {
@@ -436,9 +412,6 @@
       const from = item.trackSince && item.trackSince > item.manualSince ? item.trackSince : item.manualSince;
       out.cards[at] = { ...kept, manualSince: from };
     }
-    // Etiket ayarları: aynı etiket hesaptakiyle kalır
-    const tagIds = new Set((account.tags || []).map(t => t.id));
-    out.tags = [...(account.tags || []), ...(local.tags || []).filter(t => t && validId(t.id) && !tagIds.has(t.id))];
     for (const field of ["installments", "entries", "debts"]) {
       const list = [...(account[field] || [])], ids = new Set(list.map(x => x.id));
       for (const item of local[field] || []) {
@@ -453,48 +426,46 @@
     return out;
   }
 
-  // Etiketi yeniden adlandırır; yeni ad başka bir etiketinse ikisi birleşir (harcamada bir kez kalır, ayar: hedefinki,
-  // yoksa eskisininki). → { installments, tags, name (son ad), changed (değişen harcama sayısı), merged } ya da ad
-  // geçersizse null. Veriyi değiştirmez, yeni listeler döner.
-  function renameTag(state, from, to) {
+  // Etiketi bütün harcamalarda yeniden adlandırır; yeni ad başka bir etiketse ikisi birleşir (harcamada bir kez kalır,
+  // var olan etiketin yazılışıyla). Yeni ad boşsa etiket kaldırılır (harcamalar kalır). Veriyi değiştirmez:
+  // → { installments, name (son ad; kaldırılınca null), changed (değişen harcama sayısı), merged }
+  function renameTag(list, from, to) {
     const fromKey = tagKey(from), name0 = tagName(to);
-    if (!fromKey || !name0) return null;
-    const toKey = tagKey(name0);
-    const list = state.installments || [], settings = state.tags || [];
-    // Hedef başka bir etiketse onun yazılışı kalır (birleştirme); aynı etiketse yeni yazılış
-    let name = name0, merged = false;
-    if (toKey !== fromKey) {
+    const toKey = name0 ? tagKey(name0) : null;
+    let name = name0 || null, merged = false;
+    if (toKey && toKey !== fromKey) {
       for (const p of list) for (const t of tags(p.tags) || []) if (tagKey(t) === toKey) { name = t; merged = true; }
-      const own = settings.find(t => t.id === toKey);
-      if (own) { name = merged ? name : own.name; merged = true; }
     }
     let changed = 0;
     const installments = list.map(p => {
       const cur = tags(p.tags);
-      if (!cur || !cur.some(t => tagKey(t) === fromKey)) return p;
+      if (!fromKey || !cur || !cur.some(t => tagKey(t) === fromKey)) return p;
       changed++;
-      return { ...p, tags: tags(cur.map(t => (tagKey(t) === fromKey || tagKey(t) === toKey ? name : t))) };
+      const next = tags(cur.flatMap(t => (tagKey(t) === fromKey || tagKey(t) === toKey ? (name ? [name] : []) : [t])));
+      const { tags: _, ...rest } = p;
+      return next ? { ...rest, tags: next } : rest;
     });
-    const old = settings.find(t => t.id === fromKey), target = settings.find(t => t.id === toKey && toKey !== fromKey);
-    let next = settings.filter(t => t.id !== fromKey && t.id !== toKey);
-    const kept = target ?? old;
-    if (kept) next = [...next, { ...kept, id: toKey, name }];
-    return { installments, tags: next, name, changed, merged };
+    return { installments, name, changed, merged };
   }
 
-  // Etiketi bütün harcamalardan ve ayarlardan kaldırır (harcamalar kalır). → { installments, tags, changed }
-  function removeTag(state, tag) {
-    const key = tagKey(tag);
-    let changed = 0;
-    const installments = (state.installments || []).map(p => {
-      const cur = tags(p.tags);
-      if (!cur || !cur.some(t => tagKey(t) === key)) return p;
-      changed++;
-      const { tags: _, ...rest } = p;
-      const left = cur.filter(t => tagKey(t) !== key);
-      return left.length ? { ...rest, tags: left } : rest;
+  // Etiketi verilen harcamalara ekler (hesapta varsa onun yazılışıyla); etiket zaten varsa dokunulmaz, yer yoksa
+  // (MAX_TAGS) atlanır. Veriyi değiştirmez: → { installments, name, added: [id], full: [id] } ya da ad geçersizse null
+  function tagPurchases(list, tag, ids) {
+    const name0 = tagName(tag);
+    if (!name0) return null;
+    const key = tagKey(name0);
+    let name = name0;
+    for (const p of list) for (const t of tags(p.tags) || []) if (tagKey(t) === key) name = t;
+    const want = new Set(ids), added = [], full = [];
+    const installments = list.map(p => {
+      if (!want.has(p.id)) return p;
+      const cur = tags(p.tags) || [];
+      if (cur.some(t => tagKey(t) === key)) return p;
+      if (cur.length >= MAX_TAGS) { full.push(p.id); return p; }
+      added.push(p.id);
+      return { ...p, tags: [...cur, name] };
     });
-    return { installments, tags: (state.tags || []).filter(t => t.id !== key), changed };
+    return { installments, name, added, full };
   }
 
   // CashFollow Premium (subscriptions satırı, supabase/tablolar.sql): etkin ya da ödeme ek süresinde ve erişimi
@@ -506,7 +477,7 @@
     return Number.isFinite(t) && t > now;
   }
 
-  const api = { TABLES, FIELD, SCHEMA, MAX_TAGS, TAG_LEN, tagName, tagKey, tags, renameTag, removeTag, keyOf, rekey, toState, baseOf, stale, changes, merge, combine, premium };
+  const api = { TABLES, FIELD, SCHEMA, MAX_TAGS, TAG_LEN, tagName, tagKey, tags, renameTag, tagPurchases, keyOf, rekey, toState, baseOf, stale, changes, merge, combine, premium };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.Tablo = api;
 })(this);
