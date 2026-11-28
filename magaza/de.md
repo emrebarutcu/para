@@ -74,7 +74,6 @@ Datenschutz: https://cashfollow.app/privacy
 ## What's new (≤4000)
 
 - Tags: Gib Käufen Tags wie „Mallorca“ und sieh auf einem Bildschirm, was eine Reise, eine Hochzeit oder eine Renovierung insgesamt gekostet hat.
-- Reisemodus und Budget: Käufe an den gewählten Tagen bekommen den Tag automatisch; gib einem Tag ein Budget und werde beim Überschreiten gewarnt.
 - Mit Apple anmelden: Konto mit einem Tipp anlegen, ohne E-Mail-Bestätigung.
 - Die ersten 3 Monate im Cashflow sind kostenlos: Sieh deinen Zahlungsplan für die nächsten drei Monate ohne Premium.
 - Zahlst du mit Pay in 4? Trag es bei der Einrichtung ein, und alle vier Zahlungstermine landen in deinem Plan.

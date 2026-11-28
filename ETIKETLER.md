@@ -1,15 +1,30 @@
 # Etiketler
 
-Tasarım (27 Kasım 2026). Kullanıcı onayladı: ücretsizde **2 etiket**, toplam ücretsizde **açık**. **Aşama 1, 2 ve 3
-yapıldı** (hepsi sürüm **1.4.0**'da; 1.4.0 henüz yayınlanmadığı için sürüm ve yapı numarası aynı kaldı). Çalışan özelliğin belgesi `SETUP.md` → 4 → Etiketler; burada kararlar ve sonraki aşamalar.
+Tasarım (27 Kasım 2026). Kullanıcı onayladı: ücretsizde **2 etiket**, toplam ücretsizde **açık**. Üç aşama yapıldıktan
+sonra (28 Kasım) üç bağımsız inceleme yapıldı (kullanım, kapsam / Premium, kod); kullanıcı **sade sürümü** seçti:
+öncelik "olabildiğince kolay kullanım ve sadelik". Hepsi sürüm **1.4.0**'da (henüz yayınlanmadı). Çalışan özelliğin
+belgesi `SETUP.md` → 4 → Etiketler; burada kararlar.
 
-Aşama 1'de tasarımdan farklar:
-- Ayrı `etiket.js` yok: ad / kimlik `tablo.js`'te (`tags`, `tagName`, `tagKey`), rapor `icgoru.js`'te (`tagList`,
-  `tagSummary`). Böylece iPhone'un JavaScriptCore'una, web'e ve Xcode'un "Web modülleri" adımına yeni dosya eklenmedi.
-- GIN indeksi eklenmedi: veri istemcide süzülüyor, sunucuda etikete göre sorgu yok.
-- Sürüm 1.6.0 değil 1.4.0: sürüm yalnızca yayındakinden (1.3.4) bir adım ileri gider (`SETUP.md` → Sürüm).
-- Asistanın `tag_purchases` aracı Aşama 1'de: id'leriyle toplu ekle / çıkar (tarih aralığını asistan `list_purchases`
-  ile bulur). Uygulamada tarih aralığından toplu etiketleme Aşama 2'de.
+**Sade sürümde olan:** formda etiket, satırda `#etiket` (dokununca rapor), Harcamalar → Etiketler, rapor (toplam, döviz
+notu, harcamalar; Premium'da ödenen / kalan, son ödeme, kategori ve kişi dağılımı), raporda üç iş: eski harcamaları
+etiketle (hiçbiri işaretli gelmez), yeniden adlandır / birleştir, sil — hepsi ücretsiz. Kilitler yalnızca `tags`
+(3. etiket) ve `tag_report`. Veri yalnızca `purchases.tags`. Asistanda 3 araç (`tag_summary`, `tag_purchases`,
+`rename_tag`).
+
+**Çıkarılanlar ve neden** (yapılmıştı, sade sürümde geri alındı):
+- **Gezi modu** (seçilen günlerde yeni harcamaya kendiliğinden etiket): kullanıcı neyin neden etiketlendiğini görmüyor,
+  çıkarılan etiket geri gelebiliyordu, tekrarlayan harcamalar (Netflix) da etiket alıyordu; beş ayrı kod yolu. Eski
+  harcamaları etiketlemek aynı ihtiyacı karşılıyor. Kullanıcılar isterse yeniden düşünülür.
+- **Etiket bütçesi ve uyarısı:** `YAPILACAKLAR.md` → Bütçe ayırma ile ikinci bir bütçe kavramı doğuyordu; o maddeyle tek
+  tasarımda gelecek.
+- **CSV:** uygulamanın genel bir dışa aktarması yokken yalnızca etikete özel kalıyordu; genel dışa aktarmayla gelecek.
+- **`tags` tablosu:** yalnızca bütçe ve gezi modu içindi.
+- **Kart dağılımı ve günlük ortalama:** kart harcama listesinde zaten var; günlük ortalama yanıltıyordu (bilet haftalar
+  önce alınınca "31 gün").
+- Toplu ekleme, yeniden adlandırma ve CSV için ayrı kilitler: beş kilit nedeni ikiye indi; yazım hatası düzeltmek
+  ücretsiz sürümün bir etiket hakkını yemesin diye adlandırma ücretsiz.
+
+Aşağıdaki bölümler ilk tasarımdır (tarihçe); güncel durum yukarıda ve `SETUP.md`'de.
 
 ## Ne
 

@@ -74,7 +74,6 @@ Privacidad: https://cashfollow.app/privacy
 ## What's new (≤4000)
 
 - Etiquetas: añade etiquetas como «Canarias» a tus compras y mira en una pantalla el coste total de un viaje, una boda o una reforma.
-- Modo viaje y presupuesto: las compras de los días que elijas reciben la etiqueta solas; ponle un presupuesto y recibe un aviso si lo superas.
 - Inicia sesión con Apple: crea tu cuenta con un toque, sin confirmar el correo.
 - Los 3 primeros meses del Flujo son gratis: mira tu plan de pagos de los próximos tres meses sin Premium.
 - ¿Pagas con pago en 4? Añádelo al empezar y las cuatro fechas de pago entran en tu plan.

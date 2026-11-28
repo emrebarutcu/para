@@ -74,7 +74,6 @@ Confidentialité : https://cashfollow.app/privacy
 ## What's new (≤4000)
 
 - Étiquettes : ajoutez des étiquettes comme « Bretagne » à vos achats et voyez sur un seul écran le coût total d'un voyage, d'un mariage ou de travaux.
-- Mode voyage et budget : les achats ajoutés les jours choisis reçoivent l'étiquette automatiquement ; fixez un budget et soyez prévenu en cas de dépassement.
 - Connexion avec Apple : créez votre compte en un geste, sans confirmation par e-mail.
 - Les 3 premiers mois de la Trésorerie sont gratuits : voyez votre plan de paiement des trois prochains mois sans Premium.
 - Vous payez en 4 fois ? Ajoutez-le dès la configuration et les quatre échéances entrent dans votre plan.

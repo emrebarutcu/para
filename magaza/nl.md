@@ -74,7 +74,6 @@ Privacy: https://cashfollow.app/privacy
 ## What's new (≤4000)
 
 - Labels: geef aankopen labels zoals ‘Texel’ en zie op één scherm wat een reis, een bruiloft of een verbouwing in totaal heeft gekost.
-- Reismodus en budget: aankopen op de gekozen dagen krijgen het label vanzelf; geef een label een budget en krijg een waarschuwing als je eroverheen gaat.
 - Inloggen met Apple: maak je account aan met één tik, zonder e-mailbevestiging.
 - De eerste 3 maanden van Cashflow zijn gratis: zie je betaalplan voor de komende drie maanden zonder Premium.
 - Betaal je met betalen in 4? Voeg het toe bij het instellen en alle vier de betaaldata komen in je plan.

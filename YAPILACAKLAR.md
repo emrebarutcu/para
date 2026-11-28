@@ -4,8 +4,9 @@ Kullanıcıyla konuşulup sıraya alınanlar. Kullanıcıyı tutmaya yönelik yo
 
 ## Etiketler
 
-Harcamaya birden fazla serbest etiket ("Maldivler") ve etiketin raporu: gezi kaça mal oldu. Tasarım ve Premium ile
-birleşmesi `ETIKETLER.md`'de. Etiket bütçesi aşağıdaki tek seferlik bütçenin ilk adımı olur.
+Yapıldı (1.4.0, sade sürüm): harcamaya birden fazla etiket ve etiketin raporu (gezi kaça mal oldu). Kararlar
+`ETIKETLER.md`'de. Etiket bütçesi ve gezi modu denendi, sadelik için çıkarıldı: bütçe aşağıdaki "Bütçe ayırma" ile tek
+tasarımda gelecek (tek seferlik bütçe bir etikete bağlanabilir).
 
 ## Bütçe ayırma
 
