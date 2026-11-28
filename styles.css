@@ -1969,9 +1969,6 @@ a.hero-eq { display: block; width: fit-content; }
 .bar.tag-progress { max-width: none; height: 8px; border-radius: 4px; }
 .tag-progress > span { display: block; height: 100%; background: var(--text); border-radius: 4px; }
 .tag-split { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 14px; font-variant-numeric: tabular-nums; }
-.tag-tools .tag-tool-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.tag-tools .btn.on { background: var(--surface-3); }
-.tag-tools > .field { margin-top: 12px; }
 .tag-form { display: flex; gap: 8px; align-items: center; }
 .tag-form input { flex: 1; min-width: 0; }
 .tag-dates { display: flex; gap: 8px; align-items: center; }
@@ -1982,3 +1979,26 @@ a.hero-eq { display: block; width: fit-content; }
 .tag-pick-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-pick-meta { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tag-bulk > .btn { align-self: flex-start; }
+.tag-head-actions { display: flex; align-items: center; gap: 4px; }
+.tag-menu-wrap { position: relative; }
+.tag-menu {
+  position: absolute; inset-inline-end: 0; top: calc(100% + 6px); z-index: 5; min-width: 250px; max-width: calc(100vw - 32px); padding: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+}
+.tag-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: none; border-radius: 10px;
+  background: transparent; font-size: 15px; text-align: start; cursor: pointer; color: var(--text);
+}
+.tag-menu button .ic { width: 18px; height: 18px; color: var(--text-2); }
+.tag-menu button:hover, .tag-menu button:focus-visible { background: var(--surface-2); outline: none; }
+.tag-menu .danger, .tag-menu .danger .ic { color: var(--danger); }
+.tag-menu .danger.armed { background: var(--danger); color: #fff; }
+.tag-menu .danger.armed .ic { color: #fff; }
+.tag-panel-box { margin-top: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+.tag-panel-head { display: flex; align-items: center; justify-content: space-between; }
+.tag-panel-head strong { font-size: 15px; }
+.tag-panel-box .hint { margin: 0; }
+.tag-panel-box input[type="text"], .tag-panel-box input[type="date"] { background: var(--surface); }
+.tag-panel-box .tag-pick { background: var(--surface); }
+.tag-menu button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

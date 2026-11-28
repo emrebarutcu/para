@@ -557,6 +557,7 @@ const els = {
 };
 // Etiketler: harcama formundaki alan, Harcamalar'daki liste ve rapor penceresi
 Object.assign(els, {
+  tagMenuBtn: $("tagMenuBtn"), tagMenu: $("tagMenu"), tagDelete: $("tagDelete"),
   tagRow: $("tagRow"), tagVal: $("tagVal"), tagChips: $("tagChips"), tagInput: $("tagInput"), tagSuggest: $("tagSuggest"), tagLock: $("tagLock"),
   tagPanel: $("tagPanel"), tagList: $("tagList"), tagCount: $("tagCount"), tagEmpty: $("tagEmpty"),
   tagSheet: $("tagSheet"), tagTitle: $("tagTitle"), tagBody: $("tagBody"),
@@ -2401,7 +2402,6 @@ function purchaseRow({ p, pays, plan, left, paid, next }, today) {
 let tagOpen = null;   // raporu açık etiket
 let tagTool = null;   // raporda açık iş: "bulk" | "rename"
 let tagRange = null;  // eski harcamaları etiketlerken { from, to, picked: Set(id) } (hiçbiri işaretli gelmez)
-let tagAbort = null;  // yeniden çizilen raporda eski Sil düğmesinin dinleyicileri (confirmTap)
 
 function tagDates(first, last) {
   if (!first) return "";
@@ -2495,7 +2495,9 @@ function renderTagSheet() {
     hero.append(el("p", "hint", s.assets.map(a => money(a.amount, a.asset)).join(" + ") + " · " + L("döviz ve altın bugünkü kurla")));
   }
   if (s.missing) hero.append(el("p", "hint", L("Kuru alınamayan {0} harcama toplama girmedi.", s.missing)));
-  body.push(hero, tagTools(s));
+  body.push(hero);
+  const tool = tagTools();
+  if (tool) body.push(tool);
 
   if (locked()) {
     body.push(premiumLock(null, L("Etiketin raporu Premium'da: ne kadarı ödendi, ne kadar kaldı, son taksit hangi ay; kategoriye ve kişiye göre dağılım."), "tag_report"));
@@ -2545,40 +2547,53 @@ function renderTagSheet() {
   els.tagBody.replaceChildren(...body);
 }
 
-// Raporun üç işi: eski harcamaları etiketle, yeniden adlandır / birleştir, etiketi sil (hepsi ücretsiz)
-function tagTools(s) {
-  const sec = el("section", "tag-sec tag-tools");
-  const row = el("div", "tag-tool-row");
-  const tool = (label, name) => {
-    const b = el("button", "btn btn-ghost sm" + (tagTool === name ? " on" : ""), label);
-    b.type = "button";
-    b.setAttribute("aria-expanded", String(tagTool === name));
-    b.addEventListener("click", () => {
-      tagTool = tagTool === name ? null : name;
-      if (tagTool === "bulk") tagRange = { from: s.first ?? T.addDays(T.todayKey(), -7), to: s.last ?? T.todayKey(), picked: new Set() };
-      renderTagSheet();
-    });
-    return b;
-  };
-  const del = el("button", "btn btn-danger sm");
-  del.type = "button";
-  del.append(el("span", "", L("Etiketi sil")));
-  tagAbort?.abort();
-  tagAbort = new AbortController();
-  const signal = tagAbort.signal;
-  // confirmTap pencereyi düğmenin atasından bulur: düğme rapora yerleşince (renderTagSheet aynı adımda yerleştirir)
-  queueMicrotask(() => confirmTap(del, () => {
-    state.installments = Tb.renameTag(state.installments, s.name, "").installments;
-    saveState();
-    els.tagSheet.close();
-    toast(L("#{0} etiketi kaldırıldı; harcamalar duruyor", s.name));
-    render();
-  }, signal));
-  row.append(tool(L("Eski harcamaları etiketle"), "bulk"), tool(L("Yeniden adlandır"), "rename"), del);
-  sec.append(row);
-  if (tagTool === "bulk") sec.append(tagBulkBox(s));
-  else if (tagTool === "rename") sec.append(tagRenameBox(s));
-  return sec;
+// Raporun üç işi başlıktaki ⋯ menüsünde (iPhone'daki gibi; hepsi ücretsiz): eski harcamaları etiketle ve yeniden
+// adlandır raporun tepesinde küçük bir panel açar, Etiketi sil iki dokunuşla (confirmTap) siler
+function tagTools() {
+  if (tagTool === "bulk") return tagBulkBox(I.tagSummary(state, tagOpen, T.todayKey(), curRates()));
+  if (tagTool === "rename") return tagRenameBox(I.tagSummary(state, tagOpen, T.todayKey(), curRates()));
+  return null;
+}
+
+function toggleTagMenu(open = els.tagMenu.hidden) {
+  els.tagMenu.hidden = !open;
+  els.tagMenuBtn.setAttribute("aria-expanded", String(open));
+  if (open) els.tagMenu.querySelector("button")?.focus();
+}
+els.tagMenuBtn.addEventListener("click", e => { e.stopPropagation(); toggleTagMenu(); });
+els.tagMenu.addEventListener("click", e => {
+  const b = e.target.closest("[data-tag-tool]");
+  if (!b) return;
+  toggleTagMenu(false);
+  const s = I.tagSummary(state, tagOpen, T.todayKey(), curRates());
+  tagTool = b.dataset.tagTool;
+  if (tagTool === "bulk") tagRange = { from: s?.first ?? T.addDays(T.todayKey(), -7), to: s?.last ?? T.todayKey(), picked: new Set() };
+  renderTagSheet();
+});
+document.addEventListener("click", e => { if (!els.tagMenu.hidden && !e.target.closest(".tag-menu-wrap")) toggleTagMenu(false); });
+els.tagMenu.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); toggleTagMenu(false); els.tagMenuBtn.focus(); } });
+els.tagSheet.addEventListener("close", () => toggleTagMenu(false));
+confirmTap(els.tagDelete, () => {
+  const name = tagOpen;
+  state.installments = Tb.renameTag(state.installments, name, "").installments;
+  saveState();
+  els.tagSheet.close();
+  toast(L("#{0} etiketi kaldırıldı; harcamalar duruyor", name));
+  render();
+});
+
+// Açık panelin başlığı ve kapatma düğmesi
+function tagPanel(title, className) {
+  const box = el("div", `tag-panel-box field ${className}`);
+  const head = el("div", "tag-panel-head");
+  const close = el("button", "icon-btn sm");
+  close.type = "button";
+  close.setAttribute("aria-label", L("Vazgeç"));
+  close.append(icon("x"));
+  close.addEventListener("click", () => { tagTool = null; renderTagSheet(); });
+  head.append(el("strong", "", title), close);
+  box.append(head);
+  return box;
 }
 
 function tagDateInput(value, label) {
@@ -2592,7 +2607,7 @@ function tagDateInput(value, label) {
 // Eski harcamaları etiketle: seçilen günlerdeki, etiketi olmayan tarihli harcamalar listelenir; hiçbiri işaretli
 // gelmez (alakasız harcama yanlışlıkla etiket almasın), kullanıcı istediklerini işaretler
 function tagBulkBox(s) {
-  const box = el("div", "tag-bulk field");
+  const box = tagPanel(L("Eski harcamaları etiketle"), "tag-bulk");
   const key = Tb.tagKey(s.name);
   const from = tagDateInput(tagRange.from, L("Başlangıç")), to = tagDateInput(tagRange.to, L("Bitiş"));
   const update = () => { tagRange.from = from.value; tagRange.to = to.value; renderTagSheet(); };
@@ -2640,7 +2655,7 @@ function tagBulkBox(s) {
 
 // Yeniden adlandırma; yeni ad başka bir etiketse birleşir
 function tagRenameBox(s) {
-  const box = el("div", "tag-rename field");
+  const box = tagPanel(L("Yeniden adlandır"), "tag-rename");
   const input = el("input");
   input.type = "text";
   input.value = s.name;

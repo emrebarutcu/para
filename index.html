@@ -22,6 +22,7 @@
     <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 10.2 12 3.5l8.5 6.7V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-6h-5v6H5A1.5 1.5 0 0 1 3.5 19z"/></symbol>
     <symbol id="i-flow" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4M8 13.5h3M8 16.5h6"/></symbol>
     <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5.5 3h13v18l-3.25-2-3.25 2-3.25-2-3.25 2z"/><path d="M9 8h6M9 12h6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
     <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.6V4.5a1 1 0 0 1 1-1h8.1l8 8a1.4 1.4 0 0 1 0 2l-7 7a1.4 1.4 0 0 1-2 0z"/><circle cx="8" cy="8" r="1.5"/></symbol>
     <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/></symbol>
     <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.5"/></symbol>
@@ -1024,7 +1025,18 @@
     <div class="sheet-form">
       <header class="sheet-head">
         <h2 id="tagTitle"></h2>
-        <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+        <div class="tag-head-actions">
+          <!-- Etiketin işleri (iPhone'daki ⋯ menüsü gibi): eski harcamaları etiketle, yeniden adlandır, sil -->
+          <div class="tag-menu-wrap">
+            <button type="button" class="icon-btn" id="tagMenuBtn" aria-label="Etiketi yönet" aria-haspopup="menu" aria-expanded="false"><svg class="ic"><use href="#i-more"/></svg></button>
+            <div class="tag-menu" id="tagMenu" role="menu" hidden>
+              <button type="button" role="menuitem" data-tag-tool="bulk"><svg class="ic"><use href="#i-plus"/></svg><span>Eski harcamaları etiketle</span></button>
+              <button type="button" role="menuitem" data-tag-tool="rename"><svg class="ic"><use href="#i-tag"/></svg><span>Yeniden adlandır</span></button>
+              <button type="button" role="menuitem" class="danger" id="tagDelete"><svg class="ic"><use href="#i-trash"/></svg><span>Etiketi sil</span></button>
+            </div>
+          </div>
+          <button type="button" class="icon-btn" data-close aria-label="Kapat"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
       </header>
       <div class="sheet-body" id="tagBody"></div>
       <footer class="sheet-foot">
