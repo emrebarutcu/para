@@ -47,9 +47,7 @@ struct EtiketlerKarti: View {
     var body: some View {
         if etiketler.isEmpty {
             Kart {
-                KartBasligi(L("Etiketler"))
-                Text(L("Bir gezinin, düğünün ya da tadilatın harcamalarını bir arada görmek için harcamaya etiket ekle (harcama formunda Etiketler). Sonra burada toplam maliyetini görürsün."))
-                    .font(.subheadline).foregroundStyle(Tema.metin3)
+                Text(L("Henüz etiket yok. Harcama eklerken etiket yaz.")).font(.subheadline).foregroundStyle(Tema.metin3)
             }
         } else {
             Kart(dolgu: 14) {
@@ -100,7 +98,7 @@ struct EtiketRaporuEkrani: View {
                     Text([L("{0} harcama", r.purchases), Etiket.tarihler(r.firstPurchase, r.lastPurchase)].compactMap { $0 }.joined(separator: " · "))
                         .font(.footnote).foregroundStyle(Tema.metin3)
                     if r.byCurrency.contains(where: { $0.asset != Bicim.home }) {
-                        Text(r.byCurrency.map { Bicim.amount($0.amount, asset: $0.asset) }.joined(separator: " + ") + " · " + L("döviz ve altın bugünkü kurla"))
+                        Text(r.byCurrency.map { Bicim.amount($0.amount, asset: $0.asset) }.joined(separator: " + "))
                             .font(.footnote).foregroundStyle(Tema.metin3)
                     }
                     if let m = r.missingRates, m > 0 {
@@ -123,9 +121,7 @@ struct EtiketRaporuEkrani: View {
                     dagilim(L("Kategoriye göre"), r.byCategory)
                     if r.byPerson.count > 1 { dagilim(L("Kişiye göre"), r.byPerson) }
                 } else {
-                    PremiumKilidi(baslik: L("Etiketin raporu"),
-                                  aciklama: L("Ne kadarı ödendi, ne kadar kaldı, son taksit hangi ay; kategoriye ve kişiye göre dağılım."),
-                                  neden: "tag_report")
+                    PremiumKilidi(baslik: L("Etiketin raporu"), aciklama: L("Ödenen, kalan ve dağılım Premium'da."), neden: "tag_report")
                 }
                 BolumBasligi(baslik: L("Harcamalar"))
                 Kart(dolgu: 14) {
@@ -158,13 +154,11 @@ struct EtiketRaporuEkrani: View {
             TextField(L("Yeni ad"), text: $yeniAd)
             Button(L("Kaydet")) { if Etiket.ad(yeniAd) != nil { degistir(yeniAd) } }
             Button(L("Vazgeç"), role: .cancel) {}
-        } message: {
-            Text(L("Başka bir etiketin adını yazarsan ikisi birleşir."))
         }
         .confirmationDialog(L("#{0} etiketi silinsin mi?", ad), isPresented: $silinsin, titleVisibility: .visible) {
             Button(L("Etiketi sil"), role: .destructive) { degistir("") }
         } message: {
-            Text(L("Etiket bütün harcamalardan kalkar; harcamalar durur."))
+            Text(L("Harcamalar silinmez."))
         }
     }
 
@@ -175,11 +169,11 @@ struct EtiketRaporuEkrani: View {
             let s = try model.write("rename_tag", ["tag": ad, "new_name": yeni], as: Sonuc.self)
             hata = nil
             if s.deleted == true {
-                Bant.goster(Bant.Mesaj(baslik: L("#{0} etiketi kaldırıldı; harcamalar duruyor", ad)))
+                Bant.goster(Bant.Mesaj(baslik: L("#{0} silindi", ad)))
                 dismiss()
             } else if let t = s.tag {
                 ad = t
-                Bant.goster(Bant.Mesaj(baslik: s.merged == true ? L("#{0} etiketine birleştirildi", t) : L("Etiket #{0} oldu", t)))
+                Bant.goster(Bant.Mesaj(baslik: s.merged == true ? L("#{0} etiketine birleştirildi", t) : L("Kaydedildi")))
             }
         } catch { hata = error.localizedDescription }
     }
@@ -202,7 +196,6 @@ struct EtiketRaporuEkrani: View {
                         }
                     }
                     .frame(height: 6)
-                    Text(Bicim.yuzde(Int((k.share * 100).rounded()))).font(.caption).foregroundStyle(Tema.metin3).monospacedDigit()
                 }
             }
         }
@@ -250,8 +243,6 @@ struct EtiketTopluEkle: View {
                 Section {
                     DatePicker(L("Başlangıç"), selection: $bas, displayedComponents: .date)
                     DatePicker(L("Bitiş"), selection: $bit, in: bas..., displayedComponents: .date)
-                } footer: {
-                    Text(L("Bu günlerdeki harcamalardan #{0} etiketini alacakları işaretle.", etiket))
                 }
                 .environment(\.locale, Bicim.locale)
                 Section {
@@ -303,7 +294,7 @@ struct EtiketTopluEkle: View {
         do {
             let s = try model.write("tag_purchases", ["tag": etiket, "add": Array(secili)], as: Sonuc.self)
             Analitik.olay("tag_added", ["count": s.added.count, "source": "bulk"])
-            Bant.goster(Bant.Mesaj(baslik: L("{0} harcama #{1} etiketini aldı", s.added.count, etiket)))
+            Bant.goster(Bant.Mesaj(baslik: L("{0} harcama etiketlendi", s.added.count)))
             dismiss()
         } catch { hata = error.localizedDescription }
     }

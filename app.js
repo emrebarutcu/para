@@ -559,7 +559,7 @@ const els = {
 Object.assign(els, {
   tagMenuBtn: $("tagMenuBtn"), tagMenu: $("tagMenu"), tagDelete: $("tagDelete"),
   tagRow: $("tagRow"), tagVal: $("tagVal"), tagChips: $("tagChips"), tagInput: $("tagInput"), tagSuggest: $("tagSuggest"), tagLock: $("tagLock"),
-  tagPanel: $("tagPanel"), tagList: $("tagList"), tagCount: $("tagCount"), tagEmpty: $("tagEmpty"),
+  tagPanel: $("tagPanel"), tagList: $("tagList"), tagEmpty: $("tagEmpty"),
   tagSheet: $("tagSheet"), tagTitle: $("tagTitle"), tagBody: $("tagBody"),
 });
 
@@ -2412,7 +2412,6 @@ function tagDates(first, last) {
 function renderTagList() {
   const list = I.tagList(state, T.todayKey(), curRates());
   if (list.some(t => t.missing)) loadRates();
-  els.tagCount.textContent = list.length ? L("{0} etiket", list.length) : "";
   els.tagEmpty.hidden = list.length > 0;
   els.tagList.hidden = !list.length;
   els.tagList.replaceChildren(...list.map(t => {
@@ -2467,9 +2466,7 @@ function tagSplit(title, rows) {
     const fill = el("span");
     fill.style.width = `${(r.value / max) * 100}%`;
     bar.append(fill);
-    const meta = el("div", "cat-meta");
-    meta.append(el("span", "", D.pct(Math.round(r.share * 100))));
-    li.append(head, bar, meta);
+    li.append(head, bar);
     ul.append(li);
   }
   sec.append(ul);
@@ -2492,7 +2489,7 @@ function renderTagSheet() {
   if (s.first) meta.push(tagDates(s.first, s.last));
   hero.append(el("p", "hint", meta.join(" · ")));
   if (s.assets.some(a => a.asset !== HOME)) {
-    hero.append(el("p", "hint", s.assets.map(a => money(a.amount, a.asset)).join(" + ") + " · " + L("döviz ve altın bugünkü kurla")));
+    hero.append(el("p", "hint", s.assets.map(a => money(a.amount, a.asset)).join(" + ")));
   }
   if (s.missing) hero.append(el("p", "hint", L("Kuru alınamayan {0} harcama toplama girmedi.", s.missing)));
   body.push(hero);
@@ -2500,7 +2497,7 @@ function renderTagSheet() {
   if (tool) body.push(tool);
 
   if (locked()) {
-    body.push(premiumLock(null, L("Etiketin raporu Premium'da: ne kadarı ödendi, ne kadar kaldı, son taksit hangi ay; kategoriye ve kişiye göre dağılım."), "tag_report"));
+    body.push(premiumLock(null, L("Ödenen, kalan ve dağılım Premium'da."), "tag_report"));
   } else {
     const pay = el("section", "tag-sec");
     const bar = el("div", "bar tag-progress");
@@ -2578,7 +2575,7 @@ confirmTap(els.tagDelete, () => {
   state.installments = Tb.renameTag(state.installments, name, "").installments;
   saveState();
   els.tagSheet.close();
-  toast(L("#{0} etiketi kaldırıldı; harcamalar duruyor", name));
+  toast(L("#{0} silindi", name));
   render();
 });
 
@@ -2615,7 +2612,7 @@ function tagBulkBox(s) {
   to.addEventListener("change", update);
   const dates = el("div", "tag-dates");
   dates.append(from, el("span", "", "–"), to);
-  box.append(el("p", "hint", L("Bu günlerdeki harcamalardan #{0} etiketini alacakları işaretle.", s.name)), dates);
+  box.append(dates);
   const ok = T.parseDate(tagRange.from) && T.parseDate(tagRange.to) && tagRange.from <= tagRange.to;
   const items = ok ? knownPurchases().filter(p => p.date && p.date >= tagRange.from && p.date <= tagRange.to
     && !(Tb.tags(p.tags) || []).some(t => Tb.tagKey(t) === key)).sort((a, b) => a.date.localeCompare(b.date)) : [];
@@ -2645,7 +2642,7 @@ function tagBulkBox(s) {
     state.installments = r.installments;
     saveState();
     tagTool = null;
-    toast(L("{0} harcama #{1} etiketini aldı", r.added.length, r.name) + (r.full.length ? " · " + L("{0} harcamada yer yok (en fazla {1} etiket)", r.full.length, Tb.MAX_TAGS) : ""));
+    toast(L("{0} harcama etiketlendi", r.added.length));
     window.Analitik?.event("tag_added", { count: r.added.length, source: "bulk" });
     render();
   });
@@ -2675,10 +2672,10 @@ function tagRenameBox(s) {
     saveState();
     tagOpen = r.name;
     tagTool = null;
-    toast(r.merged ? L("#{0} etiketine birleştirildi", r.name) : L("Etiket #{0} oldu", r.name));
+    toast(r.merged ? L("#{0} etiketine birleştirildi", r.name) : L("Kaydedildi"));
     render();
   });
-  box.append(el("p", "hint", L("Başka bir etiketin adını yazarsan ikisi birleşir.")), form);
+  box.append(form);
   setTimeout(() => input.focus(), 0);
   return box;
 }
@@ -4338,7 +4335,7 @@ function addFormTag(raw) {
   if (formTags.some(t => Tb.tagKey(t) === key)) return true;
   if (formTags.length >= Tb.MAX_TAGS) { toast(L("Bir harcamaya en fazla {0} etiket eklenir.", Tb.MAX_TAGS)); return false; }
   if (!tagAllowed(name)) {
-    els.tagLock.replaceChildren(premiumLock(null, L("Ücretsiz sürümde {0} etiket olur; var olanları kullanmaya devam edebilirsin.", FREE_TAGS), "tags"));
+    els.tagLock.replaceChildren(premiumLock(null, L("Ücretsiz sürümde {0} etiket var.", FREE_TAGS), "tags"));
     els.tagLock.hidden = false;
     return false;
   }

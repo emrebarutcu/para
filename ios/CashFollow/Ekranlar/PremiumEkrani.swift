@@ -77,7 +77,7 @@ struct PremiumEkrani: View {
         case "payoff":
             return (L("Kart borcunu planla"), L("Hangi ay ne kadar ödersen borcun ne zaman biter."))
         case "tags", "tag_report":
-            return (L("Etiketin raporunun tamamı"), L("Sınırsız etiket; ne kadarı ödendi, ne kadar kaldı, kategoriye ve kişiye göre dağılım. Ücretsiz sürümde {0} etiket var.", Abonelik.ucretsizEtiket))
+            return (L("Etiketin raporunun tamamı"), L("Sınırsız etiket; ödenen, kalan ve dağılım."))
         default:
             return (L("Önümüzdeki 12 ayı gör, almadan önce sor"), L("Her ayın ödemesi, paranın yetip yetmeyeceği, ilk ödemesi en geç gelen kart."))
         }

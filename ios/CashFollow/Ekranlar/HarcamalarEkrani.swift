@@ -751,7 +751,7 @@ struct HarcamaFormu: View {
                     }
                 }
             }
-            TextField(L("Etiket ekle, ör. Maldivler"), text: $yeniEtiket)
+            TextField(L("Etiket ekle"), text: $yeniEtiket)
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 .onSubmit { etiketEkle(yeniEtiket) }
