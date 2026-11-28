@@ -177,7 +177,7 @@ struct Harcama: Decodable, Identifiable, Hashable {
     let tags: [String]?           // etiketler (1.4'ten önceki araçlarda yok)
 }
 
-// Etiketler (list_tags): en son kullanılan önce; total bütün taksitlerle, ana para biriminde
+// Etiketler (tag_summary etiketsiz): en son kullanılan önce; total bütün taksitlerle, ana para biriminde
 struct EtiketListesi: Decodable {
     struct Etiket: Decodable, Identifiable, Hashable {
         let tag: String
@@ -186,15 +186,10 @@ struct EtiketListesi: Decodable {
         let firstPurchase: String?
         let lastPurchase: String?
         let missingRates: Bool?
-        let budget: Double?
-        let travelMode: GeziModu?
         var id: String { tag }
     }
     let tags: [Etiket]
 }
-
-// Etiketin gezi modu (set_tag): from–until arasındaki yeni harcamalar etiketi kendiliğinden alır; on bugün açık mı
-struct GeziModu: Decodable, Hashable { let from: String?; let until: String; let on: Bool }
 
 // Bir etiketin raporu (tag_summary): toplam, ödenen / kalan, son ödeme, dağılımlar ve harcamalar
 struct EtiketRaporu: Decodable {
@@ -220,18 +215,11 @@ struct EtiketRaporu: Decodable {
     let lastPayment: String?
     let firstPurchase: String?
     let lastPurchase: String?
-    let days: Int?
-    let perDay: Double?
     let byCurrency: [Birim]
     let byCategory: [Pay]
     let byPerson: [Pay]
-    let byCard: [Pay]
     let list: [Kalem]
     let missingRates: Int?
-    let budget: Double?
-    let budgetLeft: Double?
-    let budgetUsed: Double?
-    let travelMode: GeziModu?
 }
 
 // Kartın dönem dönem harcamaları (card_statements): yeniden eskiye; ilki bugünün dönemi

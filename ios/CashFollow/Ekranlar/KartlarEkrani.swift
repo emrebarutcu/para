@@ -112,6 +112,7 @@ struct KartDetayi: View {
             .navigationTitle(c.name)
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: String.self) { id in HarcamaDetayi(id: id) }
+            .navigationDestination(for: EtiketHedefi.self) { EtiketRaporuEkrani(etiket: $0.ad) }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Bitti")) { dismiss() } } }
         }
         .presentationDetents([.large])

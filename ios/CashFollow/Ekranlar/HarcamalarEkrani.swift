@@ -40,7 +40,7 @@ struct HarcamalarEkrani: View {
                     Secici(secim: $gorunum, ogeler: [("liste", L("Liste")), ("kategori", L("Kategoriler")), ("etiket", L("Etiketler"))])
                 }
                 if gorunum == "etiket" && search.isEmpty {
-                    Okunan(tool: "list_tags") { (l: EtiketListesi) in EtiketlerKarti(etiketler: l.tags) }
+                    Okunan(tool: "tag_summary") { (l: EtiketListesi) in EtiketlerKarti(etiketler: l.tags) }
                 } else if gorunum == "kategori" && search.isEmpty {
                     Okunan(tool: "spending_by_category", args: ["months": 3]) { (k: KategoriHarcamasi) in
                         KategoriKarti(months: k.months, secili: kategori.map { $0.id }) { k in
@@ -423,7 +423,18 @@ struct HarcamaDetayi: View {
                     VStack(spacing: 10) {
                         if let d = p.date { Satir(title: L("Tarih"), value: Bicim.day(d)) }
                         if let c = p.categoryName { Satir(title: L("Kategori"), value: c) }
-                        if let t = p.tags, !t.isEmpty { Satir(title: L("Etiketler"), value: t.map { "#" + $0 }.joined(separator: " ")) }
+                        // Etiket: dokununca etiketin raporu
+                        ForEach(p.tags ?? [], id: \.self) { t in
+                            NavigationLink(value: EtiketHedefi(ad: t)) {
+                                HStack {
+                                    Text(L("Etiket")).foregroundStyle(Tema.metin2)
+                                    Spacer()
+                                    Text("#" + t).foregroundStyle(Tema.metin)
+                                    Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(Tema.metin3)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
                         if let cut = p.statementCutoff { Satir(title: L("Ekstre kesimi"), value: Bicim.day(cut)) }
                         if let r = p.repeat?.label { Satir(title: L("Tekrar"), value: r) }
                         if let b = p.bnpl {
@@ -750,7 +761,7 @@ struct HarcamaFormu: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(oneriler) { t in
-                            Cip(ad: "#" + t.tag, sayi: t.purchases, secili: false) { etiketEkle(t.tag) }
+                            Cip(ad: "#" + t.tag, secili: false) { etiketEkle(t.tag) }
                         }
                     }
                 }
@@ -885,7 +896,7 @@ struct HarcamaFormu: View {
     private func load() {
         cards = (try? model.read("list_cards") as KartListesi)?.cards ?? []
         people = (try? model.read("list_people") as KisiListesi)?.people ?? []
-        bilinenEtiketler = (try? model.read("list_tags") as EtiketListesi)?.tags ?? []
+        bilinenEtiketler = (try? model.read("tag_summary") as EtiketListesi)?.tags ?? []
         if !yuklendi, let p = duzenle {
             desc = p.description
             amount = p.total.formatted(.number.locale(Bicim.locale).grouping(.never).precision(.fractionLength(0...2)))
@@ -916,10 +927,6 @@ struct HarcamaFormu: View {
                 if amount.isEmpty { tutarOdak = true }
             } else { tutarOdak = true }
             taksitli = count > 1
-        }
-        // Yeni harcamada gezi modundaki etiketler hazır gelir (çıkarılabilir; "Yine" kendi etiketleriyle)
-        if !yuklendi, duzenle == nil, yine == nil, etiketler.isEmpty {
-            etiketler = bilinenEtiketler.filter { $0.travelMode?.on == true }.map(\.tag)
         }
         yuklendi = true
         if person.isEmpty { person = people.first?.id ?? "ben" }
